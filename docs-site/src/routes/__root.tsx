@@ -1,5 +1,5 @@
 import { zhTW } from "@fumadocs/language/zh-tw";
-import { createRootRoute, HeadContent, Outlet, Scripts, useParams } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 import type * as React from "react";
@@ -44,6 +44,10 @@ const translations = i18n
     },
   });
 
+function isSupportedLanguage(lang: string | undefined): lang is (typeof i18n.languages)[number] {
+  return lang === "en" || lang === "ru" || lang === "zh";
+}
+
 function RootComponent() {
   return (
     <RootDocument>
@@ -53,7 +57,9 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { lang = i18n.defaultLanguage } = useParams({ strict: false });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const maybeLang = pathname.split("/").filter(Boolean)[0];
+  const lang = isSupportedLanguage(maybeLang) ? maybeLang : i18n.defaultLanguage;
 
   return (
     <html lang={lang} suppressHydrationWarning>

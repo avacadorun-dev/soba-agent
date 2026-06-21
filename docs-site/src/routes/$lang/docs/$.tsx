@@ -1,5 +1,4 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
 import browserCollections from "collections/browser";
 import { useFumadocsLoader } from "fumadocs-core/source/client";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
@@ -8,41 +7,26 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { VersionSwitcher } from "@/components/version-switcher";
+import { getStaticDocsPage, getStaticDocsTree } from "@/lib/docs-static";
 import { baseOptions } from "@/lib/layout.shared";
-import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/$lang/docs/$")({
   component: Page,
   loader: async ({ params }) => {
-    const data = await loader({
-      data: {
-        slugs: params._splat?.split("/") ?? [],
-        lang: params.lang,
-      },
-    });
+    const page = getStaticDocsPage(params._splat?.split("/") ?? [], params.lang);
 
-    if (!data?.path) {
+    if (!page?.path) {
       throw notFound();
     }
 
-    await clientLoader.preload(data.path);
-    return data;
-  },
-});
-
-const loader = createServerFn({
-  method: "GET",
-})
-  .validator((params: { slugs: string[]; lang?: string }) => params)
-  .handler(async ({ data: { slugs, lang } }) => {
-    const page = source.getPage(slugs, lang);
-    if (!page) throw notFound();
+    await clientLoader.preload(page.path);
 
     return {
       path: page.path,
-      pageTree: await source.serializePageTree(source.getPageTree(lang)),
+      pageTree: getStaticDocsTree(params.lang),
     };
-  });
+  },
+});
 
 const clientLoader = browserCollections.docs.createClientLoader({
   component({ toc, frontmatter, default: MDX }) {
