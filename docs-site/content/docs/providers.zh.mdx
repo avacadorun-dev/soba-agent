@@ -113,7 +113,11 @@ export SOBA_MODEL="anthropic/claude-sonnet-4"
 # Ollama，本地且不需要 key
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192
+  --model llama3.1="Llama 3.1",8192,2048
+
+# 本地模型建议从较小限制开始：
+# 8192 = contextWindow，2048 = maxOutput。
+# 128000,8192 可能会明显压到笔记本内存。
 
 # Groq
 soba provider add groq \

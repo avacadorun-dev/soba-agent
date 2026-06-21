@@ -123,9 +123,11 @@ id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
 ```bash
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192 \
+  --model llama3.1="Llama 3.1",8192,2048 \
   --set-active
 ```
+
+`8192,2048` — бережные стартовые значения для локальной модели: сначала контекстное окно, затем максимум выходных токенов. Большие значения вроде `128000,8192` могут резко нагрузить память и сильно замедлить ноутбук.
 
 ---
 

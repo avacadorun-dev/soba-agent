@@ -120,7 +120,11 @@ export SOBA_MODEL="anthropic/claude-sonnet-4"
 # Ollama (локальный, без API-ключа)
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192
+  --model llama3.1="Llama 3.1",8192,2048
+
+# Для локальных моделей начинайте с небольших лимитов:
+# 8192 = contextWindow, 2048 = maxOutput.
+# 128000,8192 может резко нагрузить память ноутбука.
 
 # Groq
 soba provider add groq \

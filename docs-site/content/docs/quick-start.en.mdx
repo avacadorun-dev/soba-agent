@@ -63,11 +63,13 @@ Add a local OpenAI-compatible provider:
 ```bash
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192 \
+  --model llama3.1="Llama 3.1",8192,2048 \
   --set-active
 ```
 
-See [Providers and models](/ru/docs/providers) for the full provider registry.
+For local models, start with a modest context and output size. `8192,2048` is much gentler on a laptop than a 128k context. Raise it later only if your model and hardware handle it comfortably.
+
+See [Providers and models](/en/docs/providers) for the full provider registry.
 
 ---
 
@@ -168,5 +170,5 @@ Skills are listed and activated from the TUI:
 /skill:commit-message Suggest a conventional commit message for staged changes.
 ```
 
-Next: [CLI reference](/ru/docs/cli-reference), [Usage](/ru/docs/usage), [MCP servers](/ru/docs/mcp), and
-[Skills](/ru/docs/skills).
+Next: [CLI reference](/en/docs/cli-reference), [Interface and commands](/en/docs/usage),
+[MCP servers](/ru/docs/mcp), and [Skills](/ru/docs/skills).

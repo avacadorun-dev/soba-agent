@@ -123,9 +123,11 @@ Example keyless local provider:
 ```bash
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192 \
+  --model llama3.1="Llama 3.1",8192,2048 \
   --set-active
 ```
+
+`8192,2048` is a gentle starting point for a local model: context window first, max output tokens second. Larger values such as `128000,8192` can put a lot of pressure on memory and make a laptop feel painfully slow.
 
 ---
 
@@ -161,6 +163,6 @@ analyze the output, ask it to run the command through a normal prompt, which use
 
 ## Next
 
-- [Providers and models](/ru/docs/providers)
-- [Interface and commands](/ru/docs/usage)
-- [Configuration](/ru/docs/configuration)
+- [Providers and models](/en/docs/providers)
+- [Interface and commands](/en/docs/usage)
+- [Configuration](/en/docs/configuration)

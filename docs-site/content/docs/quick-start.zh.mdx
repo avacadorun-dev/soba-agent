@@ -60,11 +60,13 @@ soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
 ```bash
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192 \
+  --model llama3.1="Llama 3.1",8192,2048 \
   --set-active
 ```
 
-完整说明见 [Providers and models](/ru/docs/providers)。
+本地模型建议先用较小的 context 和输出上限。`8192,2048` 对笔记本会友好很多；只有在模型和硬件都稳定时，再慢慢调大。
+
+完整说明见 [Provider 与模型](/zh/docs/providers)。
 
 ---
 
@@ -165,5 +167,5 @@ MCP servers 通过 `.soba/mcp.json` 配置：
 /skill:commit-message Suggest a conventional commit message for staged changes.
 ```
 
-下一步：[CLI reference](/ru/docs/cli-reference)、[Usage](/ru/docs/usage)、[MCP servers](/ru/docs/mcp) 和
+下一步：[CLI reference](/zh/docs/cli-reference)、[界面与命令](/zh/docs/usage)、[MCP servers](/ru/docs/mcp) 和
 [Skills](/ru/docs/skills)。

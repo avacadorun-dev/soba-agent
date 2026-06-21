@@ -123,9 +123,11 @@ keyless 本地 provider 示例：
 ```bash
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192 \
+  --model llama3.1="Llama 3.1",8192,2048 \
   --set-active
 ```
+
+`8192,2048` 是本地模型更温和的起步值：前者是 context window，后者是最大输出 token。像 `128000,8192` 这样的大值会明显占用内存，也可能让笔记本变得很慢。
 
 ---
 
@@ -161,6 +163,6 @@ prompt 让它运行命令，这样会使用 `bash` tool。
 
 ## 下一步
 
-- [Providers 和模型](/ru/docs/providers)
-- [界面和命令](/ru/docs/usage)
-- [配置](/ru/docs/configuration)
+- [Provider 与模型](/zh/docs/providers)
+- [界面与命令](/zh/docs/usage)
+- [配置](/zh/docs/configuration)

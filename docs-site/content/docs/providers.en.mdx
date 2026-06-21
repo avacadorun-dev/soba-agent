@@ -113,7 +113,11 @@ Any OpenAI-compatible API can be added as a custom provider.
 # Ollama, local and keyless
 soba provider add ollama \
   --base-url http://localhost:11434/v1 \
-  --model llama3.1="Llama 3.1",128000,8192
+  --model llama3.1="Llama 3.1",8192,2048
+
+# Start local models with modest limits:
+# 8192 = contextWindow, 2048 = maxOutput.
+# 128000,8192 can hit laptop memory hard.
 
 # Groq
 soba provider add groq \
