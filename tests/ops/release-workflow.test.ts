@@ -23,4 +23,13 @@ describe("Release workflow", () => {
     expect(workflow).toContain("target: bun-linux-x64");
     expect(workflow).toContain("runner: ubuntu-24.04");
   });
+
+  test("passes repository context to GitHub CLI release publishing", () => {
+    const workflow = readReleaseWorkflow();
+
+    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(workflow).toContain("GH_REPO: ${{ github.repository }}");
+    expect(workflow).toContain("gh release upload");
+    expect(workflow).toContain("gh release create");
+  });
 });
