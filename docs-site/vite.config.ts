@@ -22,7 +22,7 @@ export default defineConfig({
         })),
         {
           path: "/",
-          prerender: { enabled: false },
+          prerender: { enabled: true },
         },
       ],
     }),

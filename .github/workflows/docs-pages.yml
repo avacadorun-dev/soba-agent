@@ -1,0 +1,64 @@
+name: Docs Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/docs-pages.yml"
+      - "docs-site/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: bun install --frozen-lockfile
+
+      - name: Check docs
+        working-directory: docs-site
+        run: bun run check
+
+      - name: Build docs
+        working-directory: docs-site
+        run: bun run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/dist/client
+
+  deploy:
+    name: Deploy docs
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

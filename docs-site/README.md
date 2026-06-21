@@ -25,10 +25,10 @@ Click the theme toggle in the header to switch between Graphite and Paper.
 ## Development
 
 ```bash
-npm install
-npm run dev        # Start dev server on port 3000
-npm run build      # Production build
-npm run start      # Preview production build
+bun install
+bun run dev        # Start dev server on port 3000
+bun run build      # Production build
+bun run start      # Preview production build
 ```
 
 ## Structure
