@@ -179,6 +179,21 @@ function isInvisibleAssistantMessage(message: MessageField): boolean {
   return !hasVisibleAssistantText([message]);
 }
 
+function hasFinishIntentReasoning(assistantMessages: MessageField[]): boolean {
+  const reasoningText = assistantMessages
+    .map((message) => message.reasoning_content ?? "")
+    .join("\n")
+    .toLowerCase();
+  if (!reasoningText.trim()) return false;
+
+  const compactReasoningText = reasoningText.replace(/[\s_-]+/g, "");
+  return (
+    /\b(?:call|calling|invoke|use)\s+(?:the\s+)?finish\b/.test(reasoningText) ||
+    reasoningText.includes("finish tool") ||
+    compactReasoningText.includes("callfinish")
+  );
+}
+
 function wantsFullVerification(text: string): boolean {
   const normalized = text.toLowerCase();
   return (
@@ -285,6 +300,9 @@ function createTurnError(
  *     causes models (e.g. Qwen, DeepSeek) to loop on meta-commentary.
  *   - After the model has used tools, text without finish is intermediate:
  *     the follow-up tells the model to either use tools or call finish.
+ *   - Some OpenAI-compatible providers fail to emit the finish tool but expose
+ *     their intent in reasoning_content. Accept those as final only after the
+ *     verification/error gates below have passed.
  *   - A phased final_answer is accepted as final unless files were mutated
  *     and still need verification.
  */
@@ -321,6 +339,10 @@ function getAutonomousFollowUpReason(
       )
       .join("\n    ");
     return `Active tool errors (fix their cause before finishing):\n    ${errorList}`;
+  }
+
+  if (hasFinishIntentReasoning(assistantMessages)) {
+    return null;
   }
 
   if (assistantMessages.some((message) => message.phase === "final_answer")) {

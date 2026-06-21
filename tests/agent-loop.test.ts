@@ -118,6 +118,18 @@ function makeUnphasedTextResponse(text: string): ResponseResource {
   return response;
 }
 
+function makeUnphasedTextResponseWithReasoning(
+  text: string,
+  reasoningContent: string,
+): ResponseResource {
+  const response = makeUnphasedTextResponse(text);
+  const message = response.output[0];
+  if (message?.type === "message") {
+    message.reasoning_content = reasoningContent;
+  }
+  return response;
+}
+
 function makeFinishResponse(
   summary: string,
   criteria: string[] = ["Requested work is verified"],
@@ -1286,6 +1298,49 @@ describe("AgentLoop", () => {
         finalMessage.content[0]?.type === "output_text" &&
           finalMessage.content[0].text,
       ).toContain("Создание задачи проверено");
+    }
+  });
+
+  test("принимает unphased финальный текст, если reasoning явно пытается вызвать finish", async () => {
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("bash", '{"input":"bun test"}'),
+      makeUnphasedTextResponseWithReasoning(
+        "Проверка прошла: тесты зелёные, можно завершать.",
+        "The user wants me to call finish. Let me do that.",
+      ),
+    ];
+    let responseIndex = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("bash"));
+    const loop = new AgentLoop(
+      client,
+      SessionManager.inMemory("/test"),
+      tools,
+      "/test",
+      { maxAutonomousFollowUps: 3 },
+    );
+
+    const result = await loop.runTurn("Проверь проект");
+
+    expect(requests).toHaveLength(2);
+    expect(result.errors).toHaveLength(0);
+    const finalMessage = result.items.at(-1);
+    expect(finalMessage?.type).toBe("message");
+    if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
+      expect(
+        finalMessage.content[0]?.type === "output_text" &&
+          finalMessage.content[0].text,
+      ).toContain("Проверка прошла");
     }
   });
 
