@@ -1,0 +1,745 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/preset.css";
+
+/* Paper theme (light, default) */
+@import "./paper.css";
+
+/* Graphite theme (dark) */
+@import "./graphite.css";
+
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Hide empty Fumadocs banner to remove top gap */
+body > div:has(+ main) {
+  display: none !important;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Smooth theme transitions */
+:root {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+
+/* Version badge */
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--color-fd-muted);
+  color: var(--color-fd-muted-foreground);
+  border: 1px solid var(--color-fd-border);
+}
+
+/* Language switcher container */
+.lang-switcher {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background: var(--color-fd-muted);
+  border: 1px solid var(--color-fd-border);
+}
+
+.lang-switcher a {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.lang-switcher a:hover {
+  color: var(--color-fd-foreground);
+}
+
+.lang-switcher a.active {
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Landing page */
+.landing-shell {
+  background:
+    radial-gradient(circle at 8% 12%, color-mix(in oklab, var(--color-fd-primary) 14%, transparent), transparent 28rem),
+    radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--color-fd-idea) 13%, transparent), transparent 24rem),
+    var(--color-fd-background);
+}
+
+.hero-section {
+  position: relative;
+  overflow: hidden;
+  min-height: calc(100svh - 4rem);
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-fd-border) 52%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-fd-border) 52%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at 48% 34%, black 0%, transparent 68%);
+  opacity: 0.3;
+}
+
+.hero-grid {
+  position: relative;
+  min-height: calc(100svh - 4rem);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.hero-copy h1 span {
+  display: block;
+  color: var(--color-fd-primary);
+}
+
+.hero-badge,
+.proof-pill,
+.hero-cta,
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.hero-badge {
+  gap: 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: color-mix(in oklab, var(--color-fd-muted) 68%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px color-mix(in oklab, var(--color-fd-foreground) 8%, transparent);
+}
+
+.hero-cta {
+  gap: 0.55rem;
+  border-radius: 0.9rem;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.hero-cta:hover {
+  transform: translateY(-2px);
+}
+
+.hero-cta-primary {
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+  box-shadow: 0 18px 55px color-mix(in oklab, var(--color-fd-primary) 28%, transparent);
+}
+
+.hero-cta-secondary {
+  border: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-background) 55%, transparent);
+  color: var(--color-fd-foreground);
+  backdrop-filter: blur(12px);
+}
+
+.hero-cta-secondary:hover {
+  border-color: var(--color-fd-primary);
+  background: var(--color-fd-muted);
+}
+
+.proof-pill {
+  gap: 0.5rem;
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 78%, transparent);
+  border-radius: 0.85rem;
+  padding: 0.72rem 0.85rem;
+  background: color-mix(in oklab, var(--color-fd-background) 56%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.86rem;
+  backdrop-filter: blur(12px);
+}
+
+.proof-pill svg {
+  color: var(--color-fd-success);
+}
+
+.hero-visual-card {
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 82%, transparent);
+  border-radius: 2rem;
+  background:
+    linear-gradient(145deg, color-mix(in oklab, var(--color-fd-muted) 72%, transparent), transparent),
+    color-mix(in oklab, var(--color-fd-background) 78%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
+    0 30px 90px color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
+  isolation: isolate;
+}
+
+.hero-visual-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 65%, color-mix(in oklab, var(--color-fd-background) 88%, transparent));
+}
+
+.hero-visual-caption {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+  background: color-mix(in oklab, var(--color-fd-background) 70%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+  backdrop-filter: blur(14px);
+}
+
+.stat-card {
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 78%, transparent);
+  border-radius: 1.1rem;
+  padding: 1.25rem;
+  background: color-mix(in oklab, var(--color-fd-background) 52%, transparent);
+}
+
+.section-block {
+  padding: 6rem 0;
+}
+
+.section-heading .eyebrow,
+.eyebrow {
+  margin-bottom: 0.9rem;
+  color: var(--color-fd-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.section-heading h2 {
+  color: var(--color-fd-foreground);
+  font-size: clamp(2rem, 4vw, 3.9rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+.section-heading p:not(.eyebrow) {
+  margin-top: 1.35rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.architecture-panel {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 1.6rem;
+  padding: 1rem;
+  background: color-mix(in oklab, var(--color-fd-muted) 42%, transparent);
+  box-shadow: 0 24px 70px color-mix(in oklab, var(--color-fd-foreground) 9%, transparent);
+}
+
+.architecture-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 72%, transparent);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: color-mix(in oklab, var(--color-fd-background) 55%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.85rem;
+}
+
+.architecture-row span {
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.architecture-row strong {
+  color: var(--color-fd-foreground);
+  font-weight: 650;
+  text-align: right;
+}
+
+.architecture-flow {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.workflow-card,
+.landing-feature-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 82%, transparent);
+  border-radius: 1.25rem;
+  background: color-mix(in oklab, var(--color-fd-background) 55%, transparent);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.workflow-card:hover,
+.landing-feature-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--color-fd-primary);
+  box-shadow: 0 20px 60px color-mix(in oklab, var(--color-fd-foreground) 10%, transparent);
+}
+
+.workflow-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.8rem 1rem;
+  padding: 1.2rem;
+}
+
+.workflow-icon,
+.feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 28%, var(--color-fd-border));
+  border-radius: 0.9rem;
+  background: color-mix(in oklab, var(--color-fd-primary) 12%, transparent);
+  color: var(--color-fd-primary);
+}
+
+.workflow-icon {
+  grid-row: span 2;
+  width: 2.7rem;
+  height: 2.7rem;
+}
+
+.workflow-card h3,
+.landing-feature-card h3 {
+  color: var(--color-fd-foreground);
+  font-weight: 750;
+}
+
+.workflow-card p,
+.landing-feature-card p {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.landing-feature-card {
+  padding: 1.45rem;
+}
+
+.feature-icon {
+  width: 2.55rem;
+  height: 2.55rem;
+  margin-bottom: 1rem;
+}
+
+.terminal-showcase {
+  position: relative;
+  min-height: 560px;
+  overflow: hidden;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 1.6rem;
+  background: var(--color-fd-muted);
+  box-shadow: 0 26px 80px color-mix(in oklab, var(--color-fd-foreground) 12%, transparent);
+}
+
+.landing-footer {
+  border-top: 1px solid var(--color-fd-border);
+  padding: 2rem 0;
+}
+
+.footer-link {
+  gap: 0.4rem;
+  color: var(--color-fd-foreground);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--color-fd-primary);
+}
+
+/* Roadmap page */
+.roadmap-shell {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--color-fd-muted) 30%, transparent), transparent 30rem),
+    var(--color-fd-background);
+}
+
+.roadmap-hero {
+  border-bottom: 1px solid var(--color-fd-border);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-fd-border) 42%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-fd-border) 42%, transparent) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.roadmap-hero-grid {
+  min-height: 560px;
+  align-items: center;
+}
+
+.roadmap-back-link,
+.roadmap-badge,
+.roadmap-actions,
+.roadmap-stage-meta,
+.roadmap-stage-outcomes,
+.roadmap-now-header,
+.roadmap-now-list {
+  display: flex;
+  align-items: center;
+}
+
+.roadmap-back-link {
+  width: fit-content;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.roadmap-back-link:hover {
+  color: var(--color-fd-primary);
+}
+
+.roadmap-badge {
+  width: fit-content;
+  gap: 0.55rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in oklab, var(--color-fd-background) 70%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.78rem;
+  font-weight: 800;
+  backdrop-filter: blur(12px);
+}
+
+.roadmap-hero h1 {
+  max-width: 760px;
+  margin-top: 1.5rem;
+  color: var(--color-fd-foreground);
+  font-size: 3.65rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.roadmap-hero p {
+  max-width: 690px;
+  margin-top: 1.5rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 1.12rem;
+  line-height: 1.8;
+}
+
+.roadmap-actions {
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 2.25rem;
+}
+
+.roadmap-now-panel {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-fd-background) 78%, transparent);
+  box-shadow: 0 24px 70px color-mix(in oklab, var(--color-fd-foreground) 10%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.roadmap-now-header {
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  padding: 1rem 1.15rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.roadmap-now-header strong {
+  color: var(--color-fd-primary);
+}
+
+.roadmap-now-body {
+  padding: 2rem;
+}
+
+.roadmap-now-body svg {
+  color: var(--color-fd-primary);
+}
+
+.roadmap-now-body h2 {
+  margin-top: 1.25rem;
+  color: var(--color-fd-foreground);
+  font-size: 2rem;
+  font-weight: 820;
+}
+
+.roadmap-now-body p {
+  margin-top: 0.9rem;
+  color: var(--color-fd-muted-foreground);
+  line-height: 1.75;
+}
+
+.roadmap-now-list {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  border-top: 1px solid var(--color-fd-border);
+  padding: 1rem;
+}
+
+.roadmap-now-list span,
+.roadmap-stage-outcomes span {
+  border: 1px solid color-mix(in oklab, var(--color-fd-border) 80%, transparent);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  background: color-mix(in oklab, var(--color-fd-muted) 54%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.roadmap-section {
+  padding: 5rem 0;
+}
+
+.roadmap-section-heading h2 {
+  max-width: 760px;
+  color: var(--color-fd-foreground);
+  font-size: 2.6rem;
+  font-weight: 820;
+  line-height: 1.08;
+}
+
+.roadmap-timeline {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  margin-top: 3rem;
+}
+
+.roadmap-timeline::before {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 1rem;
+  left: 1.2rem;
+  width: 1px;
+  background: var(--color-fd-border);
+}
+
+.roadmap-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 1rem;
+}
+
+.roadmap-stage-marker {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 1.35rem;
+  color: var(--color-fd-primary);
+}
+
+.roadmap-stage-content {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: color-mix(in oklab, var(--color-fd-background) 78%, transparent);
+}
+
+.roadmap-stage-meta {
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.roadmap-stage-meta strong {
+  color: var(--color-fd-primary);
+}
+
+.roadmap-stage-main {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr;
+  gap: 1rem;
+}
+
+.roadmap-stage-icon {
+  display: flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 28%, var(--color-fd-border));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--color-fd-primary) 10%, transparent);
+  color: var(--color-fd-primary);
+}
+
+.roadmap-stage h3,
+.roadmap-principle h3 {
+  color: var(--color-fd-foreground);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.roadmap-stage p,
+.roadmap-principle p {
+  margin-top: 0.45rem;
+  color: var(--color-fd-muted-foreground);
+  line-height: 1.7;
+}
+
+.roadmap-stage-outcomes {
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.roadmap-principles-section {
+  border-top: 1px solid var(--color-fd-border);
+  border-bottom: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-muted) 24%, transparent);
+}
+
+.roadmap-principles {
+  display: grid;
+  gap: 1rem;
+}
+
+.roadmap-principle {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 1rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: var(--color-fd-background);
+}
+
+.roadmap-principle svg {
+  margin-top: 0.2rem;
+  color: var(--color-fd-primary);
+}
+
+.roadmap-footer-band {
+  padding: 5rem 0;
+}
+
+.roadmap-footer-band h2 {
+  color: var(--color-fd-foreground);
+  font-size: 2.35rem;
+  font-weight: 820;
+  line-height: 1.18;
+}
+
+@media (max-width: 1023px) {
+  .hero-visual-card {
+    min-height: 520px;
+  }
+
+  .roadmap-hero h1 {
+    font-size: 3rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-section,
+  .hero-grid {
+    min-height: auto;
+  }
+
+  .hero-visual-card {
+    min-height: 430px;
+    border-radius: 1.35rem;
+  }
+
+  .section-block {
+    padding: 4.5rem 0;
+  }
+
+  .architecture-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .architecture-row strong {
+    text-align: left;
+  }
+
+  .terminal-showcase {
+    min-height: 450px;
+  }
+
+  .roadmap-hero-grid {
+    min-height: auto;
+  }
+
+  .roadmap-hero h1 {
+    font-size: 2.25rem;
+  }
+
+  .roadmap-section-heading h2,
+  .roadmap-footer-band h2 {
+    font-size: 2rem;
+  }
+
+  .roadmap-stage-main,
+  .roadmap-principle {
+    grid-template-columns: 1fr;
+  }
+
+  .roadmap-stage-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

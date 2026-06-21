@@ -1,0 +1,166 @@
+---
+title: CLI reference
+description: Режимы запуска SOBA, top-level флаги, provider subcommands и проверочные команды.
+---
+
+Эта страница перечисляет CLI-поверхность SOBA Agent v0.4.x, которая доступна из терминала.
+
+---
+
+## 1. Режимы запуска
+
+| Команда | Назначение |
+|---|---|
+| `soba "prompt"` | One-shot задача с сохранением сессии |
+| `soba` | Интерактивный TUI, если процесс запущен в TTY |
+| `soba -i` | Явно интерактивный TUI |
+| `soba -c` | Продолжить последнюю сессию |
+| `soba -r` | Выбрать сессию через интерактивный selector |
+| `soba -s <id> "prompt"` | Продолжить конкретную сессию |
+| `soba --no-session "prompt"` | Выполнить без сохранения session history |
+
+---
+
+## 2. Top-level флаги
+
+### Session и режимы
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--interactive` | `-i` | Запустить TUI |
+| `--continue` | `-c` | Продолжить последнюю сессию |
+| `--resume` | `-r` | Выбрать сессию |
+| `--session <id>` | `-s` | Открыть конкретную сессию |
+| `--no-session` | — | Не сохранять историю на диск |
+
+### Provider и модель
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--model <id>` | `-m` | Переопределить модель на один запуск |
+| `--api-key <key>` | `-k` | Переопределить API key на один запуск |
+| `--base-url <url>` | — | Переопределить OpenAI-compatible base URL |
+
+### Лимиты
+
+| Флаг | Описание |
+|---|---|
+| `--budget <n>` | Ограничить token budget задачи |
+| `--max-output-tokens <n>` | Лимит выходных токенов ответа |
+| `--max-completion-tokens <n>` | Лимит reasoning/completion токенов |
+| `--context-window <n>` | Переопределить context window модели |
+| `--max-agent-iterations <n>` | Аварийный лимит model/tool loop iterations |
+| `--max-stalled-iterations <n>` | Итерации без прогресса до stall recovery |
+| `--max-run-minutes <n>` | Максимальная длительность одной задачи |
+| `--bash-max-timeout-seconds <n>` | Верхняя граница timeout для одного вызова `bash` tool в секундах; по умолчанию 300 |
+
+### Интерфейс и поведение
+
+| Флаг | Описание |
+|---|---|
+| `--lang <en\|ru\|zh>` | Язык интерфейса |
+| `--theme <name>` | Тема TUI |
+| `--no-color` | Отключить ANSI-цвета |
+| `--no-stream` | Отключить streaming |
+| `--stream` | Включить streaming явно |
+| `--debug` | Записывать loop decisions в session JSONL |
+| `--no-auto-compact` | Отключить proactive compaction |
+
+### Sound
+
+| Флаг | Описание |
+|---|---|
+| `--sound-enabled` | Включить sound notifications |
+| `--no-sound` | Отключить sound notifications |
+| `--sound-volume <0..1>` | Громкость |
+| `--sound-repeat` | Повторять звук до следующего события/смены состояния |
+
+### Информация
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--help` | `-h` | Показать справку |
+| `--version` | `-v` | Показать версию |
+
+---
+
+## 3. Provider subcommands
+
+Provider registry управляется через sub-route `soba provider`.
+
+| Команда | Назначение |
+|---|---|
+| `soba provider help` | Справка по provider CLI |
+| `soba provider list` | Список built-in и custom providers |
+| `soba provider show <id>` | Показать provider definition |
+| `soba provider use <id>` | Сделать provider активным |
+| `soba provider add <id> ...` | Добавить custom provider |
+| `soba provider remove <id>` | Удалить custom provider |
+
+### `soba provider add`
+
+Поддержанные флаги:
+
+| Флаг | Описание |
+|---|---|
+| `--name <name>` | Человекочитаемое имя |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | Env var с API key; пустое значение = keyless provider |
+| `--adapter <openai\|anthropic>` | Adapter id; runtime path ориентирован на OpenAI-compatible API |
+| `--default-model <id>` | Default model |
+| `--model <spec>` | Model spec; флаг можно повторять |
+| `--from-file <path>` | Загрузить provider definition из JSON |
+| `--set-active` | Сразу переключиться на добавленный provider |
+
+Формат `--model`:
+
+```text
+id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
+```
+
+Пример keyless local provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",128000,8192 \
+  --set-active
+```
+
+---
+
+## 4. Практические команды проверки
+
+```bash
+soba --version
+soba --help
+soba provider list
+soba --no-session --max-agent-iterations 1 "Ответь одним словом: ok"
+```
+
+Для разработки в репозитории:
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+---
+
+## 5. Direct shell в TUI
+
+В интерактивном режиме shell-команды можно запускать напрямую:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` выполняет команду сразу, `!!` выполняет команду без вывода в transcript. Если нужно, чтобы агент увидел и
+проанализировал output, попросите его выполнить команду через обычный prompt — тогда будет использован `bash` tool.
+
+## Что дальше
+
+- [Провайдеры и модели](/ru/docs/providers)
+- [Интерфейс и команды](/ru/docs/usage)
+- [Конфигурация](/ru/docs/configuration)

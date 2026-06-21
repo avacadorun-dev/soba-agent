@@ -1,0 +1,290 @@
+---
+title: MCP-серверы
+description: Настройка project-local MCP stdio и Streamable HTTP servers, auth, trustMode, команды /mcp и troubleshooting.
+---
+
+SOBA v0.4.0 работает как MCP-клиент: запускает локальные stdio MCP-серверы или подключается к remote Streamable HTTP
+endpoints, читает `tools/list` и публикует готовые tools в общий `ToolRegistry`.
+
+Не входят в scope v0.4.0: SOBA как MCP-сервер, marketplace discovery, signed servers, deprecated HTTP+SSE как отдельный
+transport и security-решения на основе MCP tool annotations.
+
+---
+
+## 1. Поддерживаемые transports
+
+| Transport | Статус | Детали |
+|---|---|---|
+| `stdio` | Поддержан | Локальный child process. Если `transport` опущен и есть `command`, SOBA считает server stdio. |
+| `streamableHttp` | Поддержан | Remote MCP endpoint по HTTPS. Для локальной разработки разрешены `http://127.0.0.1` и `http://localhost`. |
+| Deprecated HTTP+SSE (2024-11-05) | Не поддержан как transport SOBA | Старый transport использовал отдельные SSE/messages endpoints. В SOBA настраивайте текущий единый Streamable HTTP MCP endpoint. SSE stream внутри Streamable HTTP при этом поддержан. |
+
+---
+
+## 2. Создать `.soba/mcp.json`
+
+MCP-конфиг хранится в проекте:
+
+```bash
+mkdir -p .soba
+touch .soba/mcp.json
+```
+
+### Local stdio
+
+```json
+{
+  "version": 1,
+  "servers": {
+    "github": {
+      "name": "GitHub MCP",
+      "transport": "stdio",
+      "command": "bunx",
+      "args": ["some-github-mcp-server"],
+      "cwd": ".",
+      "env": {
+        "GITHUB_TOKEN": "${ENV:GITHUB_TOKEN}"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}
+```
+
+### Remote Streamable HTTP
+
+```json
+{
+  "version": 1,
+  "servers": {
+    "hosted-docs": {
+      "name": "Hosted docs MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "none"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}
+```
+
+Context7-style hosted providers обычно дают один Streamable HTTP MCP endpoint для workspace/project. Используйте URL из
+dashboard или документации провайдера; SOBA docs не задают provider-specific endpoint.
+
+`servers` может быть object-map или массивом. В object-map ключ становится server ID. SOBA также принимает
+`mcpServers` как compatibility alias; в одном файле используйте только один из этих ключей.
+
+| Поле | Обязательное | По умолчанию | Описание |
+|---|---:|---|---|
+| `version` | нет | `1` | Принимается только schema version `1`. |
+| `servers` / `mcpServers` | да | — | Object-map или массив server configs. |
+| `id` | только для массива | object-map key | Буквы, цифры, `.`, `_`, `-`; максимум 64 символа. |
+| `name` | нет | `id` | Имя для `/mcp status`. |
+| `transport` | нет | `stdio` | `stdio` или `streamableHttp`. |
+| `command` | stdio | — | Исполняемая команда. |
+| `args` | нет | `[]` | Аргументы команды. |
+| `cwd` | только stdio | project root | Должен оставаться внутри project root. |
+| `env` | только stdio | `{}` | Строковые env-переменные, включая `${ENV:NAME}`. |
+| `url` | remote | — | Absolute URL. HTTPS обязателен, кроме localhost development URLs. Поддерживает `${ENV:NAME}` для providers с query auth. |
+| `headers` | remote | `{}` | Static headers. Значения поддерживают `${ENV:NAME}`. |
+| `auth` | remote | `{ "type": "none" }` | Remote auth mode. |
+| `timeoutMs` | нет | `30000` | Таймаут MCP request/shutdown. |
+| `maxOutputBytes` | нет | `1048576` | Лимит вывода MCP tool. |
+| `trustMode` | нет | `normal` | `safe`, `normal` или `dangerous`. |
+| `enabled` | нет | `true` | `false` оставляет server в config, но запрещает запуск. |
+
+---
+
+## 3. Remote auth
+
+Поддержанные remote auth modes:
+
+```json
+{ "type": "none" }
+```
+
+```json
+{ "type": "bearerEnv", "env": "REMOTE_MCP_BEARER_TOKEN" }
+```
+
+```json
+{ "type": "apiKeyEnv", "header": "X-API-Key", "env": "REMOTE_MCP_API_KEY" }
+```
+
+```json
+{ "type": "oauth" }
+```
+
+Некоторые remote MCP providers кладут credentials прямо в Streamable HTTP endpoint, например как API-key query parameter.
+Для такого варианта оставьте `auth` равным `none` и используйте env placeholder в `url`; token-like query params
+редактируются в diagnostics:
+
+```json
+{
+  "url": "https://mcp.example.com/mcp?apiKey=${ENV:REMOTE_MCP_API_KEY}",
+  "auth": {
+    "type": "none"
+  }
+}
+```
+
+Для `bearerEnv` и `apiKeyEnv` поле `auth.env` содержит имя env-переменной без `${ENV:...}`. Placeholders
+`${ENV:...}` также используются в `headers` и stdio `env`:
+
+```json
+{
+  "headers": {
+    "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+  },
+  "auth": {
+    "type": "apiKeyEnv",
+    "header": "X-API-Key",
+    "env": "REMOTE_MCP_API_KEY"
+  }
+}
+```
+
+OAuth lifecycle:
+
+```text
+/mcp auth status <server>
+/mcp auth login <server>
+/mcp auth logout <server>
+```
+
+Если remote server возвращает auth-required, `/mcp status` и `/mcp auth status <server>` показывают next action,
+обычно `Run /mcp auth login <server>`.
+
+OAuth в SOBA покрывает discovery, PKCE browser flow, callback, token storage, refresh, logout и UX-команды
+`/mcp auth ...`. Команды auth делегируют provider-specific интеграции через auth controller. Если controller не
+подключён для конкретного remote provider в текущей сборке, `/mcp auth login <server>` честно сообщает, что login flow
+недоступен.
+
+Для первого production-подключения проще использовать `bearerEnv` или `apiKeyEnv`. OAuth выбирайте для provider
+integration, где controller уже подключает login flow и применение сохранённых bearer credentials к remote requests.
+
+---
+
+## 4. Trust boundary
+
+Trust берётся только из локального `.soba/mcp.json`.
+
+MCP server может прислать descriptions, JSON Schema, annotations, metadata и hints. SOBA использует эти данные для
+описания инструмента, но не для security decisions. Сервер не может сам понизить свой уровень доверия.
+
+Рекомендуемая политика:
+
+- `safe` — только read-only локальные tools без сетевых и файловых мутаций.
+- `normal` — обычные dev tools, где подходит стандартный permission flow.
+- `dangerous` — filesystem/API tools, запись на диск, внешние сервисы, credentials, remote mutations.
+
+Remote auth headers, OAuth tokens, authorization codes и `MCP-Session-Id` редактируются в diagnostics и не должны
+попадать в docs или committed config.
+
+Имена MCP tools в модели имеют OpenAI-compatible формат:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Пример: `mock-modern` + `echo` → `mcp_mock_modern_echo`.
+
+---
+
+## 5. Команды `/mcp`
+
+Команды выполняются внутри интерактивной сессии SOBA:
+
+| Команда | Действие |
+|---|---|
+| `/mcp` | То же, что `/mcp status`. |
+| `/mcp status` | Показать servers, transport, state, lifecycle, protocol, auth state, restart count и last error. |
+| `/mcp start <server>` | Запустить server и зарегистрировать ready tools. |
+| `/mcp stop <server>` | Остановить server. |
+| `/mcp restart <server>` | Перезапустить server, сбросить crash counters и синхронизировать tools. |
+| `/mcp auth status <server>` | Показать remote auth state и next action. |
+| `/mcp auth login <server>` | Запустить OAuth login flow для OAuth remote server. |
+| `/mcp auth logout <server>` | Очистить сохранённые OAuth credentials. |
+
+Tools регистрируются только для servers в состоянии `ready`.
+
+---
+
+## 6. Examples
+
+Пошаговый remote setup:
+
+- [Remote MCP: пошаговый гайд](/ru/docs/remote-mcp-guide)
+
+Verified local examples:
+
+- `docs/examples/mcp/mock-modern.json`
+- `docs/examples/mcp/mock-legacy-paginated.json`
+
+Remote templates:
+
+- `docs/examples/mcp/remote-streamable-http.template.json`
+- `docs/examples/mcp/remote-bearer-env.template.json`
+- `docs/examples/mcp/remote-api-key-env.template.json`
+- `docs/examples/mcp/remote-query-env.template.json`
+- `docs/examples/mcp/remote-oauth.template.json`
+
+Remote templates выключены по умолчанию и используют `https://mcp.example.com/mcp`. Замените URL, экспортируйте нужные
+env vars, проверьте `trustMode`, затем поставьте `"enabled": true`.
+
+Optional stdio template:
+
+- `docs/examples/mcp/filesystem-stdio.template.json`
+
+Он выключен по умолчанию, потому что зависит от npm-пакета в окружении пользователя.
+
+---
+
+## 7. Troubleshooting
+
+| Симптом | Причина | Что проверить |
+|---|---|---|
+| `/mcp status` показывает, что серверов нет | Нет `.soba/mcp.json` или он не загрузился | Создайте config и перезапустите SOBA. |
+| `Required environment variable NAME is not set.` | Не найден `${ENV:NAME}` | Выполните `export NAME=...` до запуска SOBA. |
+| `Unknown MCP server id` | Неверный server ID | Проверьте ключ object-map или поле `id`. |
+| Spawn failure | `command` не установлен, неверный `cwd` или `args` | Запустите эту команду вручную из project root. |
+| HTTP 401 | Нет credentials, они истекли или отклонены | Проверьте `/mcp auth status <server>`, env vars или выполните `/mcp auth login <server>`, если OAuth подключён для provider. |
+| HTTP 403 | Credentials есть, но не имеют доступа | Проверьте permissions, workspace/project и OAuth scopes. |
+| HTTP 404 | Неверный endpoint URL | Сверьте Streamable HTTP URL с dashboard/docs провайдера. |
+| Session expired | Remote server завершил MCP HTTP session | Выполните `/mcp restart <server>`; при необходимости login заново. |
+| HTTP 429 | Rate limit remote provider | Подождите, уменьшите частоту запросов или измените лимиты у провайдера. |
+| Timeout | Вызов превысил `timeoutMs` | Увеличивайте timeout только после проверки server health/network latency. |
+| Malformed SSE | Endpoint вернул невалидный Streamable HTTP event stream | Убедитесь, что URL ведёт на единый Streamable HTTP MCP endpoint, а не на старый standalone `/sse` endpoint или обычный web URL. |
+| `crashed` | Child process завершился, remote request упал или protocol data некорректны | Смотрите redacted last error в `/mcp status`. |
+| Missing tools capability | Server не отдаёт MCP tools | В v0.4.0 нужны tools-capable MCP servers. |
+| После правки config ничего не изменилось | Hot reload не поддержан | Перезапустите SOBA. |
+
+---
+
+## 8. Release validation
+
+Для MCP docs/examples достаточно минимум:
+
+```bash
+bun test tests/core/mcp/config.test.ts
+bun run lint
+bunx tsc --noEmit
+cd docs-site && bun run check
+```
+
+Перед релизными изменениями также выполняется сборка:
+
+```bash
+bun run build
+```

@@ -1,0 +1,172 @@
+---
+title: Quick Start
+description: "Start SOBA Agent v0.4.1: install, provider, TUI, sessions, direct shell, Project Memory, MCP, and skills."
+---
+
+This guide gets you from a fresh checkout to a working SOBA v0.4.1 session. It focuses on the practical path: verify
+the provider, start the TUI, run a task, save project memory, and connect optional tools.
+
+---
+
+## 1. Install and check
+
+With npm:
+
+```bash
+npm install -g soba-agent
+```
+
+With Bun:
+
+```bash
+bun add -g soba-agent
+```
+
+Standalone binaries for macOS and Linux are attached to GitHub Releases. For normal use, prefer the npm or Bun package;
+use a binary when you do not want a global package install.
+
+Check the CLI:
+
+```bash
+soba --version
+soba --help
+```
+
+From source, use:
+
+```bash
+git clone <repo-url> soba-agent
+cd soba-agent
+bun install
+bun run build
+bun run src/cli.ts --version
+```
+
+---
+
+## 2. Configure a provider
+
+List configured providers:
+
+```bash
+soba provider list
+```
+
+Run a minimal one-shot check:
+
+```bash
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+Add a local OpenAI-compatible provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",128000,8192 \
+  --set-active
+```
+
+See [Providers and models](/ru/docs/providers) for the full provider registry.
+
+---
+
+## 3. Start the TUI
+
+```bash
+soba -i --lang en --theme graphite
+```
+
+Useful first commands:
+
+```text
+/session
+/budget
+/permissions ask
+/auto-compact on
+```
+
+For a disposable repository, you can switch to repo-scoped permissions:
+
+```text
+/permissions repo
+```
+
+`repo` suppresses prompts only for dangerous operations that stay inside the current repository. Use `/permissions full`
+only when you want to trust all dangerous operations for the current session, including external commands.
+
+---
+
+## 4. Run the first task
+
+Example prompt:
+
+```text
+Inspect this project.
+Read package.json and the src/tests layout first.
+Then propose a short plan.
+If edits are needed, keep them inside the plan and run a targeted test.
+Do not create a git commit.
+```
+
+Use direct shell `!` for quick commands you run yourself:
+
+```text
+!git status --short
+!git diff --stat
+!bun test
+```
+
+Use `!!` when the command output should stay out of the transcript:
+
+```text
+!!bun run build
+```
+
+If you want the agent to analyze command output, ask it in a normal message so it can call the `bash` tool itself.
+
+---
+
+## 5. Continue sessions
+
+```bash
+soba -i
+soba -c -i
+soba -r
+soba -s <SESSION_ID> "Continue the task"
+```
+
+For throwaway prompts:
+
+```bash
+soba --no-session "One-off question"
+```
+
+---
+
+## 6. Use Project Memory, MCP, and skills
+
+Project Memory stores durable project facts in `.soba/memory/`:
+
+```text
+Update Project Memory with architecture, conventions, known errors, and dependencies.
+Do not store secrets.
+```
+
+MCP servers are configured in `.soba/mcp.json`:
+
+```text
+/mcp status
+/mcp start <server>
+/mcp auth status <server>
+```
+
+Skills are listed and activated from the TUI:
+
+```text
+/skill list
+/skill:commit-message Suggest a conventional commit message for staged changes.
+```
+
+Next: [CLI reference](/ru/docs/cli-reference), [Usage](/ru/docs/usage), [MCP servers](/ru/docs/mcp), and
+[Skills](/ru/docs/skills).

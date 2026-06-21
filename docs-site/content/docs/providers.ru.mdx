@@ -1,0 +1,277 @@
+---
+title: Провайдеры и модели
+description: Встроенные провайдеры DeepSeek, Moonshot Kimi, Alibaba Qwen, OpenRouter. Динамический discovery моделей и кастомные провайдеры.
+---
+
+SOBA работает с любым OpenAI-совместимым API. Этот гайд объясняет, как работать со встроенными
+провайдерами, выбирать модели, добавлять кастомные и диагностировать проблемы.
+
+**Ключевое изменение в v0.4.0:** Модели больше не хранятся в жёстко закодированных списках —
+они **обнаруживаются динамически** через `GET /v1/models`. Это значит, что новые модели
+(DeepSeek-V3, Kimi K2, Qwen3 и т.д.) доступны сразу, без обновления SOBA.
+
+---
+
+## Содержание
+
+1. [Архитектура](#1-архитектура)
+1. [Встроенные провайдеры](#2-встроенные-провайдеры)
+1. [Выбор модели](#3-выбор-модели)
+1. [Кастомные провайдеры](#4-кастомные-провайдеры)
+1. [Управление через CLI](#5-управление-через-cli)
+1. [Аутентификация](#6-аутентификация)
+1. [Диагностика](#7-диагностика)
+
+---
+
+## 1. Архитектура
+
+Система провайдеров в SOBA использует **registry** (реестр), который объединяет:
+
+- **Встроенные провайдеры**: 4 провайдера с предварительно известными базовыми URL
+- **Кастомные провайдеры**: любые OpenAI-совместимые API, добавленные пользователем
+- **Динамический discovery моделей**: список моделей запрашивается у API провайдера при запуске (и кэшируется)
+
+```
+┌──────────────────────────────────────────┐
+│              Registry                    │
+│                                          │
+│  ┌────────────────┐  ┌────────────────┐ │
+│  │ Built-in       │  │ Custom         │ │
+│  │ Providers (4)  │  │ Providers (∞)  │ │
+│  └────────────────┘  └────────────────┘ │
+│                                          │
+│  ┌────────────────────────────────────┐  │
+│  │ Dynamic Model Discovery             │  │
+│  │ GET /v1/models → in-memory cache    │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## 2. Встроенные провайдеры
+
+SOBA v0.4.0 поставляется с 4 встроенными провайдерами. Все они используют OpenAI-совместимый адаптер.
+
+| ID | Название | Базовый URL | API-ключ (env) | Комментарий |
+|---|---|---|---|---|
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | V3, R1, Coder |
+| `kimi` | Moonshot Kimi | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | Kimi K2 — отличная кодовая модель |
+| `alibaba` | Alibaba Qwen | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | Qwen3, Qwen-Coder (Singapore регион) |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | Мета-маршрутизатор: Claude, GPT, Gemini, Llama и десятки других |
+
+### 2.1. Динамический discovery моделей
+
+При запуске SOBA делает `GET {baseUrl}/models` для активного провайдера. Полученный список моделей
+кэшируется в памяти до перезапуска. Автоматически выбирается наиболее подходящая модель по умолчанию
+(предпочтение отдаётся код-ориентированным моделям).
+
+Кэш живёт только в памяти текущего процесса. Чтобы заново запросить каталог моделей, перезапустите SOBA или откройте селектор модели в TUI через `Ctrl+M`.
+
+---
+
+## 3. Выбор модели
+
+### 3.1. Просмотр доступных моделей
+
+```bash
+# В терминале
+soba provider list
+```
+
+Вывод показывает всех провайдеров и их текущие модели, сгруппированные по провайдеру.
+Активная модель помечена звёздочкой.
+
+### 3.2. Выбор модели
+
+В TUI модель переключается через селектор `Ctrl+M`. Для одного запуска можно передать модель через top-level CLI-флаг или env:
+
+```bash
+# Через CLI на один запуск
+soba --model deepseek-chat "Проверь проект"
+
+# Через env
+export SOBA_MODEL="anthropic/claude-sonnet-4"
+```
+
+Команда `soba provider use <id>` переключает активного провайдера на его default model. Для кастомных провайдеров default model задаётся при добавлении (`--default-model`) или берётся из первого `--model`.
+
+### 3.3. Рекомендации по моделям
+
+| Задача | Рекомендуемая модель | Почему |
+|---|---|---|
+| Кодинг (быстро) | `deepseek/deepseek-chat` | V3: отличный баланс цена/качество/скорость |
+| Кодинг (качество) | `openrouter/anthropic/claude-sonnet-4` | Sonnet 4: лучший для сложных рефакторингов |
+| Кодинг (китайский) | `kimi/kimi-k2` | Kimi K2: фокус на code generation |
+| Reasoning | `deepseek/deepseek-reasoner` | R1: глубокое reasoning в сложных задачах |
+| Бесплатно | `openrouter/google/gemma-3-27b-it:free` | Бесплатные модели OpenRouter |
+| Локально | кастомный провайдер → Ollama | `http://localhost:11434/v1` |
+
+---
+
+## 4. Кастомные провайдеры
+
+Любой OpenAI-совместимый API можно добавить как кастомного провайдера.
+
+### 4.1. Добавление провайдера
+
+```bash
+# Ollama (локальный, без API-ключа)
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",128000,8192
+
+# Groq
+soba provider add groq \
+  --base-url https://api.groq.com/openai/v1 \
+  --api-key-env GROQ_API_KEY \
+  --model llama-3.3-70b-versatile="Llama 3.3 70B",128000,8192
+
+# Together AI
+soba provider add together \
+  --base-url https://api.together.xyz/v1 \
+  --api-key-env TOGETHER_API_KEY \
+  --model meta-llama/Llama-3.3-70B-Instruct-Turbo="Llama 3.3 70B",128000,8192
+
+# Любой self-hosted OpenAI-compatible API
+soba provider add my-api \
+  --base-url https://my-llm.company.com/v1 \
+  --api-key-env MY_LLM_KEY \
+  --model company-code-model="Company Code Model",128000,8192
+```
+
+### 4.2. Флаги `soba provider add`
+
+| Флаг | Обязательный | Описание |
+|---|---|---|
+| `<id>` | Да | Уникальный идентификатор провайдера (только буквы, цифры, дефисы) |
+| `--base-url <url>` | Да | Базовый URL OpenAI-совместимого API |
+| `--api-key-env <VAR>` | Нет | Имя переменной окружения с API-ключом. Если не указан, провайдер считается keyless (подходит для локальных серверов) |
+| `--name <name>` | Нет | Человекочитаемое имя для отображения |
+| `--model <spec>` | Да | Модель в формате `id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]`. Можно повторять |
+| `--default-model <id>` | Нет | Default model. Если не указан, используется первый `--model` |
+| `--adapter <openai\|anthropic>` | Нет | Адаптер провайдера. Сейчас runtime-путь рассчитан на OpenAI-compatible API (`openai`) |
+| `--from-file <path>` | Нет | Загрузить определение провайдера из JSON-файла |
+| `--set-active` | Нет | Сразу сделать провайдера активным после добавления |
+
+### 4.3. Управление кастомными провайдерами
+
+```bash
+# Посмотреть определение провайдера
+soba provider show ollama
+
+# Сделать провайдера активным
+soba provider use ollama
+
+# Удалить кастомный провайдер
+soba provider remove ollama
+```
+
+Команды `update` нет: чтобы изменить URL или список моделей, удалите кастомного провайдера и добавьте его заново.
+
+### 4.4. Хранение
+
+Кастомные провайдеры сохраняются в `registry.customProviders` внутри `~/.soba/config.json`:
+
+```json
+{
+  "registry": {
+    "activeProvider": "deepseek",
+    "activeModelId": "deepseek-chat",
+    "customProviders": [
+      {
+        "id": "ollama",
+        "name": "Ollama (Local)",
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKeyEnv": "OLLAMA_API_KEY",
+        "adapter": "openai"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 5. Управление через CLI
+
+Полный набор команд `soba provider`:
+
+```bash
+# Справка
+soba provider help
+
+# Список провайдеров и моделей
+soba provider list
+
+# Выбрать активного провайдера (использует его default model)
+soba provider use deepseek
+
+# Добавить кастомный провайдер
+soba provider add <id> --base-url <url> --model <spec> [--api-key-env <VAR>] [--name <name>]
+
+# Удалить кастомный провайдер
+soba provider remove <id>
+
+# Показать определение провайдера
+soba provider show <id>
+```
+
+### Slash-команды в TUI
+
+Управление провайдерами и моделями производится через CLI-команды `soba provider` (см. выше) или через флаг `--model` при запуске.
+
+---
+
+## 6. Аутентификация
+
+### 6.1. Способы передачи API-ключа
+
+**Приоритет:**
+
+1. **Сохранённый ключ провайдера** в `registry.providers.<providerId>.apiKey` (создаётся first-time wizard для встроенных провайдеров)
+2. **Переменная окружения провайдера**: `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `DASHSCOPE_API_KEY`, `OPENROUTER_API_KEY`
+3. **Legacy flat-настройки** `SOBA_API_KEY` / `apiKey` используются старым fallback-путём конфигурации; для registry-провайдеров предпочтительны provider-specific env-переменные или сохранённый ключ
+
+### 6.2. Для кастомных провайдеров
+
+При использовании `--api-key-env MY_VAR` SOBA будет читать ключ из `process.env.MY_VAR`.
+Если не указан `--api-key-env`, кастомный провайдер считается keyless — это удобно для локальных OpenAI-compatible серверов.
+
+---
+
+## 7. Диагностика
+
+### 7.1. Проверка соединения
+
+```bash
+# Прямой запрос к API для проверки
+curl -H "Authorization: Bearer $DEEPSEEK_API_KEY" https://api.deepseek.com/models
+
+# Проверка через SOBA: вывести провайдеров и активную модель
+soba provider list
+```
+
+### 7.2. Распространённые проблемы
+
+| Проблема | Причина | Решение |
+|---|---|---|
+| `401 Unauthorized` | Неверный API-ключ | Проверьте `SOBA_API_KEY` или `apiKey` в `config.json` |
+| `404 Not Found` | Неправильный base URL | Проверьте `--base-url` или `config.json` |
+| `Model not found` | Модель недоступна у провайдера | Проверьте `soba provider list`, откройте селектор `Ctrl+M` или задайте корректный `--model` |
+| `Context overflow` | Превышен context window | Уменьшите `maxOutputTokens`, используйте compaction |
+| `429 Too Many Requests` | Rate limit провайдера | Подождите, уменьшите частоту запросов |
+| Таймаут | Провайдер не отвечает | Проверьте сеть, попробуйте другого провайдера |
+
+### 7.3. Проверка кэша моделей
+
+SOBA кэширует модели в памяти текущего процесса. При добавлении новой модели провайдером перезапустите SOBA или откройте селектор `Ctrl+M`, чтобы заново выполнить discovery.
+
+### 7.4. Смена провайдера при проблемах
+
+Если один провайдер недоступен, легко переключиться на другой:
+```bash
+soba provider use openrouter
+soba --model meta-llama/llama-3.3-70b-instruct "Продолжи задачу"
+```

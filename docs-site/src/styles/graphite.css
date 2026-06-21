@@ -1,0 +1,36 @@
+/* === SOBA Graphite Theme (Dark) === */
+
+.dark {
+  --color-fd-background: hsl(220, 17%, 7%);
+  --color-fd-foreground: hsl(215, 18%, 87%);
+  --color-fd-muted: hsl(220, 16%, 11%);
+  --color-fd-muted-foreground: hsl(215, 9%, 53%);
+  --color-fd-popover: hsl(220, 16%, 13%);
+  --color-fd-popover-foreground: hsl(215, 18%, 87%);
+  --color-fd-card: hsl(220, 16%, 11%);
+  --color-fd-card-foreground: hsl(215, 18%, 87%);
+  --color-fd-border: hsl(217, 16%, 22%);
+  --color-fd-primary: hsl(214, 17%, 73%);
+  --color-fd-primary-foreground: hsl(220, 17%, 7%);
+  --color-fd-secondary: hsl(220, 16%, 11%);
+  --color-fd-secondary-foreground: hsl(215, 18%, 87%);
+  --color-fd-accent: hsl(214, 17%, 73%);
+  --color-fd-accent-foreground: hsl(220, 17%, 7%);
+  --color-fd-ring: hsl(214, 17%, 73%);
+
+  --color-fd-success: hsl(138, 18%, 59%);
+  --color-fd-warning: hsl(41, 47%, 58%);
+  --color-fd-error: hsl(356, 45%, 61%);
+  --color-fd-info: hsl(205, 35%, 63%);
+  --color-fd-idea: hsl(205, 35%, 56%);
+
+  --color-fd-diff-add: hsla(138, 18%, 59%, 0.12);
+  --color-fd-diff-add-symbol: hsl(138, 18%, 52%);
+  --color-fd-diff-remove: hsla(356, 45%, 61%, 0.12);
+  --color-fd-diff-remove-symbol: hsl(356, 45%, 54%);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: hsl(220, 17%, 7%);
+  --color-fd-secondary: hsl(220, 17%, 7%);
+}

@@ -1,0 +1,169 @@
+---
+title: 快速开始
+description: "快速启动 SOBA Agent v0.4.1：安装、provider、TUI、session、direct shell、Project Memory、MCP 和 skills。"
+---
+
+本指南从一次干净安装开始，带你完成 SOBA v0.4.1 的最小可用工作流：检查 provider、启动 TUI、执行任务、
+保存项目记忆，并按需连接 MCP tools 和 skills。
+
+---
+
+## 1. 安装并检查
+
+使用 npm：
+
+```bash
+npm install -g soba-agent
+```
+
+使用 Bun：
+
+```bash
+bun add -g soba-agent
+```
+
+检查 CLI：
+
+```bash
+soba --version
+soba --help
+```
+
+如果从源码运行：
+
+```bash
+git clone <repo-url> soba-agent
+cd soba-agent
+bun install
+bun run build
+bun run src/cli.ts --version
+```
+
+---
+
+## 2. 配置 provider
+
+查看 providers：
+
+```bash
+soba provider list
+```
+
+执行最小 one-shot 检查：
+
+```bash
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+添加本地 OpenAI-compatible provider：
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",128000,8192 \
+  --set-active
+```
+
+完整说明见 [Providers and models](/ru/docs/providers)。
+
+---
+
+## 3. 启动 TUI
+
+```bash
+soba -i --lang zh --theme graphite
+```
+
+常用起始命令：
+
+```text
+/session
+/budget
+/permissions ask
+/auto-compact on
+```
+
+一次性仓库可以使用 repo-scoped permissions：
+
+```text
+/permissions repo
+```
+
+`repo` 只会跳过当前仓库内 dangerous 操作的确认。只有当你要在当前 session 中信任所有 dangerous 操作
+（包括外部命令）时，才使用 `/permissions full`。
+
+---
+
+## 4. 执行第一个任务
+
+示例 prompt：
+
+```text
+Inspect this project.
+Read package.json and the src/tests layout first.
+Then propose a short plan.
+If edits are needed, keep them inside the plan and run a targeted test.
+Do not create a git commit.
+```
+
+使用 direct shell `!` 快速执行你自己的命令：
+
+```text
+!git status --short
+!git diff --stat
+!bun test
+```
+
+如果不想把输出放进 transcript，用 `!!`：
+
+```text
+!!bun run build
+```
+
+如果需要 agent 分析命令输出，请用普通消息要求它运行命令，这样它会通过 `bash` tool 获取输出。
+
+---
+
+## 5. 继续 session
+
+```bash
+soba -i
+soba -c -i
+soba -r
+soba -s <SESSION_ID> "Continue the task"
+```
+
+一次性问题可以不保存 session：
+
+```bash
+soba --no-session "One-off question"
+```
+
+---
+
+## 6. 使用 Project Memory、MCP 和 skills
+
+Project Memory 把长期项目事实保存在 `.soba/memory/`：
+
+```text
+Update Project Memory with architecture, conventions, known errors, and dependencies.
+Do not store secrets.
+```
+
+MCP servers 通过 `.soba/mcp.json` 配置：
+
+```text
+/mcp status
+/mcp start <server>
+/mcp auth status <server>
+```
+
+在 TUI 中查看和激活 skills：
+
+```text
+/skill list
+/skill:commit-message Suggest a conventional commit message for staged changes.
+```
+
+下一步：[CLI reference](/ru/docs/cli-reference)、[Usage](/ru/docs/usage)、[MCP servers](/ru/docs/mcp) 和
+[Skills](/ru/docs/skills)。

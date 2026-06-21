@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-commit: Bun is required but was not found in PATH." >&2
+  exit 1
+fi
+
+run() {
+  echo "pre-commit: $*"
+  "$@"
+}
+
+run bun run lint
+run bunx tsc --noEmit
+run bun test

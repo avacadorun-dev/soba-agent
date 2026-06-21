@@ -1,0 +1,709 @@
+---
+title: "Проект шаг за шагом: профессиональный workflow"
+description: "End-to-end руководство по SOBA Agent v0.4.0: TUI, безопасная разработка, Project Memory, MCP, skills, sessions, capsules, tests и handoff."
+---
+
+Это руководство показывает полный рабочий цикл разработки с SOBA Agent v0.4.0. Мы не будем делать игрушечный
+todo-list. Вместо этого построим `release-radar`: локальный release readiness auditor на Bun/TypeScript, который
+отвечает на практичный вопрос: можно ли текущий репозиторий выпускать сейчас, и что именно мешает релизу.
+
+Проект достаточно небольшой, чтобы пройти его за один tutorial, но достаточно реалистичный, чтобы показать главное:
+планирование, controlled edits, тесты, Project Memory, локальный MCP stdio-сервер, permissions, sessions, compaction,
+portable capsules и финальный handoff.
+
+## Что делает Release Radar
+
+`release-radar` — это маленький CLI release gate для локального dev-репозитория. Команда `release-radar analyze`
+собирает сигналы из git, `package.json`, тестов и исходников, а затем печатает короткий отчёт для developer review,
+pre-release проверки или handoff другой сессии.
+
+Пример ожидаемого результата:
+
+```text
+Release Radar
+
+Status: NOT READY
+
+Blockers:
+- Working tree has 4 uncommitted files
+- Missing build script
+- 2 FIXME markers in src/
+
+Warnings:
+- Diff touches config and release workflow
+- No tests found for changed files
+
+Signals:
+- Git repo detected
+- test script present
+- TypeScript project detected
+
+Next steps:
+1. Add build script
+2. Resolve FIXME markers
+3. Run bun test
+```
+
+## Что получится в конце
+
+После прохождения у вас будет:
+
+- Bun/TypeScript CLI `release-radar` для локальной оценки релизной готовности;
+- локальный MCP stdio-сервер, который отдаёт agent-readable метрики проекта;
+- `.soba/memory/` с архитектурными решениями, conventions и known errors;
+- проверяемый workflow с `bun test`, `bun run build`, `bunx tsc --noEmit` и `git diff --check`;
+- session history с checkpoints, context capsules и возможностью rewind;
+- portable capsule для передачи работы в новую сессию или другому агенту.
+
+## Что из v0.4.0 покрывает tutorial
+
+| Возможность | Где используется |
+|---|---|
+| One-shot и TUI | стартовые проверки и основной interactive workflow |
+| Provider/model configuration | перед началом работы и при смене модели |
+| Permissions | `/permissions ask`, `/permissions repo`, `/permissions full`, подтверждение dangerous-команд |
+| Direct shell | `!git status`, `!bun test`, `!!bun run build` |
+| Queue | постановка последующих prompts во время активного turn |
+| Sessions | `soba -i`, `soba -c -i`, `soba -r`, `/session` |
+| Budget и proactive compaction | `/budget`, `/auto-compact on`, ручной `/compact` |
+| Context Capsules | `/compact`, `/capsule`, `/rewind` |
+| Portable Capsules | `/capsule create`, `/capsule export`, `/capsule load` |
+| Project Memory | `.soba/memory/`, `read_project_memory`, `write_project_memory` agent tools |
+| MCP Client | `.soba/mcp.json`, `/mcp status`, `/mcp start`, `mcp_<server>_<tool>` |
+| Skills и Project Trust | `/skill list`, `/skill:NAME`, `/project-trust status/approve/revoke` |
+| Themes/i18n/sound | `--theme`, `/theme`, `--lang`, `/lang`, `--sound-enabled` |
+
+Не входит в v0.4.0 scope: SOBA как MCP-сервер, marketplace discovery, team memory sync и автоматический memory-doctor.
+
+---
+
+## 1. Подготовить репозиторий
+
+Создайте чистый проект. В tutorial используется `release-radar`, но тот же подход применим к рабочему продукту,
+библиотеке или сервису.
+
+```bash
+mkdir -p ~/projects/release-radar
+cd ~/projects/release-radar
+git init
+bun init -y
+```
+
+Проверьте SOBA:
+
+```bash
+soba --version
+soba --help
+```
+
+Если вы запускаете SOBA из исходников, используйте команду вашего окружения. В примерах ниже для краткости указано
+`soba`.
+
+## 2. Проверить provider, модель и базовые настройки
+
+Перед началом разработки убедитесь, что модель отвечает:
+
+```bash
+soba --no-session --max-agent-iterations 1 "Ответь одним словом: ok"
+```
+
+Если нужно настроить provider или модель, используйте отдельное руководство [Провайдеры и модели](/ru/docs/providers).
+В рабочем проекте полезно сразу выбрать язык и тему:
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+Не ставьте небольшой `--max-agent-iterations` как дефолт для tutorial: длинный implementation turn может законно
+потребовать больше вызовов модели. Этот лимит полезен точечно для диагностики runaway-loop или для коротких smoke checks.
+
+В TUI проверьте состояние:
+
+```text
+/session
+/budget
+/permissions
+```
+
+Рекомендуемый стартовый режим:
+
+```text
+/permissions ask
+/auto-compact on
+```
+
+`ask` оставляет контроль над dangerous-действиями. `repo` можно включать позже, когда репозиторий disposable или diff
+понятен.
+
+## 3. Сформулировать инженерный контракт
+
+Первый prompt должен быть не “сделай проект”, а контракт: цель, scope, ограничения, проверки и критерии готовности.
+
+```text
+Создай Bun/TypeScript CLI release-radar.
+
+Цель:
+- команда analyze печатает краткий release readiness report для текущего git-репозитория;
+- report должен учитывать git status, наличие тестов, package scripts, TODO/FIXME markers и размер diff;
+- в этом turn НЕ добавляй explain, --json, MCP, README и package publishing.
+
+Ограничения:
+- Bun only: bun test, bun run build, bunx tsc --noEmit;
+- TypeScript strict mode;
+- без внешних зависимостей, если можно обойтись стандартной библиотекой;
+- не выполнять сетевые команды;
+- не делать git commit;
+- перед крупным изменением сначала покажи короткий план.
+- git/filesystem/test-runner adapters должны принимать cwd/rootDir, а не зависеть от process.cwd().
+- если analyze запускает тесты проекта, сделай это отключаемым для unit tests, чтобы bun test не запускал сам себя рекурсивно.
+
+Definition of Done:
+- есть src/, tests/, package.json, tsconfig.json;
+- покрыты happy path и edge cases: no git repo, dirty repo, empty diff, TODO markers;
+- targeted bun test проходит без рекурсивного запуска bun test из analyze-tests;
+- build проходит;
+- в финальном ответе перечислены изменённые файлы, проверки и риски.
+```
+
+SOBA должен начать с разведки и плана. Если агент сразу добавляет `explain`, `--json`, MCP, README или другие
+возможности вне первого scope, остановите `Ctrl+C` и уточните задачу.
+
+## 4. Дать первую реализацию и держать контроль
+
+После initial prompt ожидаемый цикл:
+
+1. SOBA читает структуру проекта.
+2. Создаёт минимальный CLI skeleton.
+3. Добавляет анализ git/package/test markers.
+4. Пишет тесты.
+5. Запускает targeted проверки.
+6. Исправляет ошибки по фактическому output.
+7. Даёт сводку.
+
+Для этого проекта есть важная ловушка: если `analyze()` внутри себя запускает `bun test`, то unit-test для
+`analyze()` может рекурсивно запускать весь test runner. Корректная реализация должна разделять:
+
+- pure analysis logic;
+- adapters для git/filesystem/process execution с явным `cwd`;
+- выполнение project tests, которое можно отключить или замокать в unit tests.
+
+Проверяйте не каждый tool call, а инженерные контрольные точки:
+
+- план соответствует scope;
+- новые файлы ожидаемы;
+- нет случайных зависимостей;
+- тесты добавлены до финального ответа;
+- ошибки исправляются на основании output команд.
+- тесты не зависят от текущего `process.cwd()`, если проверяется чужой `rootDir`.
+
+Если нужно сузить работу:
+
+```text
+Остановись. Сократи scope: сейчас только analyze и tests. explain и --json добавим отдельным turn.
+```
+
+## 5. Использовать direct shell для быстрых проверок
+
+Команды с `!` выполняются напрямую из TUI. Это удобно для быстрых проверок состояния:
+
+```text
+!git status --short
+!git diff --stat
+!git diff -- package.json tsconfig.json src tests
+!bun test
+!bun run build
+```
+
+Если нужен только факт выполнения и не нужен большой вывод в transcript:
+
+```text
+!!bun test
+!!bun run build
+```
+
+После первой реализации попросите read-only review:
+
+```text
+Проверь текущий diff как reviewer.
+Ищи: лишние зависимости, слабую обработку ошибок, хрупкие тесты, нарушение Bun-only подхода.
+Не меняй файлы без отдельного плана.
+```
+
+Это важный паттерн: диагностика отдельно, исправления отдельно.
+
+## 6. Итерировать маленькими задачами
+
+Добавляйте возможности по одной. Не отправляйте голое `Продолжай`, если предыдущий turn завершился ошибками или
+слишком широким scope: агент может сам выбрать не тот следующий шаг. Вместо этого используйте bounded resume prompt:
+
+```text
+Продолжи только текущий scope release-radar analyze.
+Сначала кратко перечисли:
+- что уже изменено;
+- какая последняя ошибка/проверка;
+- какой один следующий безопасный шаг.
+Не добавляй explain, --json, MCP или README без отдельного запроса.
+```
+
+Пример второй итерации:
+
+```text
+Добавь команду explain FILE.
+
+Требования:
+- explain объясняет, почему файл попал в release report;
+- если файла нет в report, выводит понятную причину;
+- покрыть тестами dirty file, TODO marker и unknown file;
+- после изменений запустить targeted bun test.
+```
+
+Пример третьей итерации:
+
+```text
+Добавь --json для analyze и explain.
+
+Требования:
+- стабильный JSON shape;
+- no ANSI в JSON mode;
+- tests проверяют stdout parsing;
+- README пока не трогай.
+```
+
+Пока агент работает, можно поставить следующий prompt в очередь:
+
+```text
+После завершения текущего turn проверь README и предложи раздел Usage. Файлы пока не меняй.
+```
+
+Очередь можно посмотреть и очистить:
+
+```text
+/queue
+/queue cancel all
+```
+
+## 7. Зафиксировать знания в Project Memory
+
+Project Memory в v0.4.0 — это проектная память на диске, а не отдельная slash-команда. SOBA создаёт и читает:
+
+```text
+.soba/memory/
+├── knowledge/
+│   ├── architecture.md
+│   ├── conventions.md
+│   ├── dependencies.md
+│   └── known-errors.md
+├── capsules/
+└── graph/
+```
+
+Агент получает tools:
+
+- `read_project_memory` — прочитать bounded/sanitized знания и capsules;
+- `write_project_memory` — записать knowledge или memory capsule.
+
+Попросите SOBA сохранить устойчивые решения:
+
+```text
+Обнови Project Memory для release-radar.
+
+Сохрани:
+- architecture: CLI состоит из parser, analyzer, reporter и filesystem/git adapters;
+- conventions: Bun only, strict TypeScript, no external deps by default;
+- known-errors: git-команды должны возвращать controlled error вне git repo;
+- dependencies: runtime dependencies отсутствуют, dev flow через bun test/build/tsc.
+
+Используй project memory tools. Не сохраняй секреты и абсолютные домашние пути.
+```
+
+Проверьте результат обычными read-only командами:
+
+```text
+!find .soba/memory -maxdepth 3 -type f | sort
+!sed -n '1,160p' .soba/memory/knowledge/architecture.md
+```
+
+Теперь проверьте, что память переживает новую сессию:
+
+```bash
+soba -i --lang ru
+```
+
+В новой сессии спросите:
+
+```text
+Кратко напомни архитектурные решения release-radar из Project Memory. Не читай README, используй доступный контекст памяти.
+```
+
+Ожидаемое поведение: SOBA использует injected Project Memory section и/или `read_project_memory`, а не просит заново
+объяснять архитектуру.
+
+## 8. Подключить локальный MCP stdio-сервер
+
+MCP в v0.4.0 поддерживает local `stdio` servers и remote `streamableHttp` endpoints. В tutorial используется локальный
+stdio-сервер, потому что он детерминирован для разработки: SOBA запускает его как дочерний процесс, делает handshake и
+публикует tools в общий `ToolRegistry` с именами вида:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Для tutorial добавим project-local MCP-сервер `repo-metrics`, который отдаёт JSON с базовыми метриками репозитория.
+Попросите агента:
+
+```text
+Добавь локальный MCP stdio server для release-radar.
+
+Scope:
+- файл tools/repo-metrics-mcp.ts;
+- server должен поддерживать initialize, tools/list и tools/call;
+- tool repo_summary возвращает JSON: branch, dirtyFiles, testScriptPresent, buildScriptPresent, todoCount;
+- добавить .soba/mcp.json с server id repo-metrics;
+- в .soba/mcp.json используй каноничный SOBA-ключ servers: { "repo-metrics": ... };
+- trustMode normal;
+- тесты на протокол или минимальный integration smoke test.
+
+Не используй внешний MCP пакет, если можно реализовать минимальный stdio JSON-RPC fixture самим.
+```
+
+После реализации проверьте конфиг и lifecycle:
+
+```text
+!sed -n '1,200p' .soba/mcp.json
+/mcp status
+/mcp start repo-metrics
+/mcp status
+```
+
+Теперь попросите SOBA использовать MCP tool в инженерной задаче:
+
+```text
+Используй доступный MCP tool repo_summary и сравни его вывод с тем, что release-radar analyze показывает сейчас.
+Если есть расхождение, сначала объясни причину и предложи план исправления.
+```
+
+Важно:
+
+- MCP annotations не управляют безопасностью. Trust берётся из `.soba/mcp.json`.
+- Секреты передавайте через `${ENV:NAME}`, а не прямым значением.
+- Hot reload MCP config в v0.4.0 не поддержан: после правки `.soba/mcp.json` перезапустите SOBA.
+
+Подробнее: [MCP-серверы](/ru/docs/mcp).
+
+## 9. Управлять permissions и risky operations
+
+SOBA классифицирует действия как `safe`, `normal` или `dangerous`.
+
+| Уровень | Примеры | Практика |
+|---|---|---|
+| `safe` | чтение файлов, `git status`, `bun test` | обычно выполняется без подтверждения |
+| `normal` | запись файлов, edit, local build | допустимо внутри поставленной задачи |
+| `dangerous` | `rm`, `sudo`, `curl`, `git push`, destructive git | требует явного решения |
+
+Команды управления:
+
+```text
+/permissions
+/permissions ask
+/permissions repo
+/permissions full
+/permissions clear
+```
+
+Для production-репозитория держите `ask`. Включайте `repo` только если понимаете текущий diff:
+
+```text
+!git status --short
+!git diff --stat
+/permissions repo
+```
+
+`repo` разрешает dangerous-действия только внутри текущего репозитория. `full` отключает повторные dangerous prompts до
+конца текущей сессии, включая внешние команды.
+
+Не прячьте dangerous-действия в общую формулировку “доведи до конца”. `git push`, удаление данных, сетевые команды и
+миграции должны быть отдельным явным запросом или осознанным `/permissions full`.
+
+## 10. Использовать skills и project trust
+
+Skills нужны для повторяемых workflows: аудит diff, подготовка handoff, regression run, doc validation, commit
+message.
+
+Посмотреть каталог:
+
+```text
+/skill list
+```
+
+Активировать skill точечно:
+
+```text
+/skill:git-summary Суммируй текущий diff и выдели рискованные изменения.
+```
+
+Если проект содержит `.soba/skills/`, сначала проверьте trust:
+
+```text
+/project-trust status
+/project-trust approve
+```
+
+Project trust разрешает discovery project skills, но не выдаёт им дополнительные права на dangerous-команды.
+Permissions продолжают работать отдельно.
+
+Если skill больше не должен быть доступен:
+
+```text
+/project-trust revoke
+```
+
+## 11. Работать с sessions, budget и rewind
+
+Посмотреть текущую сессию:
+
+```text
+/session
+/budget
+```
+
+Продолжить последнюю сессию:
+
+```bash
+soba -c -i
+```
+
+Выбрать сессию:
+
+```bash
+soba -r
+```
+
+Перед рискованным рефакторингом создайте context capsule:
+
+```text
+/compact Сохрани цель release-radar, текущий scope, принятые решения, изменённые файлы, проверки, известные риски и следующий безопасный шаг.
+```
+
+Посмотреть capsules и детали:
+
+```text
+/capsule
+/capsule CHECKPOINT_ID
+```
+
+Если направление оказалось неправильным:
+
+```text
+/rewind
+/rewind CHECKPOINT_ID
+```
+
+Rewind не удаляет историю. Он создаёт новую ветку сессии от выбранной точки, поэтому можно сравнивать альтернативные
+решения.
+
+## 12. Передать контекст через Portable Capsule
+
+Context capsule живёт внутри session. Portable Capsule — это `.capsule.md` файл для передачи между сессиями,
+агентами или проектами.
+
+Создать capsule из актуального состояния:
+
+```text
+/capsule create "handoff release-radar v0.4 tutorial implementation"
+```
+
+Экспортировать checkpoint:
+
+```text
+/capsule export CHECKPOINT_ID ./release-radar-handoff.capsule.md
+```
+
+Загрузить в другой сессии:
+
+```text
+/capsule load ./release-radar-handoff.capsule.md
+```
+
+Загрузка capsule не исполняет команды и не применяет изменения автоматически. Это недоверенный briefing для
+следующего turn. Все дальнейшие действия проходят обычные permissions.
+
+Подробнее: [Portable Capsules](/ru/docs/portable-capsules).
+
+## 13. Подготовить финальное ревью
+
+Перед коммитом попросите SOBA подготовить reviewer-grade summary:
+
+```text
+Подготовь результат к ревью.
+
+Нужно:
+- кратко описать реализованное поведение;
+- перечислить изменённые файлы по группам;
+- указать, какие тесты запускались;
+- отдельно назвать риски и что не входило в scope;
+- проверить, что Project Memory обновлена;
+- проверить, что MCP server выключается/перезапускается штатно;
+- не делай git commit.
+```
+
+Проверьте diff:
+
+```text
+!git diff --stat
+!git diff --check
+!git status --short
+```
+
+Минимальный gate для этого tutorial:
+
+```text
+!bun test
+!bun run build
+!bunx tsc --noEmit
+```
+
+Если в проекте есть lint:
+
+```text
+!bun run lint
+```
+
+Если часть full suite уже была красной до задачи, фиксируйте это явно:
+
+```text
+Full suite падает на существующем baseline.
+Для этой задачи проходят:
+- bun test tests/release-radar.test.ts
+- bun run build
+- bunx tsc --noEmit
+Не относящийся к задаче fail: tests/legacy/foo.test.ts.
+```
+
+## 14. Commit делать только явным запросом
+
+Когда diff проверен, stage делайте осознанно:
+
+```text
+!git add package.json tsconfig.json src tests tools .soba/mcp.json
+!git status --short
+```
+
+Попросите commit message:
+
+```text
+/skill:commit-message Предложи conventional commit message для текущих staged changes.
+```
+
+Коммит:
+
+```text
+!git commit -m "feat: add release radar cli"
+```
+
+Не используйте `git add -A`, если в рабочем дереве есть чужие, временные или сгенерированные файлы.
+
+## 15. Проверить работу новой сессии
+
+Финальная проверка v0.4.0 workflow — новая сессия должна понимать проект без полного повторения контекста.
+
+```bash
+soba -i --lang ru
+```
+
+Prompt:
+
+```text
+Продолжи работу над release-radar.
+Сначала используй Project Memory и session context, затем скажи:
+- какая архитектура сейчас принята;
+- какие MCP tools доступны;
+- какой следующий безопасный шаг;
+- какие проверки уже проходили.
+Ничего не меняй.
+```
+
+Хороший ответ должен ссылаться на сохранённые архитектурные решения, `.soba/mcp.json`, последние проверки и следующий
+шаг. Если агент просит заново объяснить базовую архитектуру, значит Project Memory или capsule handoff не были
+сформированы достаточно явно.
+
+---
+
+## Краткая шпаргалка
+
+### Запуск
+
+| Команда | Назначение |
+|---|---|
+| `soba "prompt"` | one-shot запрос |
+| `soba -i` | новая интерактивная сессия |
+| `soba -c -i` | продолжить последнюю сессию |
+| `soba -r` | выбрать сессию |
+| `soba --no-session "prompt"` | выполнить без сохранения сессии |
+| `soba --debug "prompt"` | записывать loop debug в session JSONL |
+
+### Контроль работы
+
+| Команда | Назначение |
+|---|---|
+| `/session` | состояние текущей сессии |
+| `/budget` | использование контекста |
+| `/auto-compact on` | включить proactive compaction |
+| `/auto-compact off` | отключить proactive compaction |
+| `/compact` | создать context capsule вручную |
+| `/rewind` | выбрать checkpoint для ветвления |
+
+### Capsules
+
+| Команда | Назначение |
+|---|---|
+| `/capsule` | показать capsules/checkpoints |
+| `/capsule CHECKPOINT_ID` | детали capsule |
+| `/capsule create "objective"` | создать portable capsule |
+| `/capsule export CHECKPOINT_ID ./file.capsule.md` | экспортировать checkpoint |
+| `/capsule load ./file.capsule.md` | загрузить portable capsule |
+
+### MCP
+
+| Команда | Назначение |
+|---|---|
+| `/mcp status` | состояние настроенных MCP servers |
+| `/mcp start <server>` | запустить server и зарегистрировать tools |
+| `/mcp stop <server>` | остановить server |
+| `/mcp restart <server>` | перезапустить server и синхронизировать tools |
+| `/mcp auth status <server>` | remote auth state и next action |
+| `/mcp auth login <server>` | OAuth login для remote MCP server |
+| `/mcp auth logout <server>` | очистить OAuth credentials |
+
+### TUI, queue и permissions
+
+| Команда | Назначение |
+|---|---|
+| `/permissions` | показать режим разрешений |
+| `/permissions ask` | подтверждать dangerous-действия |
+| `/permissions repo` | разрешать repo-scoped действия |
+| `/permissions full` | разрешать все dangerous-действия до конца текущей сессии |
+| `/permissions clear` | сбросить выданные разрешения |
+| `/queue` | показать очередь |
+| `/queue cancel all` | очистить очередь |
+| `/theme NAME` | сменить тему |
+| `/lang ru` | сменить язык интерфейса |
+
+### Skills и project trust
+
+| Команда | Назначение |
+|---|---|
+| `/skill list` | список skills |
+| `/skill:NAME prompt` | активировать skill |
+| `/project-trust status` | статус доверия project skills |
+| `/project-trust approve` | разрешить discovery project skills |
+| `/project-trust revoke` | отозвать trust |
+
+## Что дальше
+
+- [Интерфейс и команды](/ru/docs/usage) — TUI, slash-команды, queue и shell shortcuts.
+- [MCP-серверы](/ru/docs/mcp) — project-local MCP config, stdio/remote lifecycle и auth.
+- [Сессии](/ru/docs/sessions) — JSONL, continuation, rewind и ветвление.
+- [Compaction и Context Capsules](/ru/docs/compaction) — управление длинным контекстом.
+- [Portable Capsules](/ru/docs/portable-capsules) — handoff через `.capsule.md`.
+- [Skills](/ru/docs/skills) — bundled/user/project skills и lifecycle.
+- [Безопасность](/ru/docs/security) — trust levels, permissions и project trust.

@@ -1,0 +1,202 @@
+---
+title: Project Memory
+description: "Постоянная память проекта в SOBA v0.4.0: knowledge files, memory capsules, entity graph, agent tools и безопасное обновление."
+---
+
+Project Memory — это project-local память SOBA Agent. Она хранится в репозитории в `.soba/memory/` и переживает
+перезапуск процесса, новую сессию и compaction.
+
+В v0.4.0 Project Memory — это не slash-команда пользователя. Это слой памяти, который SOBA автоматически подключает к
+agent loop, и два agent tools:
+
+- `read_project_memory` — прочитать bounded и sanitized память проекта;
+- `write_project_memory` — записать knowledge-файл или memory capsule.
+
+---
+
+## 1. Структура на диске
+
+При первом использовании Project Memory создаёт директорию:
+
+```text
+.soba/memory/
+├── knowledge/
+│   ├── architecture.md
+│   ├── conventions.md
+│   ├── known-errors.md
+│   └── dependencies.md
+├── capsules/
+│   └── index.json
+└── graph.json
+```
+
+### Knowledge files
+
+Knowledge files — это стабильные проектные документы, которые полезны почти в каждой сессии.
+
+| Файл | Что хранить |
+|---|---|
+| `architecture.md` | Архитектура, основные модули, data flow, ограничения дизайна |
+| `conventions.md` | Стиль кода, naming, правила тестов, проектные практики |
+| `known-errors.md` | Повторяющиеся ошибки, причины, fixes, команды проверки |
+| `dependencies.md` | Важные зависимости, runtime constraints, upgrade caveats |
+
+### Memory capsules
+
+Memory capsules — структурированные записи о решениях, ошибках, discovery и паттернах. Они лежат в
+`.soba/memory/capsules/*.json`, а индекс — в `.soba/memory/capsules/index.json`.
+
+Поддержанные типы:
+
+- `decision`
+- `error_fix`
+- `discovery`
+- `pattern`
+- `blocker`
+- `insight`
+
+Приоритеты:
+
+- `critical`
+- `high`
+- `medium`
+- `low`
+
+По умолчанию хранилище держит до 50 capsules; low-priority старше 30 дней первыми попадают под pruning.
+
+### Entity graph
+
+`graph.json` хранит связи между сущностями проекта. В v0.4.0 это локальный persisted graph слой для файлов, функций,
+классов, модулей, ошибок и зависимостей.
+
+---
+
+## 2. Как память попадает в prompt
+
+SOBA создаёт `ProjectMemory` для текущего `cwd`, читает релевантные knowledge/capsules и добавляет bounded section в
+system prompt. Бюджет ограничен: память не должна вытеснять текущую задачу и последние важные turns.
+
+Практический эффект:
+
+1. В первой сессии вы сохраняете архитектурное решение.
+2. Во второй сессии SOBA уже видит это решение в Project Memory.
+3. Агенту не нужно заново объяснять базовый контекст проекта.
+
+---
+
+## 3. Как попросить агента обновить Project Memory
+
+Пишите явно, какие факты должны стать долгоживущими:
+
+```text
+Обнови Project Memory.
+
+Сохрани:
+- architecture: CLI разделён на parser, analyzer, reporter и adapters;
+- conventions: Bun only, strict TypeScript, tests mirror src;
+- known-errors: вне git repo git-команды должны возвращать controlled error;
+- dependencies: runtime dependencies отсутствуют.
+
+Используй project memory tools. Не сохраняй секреты, токены и абсолютные домашние пути.
+```
+
+SOBA должен использовать `write_project_memory`. Для проверки можно выполнить:
+
+```text
+!find .soba/memory -maxdepth 3 -type f | sort
+!sed -n '1,160p' .soba/memory/knowledge/architecture.md
+```
+
+---
+
+## 4. Как попросить агента прочитать память
+
+```text
+Перед планом прочитай Project Memory и учти architecture, conventions и known-errors.
+Ничего не меняй, сначала дай краткое резюме релевантной памяти.
+```
+
+Агент может вызвать `read_project_memory` с фильтрами:
+
+- `kind`: `all`, `knowledge`, `capsules`;
+- `knowledgeKey`: `architecture`, `conventions`, `known-errors`, `dependencies`;
+- `tags`;
+- `capsuleType`;
+- `priority`;
+- `from` / `to`;
+- `query`;
+- `limit`;
+- `maxBytes`.
+
+Вывод tool ограничивается по размеру и проходит sanitation.
+
+---
+
+## 5. Безопасность и sanitation
+
+`write_project_memory` отклоняет:
+
+- secret-like content;
+- path traversal за пределы `.soba/memory`;
+- неизвестные knowledge keys;
+- некорректные capsule payloads.
+
+Не сохраняйте в Project Memory:
+
+- API keys;
+- OAuth tokens;
+- приватные ключи;
+- абсолютные домашние пути;
+- временные debug dumps с пользовательскими секретами.
+
+Если нужно записать интеграционный факт, используйте placeholders:
+
+```text
+Используется переменная окружения GITHUB_TOKEN, значение токена в Project Memory не сохранять.
+```
+
+---
+
+## 6. Project Memory vs Context Capsule vs Portable Capsule
+
+| Механизм | Где хранится | Для чего нужен |
+|---|---|---|
+| Project Memory | `.soba/memory/` | Долгоживущие знания проекта между сессиями |
+| Context Capsule | session JSONL | Сжатие длинной текущей сессии |
+| Portable Capsule | `.capsule.md` файл | Handoff между сессиями, агентами или проектами |
+
+Используйте Project Memory для устойчивых знаний, Context Capsules — для управления длинным контекстом, Portable
+Capsules — для передачи работы.
+
+---
+
+## 7. Проверка
+
+Минимальная проверка Project Memory:
+
+```text
+Обнови Project Memory коротким архитектурным решением, затем прочитай его обратно через project memory tools.
+```
+
+Проверка новой сессии:
+
+```bash
+soba -i --lang ru
+```
+
+```text
+Кратко напомни архитектурные решения проекта из Project Memory. Ничего не меняй.
+```
+
+Если SOBA не видит сохранённые факты, проверьте:
+
+- вы запускаете SOBA из того же project root;
+- `.soba/memory/knowledge/*.md` существует;
+- в памяти нет только пустых template-файлов;
+- prompt явно просит использовать Project Memory.
+
+## Что дальше
+
+- [Проект шаг за шагом](/ru/docs/walkthrough-building-a-project) — end-to-end сценарий с Project Memory.
+- [Compaction и Context Capsules](/ru/docs/compaction) — управление длинным контекстом.
+- [Portable Capsules](/ru/docs/portable-capsules) — handoff через `.capsule.md`.

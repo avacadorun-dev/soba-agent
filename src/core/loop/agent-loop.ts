@@ -1,0 +1,2828 @@
+/**
+ * Agent Loop.
+ *
+ * The main execution loop of the SOBA agent:
+ *   1. Accept user input as UserMessageItemParam
+ *   2. Build input from session (history + compaction)
+ *   3. Send to OpenResponses client with tools
+ *   4. Process response output items:
+ *      - assistant messages → append to session, emit events
+ *      - function_call → execute tool, append output, loop back
+ *      - local_shell_call → execute bash, append output, loop back
+ *   5. Handle errors, stop states, budget updates
+ */
+
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { BudgetTracker } from "../budget/budget-tracker";
+import type { OpenResponsesClient } from "../client/openresponses-client";
+import type {
+  AssistantMessageItemParam,
+  CreateResponseParams,
+  FunctionCallField,
+  FunctionCallItemParam,
+  FunctionToolParam,
+  ItemParam,
+  MessageField,
+  OutputTextContent,
+  ResponseResource,
+  Usage,
+} from "../client/types";
+import type { ContextManager, PreInferenceCheckResult } from "../compaction/context-manager";
+import type { BackgroundScheduler } from "../compaction/scheduler";
+import { FixUntilGreenController } from "../fix-until-green";
+import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
+import {
+  addRecoveryReflectionFix,
+  createRecoveryReflectionDraft,
+  type RecoveryReflectionDraft,
+  writeRecoveryReflectionLesson,
+} from "../memory/reflection-memory-policy";
+import { buildSystemPrompt } from "../prompt/system-prompt";
+import type { SessionManager } from "../session/session-manager";
+import type {
+  DebugEntry,
+  ItemParam as SessionItemParam,
+  UserMessageItemParam,
+} from "../session/types";
+import type { SkillManager } from "../skills/skill-manager";
+import { type CheckpointArgs, type CheckpointEvent, extractCheckpointEvent } from "../tools/checkpoint";
+import { createToolErrorResult } from "../tools/errors";
+import type { ToolRegistry } from "../tools/tool-registry";
+import type { ToolContext, ToolResult } from "../tools/types";
+import { toolResultToOutputItem } from "../tools/types";
+import { TrustManager } from "../trust/trust-manager";
+import { type AutoVerifierToolCall, runAutoVerifier } from "../verification/auto-verifier";
+import {
+  acknowledgeErrors,
+  diagnoseFinishArguments,
+  evaluateCompletion,
+  parseFinishRequest,
+  recordToolOutcome,
+} from "./completion-gate";
+import { EvidenceLedger, isVerificationCommand } from "./evidence-ledger";
+import { LoopGuard, type ToolOutcome } from "./loop-guard";
+import {
+  createWorkingNarration,
+  isNonTrivialPrompt,
+  type WorkingNarrationEventType,
+} from "./narration";
+import { evaluateToolBatch, isMutationToolName } from "./tool-batch-guard";
+import {
+  type AgentEvent,
+  type AgentLoopOptions,
+  type AgentTurnError,
+  type AgentTurnResult,
+  type ApprovalDecision,
+  type CheckpointWorkPlanState,
+  DEFAULT_LOOP_OPTIONS,
+  type TurnStopReasonEvent,
+} from "./types";
+import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "./verification-policy";
+
+// ─── Helpers ───
+
+/**
+ * Create a UserMessageItemParam from plain text.
+ */
+export function createUserItem(text: string): UserMessageItemParam {
+  return {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text }],
+  };
+}
+
+/**
+ * Extract text from output content blocks.
+ */
+function extractTextFromOutput(item: MessageField): string {
+  return item.content
+    .filter((c): c is OutputTextContent => c.type === "output_text")
+    .map((c) => c.text)
+    .join("");
+}
+
+function extractToolResultText(result: ToolResult): string {
+  return result.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text ?? "")
+    .join("\n");
+}
+
+function safeParseArgs(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function extractCommandArgument(args: Record<string, unknown>): string {
+  if (typeof args.command === "string") return args.command;
+  return typeof args.input === "string" ? args.input : "";
+}
+
+function summarizeMutationToolCall(toolName: string, args: Record<string, unknown>): string {
+  const path = typeof args.path === "string" ? args.path : "";
+  return path ? `${toolName} changed ${path}` : `${toolName} changed project files`;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function toCheckpointArgs(args: Record<string, unknown>): CheckpointArgs | null {
+  const kind = args.kind;
+  const reason = args.reason;
+  if ((kind !== "milestone" && kind !== "plan_pivot") || typeof reason !== "string") {
+    return null;
+  }
+
+  return {
+    kind,
+    reason,
+    nextDirection: typeof args.nextDirection === "string" ? args.nextDirection : undefined,
+    completed: toStringArray(args.completed),
+    pending: toStringArray(args.pending),
+  };
+}
+
+function checkpointEventToPlanState(event: CheckpointEvent): CheckpointWorkPlanState {
+  return {
+    lastKind: event.kind,
+    reason: event.reason,
+    nextDirection: event.nextDirection,
+    completed: event.completed.slice(),
+    pending: event.pending.slice(),
+    updatedAt: event.timestamp,
+  };
+}
+
+/**
+ * Check if assistant messages contain any visible (non-empty) output_text.
+ */
+function hasVisibleAssistantText(assistantMessages: MessageField[]): boolean {
+  return assistantMessages.some(
+    (msg) =>
+      msg.content
+        .filter((c): c is OutputTextContent => c.type === "output_text")
+        .map((c) => c.text)
+        .join(" ")
+        .trim().length > 0,
+  );
+}
+
+function isInvisibleAssistantMessage(message: MessageField): boolean {
+  return !hasVisibleAssistantText([message]);
+}
+
+function wantsFullVerification(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("full gate") ||
+    normalized.includes("full verification") ||
+    normalized.includes("release") ||
+    normalized.includes("перед коммит") ||
+    normalized.includes("полный gate") ||
+    normalized.includes("полную провер")
+  );
+}
+
+function autoVerifierTimeoutSeconds(maxTimeoutSeconds: number): number {
+  if (!Number.isFinite(maxTimeoutSeconds) || maxTimeoutSeconds <= 0) return 120;
+  return Math.min(120, Math.floor(maxTimeoutSeconds));
+}
+
+const FINISH_TOOL_NAME = "finish";
+const MAX_FINISH_REJECTIONS_PER_TURN = 3;
+const FINISH_TOOL: FunctionToolParam = {
+  type: "function",
+  name: FINISH_TOOL_NAME,
+  description:
+    "Finish the current user turn. Call this only when the task is complete, explicitly unverified with permission, or blocked on required user input. Put the final user-facing response in summary.",
+  parameters: {
+    type: "object",
+    properties: {
+      summary: {
+        type: "string",
+        description: "The final user-facing response.",
+      },
+      status: {
+        type: "string",
+        description:
+          "Use completed when verified work is done, completed_with_unverified_changes only when unverified completion is explicitly allowed, or blocked when required work cannot continue.",
+        enum: ["completed", "blocked", "completed_with_unverified_changes"],
+      },
+      criteria: {
+        type: "array",
+        description:
+          "Concrete completion claims. The loop validates them against successful tool execution.",
+        items: {
+          type: "object",
+          properties: {
+            criterion: {
+              type: "string",
+              description: "A concrete completion criterion.",
+            },
+            evidenceIds: {
+              type: "array",
+              description: "Optional Evidence Ledger entry IDs supporting this criterion.",
+              items: { type: "string" },
+            },
+          },
+          required: ["criterion"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["summary", "status", "criteria"],
+    additionalProperties: false,
+  },
+  strict: true,
+};
+
+function finishRequestToMessage(
+  toolCall: FunctionCallField,
+  summary: string,
+  status: "completed" | "blocked" | "completed_with_unverified_changes",
+): MessageField {
+  const text = status === "completed_with_unverified_changes"
+    ? `Completed with unverified changes:\n${summary}`
+    : summary;
+  return {
+    type: "message",
+    id: `finish_${toolCall.call_id}`,
+    status: "completed",
+    role: "assistant",
+    phase: "final_answer",
+    content: [{ type: "output_text", text, annotations: [] }],
+  };
+}
+
+function createTurnError(
+  type: AgentTurnError["type"],
+  message: string,
+  iteration?: number,
+): AgentTurnError {
+  return {
+    id: `${type}_${crypto.randomUUID().slice(0, 8)}`,
+    type,
+    status: "active",
+    message,
+    iteration,
+  };
+}
+
+/**
+ * Decide whether a text-only response is structurally intermediate.
+ *
+ * Rules:
+ *   - If the model has not used any tools yet in this turn, a text-only
+ *     response is treated as a direct answer. Forcing the finish tool here
+ *     causes models (e.g. Qwen, DeepSeek) to loop on meta-commentary.
+ *   - After the model has used tools, text without finish is intermediate:
+ *     the follow-up tells the model to either use tools or call finish.
+ *   - A phased final_answer is accepted as final unless files were mutated
+ *     and still need verification.
+ */
+function getAutonomousFollowUpReason(
+  assistantMessages: MessageField[],
+  needsVerification: boolean,
+  activeErrors: AgentTurnError[],
+  hasMutatedFiles: boolean,
+  hasUsedTools: boolean,
+): string | null {
+  if (assistantMessages.length === 0) {
+    return null;
+  }
+
+  // An empty response is never a valid direct answer, even before tool use.
+  if (!hasVisibleAssistantText(assistantMessages)) {
+    return "You produced no visible text (only thinking). Write your response in plain text now — do not output only reasoning.";
+  }
+
+  // Simple Q&A / explanation turns do not require the finish tool.
+  if (!hasUsedTools) {
+    return null;
+  }
+
+  if (needsVerification) {
+    return "You changed project files but stopped before verifying the result.";
+  }
+
+  if (activeErrors.length > 0) {
+    const errorList = activeErrors
+      .map(
+        (error) =>
+          `${error.id} (${error.toolName ?? error.type}: ${error.message.slice(0, 120)})`,
+      )
+      .join("\n    ");
+    return `Active tool errors (fix their cause before finishing):\n    ${errorList}`;
+  }
+
+  if (assistantMessages.some((message) => message.phase === "final_answer")) {
+    if (hasMutatedFiles) {
+      return "You changed project files. Complete through the finish tool with concrete completion criteria.";
+    }
+    return null;
+  }
+
+  return "You stopped without calling finish. If the task is done, call finish now with your final response and completion criteria. If not done, continue with tools.";
+}
+
+/**
+ * Convert agent output items to session ItemParam items.
+ */
+function outputItemToSessionItem(
+  item: MessageField | FunctionCallField,
+): ItemParam | null {
+  switch (item.type) {
+    case "message": {
+      const msg: AssistantMessageItemParam = {
+        type: "message",
+        role: item.role as "assistant",
+        content: item.content,
+        id: item.id,
+        status: item.status,
+      };
+      if (item.phase) msg.phase = item.phase;
+      if (item.reasoning_content)
+        msg.reasoning_content = item.reasoning_content;
+      return msg;
+    }
+
+    case "function_call": {
+      const fc: FunctionCallItemParam = {
+        type: "function_call",
+        call_id: item.call_id,
+        name: item.name,
+        arguments: item.arguments,
+        id: item.id,
+        status: "completed",
+      };
+      if (item.reasoning_content) fc.reasoning_content = item.reasoning_content;
+      return fc;
+    }
+
+    default:
+      return null;
+  }
+}
+
+function autoVerifierCallToSessionItem(call: AutoVerifierToolCall): FunctionCallItemParam {
+  return {
+    type: "function_call",
+    call_id: call.callId,
+    name: call.toolName,
+    arguments: call.arguments,
+    id: `fc_${call.callId}`,
+    status: "completed",
+  };
+}
+
+/**
+ * Read AGENTS.md from cwd if it exists, otherwise README.md.
+ */
+function readProjectContext(
+  cwd: string,
+): Array<{ path: string; content: string }> {
+  const agentsPath = join(cwd, "AGENTS.md");
+  if (existsSync(agentsPath)) {
+    try {
+      const content = readFileSync(agentsPath, "utf-8");
+      return [{ path: "AGENTS.md", content }];
+    } catch {
+      // fall through to README.md
+    }
+  }
+
+  const readmePath = join(cwd, "README.md");
+  if (existsSync(readmePath)) {
+    try {
+      const content = readFileSync(readmePath, "utf-8");
+      return [{ path: "README.md", content }];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Build CreateResponseParams from session and system prompt.
+ */
+function buildRequest(
+  session: SessionManager,
+  systemPrompt: string,
+  tools: ToolRegistry,
+  model: string,
+  maxOutputTokens: number,
+  maxCompletionTokens: number,
+  temperature: number,
+  ephemeralMessages: Array<{ role: "developer"; content: string }> = [],
+  allowParallelToolCalls = true,
+): CreateResponseParams {
+  const input = session.buildInput();
+  const items = input.items as ItemParam[];
+
+  // Inject ephemeral developer messages at the beginning of the input
+  if (ephemeralMessages.length > 0) {
+    const ephemeralItems = ephemeralMessages.map(
+      (msg) => ({
+        type: "message" as const,
+        role: "developer" as const,
+        content: [{ type: "input_text" as const, text: msg.content }],
+      }),
+    );
+    items.unshift(...ephemeralItems);
+  }
+
+  return {
+    model,
+    input: items,
+    instructions: systemPrompt,
+    tools: [
+      ...tools
+        .getOpenResponsesTools()
+        .filter(
+          (tool) => tool.type !== "function" || tool.name !== FINISH_TOOL_NAME,
+        ),
+      FINISH_TOOL,
+    ],
+    previous_response_id: input.previousResponseId ?? undefined,
+    parallel_tool_calls: allowParallelToolCalls,
+    store: false,
+    max_output_tokens: maxOutputTokens,
+    max_completion_tokens: maxCompletionTokens > 0 ? maxCompletionTokens : null,
+    temperature,
+  };
+}
+
+// ─── AgentLoop ───
+
+export class AgentLoop {
+  private client: OpenResponsesClient;
+  private session: SessionManager;
+  private tools: ToolRegistry;
+  private options: AgentLoopOptions;
+  private cwd: string;
+  private trustManager: TrustManager;
+  private budgetTracker: BudgetTracker;
+  private contextManager: ContextManager | undefined;
+  private backgroundScheduler: BackgroundScheduler | undefined;
+  private skillManager: SkillManager | undefined;
+  private autoCompactOverride: { enabled: boolean } | undefined;
+  private projectMemory: ProjectMemorySource | undefined;
+  private _abortController: AbortController | null = null;
+  private _toolAbortController: AbortController | null = null;
+  private _directShellAbortController: AbortController | null = null;
+  private state = {
+    totalUsage: {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens_details: { reasoning_tokens: 0 },
+    } as Usage,
+    turnCount: 0,
+    isProcessing: false,
+    /** Number of trust-dialog denials in the current turn */
+    denialCount: 0,
+    /** Description of the most recently denied operation */
+    lastDeniedOperation: "",
+  };
+
+  // Event listeners
+  private listeners: Array<(event: AgentEvent) => void> = [];
+
+  constructor(
+    client: OpenResponsesClient,
+    session: SessionManager,
+    tools: ToolRegistry,
+    cwd: string,
+    options: Partial<AgentLoopOptions> = {},
+    trustManager?: TrustManager,
+    budgetTracker?: BudgetTracker,
+    contextManager?: ContextManager,
+    backgroundScheduler?: BackgroundScheduler,
+    skillManager?: SkillManager,
+    autoCompactOverride?: { enabled: boolean },
+    projectMemory?: ProjectMemorySource,
+  ) {
+    this.client = client;
+    this.session = session;
+    this.tools = tools;
+    this.cwd = cwd;
+    this.options = { ...DEFAULT_LOOP_OPTIONS, ...options };
+    this.trustManager = trustManager ?? new TrustManager({ repoRoot: cwd });
+    this.trustManager.setRepoRoot(cwd);
+    this.budgetTracker =
+      budgetTracker ??
+      new BudgetTracker({ totalBudget: this.options.tokenBudget });
+    this.contextManager = contextManager;
+    this.backgroundScheduler = backgroundScheduler;
+    this.skillManager = skillManager;
+    this.autoCompactOverride = autoCompactOverride;
+    this.projectMemory = projectMemory;
+  }
+
+  /** Get current total usage */
+  getUsage(): Usage {
+    return { ...this.state.totalUsage };
+  }
+
+  /** Get turn count */
+  getTurnCount(): number {
+    return this.state.turnCount;
+  }
+
+  /** Get the active model from the client config */
+  getModel(): string {
+    return this.client.getConfig().model;
+  }
+
+  /** Get trust manager (for adding custom rules) */
+  getTrustManager(): TrustManager {
+    return this.trustManager;
+  }
+
+  /** Get budget tracker */
+  getBudgetTracker(): BudgetTracker {
+    return this.budgetTracker;
+  }
+
+  /** Get context manager (if available) */
+  getContextManager(): ContextManager | undefined {
+    return this.contextManager;
+  }
+
+  getSessionManager(): SessionManager {
+    return this.session;
+  }
+
+  private createToolContext(): ToolContext {
+    return {
+      cwd: this.cwd,
+      session: this.session,
+      bashMaxTimeoutSeconds: this.options.bashMaxTimeoutSeconds,
+    };
+  }
+
+  /** Get background scheduler (if available) */
+  getBackgroundScheduler(): BackgroundScheduler | undefined {
+    return this.backgroundScheduler;
+  }
+
+  /** Get skill manager (if available) */
+  getSkillManager(): SkillManager | undefined {
+    return this.skillManager;
+  }
+
+  /**
+   * Set auto-compact override for runtime toggle.
+   * When enabled is false, background compaction is skipped.
+   */
+  setAutoCompactOverride(override: { enabled: boolean }): void {
+    this.autoCompactOverride = override;
+  }
+
+  /**
+   * Get current auto-compact override status.
+   */
+  getAutoCompactOverride(): { enabled: boolean } | undefined {
+    return this.autoCompactOverride;
+  }
+
+  /** Subscribe to agent events */
+  onEvent(listener: (event: AgentEvent) => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  /**
+   * Write a debug entry to the session when debug mode is enabled.
+   */
+  private debug(data: DebugEntry["data"]): void {
+    if (!this.options.debug) return;
+    this.session.appendDebug(data);
+  }
+
+  /** Emit a turn_stop_reason event and debug entry */
+  private _emitStopReason(
+    turn: number,
+    iteration: number,
+    reason: TurnStopReasonEvent["reason"],
+    detail: string,
+    hasUsedTools: boolean,
+    autonomousFollowUps: number,
+  ): void {
+    this.emit({
+      type: "turn_stop_reason",
+      timestamp: Date.now(),
+      turn,
+      iteration,
+      reason,
+      detail,
+      hasUsedTools,
+      autonomousFollowUps,
+    });
+    this.debug({
+      event: "loop/stop",
+      turn,
+      iteration,
+      reason,
+      detail,
+      hasUsedTools,
+      autonomousFollowUps,
+    });
+  }
+
+  private emitWorkingNarration(
+    eventType: WorkingNarrationEventType,
+    message: string,
+    evidenceIds: string[] = [],
+  ): void {
+    const narration = createWorkingNarration({ eventType, message, evidenceIds });
+    this.emit({
+      type: "working_narration",
+      timestamp: Date.now(),
+      eventType: narration.eventType,
+      message: narration.message,
+      evidenceIds: narration.evidenceIds,
+    });
+  }
+
+  /** Emit an event to all listeners */
+  private emit(event: AgentEvent): void {
+    if (!this.options.emitEvents) return;
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {
+        // Don't let listener errors crash the loop
+      }
+    }
+  }
+
+  /**
+   * Perform pre-inference check using ContextManager.
+   * Returns true if request can proceed, false if it should be blocked.
+   */
+  private async performPreInferenceCheck(
+    systemPromptTokens: number,
+    toolSchemaTokens: number,
+  ): Promise<PreInferenceCheckResult> {
+    if (!this.contextManager) {
+      return { canProceed: true, compactionPerformed: false };
+    }
+
+    const fingerprint = `turn_${this.state.turnCount}`;
+    const checkResult = await this.contextManager.preInferenceCheck(
+      systemPromptTokens,
+      toolSchemaTokens,
+      fingerprint,
+    );
+
+    if (checkResult.compactionPerformed && checkResult.outcome) {
+      this.emit({
+        type: "compaction_start",
+        timestamp: Date.now(),
+        reason: "pre_inference",
+        effectiveTokens: checkResult.outcome.metrics?.effectiveTokensBefore ?? 0,
+        hardLimit: 0, // Will be calculated from snapshot
+      });
+
+      this.emit({
+        type: "compaction_done",
+        timestamp: Date.now(),
+        reason: "pre_inference",
+        tokensBefore: checkResult.outcome.metrics?.effectiveTokensBefore ?? 0,
+        tokensAfter: checkResult.outcome.metrics?.estimatedTokensAfter ?? 0,
+        tokensSaved: checkResult.outcome.metrics?.reclaimedTokens ?? 0,
+        strategy: checkResult.outcome.strategy ?? "unknown",
+      });
+    }
+
+    if (!checkResult.canProceed) {
+      this.emit({
+        type: "context_error",
+        timestamp: Date.now(),
+        error: checkResult.error ?? "Pre-inference check failed",
+        effectiveTokens: 0,
+        hardLimit: 0,
+        recoveryAttempted: checkResult.compactionPerformed,
+      });
+    }
+
+    return checkResult;
+  }
+
+  /**
+   * Handle context overflow error using ContextManager.
+   * Returns true if recovery succeeded and request should be retried.
+   */
+  private async handleContextOverflow(
+    error: unknown,
+    systemPromptTokens: number,
+    toolSchemaTokens: number,
+  ): Promise<boolean> {
+    if (!this.contextManager) return false;
+
+    const errorKind = this.client.classifyError(error);
+    if (errorKind !== "context_overflow") return false;
+
+    const fingerprint = `turn_${this.state.turnCount}_overflow`;
+    
+    this.emit({
+      type: "compaction_start",
+      timestamp: Date.now(),
+      reason: "overflow_recovery",
+      effectiveTokens: 0,
+      hardLimit: 0,
+    });
+
+    const recoveryResult = await this.contextManager.handleContextOverflow(
+      systemPromptTokens,
+      toolSchemaTokens,
+      fingerprint,
+    );
+
+    if (recoveryResult.outcome) {
+      this.emit({
+        type: "compaction_done",
+        timestamp: Date.now(),
+        reason: "overflow_recovery",
+        tokensBefore: recoveryResult.outcome.metrics?.effectiveTokensBefore ?? 0,
+        tokensAfter: recoveryResult.outcome.metrics?.estimatedTokensAfter ?? 0,
+        tokensSaved: recoveryResult.outcome.metrics?.reclaimedTokens ?? 0,
+        strategy: recoveryResult.outcome.strategy ?? "unknown",
+      });
+    }
+
+    if (!recoveryResult.recovered || !recoveryResult.shouldRetry) {
+      this.emit({
+        type: "context_error",
+        timestamp: Date.now(),
+        error: recoveryResult.error ?? "Context overflow recovery failed",
+        effectiveTokens: 0,
+        hardLimit: 0,
+        recoveryAttempted: true,
+      });
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Record provider usage after successful inference.
+   */
+  private recordProviderUsage(response: ResponseResource): void {
+    if (!this.contextManager || !response.usage) return;
+
+    const fingerprint = `turn_${this.state.turnCount}`;
+    this.contextManager.recordProviderUsage(
+      response.usage.input_tokens,
+      null, // measuredThroughEntryId
+      fingerprint,
+    );
+  }
+
+  /**
+   * Request user confirmation for a dangerous operation.
+   * Emits a DangerousConfirmationEvent and blocks until the resolve callback is called.
+   * If no listeners are registered, falls back to denying the operation.
+   */
+  private async requestDangerousConfirmation(
+    toolName: string,
+    toolCallId: string,
+    description: string,
+    reason: string,
+  ): Promise<ApprovalDecision> {
+    // Emit the confirmation event even if emitEvents is disabled —
+    // dangerous operation confirmations are a critical safety feature
+    // that must always be available to the UI layer.
+    if (this.listeners.length === 0) {
+      // No UI to ask — deny for safety
+      return "deny";
+    }
+
+    return new Promise<ApprovalDecision>((resolve) => {
+      const event: AgentEvent = {
+        type: "dangerous_confirmation",
+        timestamp: Date.now(),
+        toolName,
+        toolCallId,
+        description,
+        level: "dangerous",
+        reason,
+        resolve,
+      };
+      // Emit directly to listeners without going through the normal emit path
+      // to bypass the emitEvents flag
+      for (const listener of this.listeners) {
+        try {
+          listener(event);
+        } catch {
+          // Don't let listener errors crash the loop
+        }
+      }
+    });
+  }
+
+  /**
+   * Build ephemeral developer messages triggered by trust-dialog denials.
+   * These are injected at the beginning of the next iteration to give the
+   * model a fresh, high-priority instruction to stop looking for workarounds.
+   */
+  private buildDenialEphemeralMessages(): Array<{ role: "developer"; content: string }> {
+    if (this.state.denialCount === 0) return [];
+
+    const op = this.state.lastDeniedOperation || "the operation";
+
+    if (this.state.denialCount === 1) {
+      return [
+        {
+          role: "developer",
+          content:
+            `IMPORTANT: Your previous attempt to perform "${op}" was DENIED by the user through the security dialog. ` +
+            "This is a FINAL decision — do NOT attempt to achieve the same result through alternative commands, " +
+            "indirect approaches, or workarounds. The denial means the user does not want this operation executed. " +
+            "Acknowledge the denial and either continue with unrelated parts of the task or ask the user how to proceed.",
+        },
+      ];
+    }
+
+    return [
+      {
+        role: "developer",
+        content:
+          `CRITICAL: You have been denied ${this.state.denialCount} times in this turn (last: "${op}"). ` +
+          "These denials are SECURITY DECISIONS by the user, not transient errors. " +
+          "STOP searching for workarounds. Do NOT try: different commands, script wrappers (bun -e, node -e, python -c), " +
+          "file moves (mv to /tmp), or any indirect method to achieve the denied outcome. " +
+          "Explain what was blocked by security and ask the user how they want to proceed.",
+      },
+    ];
+  }
+
+  /**
+   * Abort the currently running turn (if any).
+   * Cancels in-progress tool execution (e.g., long-running bash commands).
+   */
+  abort(): void {
+    this._abortController?.abort();
+  }
+
+  /** Stop only the currently executing tool and allow the agent turn to continue. */
+  abortActiveTool(): boolean {
+    if (this._directShellAbortController && !this._directShellAbortController.signal.aborted) {
+      this._directShellAbortController.abort();
+      return true;
+    }
+    if (!this._toolAbortController || this._toolAbortController.signal.aborted) {
+      return false;
+    }
+    this._toolAbortController.abort();
+    return true;
+  }
+
+  hasActiveTool(): boolean {
+    return (
+      (this._directShellAbortController !== null && !this._directShellAbortController.signal.aborted) ||
+      (this._toolAbortController !== null && !this._toolAbortController.signal.aborted)
+    );
+  }
+
+  /**
+   * Execute a user-authored shell command without sending it to the model.
+   * Explicit user shell commands bypass agent trust checks.
+   */
+  async runShellCommand(command: string, silent = false): Promise<ToolResult> {
+    if (this._directShellAbortController) {
+      throw new Error("A direct shell command is already running");
+    }
+    const tool = this.tools.get("bash");
+    if (!tool) {
+      throw new Error('Tool "bash" is not registered');
+    }
+
+    const toolCall = { call_id: `user_shell_${crypto.randomUUID()}`, name: "bash" };
+    const startTime = Date.now();
+    const controller = new AbortController();
+    this._directShellAbortController = controller;
+    this.emit({
+      type: "tool_call_start",
+      timestamp: startTime,
+      toolCallId: toolCall.call_id,
+      toolName: toolCall.name,
+      args: { command },
+    });
+
+    let result: ToolResult;
+    try {
+      result = await tool.execute({ command }, this.createToolContext(), controller.signal);
+    } catch (error) {
+      result = {
+        content: [{ type: "text", text: `Error executing "bash": ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    } finally {
+      if (this._directShellAbortController === controller) {
+        this._directShellAbortController = null;
+      }
+    }
+
+    if (!silent) {
+      this.emit({
+        type: "tool_call_result",
+        timestamp: Date.now(),
+        toolCallId: toolCall.call_id,
+        toolName: toolCall.name,
+        result,
+      });
+    }
+    this.emit({
+      type: "tool_call_end",
+      timestamp: Date.now(),
+      toolCallId: toolCall.call_id,
+      toolName: toolCall.name,
+      durationMs: Date.now() - startTime,
+    });
+    return result;
+  }
+
+  /**
+   * Run a single turn of the agent loop.
+   *
+   * A turn processes one user input and continues until
+   * the LLM returns a response without tool calls.
+   */
+  async runTurn(userText: string): Promise<AgentTurnResult> {
+    if (this.state.isProcessing) {
+      throw new Error("Agent is already processing a turn");
+    }
+
+    // Cancel any background compaction operation when starting a new turn
+    if (this.backgroundScheduler?.isRunning()) {
+      this.backgroundScheduler.cancel("new turn started");
+    }
+
+    this.state.isProcessing = true;
+    this.state.turnCount++;
+    this.state.denialCount = 0;
+    this.state.lastDeniedOperation = "";
+    this._abortController = new AbortController();
+    const turnIndex = this.state.turnCount;
+    const errors: AgentTurnError[] = [];
+    const allItems: ItemParam[] = [];
+    const evidenceLedger = new EvidenceLedger();
+    const taskKind = inferTaskKindFromPrompt(userText);
+    const allowUnverifiedCompletion = allowsUnverifiedCompletion(userText);
+    const shouldNarrate = isNonTrivialPrompt(userText);
+    const emittedNarrationTypes = new Set<WorkingNarrationEventType>();
+    const emitNarrationOnce = (
+      eventType: WorkingNarrationEventType,
+      message: string,
+      evidenceIds: string[] = [],
+    ) => {
+      if (!shouldNarrate || emittedNarrationTypes.has(eventType)) return;
+      emittedNarrationTypes.add(eventType);
+      this.emitWorkingNarration(eventType, message, evidenceIds);
+    };
+
+    // Emit turn start
+    this.emit({
+      type: "turn_start",
+      timestamp: Date.now(),
+      turnIndex,
+      userInput: userText,
+    });
+
+    // Create and append user message
+    const userItem = createUserItem(userText);
+    this.session.appendItem(userItem as unknown as SessionItemParam);
+    allItems.push(userItem as unknown as ItemParam);
+    this.debug({
+      event: "loop/turn-start",
+      turn: turnIndex,
+      detail: userText.slice(0, 200),
+    });
+
+    try {
+      // Read AGENTS.md if present, then build system prompt
+      emitNarrationOnce(
+        "context_scan",
+        "Checking project instructions, available skills, and memory before choosing the next action.",
+      );
+      const contextFiles = readProjectContext(this.cwd);
+      const projectInstructions = contextFiles.map((file) => file.content);
+      emitNarrationOnce(
+        "observation",
+        contextFiles.length > 0
+          ? `Loaded project instructions from ${contextFiles.map((file) => file.path).join(", ")}.`
+          : "No project instruction file was found; using repository structure and targeted reads.",
+      );
+      
+      // Get skill catalog for system prompt
+      const skills = this.skillManager?.getCatalogForPrompt() ?? [];
+      const projectMemorySection = this.projectMemory
+        ? buildProjectMemorySection(this.projectMemory, {
+            maxTokens: 2_000,
+            query: userText,
+          })
+        : "";
+      
+      const systemPrompt = buildSystemPrompt({
+        cwd: this.cwd,
+        selectedTools: this.tools.getNames(),
+        contextFiles,
+        skills,
+        projectMemorySection,
+      });
+
+      // Get current model from client config
+      const model = this.client.getConfig().model;
+      const maxOutputTokens = this.client.getConfig().maxOutputTokens;
+      const maxCompletionTokens = this.client.getConfig().maxCompletionTokens ?? 0;
+      const temperature = this.client.getConfig().temperature;
+      emitNarrationOnce(
+        "plan",
+        "Proceeding in small steps: inspect relevant context, act with tools, then verify before completion.",
+      );
+
+      // Main loop: continue until no more tool calls
+      let currentResponse: ResponseResource | null = null;
+      let iteration = 0;
+      let continuationAttempts = 0;
+      let autonomousFollowUps = 0;
+      let finishRejections = 0;
+      let hasUsedTools = false;
+      let needsVerification = false;
+      let hasMutatedFiles = false;
+      let checkpointState: CheckpointWorkPlanState | undefined;
+      const successfulToolCallIds = new Set<string>();
+      const verificationEvidenceCallIds = new Set<string>();
+      const autoVerificationAttempts = new Set<string>();
+      const includeFullGate = wantsFullVerification(userText) || taskKind === "release_task";
+      const loopGuard = new LoopGuard(this.options);
+      const fixUntilGreen = new FixUntilGreenController();
+      let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
+      const scheduleCheckpointCompaction = (checkpointEvents: CheckpointEvent[]): void => {
+        let milestone: CheckpointEvent | undefined;
+        for (let index = checkpointEvents.length - 1; index >= 0; index--) {
+          if (checkpointEvents[index].kind === "milestone") {
+            milestone = checkpointEvents[index];
+            break;
+          }
+        }
+        if (!milestone || !this.backgroundScheduler || !this.contextManager) return;
+
+        const autoCompactEnabled = this.autoCompactOverride?.enabled ?? true;
+        if (!autoCompactEnabled) return;
+
+        const checkpointFingerprint = `turn_${turnIndex}_checkpoint_${iteration}`;
+        const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
+        const toolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
+        const { shouldCompact, snapshot } = this.contextManager.evaluateMilestone(
+          systemPromptTokens,
+          toolSchemaTokens,
+          checkpointFingerprint,
+        );
+
+        this.debug({
+          event: "loop/iteration",
+          turn: turnIndex,
+          iteration,
+          detail: shouldCompact
+            ? `milestone scheduled for capsule candidate: ${milestone.reason}`
+            : `milestone recorded without compaction: ${milestone.reason}`,
+        });
+
+        if (!shouldCompact) return;
+
+        this.backgroundScheduler.schedule(
+          "milestone",
+          snapshot,
+          systemPromptTokens,
+          toolSchemaTokens,
+          checkpointFingerprint,
+        );
+      };
+      const runAutoVerificationOpportunity = async (opportunity: string): Promise<boolean> => {
+        const summaryBefore = evidenceLedger.getSummary();
+        if (!summaryBefore.needsVerification) return false;
+
+        const bashTool = this.tools.get("bash");
+        const result = await runAutoVerifier({
+          cwd: this.cwd,
+          taskKind,
+          evidenceSummary: summaryBefore,
+          ledger: evidenceLedger,
+          bashTool,
+          toolContext: this.createToolContext(),
+          trustManager: this.trustManager,
+          projectInstructions,
+          includeFullGate,
+          includeReleaseGate: taskKind === "release_task",
+          timeoutSeconds: autoVerifierTimeoutSeconds(this.options.bashMaxTimeoutSeconds),
+          iteration,
+          attemptedFingerprints: autoVerificationAttempts,
+          signal: this._abortController?.signal,
+          onToolCallStart: (call) => {
+            const fcItem = autoVerifierCallToSessionItem(call);
+            this.session.appendItem(fcItem);
+            allItems.push(fcItem);
+            this.emit({
+              type: "tool_call_start",
+              timestamp: Date.now(),
+              toolCallId: call.callId,
+              toolName: call.toolName,
+              args: call.args,
+            });
+          },
+          onToolCallResult: (call, toolResult, durationMs) => {
+            this.emitToolResultAndEnd(
+              {
+                call_id: call.callId,
+                name: call.toolName,
+              },
+              toolResult,
+              Date.now() - durationMs,
+            );
+            recordToolOutcome(
+              errors,
+              successfulToolCallIds,
+              { call_id: call.callId, name: call.toolName, arguments: call.arguments },
+              toolResult.isError,
+              extractToolResultText(toolResult),
+              iteration,
+            );
+            const outputItem = toolResultToOutputItem(toolResult, call.callId, call.toolName);
+            this.session.appendItem(outputItem);
+            allItems.push(outputItem);
+          },
+        });
+
+        const autoVerifierActivity = result.selected.length + result.skipped.length;
+        if (autoVerifierActivity > 0) {
+          this.debug({
+            event: "loop/iteration",
+            turn: turnIndex,
+            iteration,
+            detail: `auto-verifier ${opportunity}: ${result.executions.length} executed, ${result.skipped.length} skipped`,
+          });
+        }
+
+        if (result.executions.length === 0) return false;
+
+        hasUsedTools = true;
+        const summaryAfter = evidenceLedger.getSummary();
+        needsVerification = summaryAfter.needsVerification;
+        hasMutatedFiles = summaryAfter.hasMutatedFiles;
+        for (const execution of result.executions) {
+          if (!execution.result.isError) verificationEvidenceCallIds.add(execution.call.callId);
+        }
+        emitNarrationOnce(
+          "verification",
+          `Auto-verifier ran ${result.executions.length} project verification command(s).`,
+          result.executions.map((execution) => execution.call.callId),
+        );
+        return true;
+      };
+
+      do {
+        this.debug({
+          event: "loop/iteration",
+          turn: turnIndex,
+          iteration,
+          hasUsedTools,
+          needsVerification,
+          autonomousFollowUps,
+        });
+        const limitDecision = loopGuard.checkLimits(iteration);
+        if (limitDecision.action === "stop") {
+          const message = limitDecision.message;
+          emitNarrationOnce("blocked", message);
+          errors.push(createTurnError("timeout", message, iteration));
+          this.emit({
+            type: "loop_guard",
+            timestamp: Date.now(),
+            action: "stop",
+            iteration,
+            message,
+          });
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: message,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "loop-guard",
+            message,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        // Force-terminate after too many denials in one turn
+        const MAX_DENIALS_PER_TURN = 3;
+        if (this.state.denialCount >= MAX_DENIALS_PER_TURN) {
+          const message = `Turn terminated: ${this.state.denialCount} operations were denied by security policy in this turn. The user has repeatedly blocked these operations — do not continue.`;
+          emitNarrationOnce("blocked", message);
+          errors.push(createTurnError("security_denial", message, iteration));
+          this.emit({
+            type: "loop_guard",
+            timestamp: Date.now(),
+            action: "stop",
+            iteration,
+            message,
+          });
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: message,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "security-denial",
+            message,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        // Check for user cancellation
+        if (this._abortController?.signal.aborted) {
+          const cancelMsg = "Operation cancelled by user";
+          errors.push(createTurnError("cancelled", cancelMsg, iteration));
+          this.emit({
+            type: "turn_stop_reason",
+            timestamp: Date.now(),
+            turn: turnIndex,
+            iteration,
+            reason: "aborted",
+            detail: cancelMsg,
+            hasUsedTools,
+            autonomousFollowUps,
+          });
+          break;
+        }
+
+        // Emit thinking
+        this.emit({ type: "thinking", timestamp: Date.now(), active: true });
+
+        // Get ephemeral developer messages from active skills + denial warnings
+        const ephemeralMessages = [
+          ...(this.skillManager?.buildEphemeralMessages() ?? []),
+          ...this.buildDenialEphemeralMessages(),
+        ];
+
+        // Build request with current input
+        const request = buildRequest(
+          this.session,
+          systemPrompt,
+          this.tools,
+          model,
+          maxOutputTokens,
+          maxCompletionTokens,
+          temperature,
+          ephemeralMessages,
+          !needsVerification,
+        );
+
+        // Pre-inference check: ensure we're within hard limit
+        const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
+        const toolSchemaTokens = Math.ceil(JSON.stringify(request.tools).length / 4);
+        
+        const checkResult = await this.performPreInferenceCheck(
+          systemPromptTokens,
+          toolSchemaTokens,
+        );
+        
+        if (!checkResult.canProceed) {
+          this.emit({ type: "thinking", timestamp: Date.now(), active: false });
+          const errorMsg = checkResult.error || "Cannot proceed: context exceeds hard limit even after compaction";
+          emitNarrationOnce("blocked", errorMsg);
+          errors.push(createTurnError("api_error", errorMsg, iteration));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: errorMsg,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "api-error",
+            errorMsg,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        // Send to LLM — use streaming if enabled
+        let response: ResponseResource;
+        const toolCalls: Array<FunctionCallField> = [];
+        const assistantMessages: Array<MessageField> = [];
+
+        try {
+          if (this.options.stream) {
+            response = await this.runStreamingRequest(
+              request,
+              assistantMessages,
+              toolCalls,
+            );
+          } else {
+            response = await this.client.create(request);
+            // Extract output items from non-streaming response
+            for (const item of response.output) {
+              if (item.type === "function_call") {
+                toolCalls.push(item as FunctionCallField);
+              } else if (item.type === "message") {
+                assistantMessages.push(item as MessageField);
+              }
+            }
+
+            // Emit assistant messages for non-streaming
+            for (const msg of assistantMessages) {
+              const text = extractTextFromOutput(msg);
+              if (text) {
+                this.emit({
+                  type: "assistant_message",
+                  timestamp: Date.now(),
+                  messageId: msg.id,
+                  text,
+                  reasoningContent: msg.reasoning_content,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          this.emit({ type: "thinking", timestamp: Date.now(), active: false });
+          
+          // Classify error using provider adapter (safely — not all clients have it)
+          const errorType = typeof this.client.classifyError === "function"
+            ? this.client.classifyError(error)
+            : "unknown";
+          if (errorType === "context_overflow") {
+            const canRecover = await this.handleContextOverflow(error, systemPromptTokens, toolSchemaTokens);
+            if (canRecover) {
+              // Recovery успешен, повторяем запрос
+              this.emit({ type: "thinking", timestamp: Date.now(), active: true });
+              continue;
+            }
+          }
+          
+          errors.push(
+            createTurnError(
+              "api_error",
+              error instanceof Error ? error.message : String(error),
+              iteration,
+            ),
+          );
+          emitNarrationOnce("blocked", error instanceof Error ? error.message : String(error));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "api-error",
+            error instanceof Error ? error.message : String(error),
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        // Emit thinking done
+        this.emit({ type: "thinking", timestamp: Date.now(), active: false });
+
+        currentResponse = response;
+        
+        // Record provider usage for context tracking
+        this.recordProviderUsage(response);
+        this.debug({
+          event: "loop/response",
+          turn: turnIndex,
+          iteration,
+          responseId: response.id,
+          responseStatus: response.status,
+          toolCalls: toolCalls.length,
+          assistantMessages: assistantMessages.length,
+          hasUsedTools,
+          needsVerification,
+          autonomousFollowUps,
+          textPreview: assistantMessages
+            .map(extractTextFromOutput)
+            .join(" ")
+            .slice(0, 100),
+          assistantPhases: assistantMessages.map(
+            (message) => message.phase ?? null,
+          ),
+          finishCalls: toolCalls.filter(
+            (toolCall) => toolCall.name === FINISH_TOOL_NAME,
+          ).length,
+        });
+
+        // Check response status
+        if (response.status === "failed") {
+          const errorMsg = response.error?.message ?? "Unknown error";
+          emitNarrationOnce("blocked", errorMsg);
+          errors.push(createTurnError("api_error", errorMsg, iteration));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: errorMsg,
+            status: "failed",
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "api-error",
+            errorMsg,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        const shouldContinue =
+          response.status === "incomplete" &&
+          response.incomplete_details?.reason === "max_output_tokens";
+
+        if (response.status === "incomplete" && !shouldContinue) {
+          const reason = response.incomplete_details?.reason ?? "unknown";
+          errors.push(
+            createTurnError(
+              "api_error",
+              `Response incomplete: ${reason}`,
+              iteration,
+            ),
+          );
+          emitNarrationOnce("blocked", `Response incomplete: ${reason}`);
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: `Response incomplete: ${reason}`,
+            status: "incomplete",
+          });
+        }
+
+        // Accumulate usage
+        if (response.usage) {
+          this.state.totalUsage.input_tokens += response.usage.input_tokens;
+          this.state.totalUsage.output_tokens += response.usage.output_tokens;
+          this.state.totalUsage.total_tokens += response.usage.total_tokens;
+          this.budgetTracker.addUsage(
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+          );
+
+          // Emit budget update (always — sidebar needs token count even with unlimited budget)
+          const percentage =
+            this.options.tokenBudget > 0
+              ? Math.round(
+                  (this.state.totalUsage.total_tokens /
+                    this.options.tokenBudget) *
+                    100,
+                )
+              : 0;
+
+          // Compute effective context tokens for the sidebar context counter.
+          // Uses the context meter to estimate how full the context window is.
+          let effectiveContextTokens: number | undefined;
+          if (this.contextManager) {
+            try {
+              const ctxSnapshot = this.contextManager.getSnapshot(
+                systemPromptTokens,
+                toolSchemaTokens,
+                `turn_${turnIndex}_ctx`,
+              );
+              effectiveContextTokens = ctxSnapshot.effectiveTokens;
+            } catch {
+              // Swallow — context meter may not have enough data yet
+            }
+          }
+
+          this.emit({
+            type: "budget_update",
+            timestamp: Date.now(),
+            usedTokens: this.state.totalUsage.total_tokens,
+            totalBudget: this.options.tokenBudget,
+            percentage,
+            effectiveContextTokens,
+          });
+        }
+
+        // Store assistant messages in session
+        for (const msg of assistantMessages) {
+          // Do not feed an invisible response back to the model. Some
+          // OpenAI-compatible reasoning models otherwise continue the same
+          // unfinished response instead of following the recovery instruction.
+          if (isInvisibleAssistantMessage(msg)) {
+            continue;
+          }
+          const sessionItem = outputItemToSessionItem(msg);
+          if (sessionItem) {
+            this.session.appendItem(sessionItem as unknown as SessionItemParam);
+            allItems.push(sessionItem);
+          }
+        }
+
+        if (shouldContinue && toolCalls.length > 0) {
+          if (continuationAttempts < this.options.maxContinuationAttempts) {
+            continuationAttempts++;
+            const continuationItem = createUserItem(
+              "Your previous response was cut off while generating a tool call. " +
+                "Discard the incomplete tool call and re-issue the intended tool call from scratch with complete valid JSON arguments.",
+            );
+            this.session.appendItem(continuationItem as unknown as SessionItemParam);
+            allItems.push(continuationItem as unknown as ItemParam);
+            iteration++;
+            continue;
+          }
+
+          const message =
+            `Response remained incomplete while generating tool calls after ${this.options.maxContinuationAttempts} automatic continuations`;
+          emitNarrationOnce("blocked", message);
+          errors.push(createTurnError("api_error", message, iteration));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: message,
+            status: "incomplete",
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "continuation-exhausted",
+            message,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        const finishCall =
+          toolCalls.length === 1 && toolCalls[0].name === FINISH_TOOL_NAME
+            ? toolCalls[0]
+            : null;
+        const finishRequest = finishCall
+          ? parseFinishRequest(finishCall)
+          : null;
+        if (finishCall && finishRequest) {
+          let decision = evaluateCompletion(finishRequest, {
+            ...evidenceLedger.toCompletionState(errors),
+            taskKind,
+            allowUnverifiedCompletion,
+          });
+          if (!decision.accepted && evidenceLedger.getSummary().needsVerification) {
+            const didAutoVerify = await runAutoVerificationOpportunity("finish");
+            if (didAutoVerify) {
+              decision = evaluateCompletion(finishRequest, {
+                ...evidenceLedger.toCompletionState(errors),
+                taskKind,
+                allowUnverifiedCompletion,
+              });
+            }
+          }
+          if (!decision.accepted) {
+            evidenceLedger.recordFinishAttempt("rejected", decision.reasons.join("; "));
+            const fcItem = outputItemToSessionItem(finishCall);
+            if (fcItem) {
+              this.session.appendItem(fcItem as unknown as SessionItemParam);
+              allItems.push(fcItem);
+            }
+            const rejection: ToolResult = {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Finish rejected by completion gate:\n- ${decision.reasons.join("\n- ")}\n` +
+                    "Resolve the issues, continue with tools, use criteria[].evidenceIds when you have matching evidence, or use status blocked with a concrete blocker.",
+                },
+              ],
+              isError: true,
+            };
+            const outputItem = toolResultToOutputItem(
+              rejection,
+              finishCall.call_id,
+              finishCall.name,
+            );
+            this.session.appendItem(outputItem);
+            allItems.push(outputItem);
+            this.debug({
+              event: "loop/finish-rejected",
+              turn: turnIndex,
+              iteration,
+              toolCalls: toolCalls.length,
+              hasUsedTools,
+              needsVerification,
+              autonomousFollowUps,
+              activeErrors: errors.filter((error) => error.status === "active")
+                .length,
+              detail: decision.reasons.join(" "),
+            });
+            finishRejections++;
+            if (finishRejections >= MAX_FINISH_REJECTIONS_PER_TURN) {
+              const message = `Completion gate rejected ${finishRejections} finish attempts in this turn: ${decision.reasons.join(" ")}`;
+              errors.push(createTurnError("timeout", message, iteration));
+              this.emit({
+                type: "turn_error",
+                timestamp: Date.now(),
+                error: message,
+              });
+              this._emitStopReason(
+                turnIndex,
+                iteration,
+                "loop-guard",
+                message,
+                hasUsedTools,
+                autonomousFollowUps,
+              );
+              break;
+            }
+            iteration++;
+            continue;
+          }
+
+          acknowledgeErrors(errors, finishRequest.acknowledgedErrorIds);
+          evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
+          const finishMessage = finishRequestToMessage(
+            finishCall,
+            finishRequest.summary,
+            finishRequest.status,
+          );
+          const text = extractTextFromOutput(finishMessage);
+          const sessionItem = outputItemToSessionItem(finishMessage);
+          if (sessionItem) {
+            this.session.appendItem(sessionItem as unknown as SessionItemParam);
+            allItems.push(sessionItem);
+          }
+          this.emit({
+            type: "assistant_message",
+            timestamp: Date.now(),
+            messageId: finishMessage.id,
+            text,
+          });
+          emitNarrationOnce(
+            finishRequest.status === "blocked" ? "blocked" : "completion",
+            finishRequest.status === "blocked"
+              ? "Finishing as blocked with a concrete external blocker."
+              : finishRequest.status === "completed_with_unverified_changes"
+                ? "Finishing with explicitly visible unverified changes."
+              : "Finishing after satisfying the current completion gate.",
+            verificationEvidenceCallIds.size > 0 ? [...verificationEvidenceCallIds] : successfulToolCallIds.size > 0 ? [...successfulToolCallIds] : [],
+          );
+          this.debug({
+            event: "loop/explicit-finish",
+            turn: turnIndex,
+            iteration,
+            toolCalls: toolCalls.length,
+            hasUsedTools,
+            needsVerification,
+            autonomousFollowUps,
+            textPreview: text.slice(0, 100),
+            activeErrors: errors.filter((error) => error.status === "active")
+              .length,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "completed",
+            "Model used the explicit finish control tool",
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        } else if (finishCall) {
+          evidenceLedger.recordFinishAttempt("rejected", "Invalid finish arguments");
+          const fcItem = outputItemToSessionItem(finishCall);
+          if (fcItem) {
+            this.session.appendItem(fcItem as unknown as SessionItemParam);
+            allItems.push(fcItem);
+          }
+          const diagnosis = diagnoseFinishArguments(finishCall);
+          const rejection: ToolResult = {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Finish rejected: invalid arguments. Fix these issues:\n- ${diagnosis.join("\n- ")}`,
+              },
+            ],
+            isError: true,
+          };
+          const outputItem = toolResultToOutputItem(
+            rejection,
+            finishCall.call_id,
+            finishCall.name,
+          );
+          this.session.appendItem(outputItem);
+          allItems.push(outputItem);
+          finishRejections++;
+          if (finishRejections >= MAX_FINISH_REJECTIONS_PER_TURN) {
+            const message = `Completion gate rejected invalid finish arguments ${finishRejections} times in this turn`;
+            errors.push(createTurnError("timeout", message, iteration));
+            this.emit({
+              type: "turn_error",
+              timestamp: Date.now(),
+              error: message,
+            });
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              "loop-guard",
+              message,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+            break;
+          }
+          iteration++;
+          continue;
+        }
+
+        if (
+          shouldContinue &&
+          toolCalls.length === 0 &&
+          continuationAttempts < this.options.maxContinuationAttempts
+        ) {
+          continuationAttempts++;
+          const continuationItem = createUserItem(
+            "Continue exactly where you stopped. Do not repeat completed text. Keep working until the task is complete.",
+          );
+          this.session.appendItem(
+            continuationItem as unknown as SessionItemParam,
+          );
+          allItems.push(continuationItem as unknown as ItemParam);
+          iteration++;
+          continue;
+        }
+
+        if (
+          shouldContinue &&
+          continuationAttempts >= this.options.maxContinuationAttempts
+        ) {
+          const message = `Response remained incomplete after ${this.options.maxContinuationAttempts} automatic continuations`;
+          emitNarrationOnce("blocked", message);
+          errors.push(createTurnError("api_error", message, iteration));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: message,
+            status: "incomplete",
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "continuation-exhausted",
+            message,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        if (toolCalls.length === 0 && !shouldContinue && evidenceLedger.getSummary().needsVerification) {
+          await runAutoVerificationOpportunity("text-only-stop");
+        }
+
+        const autonomousReason =
+          toolCalls.length === 0 && !shouldContinue
+            ? getAutonomousFollowUpReason(
+                assistantMessages,
+                needsVerification,
+                errors.filter((error) => error.status === "active"),
+                hasMutatedFiles,
+                hasUsedTools,
+              )
+            : null;
+
+        // After a security denial, the model has already received
+        // "Do NOT attempt alternative approaches". Don't inject a
+        // follow-up message that could be interpreted as "continue".
+        const hadSecurityDenialThisTurn = errors.some(
+          (error) => error.type === "security_denial",
+        );
+        if (hadSecurityDenialThisTurn && autonomousReason) {
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "security-denial",
+            "Turn stopped after security denial. The model has been instructed not to continue.",
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+
+        if (
+          autonomousReason &&
+          autonomousFollowUps < this.options.maxAutonomousFollowUps
+        ) {
+          autonomousFollowUps++;
+          this.debug({
+            event: "loop/auto-continue",
+            turn: turnIndex,
+            iteration,
+            toolCalls: toolCalls.length,
+            hasUsedTools,
+            needsVerification,
+            autonomousFollowUps,
+            autoContinue: true,
+            textPreview: assistantMessages
+              .map(extractTextFromOutput)
+              .join(" ")
+              .slice(0, 100),
+          });
+          // Directive injected as a user message — the model must act, not discuss
+          const hasActiveErrors = errors.some(
+            (error) => error.status === "active",
+          );
+          const requiredAction = hasActiveErrors
+            ? "Call a different available tool or command now to resolve or bypass the error. Do not call finish while the error is active."
+            : "Either call a tool to make progress, or call finish with your final response and completion criteria.";
+          const followUpItem = createUserItem(
+            `${autonomousReason} Do not output commentary about the situation. ${requiredAction}`,
+          );
+          this.session.appendItem(followUpItem as unknown as SessionItemParam);
+          allItems.push(followUpItem as unknown as ItemParam);
+          iteration++;
+          continue;
+        }
+
+        if (autonomousReason) {
+          const activeErrors = errors.filter(
+            (error) => error.status === "active",
+          );
+
+          // If there are active unresolved errors, stop with a loop-guard error.
+          if (activeErrors.length > 0) {
+            const actualCount = autonomousFollowUps + 1;
+            const message = `No tool calls or finish after ${actualCount} attempts. Active errors remain unresolved.`;
+            emitNarrationOnce("blocked", message);
+            errors.push(createTurnError("timeout", message, iteration));
+            this.emit({
+              type: "turn_error",
+              timestamp: Date.now(),
+              error: message,
+            });
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              "loop-guard",
+              message,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+            break;
+          }
+
+          // If visible text is still empty after all follow-up attempts, stop with an error.
+          if (!hasVisibleAssistantText(assistantMessages)) {
+            const actualCount = autonomousFollowUps + 1;
+            const message = `No visible response after ${actualCount} attempts. The model kept producing only thinking without substantive output.`;
+            emitNarrationOnce("blocked", message);
+            errors.push(createTurnError("timeout", message, iteration));
+            this.emit({
+              type: "turn_error",
+              timestamp: Date.now(),
+              error: message,
+            });
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              "loop-guard",
+              message,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+            break;
+          }
+
+          // No active errors — accept text-only response as final answer.
+          // This covers both non-mutation turns and mutation turns where the model
+          // completed work but didn't call finish (model-dependent compliance).
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "completed",
+            "Model returned a text-only response; accepting as final answer",
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          emitNarrationOnce("completion", "Finishing with a visible final response.");
+          break;
+        }
+
+        // Reset counter when tool calls are present (model is actively working)
+        if (toolCalls.length > 0) {
+          autonomousFollowUps = 0;
+        }
+
+        // A phased final answer is the only text-only completion signal.
+        if (toolCalls.length === 0) {
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "completed",
+            "Model returned a final response",
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          emitNarrationOnce("completion", "Finishing with a visible final response.");
+          break;
+        }
+
+        // Store the complete assistant tool-call group before any tool outputs.
+        // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
+        for (const toolCall of toolCalls) {
+          const fcItem: FunctionCallItemParam = {
+            type: "function_call",
+            call_id: toolCall.call_id,
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            id: toolCall.id,
+            status: "completed",
+          };
+          if (toolCall.reasoning_content)
+            fcItem.reasoning_content = toolCall.reasoning_content;
+          this.session.appendItem(fcItem);
+          allItems.push(fcItem);
+        }
+
+        const batchDecision = evaluateToolBatch(toolCalls);
+        if (batchDecision.action === "reject") {
+          emitNarrationOnce("recovery", batchDecision.message);
+          const iterationOutcomes: ToolOutcome[] = [];
+          for (const toolCall of toolCalls) {
+            hasUsedTools = true;
+            const result = createToolErrorResult({
+              code: batchDecision.code,
+              category: "validation",
+              message: batchDecision.message,
+              nextAction: "Run only the mutation now; after observing that result, call the verification tool separately.",
+              fingerprint: `validation:${batchDecision.code}`,
+            });
+            this.emit({
+              type: "tool_call_start",
+              timestamp: Date.now(),
+              toolCallId: toolCall.call_id,
+              toolName: toolCall.name,
+              args: safeParseArgs(toolCall.arguments),
+            });
+            this.emitToolResultAndEnd(toolCall, result, Date.now());
+            recordToolOutcome(
+              errors,
+              successfulToolCallIds,
+              toolCall,
+              true,
+              extractToolResultText(result),
+              iteration,
+            );
+            evidenceLedger.recordToolOutcome({
+              toolCallId: toolCall.call_id,
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+              isError: true,
+              output: extractToolResultText(result),
+              iteration,
+            });
+            const outputItem = toolResultToOutputItem(result, toolCall.call_id, toolCall.name);
+            this.session.appendItem(outputItem);
+            allItems.push(outputItem);
+            iterationOutcomes.push({
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+              result: extractToolResultText(result),
+              isError: true,
+              error: result.error,
+            });
+          }
+
+          const progressDecision = loopGuard.observeToolIteration(iterationOutcomes);
+          if (progressDecision.action === "recover") {
+            emitNarrationOnce("recovery", progressDecision.message);
+            this.emit({
+              type: "loop_guard",
+              timestamp: Date.now(),
+              action: "recover",
+              iteration,
+              message: progressDecision.message,
+            });
+            const recoveryItem = createUserItem(progressDecision.message);
+            this.session.appendItem(recoveryItem as unknown as SessionItemParam);
+            allItems.push(recoveryItem as unknown as ItemParam);
+            iteration++;
+            continue;
+          }
+          if (progressDecision.action === "stop") {
+            emitNarrationOnce("blocked", progressDecision.message);
+            errors.push(createTurnError("timeout", progressDecision.message, iteration));
+            this.emit({
+              type: "turn_error",
+              timestamp: Date.now(),
+              error: progressDecision.message,
+            });
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              "loop-guard",
+              progressDecision.message,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+            break;
+          }
+
+          iteration++;
+          continue;
+        }
+
+        // Execute tool calls
+        const iterationOutcomes: ToolOutcome[] = [];
+        const checkpointEvents: CheckpointEvent[] = [];
+        let fixUntilGreenFollowUp: string | null = null;
+        let fixUntilGreenStop: string | null = null;
+        let mutationSucceededInCurrentBatch = false;
+        for (const toolCall of toolCalls) {
+          hasUsedTools = true;
+          const startTime = Date.now();
+
+          // Emit tool call start
+          let parsedArgs: Record<string, unknown> = {};
+          try {
+            parsedArgs = JSON.parse(toolCall.arguments);
+          } catch {
+            parsedArgs = {};
+          }
+
+          if (toolCall.name === "edit" || toolCall.name === "write") {
+            emitNarrationOnce(
+              "edit_intent",
+              `Preparing a scoped ${toolCall.name} change before running verification.`,
+            );
+          } else if (toolCall.name === "bash" && typeof parsedArgs.command === "string") {
+            const command = parsedArgs.command.toLowerCase();
+            if (isVerificationCommand(command)) {
+              emitNarrationOnce("verification", "Running a project verification command.", [toolCall.call_id]);
+            }
+          }
+
+          this.emit({
+            type: "tool_call_start",
+            timestamp: startTime,
+            toolCallId: toolCall.call_id,
+            toolName: toolCall.name,
+            args: parsedArgs,
+          });
+
+          // Execute the tool (with trust check)
+          const tool = this.tools.get(toolCall.name);
+          let result: ToolResult;
+
+          // Check trust level before execution
+          const trustCheck =
+            toolCall.name === "bash" && typeof parsedArgs.command === "string"
+              ? this.trustManager.checkCommand(parsedArgs.command)
+              : this.trustManager.checkTool(toolCall.name);
+          if (trustCheck.needsConfirmation) {
+            // Build description for the confirmation prompt
+            const description =
+              toolCall.name === "bash" && typeof parsedArgs.command === "string"
+                ? `bash: ${parsedArgs.command}`
+                : `${toolCall.name}(${toolCall.arguments.slice(0, 200)})`;
+
+            // Ask user for confirmation via event (blocking until resolved)
+            const decision = await this.requestDangerousConfirmation(
+              toolCall.name,
+              toolCall.call_id,
+              description,
+              trustCheck.reason,
+            );
+
+            if (decision === "session") {
+              const approvalKind = toolCall.name === "bash" ? "command" : "tool";
+              const approvalValue =
+                toolCall.name === "bash" && typeof parsedArgs.command === "string"
+                  ? parsedArgs.command
+                  : toolCall.name;
+              this.trustManager.approveForSession(approvalKind, approvalValue);
+            } else if (decision === "repo" || decision === "full") {
+              this.trustManager.setPermissionMode(decision);
+            }
+
+            if (decision === "deny") {
+              this.state.denialCount++;
+              this.state.lastDeniedOperation = description;
+              result = {
+                ...createToolErrorResult({
+                  code: "trust_confirmation_denied",
+                  category: "trust",
+                  message: `Denied: ${trustCheck.reason}. The operation was cancelled by the user. Do NOT attempt alternative approaches — the user has decided this operation should not be performed.`,
+                  nextAction: "Stop or ask the user for explicit confirmation if this exact operation is still required.",
+                  fingerprint: `trust:confirmation_denied:${toolCall.name}`,
+                }),
+              };
+              this.emitToolResultAndEnd(toolCall, result, startTime);
+              recordToolOutcome(
+                errors,
+                successfulToolCallIds,
+                toolCall,
+                true,
+                extractToolResultText(result),
+                iteration,
+                "security_denial",
+              );
+              evidenceLedger.recordToolOutcome({
+                toolCallId: toolCall.call_id,
+                toolName: toolCall.name,
+                arguments: toolCall.arguments,
+                isError: true,
+                output: extractToolResultText(result),
+                iteration,
+              });
+              const outputItem = toolResultToOutputItem(
+                result,
+                toolCall.call_id,
+                toolCall.name,
+              );
+              this.session.appendItem(outputItem);
+              allItems.push(outputItem);
+              iterationOutcomes.push({
+                toolName: toolCall.name,
+                arguments: toolCall.arguments,
+                result: extractToolResultText(result),
+                isError: result.isError,
+                error: result.error,
+              });
+              continue;
+            }
+            // User allowed — continue to normal execution below
+          }
+
+          if (!tool) {
+            result = createToolErrorResult({
+              code: "tool_not_registered",
+              category: "validation",
+              message: `Tool "${toolCall.name}" is not registered. Available tools: ${this.tools.getNames().join(", ")}`,
+              nextAction: "Call one of the registered tools or inspect the available tool list before retrying.",
+              fingerprint: `validation:tool_not_registered:${toolCall.name}`,
+            });
+          } else {
+            try {
+              let args: Record<string, unknown> = parsedArgs;
+              if (tool.prepareArgs) {
+                try {
+                  args = tool.prepareArgs(parsedArgs) as Record<
+                    string,
+                    unknown
+                  >;
+                } catch (err) {
+                  result = createToolErrorResult({
+                    code: "tool_invalid_arguments",
+                    category: "validation",
+                    message: `Error preparing arguments for "${toolCall.name}": ${err instanceof Error ? err.message : String(err)}`,
+                    nextAction: "Fix the tool arguments to match the schema before retrying.",
+                    fingerprint: `validation:tool_invalid_arguments:${toolCall.name}`,
+                  });
+                  // Skip execution — args couldn't be parsed
+                  this.emitToolResultAndEnd(toolCall, result, startTime);
+                  recordToolOutcome(
+                    errors,
+                    successfulToolCallIds,
+                    toolCall,
+                    true,
+                    extractToolResultText(result),
+                    iteration,
+                  );
+                  evidenceLedger.recordToolOutcome({
+                    toolCallId: toolCall.call_id,
+                    toolName: toolCall.name,
+                    arguments: toolCall.arguments,
+                    isError: true,
+                    output: extractToolResultText(result),
+                    iteration,
+                  });
+                  const outputItem = toolResultToOutputItem(
+                    result,
+                    toolCall.call_id,
+                    toolCall.name,
+                  );
+                  this.session.appendItem(outputItem);
+                  allItems.push(outputItem);
+                  iterationOutcomes.push({
+                    toolName: toolCall.name,
+                    arguments: toolCall.arguments,
+                    result: extractToolResultText(result),
+                    isError: result.isError,
+                    error: result.error,
+                  });
+                  continue;
+                }
+              }
+
+              const toolAbortController = new AbortController();
+              this._toolAbortController = toolAbortController;
+              const turnSignal = this._abortController?.signal;
+              const abortToolWithTurn = () => toolAbortController.abort();
+              if (turnSignal?.aborted) {
+                toolAbortController.abort();
+              } else {
+                turnSignal?.addEventListener("abort", abortToolWithTurn, { once: true });
+              }
+              try {
+                result = await tool.execute(
+                  args,
+                  this.createToolContext(),
+                  toolAbortController.signal,
+                );
+              } finally {
+                turnSignal?.removeEventListener("abort", abortToolWithTurn);
+                if (this._toolAbortController === toolAbortController) {
+                  this._toolAbortController = null;
+                }
+              }
+            } catch (err) {
+              result = createToolErrorResult({
+                code: "tool_execution_failed",
+                category: "unknown",
+                message: `Error executing "${toolCall.name}": ${err instanceof Error ? err.message : String(err)}`,
+                nextAction: "Inspect the error, change the approach, and avoid retrying the same call unchanged.",
+                fingerprint: `unknown:tool_execution_failed:${toolCall.name}`,
+              });
+            }
+          }
+
+          // Emit result and end
+          this.emitToolResultAndEnd(toolCall, result, startTime);
+          recordToolOutcome(
+            errors,
+            successfulToolCallIds,
+            toolCall,
+            result.isError,
+            extractToolResultText(result),
+            iteration,
+          );
+          evidenceLedger.recordToolOutcome({
+            toolCallId: toolCall.call_id,
+            toolName: toolCall.name,
+            arguments: toolCall.arguments,
+            isError: result.isError,
+            output: extractToolResultText(result),
+            iteration,
+          });
+
+          if (!result.isError && toolCall.name === "checkpoint") {
+            const checkpointArgs = toCheckpointArgs(parsedArgs);
+            if (checkpointArgs) {
+              const checkpointEvent = extractCheckpointEvent(checkpointArgs);
+              checkpointEvents.push(checkpointEvent);
+              checkpointState = checkpointEventToPlanState(checkpointEvent);
+              evidenceLedger.recordCheckpoint({
+                kind: checkpointEvent.kind,
+                reason: checkpointEvent.reason,
+                nextDirection: checkpointEvent.nextDirection,
+                completed: checkpointEvent.completed,
+                pending: checkpointEvent.pending,
+                toolCallId: toolCall.call_id,
+                iteration,
+              });
+            }
+          }
+
+          // Handle activate_skill tool: emit skill_activated event
+          if (!result.isError && toolCall.name === "activate_skill") {
+            let skillName: string | null = null;
+            try {
+              const parsed = JSON.parse(toolCall.arguments);
+              skillName = typeof parsed?.name === "string" ? parsed.name : null;
+            } catch {
+              // Ignore parse errors
+            }
+            if (skillName) {
+              const skill = this.skillManager?.getSkill(skillName);
+              if (skill) {
+                this.emit({
+                  type: "skill_activated",
+                  timestamp: Date.now(),
+                  skillName: skill.name,
+                  skillRevision: skill.revision ?? "unknown",
+                  skillScope: skill.scope,
+                });
+              }
+            }
+          }
+
+          if (
+            !result.isError &&
+            isMutationToolName(toolCall.name)
+          ) {
+            hasMutatedFiles = true;
+            needsVerification = true;
+            mutationSucceededInCurrentBatch = true;
+            verificationEvidenceCallIds.clear();
+            fixUntilGreen.recordProgress(toolCall.call_id);
+            if (recoveryReflectionDraft) {
+              recoveryReflectionDraft = addRecoveryReflectionFix(
+                recoveryReflectionDraft,
+                summarizeMutationToolCall(toolCall.name, parsedArgs),
+              );
+            }
+          } else if (
+            !result.isError &&
+            needsVerification &&
+            !mutationSucceededInCurrentBatch &&
+            (toolCall.name === "read" || toolCall.name === "bash")
+          ) {
+            needsVerification = false;
+            verificationEvidenceCallIds.add(toolCall.call_id);
+            emitNarrationOnce(
+              "verification",
+              `Recorded ${toolCall.name} as verification evidence after mutation.`,
+              [toolCall.call_id],
+            );
+          } else if (
+            !result.isError &&
+            hasMutatedFiles &&
+            !mutationSucceededInCurrentBatch &&
+            (toolCall.name === "read" || toolCall.name === "bash")
+          ) {
+            verificationEvidenceCallIds.add(toolCall.call_id);
+            emitNarrationOnce(
+              "verification",
+              `Recorded ${toolCall.name} as verification evidence after mutation.`,
+              [toolCall.call_id],
+            );
+          }
+
+          if (toolCall.name === "bash") {
+            const command = extractCommandArgument(parsedArgs);
+            if (isVerificationCommand(command)) {
+              if (result.isError) {
+                const recoveryDecision = fixUntilGreen.recordVerificationFailure({
+                  command,
+                  output: extractToolResultText(result),
+                });
+                evidenceLedger.recordRecoveryIteration(recoveryDecision);
+                if (recoveryDecision.action === "recover") {
+                  recoveryReflectionDraft = createRecoveryReflectionDraft(recoveryDecision.diagnostic);
+                  fixUntilGreenFollowUp = recoveryDecision.message;
+                } else if (recoveryDecision.action === "stop") {
+                  recoveryReflectionDraft = null;
+                  fixUntilGreenStop = recoveryDecision.message;
+                }
+              } else {
+                const recoveryDecision = fixUntilGreen.recordVerificationPassed(command);
+                evidenceLedger.recordRecoveryIteration(recoveryDecision);
+                if (recoveryReflectionDraft) {
+                  const reflectionResult = writeRecoveryReflectionLesson(this.projectMemory, {
+                    task: userText,
+                    sessionId: this.session.getSessionId(),
+                    draft: recoveryReflectionDraft,
+                    verification: recoveryDecision.message,
+                    observableSuccess: true,
+                  });
+                  if (reflectionResult.status === "written") {
+                    evidenceLedger.recordReflection(`Stored recovery lesson: ${reflectionResult.capsule.summary}`);
+                  } else if (reflectionResult.reason !== "no_memory") {
+                    evidenceLedger.recordReflection(`Skipped recovery lesson: ${reflectionResult.reason}`);
+                  }
+                  recoveryReflectionDraft = null;
+                }
+              }
+            }
+          }
+
+          // Store output in session
+          const outputItem = toolResultToOutputItem(
+            result,
+            toolCall.call_id,
+            toolCall.name,
+          );
+          this.session.appendItem(outputItem);
+          allItems.push(outputItem);
+          iterationOutcomes.push({
+            toolName: toolCall.name,
+            arguments: toolCall.arguments,
+            result: extractToolResultText(result),
+            isError: result.isError,
+            error: result.error,
+          });
+        }
+
+        if (checkpointEvents.length > 0) {
+          scheduleCheckpointCompaction(checkpointEvents);
+        }
+
+        iteration++;
+        if (fixUntilGreenStop) {
+          emitNarrationOnce("blocked", fixUntilGreenStop);
+          errors.push(createTurnError("timeout", fixUntilGreenStop, iteration));
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: fixUntilGreenStop,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "loop-guard",
+            fixUntilGreenStop,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+        if (fixUntilGreenFollowUp) {
+          emitNarrationOnce("recovery", fixUntilGreenFollowUp);
+          const recoveryItem = createUserItem(fixUntilGreenFollowUp);
+          this.session.appendItem(recoveryItem as unknown as SessionItemParam);
+          allItems.push(recoveryItem as unknown as ItemParam);
+          continue;
+        }
+        const progressDecision =
+          loopGuard.observeToolIteration(iterationOutcomes);
+        if (progressDecision.action === "recover") {
+          emitNarrationOnce("recovery", progressDecision.message);
+          this.emit({
+            type: "loop_guard",
+            timestamp: Date.now(),
+            action: "recover",
+            iteration,
+            message: progressDecision.message,
+          });
+          const recoveryItem = createUserItem(progressDecision.message);
+          this.session.appendItem(recoveryItem as unknown as SessionItemParam);
+          allItems.push(recoveryItem as unknown as ItemParam);
+          continue;
+        }
+        if (progressDecision.action === "stop") {
+          emitNarrationOnce("blocked", progressDecision.message);
+          errors.push(
+            createTurnError("timeout", progressDecision.message, iteration),
+          );
+          this.emit({
+            type: "loop_guard",
+            timestamp: Date.now(),
+            action: "stop",
+            iteration,
+            message: progressDecision.message,
+          });
+          this.emit({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: progressDecision.message,
+          });
+          this._emitStopReason(
+            turnIndex,
+            iteration,
+            "loop-guard",
+            progressDecision.message,
+            hasUsedTools,
+            autonomousFollowUps,
+          );
+          break;
+        }
+      } while (true);
+
+      // Emit turn end
+      this.emit({
+        type: "turn_end",
+        timestamp: Date.now(),
+        turnIndex,
+        response: currentResponse ?? {
+          id: "",
+          object: "response",
+          created_at: 0,
+          completed_at: 0,
+          status: "failed",
+          incomplete_details: null,
+          model: "",
+          previous_response_id: null,
+          instructions: null,
+          output: [],
+          error: { code: "loop_error", message: "No response received" },
+          tools: [],
+          tool_choice: "auto",
+          truncation: "disabled",
+          parallel_tool_calls: true,
+          text: {},
+          top_p: 1,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          top_logprobs: 0,
+          temperature: 1,
+          reasoning: null,
+          usage: null,
+          max_output_tokens: null,
+          max_tool_calls: null,
+          store: false,
+          background: false,
+          service_tier: "default",
+          metadata: {},
+          safety_identifier: null,
+          prompt_cache_key: null,
+        },
+        totalUsage: { ...this.state.totalUsage },
+      });
+      this.debug({
+        event: "loop/turn-end",
+        turn: turnIndex,
+        iteration,
+        responseId: currentResponse?.id,
+        responseStatus: currentResponse?.status ?? "failed",
+        hasUsedTools,
+        needsVerification,
+        autonomousFollowUps,
+        errors: errors.length,
+        activeErrors: errors.filter((error) => error.status === "active")
+          .length,
+      });
+
+      // Schedule background compaction if turn completed successfully
+      if (
+        this.backgroundScheduler &&
+        this.contextManager &&
+        currentResponse?.status === "completed" &&
+        errors.length === 0
+      ) {
+        // Check if auto-compact is enabled (runtime toggle)
+        const autoCompactEnabled = this.autoCompactOverride?.enabled ?? true;
+        
+        if (autoCompactEnabled) {
+          const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
+          const toolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
+          const requestFingerprint = `turn_${turnIndex}_complete`;
+          
+          const { shouldCompact, snapshot } = this.contextManager.evaluateTurnComplete(
+            systemPromptTokens,
+            toolSchemaTokens,
+            requestFingerprint,
+          );
+          
+          if (shouldCompact) {
+            this.backgroundScheduler.schedule(
+              "turn_complete",
+              snapshot,
+              systemPromptTokens,
+              toolSchemaTokens,
+              requestFingerprint,
+            );
+          }
+        }
+      }
+
+      return {
+        items: allItems,
+        response: currentResponse ?? {
+          id: "",
+          object: "response",
+          created_at: 0,
+          completed_at: 0,
+          status: "failed",
+          incomplete_details: null,
+          model: "",
+          previous_response_id: null,
+          instructions: null,
+          output: [],
+          error: { code: "loop_error", message: "No response received" },
+          tools: [],
+          tool_choice: "auto",
+          truncation: "disabled",
+          parallel_tool_calls: true,
+          text: {},
+          top_p: 1,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          top_logprobs: 0,
+          temperature: 1,
+          reasoning: null,
+          usage: null,
+          max_output_tokens: null,
+          max_tool_calls: null,
+          store: false,
+          background: false,
+          service_tier: "default",
+          metadata: {},
+          safety_identifier: null,
+          prompt_cache_key: null,
+        },
+        usage: { ...this.state.totalUsage },
+        errors,
+        activeErrors: errors.filter((error) => error.status === "active"),
+        evidenceSummary: evidenceLedger.getSummary(),
+        checkpointState,
+      };
+    } finally {
+      this._toolAbortController = null;
+      this._abortController = null;
+      this.state.isProcessing = false;
+    }
+  }
+
+  /**
+   * Run a streaming request and populate toolCalls + assistantMessages arrays.
+   * Emits text deltas, function_call deltas, and done events in real time.
+   */
+  private async runStreamingRequest(
+    request: CreateResponseParams,
+    assistantMessages: MessageField[],
+    toolCalls: FunctionCallField[],
+  ): Promise<ResponseResource> {
+    let finalResponse: ResponseResource | null = null;
+    const currentFcArgs: Map<
+      number,
+      { id: string; name: string; args: string }
+    > = new Map();
+
+    for await (const event of this.client.createStream(request)) {
+      switch (event.type) {
+        case "response.created":
+          finalResponse = event.response;
+          break;
+
+        case "response.output_item.added": {
+          const item = event.item;
+
+          if (item.type === "message") {
+            assistantMessages.push(item as MessageField);
+            this.emit({
+              type: "assistant_message_start",
+              timestamp: Date.now(),
+              messageId: item.id,
+            });
+          } else if (item.type === "function_call") {
+            const fc = item as FunctionCallField;
+            toolCalls.push(fc);
+
+            // Function calls from streaming arrive with full arguments at [DONE]
+            if (fc.arguments) {
+              this.emit({
+                type: "function_call_done",
+                timestamp: Date.now(),
+                toolCallId: fc.call_id,
+                toolName: fc.name,
+                arguments: fc.arguments,
+              });
+            }
+          }
+          break;
+        }
+
+        case "response.output_text.delta": {
+          this.emit({
+            type: "assistant_text_delta",
+            timestamp: Date.now(),
+            messageId: event.item_id,
+            delta: event.delta,
+          });
+
+          // Update the message content in our local list
+          const msg = assistantMessages.find((m) => m.id === event.item_id);
+          if (msg) {
+            if (msg.content.length === 0) {
+              msg.content.push({
+                type: "output_text",
+                text: event.delta,
+                annotations: [],
+              });
+            } else {
+              const lastContent = msg.content[msg.content.length - 1];
+              if (lastContent.type === "output_text") {
+                lastContent.text += event.delta;
+              }
+            }
+          }
+          break;
+        }
+
+        case "response.output_item.done": {
+          const item = event.item;
+
+          if (item.type === "message") {
+            this.emit({
+              type: "assistant_text_done",
+              timestamp: Date.now(),
+              messageId: item.id,
+              fullText: extractTextFromOutput(item),
+              reasoningContent: (item as MessageField).reasoning_content,
+            });
+
+            // Update the message in our list with final content
+            const idx = assistantMessages.findIndex((m) => m.id === item.id);
+            if (idx >= 0) {
+              assistantMessages[idx] = item as MessageField;
+            }
+          } else if (item.type === "function_call") {
+            // Update function call with final data (args + reasoning_content)
+            const fc = item as FunctionCallField;
+            const idx = toolCalls.findIndex((t) => t.call_id === fc.call_id);
+            if (idx >= 0) {
+              toolCalls[idx] = fc;
+            }
+          }
+          break;
+        }
+
+        case "response.function_call_arguments.delta": {
+          const fc = currentFcArgs.get(event.output_index) ?? {
+            id: event.item_id,
+            name: "",
+            args: "",
+          };
+          fc.id = event.item_id;
+          fc.args += event.delta;
+          currentFcArgs.set(event.output_index, fc);
+
+          this.emit({
+            type: "function_call_delta",
+            timestamp: Date.now(),
+            toolCallId: event.item_id,
+            toolName: fc.name,
+            delta: event.delta,
+          });
+          break;
+        }
+
+        case "response.function_call_arguments.done": {
+          const fc = currentFcArgs.get(event.output_index);
+          if (fc) {
+            fc.args = event.arguments;
+            currentFcArgs.set(event.output_index, fc);
+
+            // Update the function call item in toolCalls
+            const tc = toolCalls.find((t) => t.call_id === event.item_id);
+            if (tc) {
+              tc.arguments = event.arguments;
+            }
+
+            this.emit({
+              type: "function_call_done",
+              timestamp: Date.now(),
+              toolCallId: event.item_id,
+              toolName: fc.name,
+              arguments: event.arguments,
+            });
+          }
+          break;
+        }
+
+        case "response.completed":
+          finalResponse = event.response;
+          // Note: assistant_text_done is already emitted per-item in output_item.done.
+          // response.completed is NOT a second signal — skip to avoid duplicates.
+          break;
+
+        case "response.failed":
+          throw new Error(event.error.message);
+      }
+    }
+
+    if (!finalResponse) {
+      throw new Error("Stream completed without a final response");
+    }
+
+    return finalResponse;
+  }
+
+  private emitToolResultAndEnd(
+    toolCall: { call_id: string; name: string },
+    result: ToolResult,
+    startTime: number,
+  ): void {
+    const durationMs = Date.now() - startTime;
+
+    this.emit({
+      type: "tool_call_result",
+      timestamp: Date.now(),
+      toolCallId: toolCall.call_id,
+      toolName: toolCall.name,
+      result,
+    });
+
+    this.emit({
+      type: "tool_call_end",
+      timestamp: Date.now(),
+      toolCallId: toolCall.call_id,
+      toolName: toolCall.name,
+      durationMs,
+    });
+  }
+}
