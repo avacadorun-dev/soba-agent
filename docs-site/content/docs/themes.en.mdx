@@ -1,0 +1,247 @@
+---
+title: Themes
+description: TUI color modes, semantic tokens, and custom theme notes.
+---
+
+Themes define the TUI palette through **semantic tokens**. Instead of assigning a separate ANSI color to every UI element, you configure roles such as `accent`, `text`, `error`, and `border`. SOBA then applies those roles consistently across the interface.
+
+---
+
+## Contents
+
+1. [Semantic tokens](#1-semantic-tokens)
+1. [Built-in themes](#2-built-in-themes)
+1. [Token list](#3-token-list)
+1. [Choosing and switching themes](#4-choosing-and-switching-themes)
+1. [Custom themes](#5-custom-themes)
+1. [Dark and light modes](#6-dark-and-light-modes)
+1. [Good practices](#7-good-practices)
+
+---
+
+## 1. Semantic tokens
+
+SOBA uses semantic tokens instead of a fixed list of low-level colors. You do not need to remember which exact color is used for a border or a hint. You describe the role:
+
+```
+accent   → primary accent color: headings, selection
+text     → main text
+muted    → secondary text
+dim      → tertiary text and placeholders
+success  → successful operations
+error    → errors
+warning  → warnings
+info     → informational messages
+border   → borders and dividers
+```
+
+Each token is a HEX color, for example `#7ee787`, converted to TrueColor ANSI.
+
+This keeps themes pleasant to maintain: names carry meaning, one theme works across the full TUI, and dark/light modes can share the same token names.
+
+---
+
+## 2. Built-in themes
+
+SOBA currently ships with three color modes:
+
+| Name | Mode | Description |
+|---|---|---|
+| **Graphite** | `dark` | GitHub Dark-like theme. Green accent (`#7ee787`), soft text. Default theme |
+| **Paper** | `light` | Light theme for bright rooms. Blue accent (`#2e6edf`), clear contrast |
+| **Forest** | `forest` | Dark, natural palette. Moss-green accent (`#6AAC7D`), warm text (`#C2CBB8`) |
+
+Additional names from configuration are reserved for future built-in themes. For now they map to base modes:
+
+| Theme name | Maps to mode |
+|---|---|
+| `graphite` | `dark` |
+| `ember` | `dark` |
+| `aurora` | `dark` |
+| `synthwave` | `dark` |
+| `paper` | `light` |
+| `highContrast` | `light` |
+| `clay` | `light` |
+| `operator` | `dark` |
+| `ink` | `dark` |
+| `forest` | `forest` |
+
+---
+
+## 3. Token list
+
+### 3.1. Core tokens
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | Purpose |
+|---|---|---|---|---|
+| `accent` | `#7ee787` | `#2e6edf` | `#6AAC7D` | Accent color: headings, buttons, selection |
+| `text` | `#c9d1d9` | `#1a1a2e` | `#C2CBB8` | Main text |
+| `muted` | `#8b949e` | `#6b7280` | `#6C7B66` | Secondary text |
+| `dim` | `#6e7681` | `#9ca3af` | `#41503E` | Tertiary text and placeholders |
+| `success` | `#3fb950` | `#16a34a` | `#5A9E60` | Successful operations |
+| `error` | `#f85149` | `#dc2626` | `#C5615A` | Errors |
+| `warning` | `#e3b341` | `#d97706` | `#C3A14E` | Warnings |
+| `info` | `#58a6ff` | `#0284c7` | `#6E9EB8` | Informational messages |
+
+### 3.2. Background tokens
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | Purpose |
+|---|---|---|---|---|
+| `userBg` | `#161b22` | `#f3f4f6` | `#121A14` | User message background |
+| `agentBg` | `#0d1117` | `#ffffff` | `#0D130F` | Main agent message background |
+| `toolBg` | `#161b22` | `#f9fafb` | `#121A14` | Tool block background |
+| `toolPending` | `#30363d` | `#e5e7eb` | `#1A261D` | Pending tool background |
+| `thinkingBg` | `#161b22` | `#e5e7eb` | `#121A14` | Thinking block background |
+| `panelBg` | `#161b22` | `#f6f8fa` | `#121A14` | Panel background |
+| `sidebarBg` | `#0d1117` | `#ffffff` | `#0D130F` | Sidebar background |
+| `headerBg` | `#0d1117` | `#ffffff` | `#0D130F` | Header background |
+| `inputBg` | `#0d1117` | `#f6f8fa` | `#0D130F` | Input line background |
+
+### 3.3. Special tokens
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | Purpose |
+|---|---|---|---|---|
+| `thinkingFg` | `#a371f7` | `#8250df` | `#8BA877` | Thinking text |
+| `thinkingTitle` | `#a371f7` | `#8250df` | `#8BA877` | THINKING title |
+| `toolsTitle` | `#e3b341` | `#9a6700` | `#C3A14E` | TOOLS title |
+| `summaryTitle` | `#7ee787` | `#1a7f37` | `#6AAC7D` | SUMMARY title |
+| `sectionTitle` | `#58a6ff` | `#0969da` | `#6AAC7D` | Section headings |
+| `diffAdded` | `#3fb950` | `#16a34a` | `#5A9E60` | Added diff lines |
+| `diffRemoved` | `#f85149` | `#dc2626` | `#C5615A` | Removed diff lines |
+| `border` | `#30363d` | `#d1d5db` | `#1A261D` | Borders and dividers |
+| `statusBarBg` | `#0d1117` | `#1f2937` | `#0D130F` | Status bar background |
+| `statusBarFg` | `#8b949e` | `#f9fafb` | `#6C7B66` | Status bar text |
+| `inputBorder` | `#30363d` | `#d1d5db` | `#1A261D` | Input border |
+| `keyHint` | `#6e7681` | `#8c959f` | `#4A5A45` | Key hints |
+| `activeDot` | `#3fb950` | `#1a7f37` | `#6AAC7D` | Active indicator |
+| `idleDot` | `#3fb950` | `#1a7f37` | `#5A9E60` | Idle indicator |
+
+---
+
+## 4. Choosing and switching themes
+
+### 4.1. In config
+
+```json
+{
+  "theme": "graphite"
+}
+```
+
+### 4.2. From CLI
+
+```bash
+soba --theme forest
+```
+
+### 4.3. In the TUI
+
+```bash
+/theme forest
+/theme graphite
+/theme paper
+```
+
+### 4.4. Show the current theme
+
+```bash
+/theme
+
+# Output:
+# Current theme: Graphite (dark)
+# Available themes: graphite, ember, aurora, synthwave, paper,
+#                   forest, highContrast, clay, operator, ink
+# Use /theme <name> to switch
+```
+
+---
+
+## 5. Custom themes
+
+Custom theme files are still in progress. The planned shape is:
+
+```json
+{
+  "customThemes": {
+    "ocean": {
+      "mode": "dark",
+      "tokens": {
+        "accent": "#00bcd4",
+        "text": "#e0f7fa",
+        "muted": "#80deea",
+        "dim": "#4dd0e1",
+        "success": "#69f0ae",
+        "error": "#ff5252",
+        "warning": "#ffd740",
+        "info": "#40c4ff",
+        "userBg": "#001f3f",
+        "agentBg": "#001a33",
+        "toolBg": "#001f3f",
+        "border": "#004d66",
+        "statusBarBg": "#001a33",
+        "statusBarFg": "#80deea",
+        "thinkingBg": "#001f3f",
+        "thinkingFg": "#00bcd4",
+        "diffAdded": "#69f0ae",
+        "diffRemoved": "#ff5252",
+        "panelBg": "#001f3f",
+        "sidebarBg": "#001a33",
+        "headerBg": "#001a33",
+        "sectionTitle": "#00bcd4",
+        "thinkingTitle": "#00bcd4",
+        "toolsTitle": "#ffd740",
+        "summaryTitle": "#00bcd4",
+        "inputBg": "#001a33",
+        "inputBorder": "#004d66",
+        "keyHint": "#4dd0e1",
+        "activeDot": "#69f0ae",
+        "idleDot": "#69f0ae"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 6. Dark and light modes
+
+### 6.1. Mode detection
+
+A theme has a `mode` field:
+
+- `"dark"` — dark mode, used by Graphite
+- `"light"` — light mode, used by Paper
+- `"forest"` — a special dark mode with natural colors
+
+The mode affects how ThemeManager initializes colors. When you switch themes, TUI elements update immediately.
+
+### 6.2. Disable colors
+
+```bash
+# Plain text mode
+soba --no-color
+```
+
+Plain text output is useful for minimal terminals, logs, or automation.
+
+---
+
+## 7. Good practices
+
+### 7.1. Choose for the room
+
+| Conditions | Recommended theme |
+|---|---|
+| Dark room or night work | `forest` — gentle on the eyes |
+| Normal daylight | `graphite` — good dark contrast |
+| Bright room or outdoor work | `paper` — strong contrast on a light background |
+| Presentation or screenshot | `paper` — usually clearer on projectors |
+| Accessibility-first reading | `paper` — maximum readability |
+
+### 7.2. If you design your own theme
+
+- **Text contrast matters**: `text` should be easy to read on `agentBg`.
+- **Keep accent calm**: it should stand out without shouting.
+- **Use intuitive status colors**: `success`, `error`, and `warning` should be clear at a glance.
+- **Test both dark and light assumptions**: they feel different in real terminals.

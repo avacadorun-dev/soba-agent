@@ -1,0 +1,247 @@
+---
+title: 主题
+description: TUI 颜色模式、语义 token，以及自定义主题说明。
+---
+
+主题通过 **语义 token** 定义 TUI 的配色。你不需要为每个界面元素单独指定 ANSI 颜色，只需要配置 `accent`、`text`、`error`、`border` 这样的角色。SOBA 会把这些角色稳定地应用到界面里。
+
+---
+
+## 目录
+
+1. [语义 token](#1-语义-token)
+1. [内置主题](#2-内置主题)
+1. [Token 列表](#3-token-列表)
+1. [选择和切换主题](#4-选择和切换主题)
+1. [自定义主题](#5-自定义主题)
+1. [深色与浅色模式](#6-深色与浅色模式)
+1. [使用建议](#7-使用建议)
+
+---
+
+## 1. 语义 token
+
+SOBA 使用语义 token，而不是一组固定的底层颜色。你不用记住边框或提示文字到底是哪一个颜色，只需要描述它的角色：
+
+```
+accent   → 主要强调色：标题、选中状态
+text     → 主文本
+muted    → 次要文本
+dim      → 第三级文本和 placeholder
+success  → 成功操作
+error    → 错误
+warning  → 警告
+info     → 信息提示
+border   → 边框和分隔线
+```
+
+每个 token 都是 HEX 颜色，例如 `#7ee787`，会转换成 TrueColor ANSI。
+
+这样维护主题会轻松很多：名字本身就有含义，一个主题能覆盖整个 TUI，深色和浅色模式也可以复用同一套 token 名。
+
+---
+
+## 2. 内置主题
+
+SOBA 当前提供三种颜色模式：
+
+| 名称 | 模式 | 说明 |
+|---|---|---|
+| **Graphite** | `dark` | 类似 GitHub Dark。绿色强调色 (`#7ee787`)，文字柔和。默认主题 |
+| **Paper** | `light` | 适合明亮环境的浅色主题。蓝色强调色 (`#2e6edf`)，对比清晰 |
+| **Forest** | `forest` | 自然感的深色主题。苔绿色强调色 (`#6AAC7D`)，暖色文字 (`#C2CBB8`) |
+
+配置里还有一些预留主题名，之后会作为新的内置主题使用。现在它们会映射到基础模式：
+
+| 主题名 | 映射到 |
+|---|---|
+| `graphite` | `dark` |
+| `ember` | `dark` |
+| `aurora` | `dark` |
+| `synthwave` | `dark` |
+| `paper` | `light` |
+| `highContrast` | `light` |
+| `clay` | `light` |
+| `operator` | `dark` |
+| `ink` | `dark` |
+| `forest` | `forest` |
+
+---
+
+## 3. Token 列表
+
+### 3.1. 核心 token
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | 用途 |
+|---|---|---|---|---|
+| `accent` | `#7ee787` | `#2e6edf` | `#6AAC7D` | 强调色：标题、按钮、选中 |
+| `text` | `#c9d1d9` | `#1a1a2e` | `#C2CBB8` | 主文本 |
+| `muted` | `#8b949e` | `#6b7280` | `#6C7B66` | 次要文本 |
+| `dim` | `#6e7681` | `#9ca3af` | `#41503E` | 第三级文本、placeholder |
+| `success` | `#3fb950` | `#16a34a` | `#5A9E60` | 成功操作 |
+| `error` | `#f85149` | `#dc2626` | `#C5615A` | 错误 |
+| `warning` | `#e3b341` | `#d97706` | `#C3A14E` | 警告 |
+| `info` | `#58a6ff` | `#0284c7` | `#6E9EB8` | 信息提示 |
+
+### 3.2. 背景 token
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | 用途 |
+|---|---|---|---|---|
+| `userBg` | `#161b22` | `#f3f4f6` | `#121A14` | 用户消息背景 |
+| `agentBg` | `#0d1117` | `#ffffff` | `#0D130F` | 代理消息主背景 |
+| `toolBg` | `#161b22` | `#f9fafb` | `#121A14` | 工具块背景 |
+| `toolPending` | `#30363d` | `#e5e7eb` | `#1A261D` | 等待中的工具背景 |
+| `thinkingBg` | `#161b22` | `#e5e7eb` | `#121A14` | Thinking 块背景 |
+| `panelBg` | `#161b22` | `#f6f8fa` | `#121A14` | 面板背景 |
+| `sidebarBg` | `#0d1117` | `#ffffff` | `#0D130F` | 侧边栏背景 |
+| `headerBg` | `#0d1117` | `#ffffff` | `#0D130F` | 标题栏背景 |
+| `inputBg` | `#0d1117` | `#f6f8fa` | `#0D130F` | 输入行背景 |
+
+### 3.3. 特殊 token
+
+| Token | Dark (Graphite) | Light (Paper) | Forest | 用途 |
+|---|---|---|---|---|
+| `thinkingFg` | `#a371f7` | `#8250df` | `#8BA877` | Thinking 文本 |
+| `thinkingTitle` | `#a371f7` | `#8250df` | `#8BA877` | THINKING 标题 |
+| `toolsTitle` | `#e3b341` | `#9a6700` | `#C3A14E` | TOOLS 标题 |
+| `summaryTitle` | `#7ee787` | `#1a7f37` | `#6AAC7D` | SUMMARY 标题 |
+| `sectionTitle` | `#58a6ff` | `#0969da` | `#6AAC7D` | 区块标题 |
+| `diffAdded` | `#3fb950` | `#16a34a` | `#5A9E60` | diff 新增行 |
+| `diffRemoved` | `#f85149` | `#dc2626` | `#C5615A` | diff 删除行 |
+| `border` | `#30363d` | `#d1d5db` | `#1A261D` | 边框和分隔线 |
+| `statusBarBg` | `#0d1117` | `#1f2937` | `#0D130F` | 状态栏背景 |
+| `statusBarFg` | `#8b949e` | `#f9fafb` | `#6C7B66` | 状态栏文字 |
+| `inputBorder` | `#30363d` | `#d1d5db` | `#1A261D` | 输入框边框 |
+| `keyHint` | `#6e7681` | `#8c959f` | `#4A5A45` | 按键提示 |
+| `activeDot` | `#3fb950` | `#1a7f37` | `#6AAC7D` | 活跃状态点 |
+| `idleDot` | `#3fb950` | `#1a7f37` | `#5A9E60` | 空闲状态点 |
+
+---
+
+## 4. 选择和切换主题
+
+### 4.1. 在配置中
+
+```json
+{
+  "theme": "graphite"
+}
+```
+
+### 4.2. 通过 CLI
+
+```bash
+soba --theme forest
+```
+
+### 4.3. 在 TUI 中即时切换
+
+```bash
+/theme forest
+/theme graphite
+/theme paper
+```
+
+### 4.4. 查看当前主题
+
+```bash
+/theme
+
+# 输出:
+# Current theme: Graphite (dark)
+# Available themes: graphite, ember, aurora, synthwave, paper,
+#                   forest, highContrast, clay, operator, ink
+# Use /theme <name> to switch
+```
+
+---
+
+## 5. 自定义主题
+
+通过配置文件创建自定义主题还在开发中。计划中的格式如下：
+
+```json
+{
+  "customThemes": {
+    "ocean": {
+      "mode": "dark",
+      "tokens": {
+        "accent": "#00bcd4",
+        "text": "#e0f7fa",
+        "muted": "#80deea",
+        "dim": "#4dd0e1",
+        "success": "#69f0ae",
+        "error": "#ff5252",
+        "warning": "#ffd740",
+        "info": "#40c4ff",
+        "userBg": "#001f3f",
+        "agentBg": "#001a33",
+        "toolBg": "#001f3f",
+        "border": "#004d66",
+        "statusBarBg": "#001a33",
+        "statusBarFg": "#80deea",
+        "thinkingBg": "#001f3f",
+        "thinkingFg": "#00bcd4",
+        "diffAdded": "#69f0ae",
+        "diffRemoved": "#ff5252",
+        "panelBg": "#001f3f",
+        "sidebarBg": "#001a33",
+        "headerBg": "#001a33",
+        "sectionTitle": "#00bcd4",
+        "thinkingTitle": "#00bcd4",
+        "toolsTitle": "#ffd740",
+        "summaryTitle": "#00bcd4",
+        "inputBg": "#001a33",
+        "inputBorder": "#004d66",
+        "keyHint": "#4dd0e1",
+        "activeDot": "#69f0ae",
+        "idleDot": "#69f0ae"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 6. 深色与浅色模式
+
+### 6.1. 模式如何确定
+
+主题包含一个 `mode` 字段：
+
+- `"dark"` — 深色模式，Graphite 使用
+- `"light"` — 浅色模式，Paper 使用
+- `"forest"` — 带自然色彩的特殊深色模式
+
+模式会影响 ThemeManager 初始化颜色的方式。切换主题后，TUI 元素会立即更新。
+
+### 6.2. 关闭颜色
+
+```bash
+# 纯文本模式
+soba --no-color
+```
+
+纯文本输出适合极简终端、日志和自动化场景。
+
+---
+
+## 7. 使用建议
+
+### 7.1. 根据环境选择
+
+| 环境 | 推荐主题 |
+|---|---|
+| 夜间或暗光环境 | `forest` — 眼睛更轻松 |
+| 普通白天环境 | `graphite` — 深色对比舒服 |
+| 明亮环境或户外 | `paper` — 浅色背景对比更强 |
+| 演示或截图 | `paper` — 投影上通常更清楚 |
+| 优先考虑可读性 | `paper` — 最大化阅读清晰度 |
+
+### 7.2. 如果你设计自己的主题
+
+- **文字对比很重要**：`text` 在 `agentBg` 上要容易阅读。
+- **强调色要克制**：应该明显，但不要刺眼。
+- **状态颜色要直观**：`success`、`error`、`warning` 应该一眼能懂。
+- **测试实际终端效果**：深色和浅色在真实终端里的感觉会不同。

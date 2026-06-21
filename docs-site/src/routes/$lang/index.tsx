@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   GitBranch,
+  Github,
   Languages,
   LockKeyhole,
   Network,
@@ -170,6 +171,7 @@ const copy = {
   },
   primaryCta: { en: "Read the docs", ru: "Читать доки", zh: "阅读文档" },
   secondaryCta: { en: "Quick start", ru: "Быстрый старт", zh: "快速入门" },
+  githubCta: { en: "GitHub", ru: "GitHub", zh: "GitHub" },
   roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
   proof: {
     en: ["Project Memory", "MCP tools", "Friendly TUI", "Long sessions"],
@@ -286,6 +288,15 @@ function Home() {
                 <Link to="/$lang/roadmap" params={{ lang }} className="hero-cta hero-cta-secondary">
                   {t(copy.roadmapCta)}
                 </Link>
+                <a
+                  href="https://github.com/avacadorun-dev/soba-agent"
+                  className="hero-cta hero-cta-secondary"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Github className="size-4" />
+                  {t(copy.githubCta)}
+                </a>
               </div>
 
               <div className="mt-8 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
@@ -410,10 +421,21 @@ function Home() {
                   ? "终端 AI 编码助手"
                   : "terminal AI coding assistant"}
             </p>
-            <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="footer-link">
-              {t(copy.primaryCta)}
-              <ArrowRight className="size-3.5" />
-            </Link>
+            <div className="flex flex-wrap items-center gap-4">
+              <a
+                href="https://github.com/avacadorun-dev/soba-agent"
+                className="footer-link"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Github className="size-3.5" />
+                {t(copy.githubCta)}
+              </a>
+              <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="footer-link">
+                {t(copy.primaryCta)}
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
           </div>
         </footer>
       </main>

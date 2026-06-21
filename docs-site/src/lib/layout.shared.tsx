@@ -21,6 +21,12 @@ export function baseOptions(locale?: string): BaseLayoutProps {
         url: `/${locale ?? "en"}/roadmap`,
         active: "url",
       },
+      {
+        text: "GitHub",
+        url: "https://github.com/avacadorun-dev/soba-agent",
+        active: "none",
+        external: true,
+      },
     ],
   };
 }

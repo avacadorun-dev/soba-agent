@@ -1,0 +1,295 @@
+---
+title: Configuration
+description: SOBA configuration file, CLI flags, environment variables, and precedence rules.
+---
+
+SOBA reads configuration from several places with a clear priority: CLI flags > environment variables > `config.json` > defaults. This guide explains the main options and how they work together.
+
+---
+
+## Contents
+
+1. [Configuration file](#1-configuration-file)
+1. [Options](#2-options)
+1. [Environment variables](#3-environment-variables)
+1. [CLI flags](#4-cli-flags)
+1. [Provider configuration](#5-provider-configuration)
+1. [Compaction configuration](#6-compaction-configuration)
+1. [Precedence](#7-precedence)
+1. [Validation](#8-validation)
+
+---
+
+## 1. Configuration file
+
+The configuration file is `~/.soba/config.json`. SOBA creates it on first run, or you can write it by hand.
+
+```json
+{
+  "baseUrl": "https://api.deepseek.com",
+  "apiKey": "YOUR_API_KEY",
+  "model": "deepseek/deepseek-chat",
+  "maxOutputTokens": 8192,
+  "maxCompletionTokens": 0,
+  "contextWindow": 65536,
+  "temperature": 0.7,
+  "maxAgentIterations": 0,
+  "maxStalledIterations": 4,
+  "maxRunMinutes": 0,
+  "bashMaxTimeoutSeconds": 300,
+  "sessionDir": "~/.soba/sessions",
+  "lang": "en",
+  "theme": "graphite",
+  "compaction": {
+    "auto": true,
+    "compactOnTurnComplete": true,
+    "compactOnMilestone": true,
+    "minTokensForAutoCompact": 32000,
+    "minReclaimableTokens": 12000,
+    "minSavingsRatio": 0.25,
+    "keepRecentTokens": 20000,
+    "safetyReserveTokens": 8192,
+    "backgroundTimeoutMs": 15000
+  },
+  "registry": {
+    "activeProvider": "deepseek",
+    "activeModelId": "deepseek-chat",
+    "customProviders": []
+  }
+}
+```
+
+Minimal configuration:
+
+```json
+{
+  "apiKey": "YOUR_API_KEY",
+  "model": "deepseek/deepseek-chat"
+}
+```
+
+---
+
+## 2. Options
+
+### 2.1. Provider
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `baseUrl` | `string` | `""` | Base URL of the OpenAI-compatible API. If empty, SOBA derives it from the active provider |
+| `apiKey` | `string` | `""` | API key |
+| `model` | `string` | `""` | Full model identifier, for example `deepseek/deepseek-chat` or `openrouter/anthropic/claude-sonnet-4` |
+
+### 2.2. Model response
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `maxOutputTokens` | `number` | `8192` | Max output tokens per model response. The default is a placeholder; the real value is read from the active model definition when available |
+| `maxCompletionTokens` | `number` | `0` | Max reasoning/thinking tokens. `0` means no explicit limit and lets the provider default apply |
+| `contextWindow` | `number` | `128000` | Model context window. The default is a placeholder and is normally taken from the active model definition |
+| `temperature` | `number` | `0.7` | Sampling temperature, from 0 to 2 |
+
+### 2.3. Runtime safety
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `maxAgentIterations` | `number` | `0` | Emergency limit for model calls in one task. `0` means unlimited |
+| `maxStalledIterations` | `number` | `4` | Consecutive no-progress iterations before SOBA treats the loop as stalled |
+| `maxRunMinutes` | `number` | `0` | Max task duration in minutes. `0` means unlimited |
+| `bashMaxTimeoutSeconds` | `number` | `300` | Upper timeout limit for one `bash` tool call |
+
+### 2.4. Sessions
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `sessionDir` | `string` | `~/.soba/sessions` | Directory for JSONL session files |
+
+### 2.5. Interface
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `lang` | `"en" \| "ru" \| "zh"` | `"en"` | Default interface language |
+| `theme` | `TuiThemeName` | `"graphite"` | TUI theme: `graphite`, `ember`, `aurora`, `synthwave`, `paper`, `forest`, `highContrast`, `clay`, `operator`, or `ink` |
+
+---
+
+## 3. Environment variables
+
+Environment variables override `config.json`.
+
+| Variable | Config option | Description |
+|---|---|---|
+| `SOBA_BASE_URL` | `baseUrl` | API base URL |
+| `SOBA_API_KEY` | `apiKey` | API key |
+| `SOBA_MODEL` | `model` | Model identifier |
+| `SOBA_MAX_OUTPUT_TOKENS` | `maxOutputTokens` | Output token limit |
+| `SOBA_MAX_COMPLETION_TOKENS` | `maxCompletionTokens` | Reasoning token limit |
+| `SOBA_CONTEXT_WINDOW` | `contextWindow` | Context window size |
+| `SOBA_MAX_AGENT_ITERATIONS` | `maxAgentIterations` | Iteration limit |
+| `SOBA_MAX_STALLED_ITERATIONS` | `maxStalledIterations` | No-progress iterations before stall recovery |
+| `SOBA_MAX_RUN_MINUTES` | `maxRunMinutes` | Max task duration in minutes |
+| `SOBA_BASH_MAX_TIMEOUT_SECONDS` | `bashMaxTimeoutSeconds` | Max timeout for one `bash` tool call |
+| `SOBA_LANG` | `lang` | Interface language |
+| `SOBA_THEME` | `theme` | TUI theme |
+| `SOBA_AUTO_COMPACT` | `compaction.auto` | `false` or `0` disables auto-compaction |
+| `SOBA_SOUND_ENABLED` | `sound.enabled` | Enable or disable sound notifications |
+| `SOBA_SOUND_VOLUME` | `sound.volume` | Volume from 0.0 to 1.0 |
+| `SOBA_SOUND_REPEAT` | `sound.repeatMode` | `repeat`/`true`/`1` repeats, `once`/`false`/`0` plays once |
+| `DEEPSEEK_API_KEY` | DeepSeek provider key | DeepSeek API key |
+| `MOONSHOT_API_KEY` | Kimi provider key | Moonshot Kimi API key |
+| `DASHSCOPE_API_KEY` | Alibaba provider key | Alibaba Qwen API key |
+| `OPENROUTER_API_KEY` | OpenRouter provider key | OpenRouter API key |
+
+---
+
+## 4. CLI flags
+
+CLI flags have the highest priority.
+
+### 4.1. Run modes
+
+| Flag | Short | Description |
+|---|---|---|
+| `--interactive` | `-i` | Start interactive TUI mode |
+| `--continue` | `-c` | Continue the latest session |
+| `--resume` | `-r` | Resume a session through the interactive picker |
+| `--session <id>` | `-s` | Continue a specific session by ID |
+
+### 4.2. Provider and model
+
+| Flag | Short | Description |
+|---|---|---|
+| `--model <id>` | `-m` | Override model identifier |
+| `--api-key <key>` | `-k` | Override API key |
+| `--base-url <url>` | | Override API base URL |
+
+### 4.3. Limits
+
+| Flag | Description |
+|---|---|
+| `--max-output-tokens <n>` | Output token limit |
+| `--max-completion-tokens <n>` | Reasoning/thinking token limit |
+| `--context-window <n>` | Override model context window |
+| `--budget <n>` | Set total token budget for the task |
+| `--max-agent-iterations <n>` | Emergency iteration limit |
+| `--max-stalled-iterations <n>` | No-progress iterations before stall recovery |
+| `--max-run-minutes <n>` | Max task duration in minutes |
+| `--bash-max-timeout-seconds <n>` | Max timeout for one `bash` tool call |
+
+### 4.4. Control and debugging
+
+| Flag | Description |
+|---|---|
+| `--no-session` | Interactive mode without persisting a session |
+| `--no-color` | Disable colors |
+| `--no-stream` | Disable streaming |
+| `--stream` | Enable streaming explicitly |
+| `--debug` | Write loop decisions into the JSONL session file |
+| `--no-auto-compact` | Disable proactive compaction, same as `compaction.auto: false` |
+| `--lang <locale>` | Override interface language: `en`, `ru`, or `zh` |
+| `--theme <name>` | Override TUI theme |
+
+### 4.5. Info
+
+| Flag | Short | Description |
+|---|---|---|
+| `--help` | `-h` | Show help |
+| `--version` | `-v` | Show version |
+
+---
+
+## 5. Provider configuration
+
+SOBA v0.4.0 uses a provider registry. See [Providers and models](/en/docs/providers) for details.
+
+Built-in providers:
+
+| ID | Name | Base URL |
+|---|---|---|
+| `deepseek` | DeepSeek | `https://api.deepseek.com` |
+| `kimi` | Moonshot Kimi (K2 for code) | `https://api.moonshot.cn/v1` |
+| `alibaba` | Alibaba Qwen (Singapore) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` |
+
+Models are discovered dynamically through `GET /models` and cached in the current process. Opening the model picker in the TUI with `Ctrl+M` refreshes built-in providers.
+
+Add a custom provider:
+
+```bash
+soba provider add my-llm \
+  --base-url https://api.myllm.com/v1 \
+  --api-key-env MY_LLM_KEY \
+  --model my-code-model="My Code Model",128000,8192
+```
+
+Custom providers are saved in `registry.customProviders`.
+
+---
+
+## 6. Compaction configuration
+
+Compaction is configured through the `compaction` section.
+
+| Option | Default | Description |
+|---|---|---|
+| `auto` | `true` | Enable proactive background compaction |
+| `compactOnTurnComplete` | `true` | Run background compaction after a turn completes |
+| `compactOnMilestone` | `true` | Run background compaction at milestone checkpoints |
+| `minTokensForAutoCompact` | `32000` | Minimum effective tokens before considering auto-compaction |
+| `minReclaimableTokens` | `12000` | Minimum reclaimable tokens for useful ROI |
+| `minSavingsRatio` | `0.25` | Minimum savings ratio, 25% by default |
+| `keepRecentTokens` | `20000` | Recent tokens to keep after compaction |
+| `safetyReserveTokens` | `8192` | Safety reserve subtracted from the context window |
+| `backgroundTimeoutMs` | `15000` | Timeout for background compaction operations |
+
+Hard limit:
+
+```
+hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
+```
+
+When effective tokens exceed `hardLimit`, SOBA runs blocking compaction. This cannot be disabled with `auto: false`. The full compaction guide is currently available in Russian: [Compaction and Context Capsules](/ru/docs/compaction).
+
+---
+
+## 7. Precedence
+
+```
+CLI flags
+    ↓ override
+Environment variables
+    ↓ override
+config.json
+    ↓ override
+Defaults
+```
+
+Example: if `config.json` contains `"theme": "graphite"`, `SOBA_THEME=forest` is set, and `--theme paper` is passed, SOBA uses `paper`.
+
+Special rules:
+
+- **`maxOutputTokens` and `contextWindow`** are taken from the active model definition when possible. CLI flags override them for advanced cases such as local proxies with incorrect model metadata.
+- **`compaction.auto`** can be overridden by `SOBA_AUTO_COMPACT=false` or `--no-auto-compact`.
+- **Numeric `0`** means unlimited for `maxAgentIterations` and `maxRunMinutes`; for `maxCompletionTokens`, it means no explicit limit.
+
+---
+
+## 8. Validation
+
+SOBA validates configuration at startup:
+
+- **API key is required** unless the selected provider is keyless.
+- **`model` is required**.
+- **Compaction invariants** must hold:
+  - `contextWindow > 0`
+  - `maxOutputTokens > 0`
+  - `safetyReserveTokens >= 0`
+  - `maxOutputTokens + safetyReserveTokens < contextWindow`
+  - `keepRecentTokens < contextWindow - maxOutputTokens - safetyReserveTokens`
+
+If compaction invariants fail, compaction is disabled with a warning:
+
+```
+⚠️  Compaction disabled: config validation failed:
+    keepRecentTokens (50000) must be < hard limit (47360)
+```

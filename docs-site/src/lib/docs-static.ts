@@ -12,11 +12,15 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   en: [
     { slug: "", path: "index.en.mdx", title: "Documentation" },
     { slug: "cli-reference", path: "cli-reference.en.mdx", title: "CLI reference" },
+    { slug: "configuration", path: "configuration.en.mdx", title: "Configuration" },
     { slug: "notifications", path: "notifications.en.mdx", title: "Sound notifications" },
     { slug: "portable-capsules", path: "portable-capsules.en.mdx", title: "Portable Capsules" },
+    { slug: "providers", path: "providers.en.mdx", title: "Providers and models" },
     { slug: "quick-start", path: "quick-start.en.mdx", title: "Quick start" },
     { slug: "security", path: "security.en.mdx", title: "Security" },
+    { slug: "themes", path: "themes.en.mdx", title: "Themes" },
     { slug: "tools", path: "tools.en.mdx", title: "Agent tools" },
+    { slug: "usage", path: "usage.en.mdx", title: "Interface and commands" },
   ],
   ru: [
     { slug: "", path: "index.ru.mdx", title: "Руководство пользователя SOBA" },
@@ -45,11 +49,15 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   zh: [
     { slug: "", path: "index.zh.mdx", title: "文档" },
     { slug: "cli-reference", path: "cli-reference.zh.mdx", title: "CLI 参考" },
+    { slug: "configuration", path: "configuration.zh.mdx", title: "配置" },
     { slug: "notifications", path: "notifications.zh.mdx", title: "声音通知" },
     { slug: "portable-capsules", path: "portable-capsules.zh.mdx", title: "Portable Capsules" },
+    { slug: "providers", path: "providers.zh.mdx", title: "Provider 与模型" },
     { slug: "quick-start", path: "quick-start.zh.mdx", title: "快速开始" },
     { slug: "security", path: "security.zh.mdx", title: "安全" },
+    { slug: "themes", path: "themes.zh.mdx", title: "主题" },
     { slug: "tools", path: "tools.zh.mdx", title: "代理工具" },
+    { slug: "usage", path: "usage.zh.mdx", title: "界面与命令" },
   ],
 };
 

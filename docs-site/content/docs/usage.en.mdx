@@ -1,0 +1,319 @@
+---
+title: Interface and commands
+description: SOBA Agent TUI, slash commands, direct shell, task queue, token budget, themes, and hotkeys.
+---
+
+SOBA gives you an interactive console UI with slash commands, hotkeys, direct shell access, and a small task queue.
+
+---
+
+## Contents
+
+1. [Starting the TUI](#1-starting-the-tui)
+1. [Hotkeys](#2-hotkeys)
+1. [Slash commands](#3-slash-commands)
+1. [Direct shell](#4-direct-shell)
+1. [Task queue](#5-task-queue)
+1. [Token budget](#6-token-budget)
+1. [Scrolling history](#7-scrolling-history)
+1. [Autocomplete](#8-autocomplete)
+1. [Themes](#9-themes)
+1. [Languages](#10-languages)
+
+---
+
+## 1. Starting the TUI
+
+```bash
+# Interactive mode, used by default when no prompt is passed
+soba
+
+# Explicit interactive mode
+soba -i
+
+# Start with a theme
+soba --theme forest
+
+# Continue a specific session
+soba -s abc123
+
+# Continue the latest session in the TUI
+soba -c
+
+# Open the session picker
+soba -r
+```
+
+### TUI shape
+
+```
+┌──────────────────────────────────────────────────────┐
+│  SOBA  Agent  [-][_][×]    Budget: 12K/64K    EN │
+│──────────────────────────────────────────────────────│
+│  ● Active    soba-agent                               │
+│──────────────────────────────────────────────────────│
+│  You: Fix all TypeScript errors in src/              │
+│                                                      │
+│  Agent: Analyzing...                                 │
+│  ┌────────────────────────────────────────────────┐   │
+│  │ 🔧 read: src/utils/parser.ts                   │   │
+│  │    ...                                         │   │
+│  └────────────────────────────────────────────────┘   │
+│  ┌────────────────────────────────────────────────┐   │
+│  │ ✅ edit: Fixed 3 type errors                   │   │
+│  └────────────────────────────────────────────────┘   │
+│  Agent: Done. Fixed 3 errors in parser.ts.          │
+│──────────────────────────────────────────────────────│
+│  > _                                                  │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Hotkeys
+
+| Key | Action | Context |
+|---|---|---|
+| `Enter` | Send the message | Input line |
+| `Ctrl+C` | Interrupt the current agent response | While the agent is working |
+| `Ctrl+Z` | Suspend SOBA (SIGTSTP) | Always |
+| `Ctrl+L` | Clear the screen | Always |
+| `Ctrl+D` | Exit the TUI | Empty input line |
+| `Escape` | Clear input or close a dialog | Input line / dialog |
+| `Tab` | Complete slash commands | Input line |
+| `↑` / `↓` | Move through message history | Input line |
+| `Page Up` / `Page Down` | Scroll the TUI message history | Main area |
+| `Home` | Jump to the beginning of history | Main area |
+| `End` | Jump to the current end of history | Main area |
+
+---
+
+## 3. Slash commands
+
+All slash commands start with `/`. Command names are case-insensitive.
+
+### 3.1. Session
+
+| Command | Action |
+|---|---|
+| `/session` | Show the current session details: ID, turns, and budget |
+| `/session rewind <turn-id>` | Rewind the session to a previous turn and create a branch |
+
+### 3.2. Compaction and budget
+
+| Command | Action |
+|---|---|
+| `/compact` | Force compaction and create a context capsule |
+| `/auto-compact on` | Enable automatic compaction |
+| `/auto-compact off` | Disable automatic compaction |
+| `/budget` | Show the current token and context budget |
+| `/capsule` | Show the latest capsule |
+
+### 3.3. Skills
+
+| Command | Action |
+|---|---|
+| `/skill list` | Show available bundled, user, and project skills |
+| `/skill new` | Create a new skill |
+| `/skill edit <name>` | Edit an existing skill |
+| `/skill remove <name>` | Remove a skill |
+| `/skill:<name>` | Activate a skill with the colon form |
+
+### 3.4. Interface settings
+
+| Command | Action |
+|---|---|
+| `/theme` | Show the current theme and available themes |
+| `/theme <name>` | Switch theme, for example `/theme forest` |
+| `/lang` | Show the current language |
+| `/lang <locale>` | Switch language: `en`, `ru`, or `zh` |
+| `/config show` | Show the current configuration |
+| `/permissions [ask\|repo\|full\|clear]` | Manage permission mode |
+| `/clear` | Clear the TUI screen |
+| `/search` | Search conversation history |
+| `/notifications` | Show notification history |
+
+### 3.5. Other commands
+
+| Command | Action |
+|---|---|
+| `/help` | Show help for all commands |
+| `/queue` | Show the task queue |
+| `/queue clear` | Clear the task queue |
+| `/project-trust status` | Show project trust status |
+| `/project-trust approve` | Trust the project |
+| `/project-trust revoke` | Revoke project trust |
+| `/mcp status` | Show configured MCP server status |
+| `/mcp start <server>` | Start an MCP server and register its tools |
+| `/mcp stop <server>` | Stop an MCP server |
+| `/mcp restart <server>` | Restart an MCP server and sync tools |
+| `/mcp auth status <server>` | Show remote auth state and next action |
+| `/mcp auth login <server>` | Start OAuth login for a remote MCP server |
+| `/mcp auth logout <server>` | Clear saved OAuth credentials |
+| `/exit`, `/quit` | Exit the TUI |
+
+---
+
+## 4. Direct shell
+
+Use `!` to run shell commands directly, without asking the AI to execute them.
+
+### 4.1. Basic syntax
+
+```bash
+# Run one command
+!ls -la src/
+
+# Repeat the previous shell command
+!!
+
+# Check Node version
+!node --version
+
+# Inspect git status
+!git status
+
+# Run tests
+!bun test
+```
+
+### 4.2. Details
+
+- **The agent does not see the output** of `!` commands. It is a quick way to do something without spending tokens.
+- **If the agent should read the output**, send a normal prompt and let the agent call the `bash` tool.
+- **Trust still applies**: dangerous commands such as `rm -rf` or `sudo` are blocked in `safe` trust mode and require confirmation in `normal` mode. See [Security](/en/docs/security).
+
+---
+
+## 5. Task queue
+
+You can send more tasks while the agent is working. SOBA runs them one after another.
+
+```bash
+# The agent is working on the first request
+> Fix all TS errors                                  # → Task 1, running
+
+# Add more work while it is still busy
+> Add tests for utils                                # → Queue, position 1
+> Update README with new features                    # → Queue, position 2
+
+# Inspect the queue
+/queue
+# Output: Queue (2 tasks)
+#   1. Add tests for utils
+#   2. Update README with new features
+
+# Clear the queue
+/queue clear
+```
+
+---
+
+## 6. Token budget
+
+SOBA tracks token usage in real time and compacts context when it needs to.
+
+```bash
+# Show budget
+/budget
+
+# Output:
+#   Used:      28,450 tokens
+#   Limit:     64,000 tokens (context window)
+#   Available: 35,550 tokens
+#   Messages:  42
+#   Turns:     8
+#   Capsules:  2
+
+# More context details
+/budget
+/session
+
+# Output:
+#   Effective tokens:   32,100
+#   Hard limit:         47,616
+#   Safety reserve:     8,192
+#   Max output:         8,192
+#   Reclaimable:        12,100
+#   Auto-compact:       ON
+```
+
+---
+
+## 7. Scrolling history
+
+The full message and tool history can be scrolled with:
+
+- **`Page Up` / `Page Down`** — page-by-page scrolling
+- **`Home`** — jump to the beginning of the session history
+- **`End`** — jump to the end, where the current state is
+
+The input line stays visible while you scroll, so you can read old context and write a new message at the same time.
+
+---
+
+## 8. Autocomplete
+
+### 8.1. Slash commands
+
+Press `Tab` after `/` to see available commands:
+
+```
+/             # Tab →
+help         session      compact      budget
+auto-compact capsule      config       lang
+theme         skill       project-trust exit
+quit          clear       search       notifications
+permissions   queue
+```
+
+### 8.2. Subcommands
+
+After a command that supports subcommands:
+
+```
+/skill        # Tab →
+/skill list    /skill new     /skill edit
+/skill eval   /skill remove   /skill:
+```
+
+---
+
+## 9. Themes
+
+SOBA includes 10 built-in color themes and lets you create your own.
+
+```bash
+# Switch theme
+/theme forest
+
+# Show the current theme
+/theme
+
+# Available themes:
+# graphite, ember, aurora, synthwave, paper,
+# forest, highContrast, clay, operator, ink
+```
+
+Each theme defines semantic tokens such as accent, text, muted, success, error, and border, with support for dark and light modes. See the [theme guide](/en/docs/themes) for details.
+
+---
+
+## 10. Languages
+
+SOBA supports English, Russian, and Chinese.
+
+```bash
+# Switch language in the TUI
+/lang en
+
+# At startup
+soba --lang en
+
+# In config
+{
+  "lang": "en"
+}
+```
+
+Translations live in `locales/`. To add a new language, create the matching JSON file and register it in the i18n system.
