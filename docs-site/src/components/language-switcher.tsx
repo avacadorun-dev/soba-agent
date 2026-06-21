@@ -7,13 +7,18 @@ const langNames: Record<string, string> = {
   zh: "中文",
 };
 
-export function LanguageSwitcher({ lang }: { lang: string }) {
+export function LanguageSwitcher({ lang, docs = false }: { lang: string; docs?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-fd-muted-foreground px-1 font-medium">Language</span>
       <div className="lang-switcher inline-flex">
         {i18n.languages.map((l) => (
-          <Link key={l} to="/$lang" params={{ lang: l }} className={lang === l ? "active" : ""}>
+          <Link
+            key={l}
+            to={docs ? "/$lang/docs/$" : "/$lang"}
+            params={docs ? { lang: l, _splat: "" } : { lang: l }}
+            className={lang === l ? "active" : ""}
+          >
             {langNames[l]}
           </Link>
         ))}

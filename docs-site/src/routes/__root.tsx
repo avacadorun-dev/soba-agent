@@ -68,6 +68,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="flex flex-col min-h-screen">
         <RootProvider
+          key={lang}
           i18n={i18nProvider(translations, lang)}
           search={{
             enabled: true,

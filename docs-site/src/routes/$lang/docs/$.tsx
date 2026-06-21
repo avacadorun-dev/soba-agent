@@ -52,13 +52,14 @@ function Page() {
 
   return (
     <DocsLayout
+      key={`${lang}:${data.path}`}
       {...baseOptions(lang)}
       tree={data.pageTree}
       sidebar={{
         banner: (
           <div className="flex flex-col gap-2 p-2">
             <VersionSwitcher lang={lang} />
-            <LanguageSwitcher lang={lang} />
+            <LanguageSwitcher lang={lang} docs />
           </div>
         ),
       }}
