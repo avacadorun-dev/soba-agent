@@ -23,12 +23,12 @@ const features = [
     icon: Terminal,
     title: {
       en: "Cozy terminal TUI",
-      ru: "Уютный консольный TUI",
+      ru: "Уютная консоль",
       zh: "舒适的终端 TUI",
     },
     desc: {
       en: "Slash commands, hotkeys, and readable tool output right where you code.",
-      ru: "Slash-команды, горячие клавиши и понятный вывод инструментов прямо рядом с кодом.",
+      ru: "Команды, горячие клавиши и вывод инструментов остаются под рукой.",
       zh: "斜杠命令、热键和清晰的工具输出，都在你写代码的地方。",
     },
   },
@@ -36,12 +36,12 @@ const features = [
     icon: GitBranch,
     title: {
       en: "Sessions that remember",
-      ru: "Сессии, которые помнят",
+      ru: "Работа не теряется",
       zh: "会记住的会话",
     },
     desc: {
       en: "Continue, rewind, and inspect past turns without losing the thread.",
-      ru: "Продолжайте, перематывайте и смотрите прошлые ходы без потери нити.",
+      ru: "Можно продолжить, вернуться назад и посмотреть, что уже было сделано.",
       zh: "继续、回退、查看过去的回合，不丢上下文。",
     },
   },
@@ -54,7 +54,7 @@ const features = [
     },
     desc: {
       en: "Capsules keep decisions, files, and next steps compact enough for long work.",
-      ru: "Капсулы аккуратно держат решения, файлы и следующие шаги для длинной работы.",
+      ru: "Решения, файлы и следующие шаги не расползаются по длинной задаче.",
       zh: "胶囊保存决策、文件和下一步，让长任务也清爽。",
     },
   },
@@ -62,12 +62,12 @@ const features = [
     icon: BrainCircuit,
     title: {
       en: "Project Memory",
-      ru: "Project Memory",
+      ru: "Память проекта",
       zh: "项目记忆",
     },
     desc: {
       en: "A small project notebook for architecture, conventions, and things the agent should not forget.",
-      ru: "Небольшой блокнот проекта: архитектура, договорённости и всё, что агенту лучше не забывать.",
+      ru: "Небольшой блокнот с архитектурой, договорённостями и важными деталями.",
       zh: "一个小小的项目笔记本：架构、约定和代理不该忘的东西。",
     },
   },
@@ -75,12 +75,12 @@ const features = [
     icon: Network,
     title: {
       en: "MCP tools",
-      ru: "MCP tools",
+      ru: "Внешние инструменты",
       zh: "MCP 工具",
     },
     desc: {
       en: "Connect stdio or Streamable HTTP MCP servers when the built-ins are not enough.",
-      ru: "Подключайте stdio или Streamable HTTP MCP-серверы, когда встроенных инструментов не хватает.",
+      ru: "Подключайте MCP-серверы, если встроенных возможностей уже мало.",
       zh: "内置工具不够时，可以接入 stdio 或 Streamable HTTP MCP 服务器。",
     },
   },
@@ -93,7 +93,7 @@ const features = [
     },
     desc: {
       en: "Read, edit, run, approve, or deny. Risky actions stay visible.",
-      ru: "Читать, править, запускать, разрешать или отклонять. Рискованные действия видны сразу.",
+      ru: "Правки, команды и рискованные действия видно до того, как они случатся.",
       zh: "读取、编辑、运行、允许或拒绝。高风险操作会清楚显示。",
     },
   },
@@ -101,12 +101,12 @@ const features = [
     icon: Zap,
     title: {
       en: "Tiny reusable skills",
-      ru: "Маленькие переиспользуемые skills",
+      ru: "Небольшие skills",
       zh: "小巧可复用技能",
     },
     desc: {
       en: "Package project habits into Markdown skills and reuse them when the work repeats.",
-      ru: "Собирайте привычки проекта в Markdown skills и возвращайтесь к ним, когда задача повторяется.",
+      ru: "Сохраняйте привычные правила проекта и возвращайтесь к ним в похожих задачах.",
       zh: "把项目习惯写成 Markdown 技能，需要时重复使用。",
     },
   },
@@ -119,7 +119,7 @@ const features = [
     },
     desc: {
       en: "English, Russian, and Chinese UI/docs, with quick switching in the TUI.",
-      ru: "UI и документация на английском, русском и китайском, с быстрым переключением прямо в TUI.",
+      ru: "Интерфейс и документация на английском, русском и китайском.",
       zh: "英文、俄文和中文 UI/文档，可在 TUI 中快速切换。",
     },
   },
@@ -131,7 +131,7 @@ const workflow = [
     title: { en: "Read", ru: "Читает", zh: "读取" },
     desc: {
       en: "Looks at code, docs, memory, and session context first.",
-      ru: "Сначала смотрит код, документацию, memory и контекст сессии.",
+      ru: "Сначала разбирается в коде, документации и текущей сессии.",
       zh: "先看代码、文档、记忆和会话上下文。",
     },
   },
@@ -140,7 +140,7 @@ const workflow = [
     title: { en: "Do", ru: "Делает", zh: "执行" },
     desc: {
       en: "Uses built-in tools, shell shortcuts, skills, and MCP.",
-      ru: "Использует встроенные инструменты, быстрые shell-команды, skills и MCP.",
+      ru: "Правит файлы, запускает команды и подключает MCP, когда нужно.",
       zh: "使用内置工具、shell 快捷方式、技能和 MCP。",
     },
   },
@@ -149,7 +149,7 @@ const workflow = [
     title: { en: "Check", ru: "Проверяет", zh: "检查" },
     desc: {
       en: "Runs the project checks and leaves the result in the session.",
-      ru: "Запускает проверки проекта и оставляет результат в сессии.",
+      ru: "Запускает проверки и оставляет понятный результат.",
       zh: "运行项目检查，并把结果留在会话里。",
     },
   },
@@ -158,14 +158,14 @@ const workflow = [
 const copy = {
   badge: {
     en: "SOBA Agent v0.4.1 · cute terminal coding agent",
-    ru: "SOBA Agent v0.4.1 · маленький консольный помощник для кода",
+    ru: "SOBA Agent v0.4.1",
     zh: "SOBA Agent v0.4.1 · 可爱的终端编码代理",
   },
-  headlineA: { en: "A tiny coding agent", ru: "Маленький помощник для кода", zh: "一个小小的编码代理" },
-  headlineB: { en: "that remembers", ru: "который помнит", zh: "会记住事情" },
+  headlineA: { en: "A tiny coding agent", ru: "Помощник для кода", zh: "一个小小的编码代理" },
+  headlineB: { en: "that remembers", ru: "в консоли", zh: "会记住事情" },
   lead: {
     en: "SOBA helps with coding from the terminal. It remembers project notes, connects MCP tools over stdio or Streamable HTTP, keeps sessions tidy, and asks before risky moves.",
-    ru: "SOBA помогает спокойно работать с кодом из консоли. Она помнит заметки проекта, подключает MCP-инструменты через stdio или Streamable HTTP, держит сессии в порядке и спрашивает перед рискованными действиями.",
+    ru: "SOBA помогает разбираться с проектом, править код и не терять контекст. Без лишнего шума: команды, файлы, проверки и заметки остаются рядом.",
     zh: "SOBA 在终端里帮你写代码。它记住项目笔记，通过 stdio 或 Streamable HTTP 连接 MCP 工具，整理会话，并在高风险操作前询问。",
   },
   primaryCta: { en: "Read the docs", ru: "Читать доки", zh: "阅读文档" },
@@ -173,18 +173,18 @@ const copy = {
   roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
   proof: {
     en: ["Project Memory", "MCP tools", "Friendly TUI", "Long sessions"],
-    ru: ["Память проекта", "MCP-инструменты", "Уютный TUI", "Длинные сессии"],
+    ru: ["Память", "MCP", "Консоль", "Сессии"],
     zh: ["项目记忆", "MCP 工具", "友好的 TUI", "长会话"],
   },
   orbitEyebrow: { en: "How it fits", ru: "Как всё связано", zh: "如何组合" },
   orbitTitle: {
     en: "One small core. Lots of helpful orbits.",
-    ru: "Одно маленькое ядро. Вокруг него - всё нужное.",
+    ru: "Всё важное рядом",
     zh: "一个小核心，许多有用的小轨道。",
   },
   orbitText: {
     en: "Memory, MCP, tools, sessions, capsules, and skills stay close to the agent core.",
-    ru: "Память проекта, MCP, инструменты, сессии, capsules и skills держатся рядом с ядром агента.",
+    ru: "Код, сессии, память проекта, инструменты и MCP собраны в один спокойный рабочий поток.",
     zh: "记忆、MCP、工具、会话、胶囊和技能围绕代理核心。",
   },
   architectureInput: {
@@ -199,7 +199,7 @@ const copy = {
   },
   architectureOutput: {
     en: "patches · verification · memory updates · session checkpoint",
-    ru: "правки · проверки · обновления памяти · checkpoint сессии",
+    ru: "правки · проверки · заметки · точка в сессии",
     zh: "补丁 · 验证 · 记忆更新 · 会话检查点",
   },
   architectureOutputLabel: {
@@ -209,7 +209,7 @@ const copy = {
   },
   featuresTitle: {
     en: "Small pieces that help a lot",
-    ru: "Маленькие вещи, которые помогают каждый день",
+    ru: "Небольшие вещи, которые правда помогают",
     zh: "小组件，大帮助",
   },
   featuresEyebrow: {
@@ -229,12 +229,12 @@ const copy = {
   },
   terminalTitle: {
     en: "Still just your terminal",
-    ru: "Всё ещё просто ваша консоль",
+    ru: "Всё остаётся в консоли",
     zh: "仍然只是你的终端",
   },
   terminalText: {
     en: "Commands, tool output, compacted context, language switching, and checks stay visible in one calm place.",
-    ru: "Команды, вывод инструментов, сжатый контекст, язык и проверки остаются в одном спокойном месте.",
+    ru: "Команды, правки, вывод инструментов и проверки остаются рядом.",
     zh: "命令、工具输出、压缩上下文、语言切换和检查都在一个安静的地方。",
   },
 };
