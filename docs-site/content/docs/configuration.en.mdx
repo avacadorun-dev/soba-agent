@@ -15,7 +15,7 @@ The configuration file is `~/.soba/config.json`. SOBA creates it on first run, o
 {
   "baseUrl": "https://api.deepseek.com",
   "apiKey": "YOUR_API_KEY",
-  "model": "deepseek/deepseek-chat",
+  "model": "deepseek/deepseek-v4-flash",
   "maxOutputTokens": 8192,
   "maxCompletionTokens": 0,
   "contextWindow": 65536,
@@ -40,7 +40,7 @@ The configuration file is `~/.soba/config.json`. SOBA creates it on first run, o
   },
   "registry": {
     "activeProvider": "deepseek",
-    "activeModelId": "deepseek-chat",
+    "activeModelId": "deepseek-v4-flash",
     "customProviders": []
   }
 }
@@ -51,7 +51,7 @@ Minimal configuration:
 ```json
 {
   "apiKey": "YOUR_API_KEY",
-  "model": "deepseek/deepseek-chat"
+  "model": "deepseek/deepseek-v4-flash"
 }
 ```
 
@@ -65,7 +65,7 @@ Minimal configuration:
 |---|---|---|---|
 | `baseUrl` | `string` | `""` | Base URL of the OpenAI-compatible API. If empty, SOBA derives it from the active provider |
 | `apiKey` | `string` | `""` | API key |
-| `model` | `string` | `""` | Full model identifier, for example `deepseek/deepseek-chat` or `openrouter/anthropic/claude-sonnet-4` |
+| `model` | `string` | `""` | Full model identifier, for example `deepseek/deepseek-v4-flash` or `openrouter/anthropic/claude-sonnet-4.6` |
 
 ### 2.2. Model response
 

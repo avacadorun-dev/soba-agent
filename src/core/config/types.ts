@@ -94,7 +94,7 @@ export interface SobaConfig {
   /** API key for authentication */
   apiKey: string;
   /**
-   * Active model id (e.g. "deepseek-chat" or "openrouter/anthropic/claude-sonnet-4").
+   * Active model id (e.g. "deepseek-v4-flash" or "openrouter/anthropic/claude-sonnet-4.6").
    * Source of truth is `registry.defaultModel` when a registry is present.
    */
   model: string;

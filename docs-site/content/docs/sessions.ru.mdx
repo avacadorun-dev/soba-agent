@@ -19,7 +19,7 @@ description: Формат JSONL, продолжение сессий, rewind, в
 ответ агента → результат».
 
 ```jsonl
-{"type":"meta","sessionId":"abc123","created":"2024-01-15T10:00:00Z","model":"deepseek/deepseek-chat"}
+{"type":"meta","sessionId":"abc123","created":"2024-01-15T10:00:00Z","model":"deepseek/deepseek-v4-flash"}
 {"type":"user","turnId":"t1","parentTurnId":null,"content":"Fix TypeScript errors","timestamp":"2024-01-15T10:00:01Z"}
 {"type":"assistant","turnId":"t1","content":"I'll analyze the TypeScript errors...","toolCalls":[{"name":"read","args":{"path":"src/parser.ts"}}],"timestamp":"2024-01-15T10:00:05Z"}
 {"type":"tool_result","turnId":"t1","toolName":"read","result":"...file content...","timestamp":"2024-01-15T10:00:06Z"}
@@ -167,7 +167,7 @@ soba -r
 # Вывод:
 # Session ID:     abc123
 # Turns:          8
-# Model:          deepseek/deepseek-chat
+# Model:          deepseek/deepseek-v4-flash
 # Tokens used:    28,450
 # Capsules:       2
 ```

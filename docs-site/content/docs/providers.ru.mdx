@@ -77,23 +77,29 @@ soba provider list
 
 ```bash
 # Через CLI на один запуск
-soba --model deepseek-chat "Проверь проект"
+soba --model deepseek-v4-flash "Проверь проект"
 
 # Через env
-export SOBA_MODEL="anthropic/claude-sonnet-4"
+export SOBA_MODEL="anthropic/claude-sonnet-4.6"
 ```
 
 Команда `soba provider use <id>` переключает активного провайдера на его default model. Для кастомных провайдеров default model задаётся при добавлении (`--default-model`) или берётся из первого `--model`.
 
 ### 3.3. Рекомендации по моделям
 
+Это не вечный рейтинг, а рабочая шпаргалка на 21 июня 2026 года. Перед большой задачей всё равно
+загляните в `soba provider list`: провайдеры часто меняют алиасы, цены и лимиты.
+
 | Задача | Рекомендуемая модель | Почему |
 |---|---|---|
-| Кодинг (быстро) | `deepseek/deepseek-chat` | V3: отличный баланс цена/качество/скорость |
-| Кодинг (качество) | `openrouter/anthropic/claude-sonnet-4` | Sonnet 4: лучший для сложных рефакторингов |
-| Кодинг (китайский) | `kimi/kimi-k2` | Kimi K2: фокус на code generation |
-| Reasoning | `deepseek/deepseek-reasoner` | R1: глубокое reasoning в сложных задачах |
-| Бесплатно | `openrouter/google/gemma-3-27b-it:free` | Бесплатные модели OpenRouter |
+| Кодинг (быстро и недорого) | `deepseek/deepseek-v4-flash` | Быстрый DeepSeek для повседневных правок. Старые `deepseek-chat` / `deepseek-reasoner` уже помечены как совместимые алиасы |
+| Reasoning и сложная проверка | `deepseek/deepseek-v4-pro` | Более тяжёлая DeepSeek V4-модель для задач, где важнее вдумчивость, чем скорость |
+| Качество агентского кода | `openrouter/openai/gpt-5.5` | Когда нужен максимум качества в tool-heavy agent loop: планирование, правки, проверка и аккуратный финальный ответ. Напрямую у OpenAI id модели — `gpt-5.5` |
+| Кодинг (сложные правки) | `openrouter/anthropic/claude-sonnet-4.6` | Сильный выбор для больших рефакторингов, навигации по кодовой базе и агентных задач |
+| Длинные агентные задачи | `openrouter/minimax/minimax-m3` | MiniMax M3 даёт большой контекст и хорошо подходит для долгой работы с tools; напрямую у MiniMax id модели — `MiniMax-M3` |
+| Кодинг на Kimi | `kimi/kimi-k2.7-code` | Свежая кодовая модель Kimi; для скорости можно пробовать `kimi-k2.7-code-highspeed` |
+| Qwen для кода | `openrouter/qwen/qwen3-coder` | Хороший запасной вариант для agentic coding, tool use и больших репозиториев |
+| Бесплатно / попробовать без бюджета | `openrouter/free` | OpenRouter сам выбирает доступную бесплатную модель; конкретные `:free` id часто меняются |
 | Локально | кастомный провайдер → Ollama | `http://localhost:11434/v1` |
 
 ---
@@ -170,7 +176,7 @@ soba provider remove ollama
 {
   "registry": {
     "activeProvider": "deepseek",
-    "activeModelId": "deepseek-chat",
+    "activeModelId": "deepseek-v4-flash",
     "customProviders": [
       {
         "id": "ollama",

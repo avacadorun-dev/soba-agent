@@ -152,7 +152,7 @@
   "config.setup.setEnvVar": "Set {var} in your shell before running soba.",
   "config.setup.discoveryFailed": "Could not list models from {provider}: {error}",
   "config.setup.usingSeed": "Falling back to seed model \"{id}\".",
-  "config.setup.typeModelIdManually": "Type the model id you want to use (e.g. \"kimi-k2-0711-preview\").",
+  "config.setup.typeModelIdManually": "Type the model id you want to use (e.g. \"kimi-k2.7-code\").",
   "command.description.compact": "Compact conversation context",
   "command.description.rewind": "List checkpoints or rewind",
   "command.description.session": "Show session statistics",

@@ -70,23 +70,28 @@ In the TUI, switch models with `Ctrl+M`. For one run, pass a model through CLI o
 
 ```bash
 # One CLI run
-soba --model deepseek-chat "Check the project"
+soba --model deepseek-v4-flash "Check the project"
 
 # Environment variable
-export SOBA_MODEL="anthropic/claude-sonnet-4"
+export SOBA_MODEL="anthropic/claude-sonnet-4.6"
 ```
 
 `soba provider use <id>` switches the active provider to its default model. For custom providers, the default model is set with `--default-model` or falls back to the first `--model`.
 
 ### 3.3. Practical model choices
 
+This is a dated field guide, not a forever ranking. As of June 21, 2026, these are reasonable starting points. Before a large run, check `soba provider list`: aliases, prices, and limits move quickly.
+
 | Task | Suggested model | Why |
 |---|---|---|
-| Fast coding | `deepseek/deepseek-chat` | V3 has a good price / quality / speed balance |
-| High-quality coding | `openrouter/anthropic/claude-sonnet-4` | Strong for larger refactors |
-| Chinese coding tasks | `kimi/kimi-k2` | Kimi K2 is focused on code generation |
-| Reasoning | `deepseek/deepseek-reasoner` | R1 is useful for deeper reasoning |
-| Free tier | `openrouter/google/gemma-3-27b-it:free` | Free models through OpenRouter |
+| Fast, affordable coding | `deepseek/deepseek-v4-flash` | Fast DeepSeek V4 model for everyday changes. Older `deepseek-chat` / `deepseek-reasoner` names are compatibility aliases |
+| Reasoning and heavy verification | `deepseek/deepseek-v4-pro` | Heavier DeepSeek V4 model when careful reasoning matters more than speed |
+| Best agentic code quality | `openrouter/openai/gpt-5.5` | Use it when a tool-heavy agent loop needs the highest quality: planning, edits, verification, and a careful final answer. The direct OpenAI model id is `gpt-5.5` |
+| Complex coding work | `openrouter/anthropic/claude-sonnet-4.6` | Strong for larger refactors, codebase navigation, and agentic work |
+| Long-horizon agent work | `openrouter/minimax/minimax-m3` | MiniMax M3 has a large context window and is useful for sustained tool-using tasks; the direct MiniMax model id is `MiniMax-M3` |
+| Kimi coding | `kimi/kimi-k2.7-code` | Current Kimi coding model; try `kimi-k2.7-code-highspeed` when speed matters |
+| Qwen for code | `openrouter/qwen/qwen3-coder` | A useful backup for agentic coding, tool use, and large repositories |
+| Free experiments | `openrouter/free` | OpenRouter picks an available free model; specific `:free` ids change often |
 | Local work | custom provider → Ollama | `http://localhost:11434/v1` |
 
 ---
@@ -163,7 +168,7 @@ Custom providers are stored in `registry.customProviders` in `~/.soba/config.jso
 {
   "registry": {
     "activeProvider": "deepseek",
-    "activeModelId": "deepseek-chat",
+    "activeModelId": "deepseek-v4-flash",
     "customProviders": [
       {
         "id": "ollama",

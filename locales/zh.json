@@ -161,7 +161,7 @@
   "config.setup.setEnvVar": "在运行 soba 之前请先在 shell 中设置 {var}。",
   "config.setup.discoveryFailed": "无法从 {provider} 获取模型列表：{error}",
   "config.setup.usingSeed": "回退到默认模型 \"{id}\"。",
-  "config.setup.typeModelIdManually": "请输入要使用的模型 ID（例如 \"kimi-k2-0711-preview\"）。",
+  "config.setup.typeModelIdManually": "请输入要使用的模型 ID（例如 \"kimi-k2.7-code\"）。",
   "command.description.compact": "压缩对话上下文",
   "command.description.rewind": "列出检查点或回退",
   "command.description.session": "显示会话统计",

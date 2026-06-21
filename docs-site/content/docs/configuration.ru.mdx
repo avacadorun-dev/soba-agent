@@ -17,7 +17,7 @@ SOBA конфигурируется через три источника с чё
 {
   "baseUrl": "https://api.deepseek.com",
   "apiKey": "YOUR_API_KEY",
-  "model": "deepseek/deepseek-chat",
+  "model": "deepseek/deepseek-v4-flash",
   "maxOutputTokens": 8192,
   "maxCompletionTokens": 0,
   "contextWindow": 65536,
@@ -42,7 +42,7 @@ SOBA конфигурируется через три источника с чё
   },
   "registry": {
     "activeProvider": "deepseek",
-    "activeModelId": "deepseek-chat",
+    "activeModelId": "deepseek-v4-flash",
     "customProviders": []
   }
 }
@@ -52,7 +52,7 @@ SOBA конфигурируется через три источника с чё
 ```json
 {
   "apiKey": "YOUR_API_KEY",
-  "model": "deepseek/deepseek-chat"
+  "model": "deepseek/deepseek-v4-flash"
 }
 ```
 
@@ -66,7 +66,7 @@ SOBA конфигурируется через три источника с чё
 |---|---|---|---|
 | `baseUrl` | `string` | `""` | Базовый URL OpenAI-совместимого API (если пусто, определяется из активного провайдера) |
 | `apiKey` | `string` | `""` | API-ключ для аутентификации |
-| `model` | `string` | `""` | Полный идентификатор модели: `deepseek/deepseek-chat`, `openrouter/anthropic/claude-sonnet-4` |
+| `model` | `string` | `""` | Полный идентификатор модели: `deepseek/deepseek-v4-flash`, `openrouter/anthropic/claude-sonnet-4.6` |
 
 ### 2.2. Параметры ответов модели
 

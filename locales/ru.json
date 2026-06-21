@@ -161,7 +161,7 @@
   "config.setup.setEnvVar": "Установите {var} в окружении перед запуском soba.",
   "config.setup.discoveryFailed": "Не удалось получить список моделей от {provider}: {error}",
   "config.setup.usingSeed": "Используем модель из seed: \"{id}\".",
-  "config.setup.typeModelIdManually": "Введите id модели, которую хотите использовать (например, \"kimi-k2-0711-preview\").",
+  "config.setup.typeModelIdManually": "Введите id модели, которую хотите использовать (например, \"kimi-k2.7-code\").",
   "command.description.compact": "Сжать контекст разговора",
   "command.description.rewind": "Показать чекпоинты или перемотать",
   "command.description.session": "Показать статистику сессии",
