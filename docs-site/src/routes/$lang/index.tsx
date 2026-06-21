@@ -23,12 +23,12 @@ const features = [
     icon: Terminal,
     title: {
       en: "Cozy terminal TUI",
-      ru: "Уютный TUI в терминале",
+      ru: "Уютный консольный TUI",
       zh: "舒适的终端 TUI",
     },
     desc: {
       en: "Slash commands, hotkeys, and readable tool output right where you code.",
-      ru: "Slash-команды, горячие клавиши и понятный вывод tools прямо там, где вы работаете.",
+      ru: "Slash-команды, горячие клавиши и понятный вывод инструментов прямо рядом с кодом.",
       zh: "斜杠命令、热键和清晰的工具输出，都在你写代码的地方。",
     },
   },
@@ -49,7 +49,7 @@ const features = [
     icon: BrainCircuit,
     title: {
       en: "Context that stays tidy",
-      ru: "Контекст без бардака",
+      ru: "Контекст в порядке",
       zh: "保持整洁的上下文",
     },
     desc: {
@@ -67,7 +67,7 @@ const features = [
     },
     desc: {
       en: "A small project notebook for architecture, conventions, and things the agent should not forget.",
-      ru: "Небольшой блокнот проекта: архитектура, conventions и всё, что агенту нельзя забывать.",
+      ru: "Небольшой блокнот проекта: архитектура, договорённости и всё, что агенту лучше не забывать.",
       zh: "一个小小的项目笔记本：架构、约定和代理不该忘的东西。",
     },
   },
@@ -80,7 +80,7 @@ const features = [
     },
     desc: {
       en: "Connect stdio or Streamable HTTP MCP servers when the built-ins are not enough.",
-      ru: "Подключайте stdio или Streamable HTTP MCP servers, когда встроенных tools мало.",
+      ru: "Подключайте stdio или Streamable HTTP MCP-серверы, когда встроенных инструментов не хватает.",
       zh: "内置工具不够时，可以接入 stdio 或 Streamable HTTP MCP 服务器。",
     },
   },
@@ -101,12 +101,12 @@ const features = [
     icon: Zap,
     title: {
       en: "Tiny reusable skills",
-      ru: "Маленькие reusable skills",
+      ru: "Маленькие переиспользуемые skills",
       zh: "小巧可复用技能",
     },
     desc: {
       en: "Package project habits into Markdown skills and reuse them when the work repeats.",
-      ru: "Упаковывайте привычки проекта в Markdown skills и переиспользуйте их.",
+      ru: "Собирайте привычки проекта в Markdown skills и возвращайтесь к ним, когда задача повторяется.",
       zh: "把项目习惯写成 Markdown 技能，需要时重复使用。",
     },
   },
@@ -119,7 +119,7 @@ const features = [
     },
     desc: {
       en: "English, Russian, and Chinese UI/docs, with quick switching in the TUI.",
-      ru: "UI и документация на английском, русском и китайском, с быстрым переключением в TUI.",
+      ru: "UI и документация на английском, русском и китайском, с быстрым переключением прямо в TUI.",
       zh: "英文、俄文和中文 UI/文档，可在 TUI 中快速切换。",
     },
   },
@@ -131,7 +131,7 @@ const workflow = [
     title: { en: "Read", ru: "Читает", zh: "读取" },
     desc: {
       en: "Looks at code, docs, memory, and session context first.",
-      ru: "Сначала смотрит код, доки, memory и контекст сессии.",
+      ru: "Сначала смотрит код, документацию, memory и контекст сессии.",
       zh: "先看代码、文档、记忆和会话上下文。",
     },
   },
@@ -140,7 +140,7 @@ const workflow = [
     title: { en: "Do", ru: "Делает", zh: "执行" },
     desc: {
       en: "Uses built-in tools, shell shortcuts, skills, and MCP.",
-      ru: "Использует built-in tools, shell shortcuts, skills и MCP.",
+      ru: "Использует встроенные инструменты, быстрые shell-команды, skills и MCP.",
       zh: "使用内置工具、shell 快捷方式、技能和 MCP。",
     },
   },
@@ -158,14 +158,14 @@ const workflow = [
 const copy = {
   badge: {
     en: "SOBA Agent v0.4.1 · cute terminal coding agent",
-    ru: "SOBA Agent v0.4.1 · милый coding agent в терминале",
+    ru: "SOBA Agent v0.4.1 · маленький консольный помощник для кода",
     zh: "SOBA Agent v0.4.1 · 可爱的终端编码代理",
   },
-  headlineA: { en: "A tiny coding agent", ru: "Маленький coding agent", zh: "一个小小的编码代理" },
+  headlineA: { en: "A tiny coding agent", ru: "Маленький помощник для кода", zh: "一个小小的编码代理" },
   headlineB: { en: "that remembers", ru: "который помнит", zh: "会记住事情" },
   lead: {
     en: "SOBA helps with coding from the terminal. It remembers project notes, connects MCP tools over stdio or Streamable HTTP, keeps sessions tidy, and asks before risky moves.",
-    ru: "SOBA помогает кодить из терминала. Помнит заметки проекта, подключает MCP tools через stdio или Streamable HTTP, держит сессии в порядке и спрашивает перед рискованными действиями.",
+    ru: "SOBA помогает спокойно работать с кодом из консоли. Она помнит заметки проекта, подключает MCP-инструменты через stdio или Streamable HTTP, держит сессии в порядке и спрашивает перед рискованными действиями.",
     zh: "SOBA 在终端里帮你写代码。它记住项目笔记，通过 stdio 或 Streamable HTTP 连接 MCP 工具，整理会话，并在高风险操作前询问。",
   },
   primaryCta: { en: "Read the docs", ru: "Читать доки", zh: "阅读文档" },
@@ -173,38 +173,68 @@ const copy = {
   roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
   proof: {
     en: ["Project Memory", "MCP tools", "Friendly TUI", "Long sessions"],
-    ru: ["Project Memory", "MCP tools", "Friendly TUI", "Длинные сессии"],
+    ru: ["Память проекта", "MCP-инструменты", "Уютный TUI", "Длинные сессии"],
     zh: ["项目记忆", "MCP 工具", "友好的 TUI", "长会话"],
   },
   orbitEyebrow: { en: "How it fits", ru: "Как всё связано", zh: "如何组合" },
   orbitTitle: {
     en: "One small core. Lots of helpful orbits.",
-    ru: "Одно маленькое ядро. Много полезных орбит.",
+    ru: "Одно маленькое ядро. Вокруг него - всё нужное.",
     zh: "一个小核心，许多有用的小轨道。",
   },
   orbitText: {
     en: "Memory, MCP, tools, sessions, capsules, and skills stay close to the agent core.",
-    ru: "Memory, MCP, tools, sessions, capsules и skills держатся рядом с ядром агента.",
+    ru: "Память проекта, MCP, инструменты, сессии, capsules и skills держатся рядом с ядром агента.",
     zh: "记忆、MCP、工具、会话、胶囊和技能围绕代理核心。",
+  },
+  architectureInput: {
+    en: "prompt · files · session · memory · MCP",
+    ru: "запрос · файлы · сессия · память · MCP",
+    zh: "提示 · 文件 · 会话 · 记忆 · MCP",
+  },
+  architectureInputLabel: {
+    en: "input",
+    ru: "на входе",
+    zh: "输入",
+  },
+  architectureOutput: {
+    en: "patches · verification · memory updates · session checkpoint",
+    ru: "правки · проверки · обновления памяти · checkpoint сессии",
+    zh: "补丁 · 验证 · 记忆更新 · 会话检查点",
+  },
+  architectureOutputLabel: {
+    en: "output",
+    ru: "на выходе",
+    zh: "输出",
   },
   featuresTitle: {
     en: "Small pieces that help a lot",
-    ru: "Маленькие штуки, которые сильно помогают",
+    ru: "Маленькие вещи, которые помогают каждый день",
     zh: "小组件，大帮助",
+  },
+  featuresEyebrow: {
+    en: "SOBA capabilities",
+    ru: "Что умеет SOBA",
+    zh: "SOBA 能力",
   },
   workflowTitle: {
     en: "Read. Do. Check.",
     ru: "Прочитал. Сделал. Проверил.",
     zh: "读取。执行。检查。",
   },
+  terminalEyebrow: {
+    en: "TUI preview",
+    ru: "Как это выглядит",
+    zh: "TUI 预览",
+  },
   terminalTitle: {
     en: "Still just your terminal",
-    ru: "Всё ещё просто ваш терминал",
+    ru: "Всё ещё просто ваша консоль",
     zh: "仍然只是你的终端",
   },
   terminalText: {
     en: "Commands, tool output, compacted context, language switching, and checks stay visible in one calm place.",
-    ru: "Команды, вывод tools, compacted context, язык и проверки видны в одном спокойном месте.",
+    ru: "Команды, вывод инструментов, сжатый контекст, язык и проверки остаются в одном спокойном месте.",
     zh: "命令、工具输出、压缩上下文、语言切换和检查都在一个安静的地方。",
   },
 };
@@ -303,8 +333,8 @@ function Home() {
             </div>
             <div className="architecture-panel">
               <div className="architecture-row">
-                <span>input</span>
-                <strong>prompt · files · session · memory · MCP</strong>
+                <span>{t(copy.architectureInputLabel)}</span>
+                <strong>{t(copy.architectureInput)}</strong>
               </div>
               <div className="architecture-flow">
                 {workflow.map((item) => {
@@ -321,8 +351,8 @@ function Home() {
                 })}
               </div>
               <div className="architecture-row">
-                <span>output</span>
-                <strong>patches · verification · memory updates · session checkpoint</strong>
+                <span>{t(copy.architectureOutputLabel)}</span>
+                <strong>{t(copy.architectureOutput)}</strong>
               </div>
             </div>
           </div>
@@ -331,7 +361,7 @@ function Home() {
         <section className="section-block border-t border-fd-border">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
             <div className="section-heading mx-auto max-w-3xl text-center">
-              <p className="eyebrow">SOBA capabilities</p>
+              <p className="eyebrow">{t(copy.featuresEyebrow)}</p>
               <h2>{t(copy.featuresTitle)}</h2>
             </div>
             <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -354,7 +384,7 @@ function Home() {
         <section className="section-block border-t border-fd-border">
           <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
             <div className="section-heading">
-              <p className="eyebrow">TUI preview</p>
+              <p className="eyebrow">{t(copy.terminalEyebrow)}</p>
               <h2>{t(copy.terminalTitle)}</h2>
               <p>{t(copy.terminalText)}</p>
               <div className="mt-8">
@@ -375,7 +405,7 @@ function Home() {
             <p>
               SOBA Agent v0.4.1 —{" "}
               {lang === "ru"
-                ? "терминальный AI-ассистент для разработки"
+                ? "консольный помощник для разработки"
                 : lang === "zh"
                   ? "终端 AI 编码助手"
                   : "terminal AI coding assistant"}

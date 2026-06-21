@@ -26,12 +26,12 @@ const copy = {
   },
   title: {
     en: "From terminal helper to verifiable delegation",
-    ru: "От терминального помощника к проверяемому делегированию",
+    ru: "От консольного помощника к работе, которой можно доверять",
     zh: "从终端助手到可验证的委托运行时",
   },
   lead: {
     en: "This roadmap shows product intentions, not internal task cards. The direction is simple: SOBA should remember the project, use the right tools, verify its work, and know when to ask.",
-    ru: "Эта дорожная карта показывает намерения продукта, а не внутренние task cards. Направление простое: SOBA должна помнить проект, пользоваться нужными инструментами, проверять работу и понимать, когда спросить.",
+    ru: "Это дорожная карта без внутренней кухни и task cards. Направление простое: SOBA должна помнить проект, пользоваться нужными инструментами, проверять работу и вовремя спрашивать.",
     zh: "这份路线图展示产品意图，而不是内部任务卡。方向很简单：SOBA 应该记住项目、使用合适工具、验证工作，并知道何时询问。",
   },
   primaryCta: { en: "Start with the docs", ru: "Начать с доков", zh: "从文档开始" },
@@ -44,7 +44,7 @@ const copy = {
   },
   principlesLead: {
     en: "The order may change as the project learns, but these product promises should not.",
-    ru: "Порядок может меняться по мере развития проекта, но эти продуктовые обещания не должны исчезать.",
+    ru: "Порядок может меняться, но эти обещания пользователю должны оставаться на месте.",
     zh: "顺序可能随着项目学习而调整，但这些产品承诺不应改变。",
   },
   horizonTitle: {
@@ -64,7 +64,7 @@ const copy = {
   },
   footerText: {
     en: "SOBA should become the local-first engineering agent that knows the project, works in bounded loops, verifies outcomes, and leaves a clear trail.",
-    ru: "SOBA должна стать local-first инженерным агентом, который знает проект, работает ограниченными циклами, проверяет результат и оставляет понятный след.",
+    ru: "SOBA должна стать local-first помощником, который знает проект, работает понятными циклами, проверяет результат и оставляет за собой ясный след.",
     zh: "SOBA 应成为 local-first 工程代理：理解项目、在有界循环中工作、验证结果，并留下清晰轨迹。",
   },
 };
@@ -146,12 +146,12 @@ const stages = [
     state: { en: "After trust", ru: "После доверия", zh: "信任之后" },
     title: {
       en: "Background delegation",
-      ru: "Фоновое делегирование",
+      ru: "Фоновая работа",
       zh: "后台委托",
     },
     intent: {
       en: "Tasks can live longer than one open terminal and stay isolated in their own workspaces.",
-      ru: "Задачи живут дольше одного открытого терминала и изолируются в своих рабочих деревьях.",
+      ru: "Задачи могут жить дольше одного открытого окна консоли и оставаться в своих рабочих деревьях.",
       zh: "任务可以比一个终端会话更长，并在独立工作区中运行。",
     },
     outcomes: {
@@ -166,12 +166,12 @@ const stages = [
     state: { en: "Stabilize", ru: "Стабилизация", zh: "稳定化" },
     title: {
       en: "Delegation with judgment",
-      ru: "Делегирование с judgment",
+      ru: "Самостоятельность с осторожностью",
       zh: "有判断力的委托",
     },
     intent: {
       en: "SOBA should turn outcomes into contracts, escalate when risk is high, and ship with a stable user promise.",
-      ru: "SOBA должна превращать outcome в контракт, эскалировать высокий риск и выйти с устойчивым пользовательским обещанием.",
+      ru: "SOBA должна заранее договариваться о результате, поднимать руку при высоком риске и держать устойчивое обещание пользователю.",
       zh: "SOBA 应把结果转成契约，在高风险时升级，并以稳定承诺发布。",
     },
     outcomes: {
