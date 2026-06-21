@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.4.0"
+        description: "Release tag, for example v0.4.1"
         required: true
         type: string
 
@@ -39,11 +39,11 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
 
-      - name: Test
-        run: bun test
-
       - name: Build npm bundle
         run: bun run build
+
+      - name: Test
+        run: bun test
 
   binaries:
     name: Binary ${{ matrix.asset }}

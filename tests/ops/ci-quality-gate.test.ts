@@ -46,8 +46,8 @@ describe("CI quality gate", () => {
       "bun install --frozen-lockfile",
       "bun run lint",
       "bunx tsc --noEmit",
-      "bun test",
       "bun run build",
+      "bun test",
     ]);
   });
 
