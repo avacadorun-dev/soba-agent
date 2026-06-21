@@ -1,0 +1,169 @@
+---
+title: Agent tools
+description: SOBA Agent built-in tools, direct shell, MCP tools, and the boundary between tool calls and slash commands.
+---
+
+Tools are functions the model can call during the agent loop. They are different from slash commands:
+
+- slash commands are run by the user in the TUI;
+- tools are called by the agent after reasoning and go through the trust/permission flow;
+- direct shell `!` is run directly by the user, without the model.
+
+---
+
+## 1. Built-in tools
+
+| Tool | Purpose |
+|---|---|
+| `ls` | Inspect directory contents |
+| `read` | Read a file or a line range |
+| `write` | Write a file |
+| `edit` | Edit a file |
+| `bash` | Run a shell command through the agent loop |
+| `checkpoint` | Record a milestone/checkpoint |
+| `activate_skill` | Activate a skill from the catalog |
+| `read_project_memory` | Read Project Memory |
+| `write_project_memory` | Write Project Memory |
+
+MCP tools are registered after an MCP server starts. Their names look like this:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Server and tool IDs are normalized into OpenAI-compatible function names.
+
+---
+
+## 2. Trust and permissions
+
+Every tool call is classified as `safe`, `normal`, or `dangerous`.
+
+| Level | Examples |
+|---|---|
+| `safe` | `read`, `ls`, `git status`, `bun test` |
+| `normal` | `write`, `edit`, local build |
+| `dangerous` | `rm`, `sudo`, `curl`, `git push`, destructive git |
+
+Modes:
+
+```text
+/permissions ask
+/permissions repo
+/permissions full
+/permissions clear
+```
+
+`repo` does not mean “everything is safe.” It removes prompts only for dangerous operations that stay inside the current
+repository. Network, privileged, and external dangerous actions still ask for confirmation in `repo` mode.
+
+`full` disables repeated dangerous confirmations until the end of the current session. Use it only in environments where
+you are comfortable letting the agent run external commands such as `curl` or `git push`.
+
+Project skills have a separate trust boundary:
+
+```text
+/project-trust status
+/project-trust approve
+/project-trust revoke
+```
+
+The internal API that switches permission mode at runtime is `TrustManager.setPermissionMode()`. For users, the normal
+interface is the `/permissions` slash command.
+
+---
+
+## 3. Direct shell `!`
+
+Direct shell is for quickly running a command yourself:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+Difference:
+
+| Method | Caller | Agent sees output |
+|---|---|---|
+| `!command` | user | no |
+| `!!command` | user | no, output is hidden |
+| `bash` tool | agent | yes |
+
+If you need the agent to analyze the output, ask it to run the command itself:
+
+```text
+Run bun test and fix the real failures from the output.
+```
+
+---
+
+## 4. Project Memory tools
+
+`read_project_memory` and `write_project_memory` work only inside the agent loop.
+
+Example prompt:
+
+```text
+Read Project Memory, then suggest a plan. Do not change anything.
+```
+
+Example update:
+
+```text
+Update Project Memory: add a convention that tests mirror src and are run with bun test.
+Do not save secrets.
+```
+
+---
+
+## 5. MCP tools
+
+MCP tools appear after a server starts:
+
+```text
+/mcp status
+/mcp start repo-metrics
+/mcp status
+```
+
+After that, the agent can call a tool such as:
+
+```text
+mcp_repo_metrics_repo_summary
+```
+
+Trust for MCP comes from `.soba/mcp.json`, not from metadata sent by the server.
+
+---
+
+## 6. How to write prompts for tools
+
+A good prompt:
+
+```text
+Check the project.
+First read package.json and tests, then run targeted bun test.
+If a test fails, fix only the cause of the failure.
+Do not make a git commit.
+```
+
+A bad prompt:
+
+```text
+Do everything.
+```
+
+Be specific about:
+
+- which files may be changed;
+- which verification commands are required;
+- which actions are forbidden;
+- when the agent should stop and ask.
+
+## Next
+
+- [Security](/en/docs/security)
+- [MCP servers](/ru/docs/mcp)
+- [Project Memory](/ru/docs/project-memory)

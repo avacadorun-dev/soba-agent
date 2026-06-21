@@ -1,0 +1,166 @@
+---
+title: CLI 参考
+description: SOBA 的启动模式、顶层标志、provider 子命令和检查命令。
+---
+
+本页列出可以在控制台中使用的 SOBA Agent v0.4.x CLI。
+
+---
+
+## 1. 启动模式
+
+| 命令 | 作用 |
+|---|---|
+| `soba "prompt"` | 执行一次性任务，并保存会话 |
+| `soba` | 当进程运行在 TTY 中时，进入交互式 TUI |
+| `soba -i` | 显式进入交互式 TUI |
+| `soba -c` | 继续最近的会话 |
+| `soba -r` | 通过交互式选择器选择会话 |
+| `soba -s <id> "prompt"` | 继续指定会话 |
+| `soba --no-session "prompt"` | 执行时不保存会话历史 |
+
+---
+
+## 2. 顶层标志
+
+### 会话和模式
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--interactive` | `-i` | 启动 TUI |
+| `--continue` | `-c` | 继续最近的会话 |
+| `--resume` | `-r` | 选择会话 |
+| `--session <id>` | `-s` | 打开指定会话 |
+| `--no-session` | — | 不把历史保存到磁盘 |
+
+### Provider 和模型
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--model <id>` | `-m` | 为本次运行覆盖模型 |
+| `--api-key <key>` | `-k` | 为本次运行覆盖 API key |
+| `--base-url <url>` | — | 覆盖 OpenAI-compatible base URL |
+
+### 限制
+
+| 标志 | 说明 |
+|---|---|
+| `--budget <n>` | 限制任务 token budget |
+| `--max-output-tokens <n>` | 限制回答的输出 token |
+| `--max-completion-tokens <n>` | 限制 reasoning/completion token |
+| `--context-window <n>` | 覆盖模型 context window |
+| `--max-agent-iterations <n>` | model/tool loop iterations 的应急上限 |
+| `--max-stalled-iterations <n>` | 触发 stall recovery 前允许的无进展迭代数 |
+| `--max-run-minutes <n>` | 单个任务的最长运行时间 |
+| `--bash-max-timeout-seconds <n>` | 单次 `bash` tool 调用的最大 timeout，单位是秒；默认 300 |
+
+### 界面和行为
+
+| 标志 | 说明 |
+|---|---|
+| `--lang <en\|ru\|zh>` | 界面语言 |
+| `--theme <name>` | TUI 主题 |
+| `--no-color` | 关闭 ANSI 颜色 |
+| `--no-stream` | 关闭 streaming |
+| `--stream` | 显式启用 streaming |
+| `--debug` | 将 loop decisions 写入 session JSONL |
+| `--no-auto-compact` | 关闭 proactive compaction |
+
+### 声音
+
+| 标志 | 说明 |
+|---|---|
+| `--sound-enabled` | 启用声音通知 |
+| `--no-sound` | 关闭声音通知 |
+| `--sound-volume <0..1>` | 音量 |
+| `--sound-repeat` | 重复播放声音，直到下一个事件或状态变化 |
+
+### 信息
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--help` | `-h` | 显示帮助 |
+| `--version` | `-v` | 显示版本 |
+
+---
+
+## 3. Provider 子命令
+
+Provider registry 通过 `soba provider` 子路由管理。
+
+| 命令 | 作用 |
+|---|---|
+| `soba provider help` | Provider CLI 帮助 |
+| `soba provider list` | 列出 built-in 和 custom providers |
+| `soba provider show <id>` | 显示 provider definition |
+| `soba provider use <id>` | 将 provider 设为 active |
+| `soba provider add <id> ...` | 添加 custom provider |
+| `soba provider remove <id>` | 删除 custom provider |
+
+### `soba provider add`
+
+支持的标志：
+
+| 标志 | 说明 |
+|---|---|
+| `--name <name>` | 给人看的名称 |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | 保存 API key 的环境变量；空值表示 keyless provider |
+| `--adapter <openai\|anthropic>` | Adapter id；runtime path 主要面向 OpenAI-compatible API |
+| `--default-model <id>` | 默认模型 |
+| `--model <spec>` | Model spec；该标志可以重复 |
+| `--from-file <path>` | 从 JSON 加载 provider definition |
+| `--set-active` | 添加后立即切换到这个 provider |
+
+`--model` 格式：
+
+```text
+id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
+```
+
+keyless 本地 provider 示例：
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",128000,8192 \
+  --set-active
+```
+
+---
+
+## 4. 实用检查命令
+
+```bash
+soba --version
+soba --help
+soba provider list
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+在仓库中开发时：
+
+```bash
+soba -i --lang zh --theme graphite
+```
+
+---
+
+## 5. TUI 中的 direct shell
+
+在交互模式中，可以直接运行 shell 命令：
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` 会立即执行命令。`!!` 会执行命令，但不会把输出写入 transcript。若希望代理看到并分析输出，请用普通
+prompt 让它运行命令，这样会使用 `bash` tool。
+
+## 下一步
+
+- [Providers 和模型](/ru/docs/providers)
+- [界面和命令](/ru/docs/usage)
+- [配置](/ru/docs/configuration)
