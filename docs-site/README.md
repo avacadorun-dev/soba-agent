@@ -31,6 +31,10 @@ bun run build      # Production build
 bun run start      # Preview production build
 ```
 
+## Deployment
+
+Public docs are deployed with GitHub Pages. See [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## Structure
 
 ```
