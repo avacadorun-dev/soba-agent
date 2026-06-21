@@ -30,6 +30,7 @@ log.txt
 
 # Логи tsc --noEmit — архивные, не нужны в репе
 *.txt
+!docs-site/public/robots.txt
 
 # Docs-site build artifacts
 docs-site/.vinxi/

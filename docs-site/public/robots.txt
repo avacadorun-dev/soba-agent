@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://soba-agent.dev/sitemap.xml

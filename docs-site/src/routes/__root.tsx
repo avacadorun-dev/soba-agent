@@ -4,24 +4,40 @@ import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 import type * as React from "react";
 import { i18n } from "@/lib/i18n";
+import { canonicalUrl, getLandingSeo, githubUrl, previewImageUrl, siteUrl } from "@/lib/seo";
 import appCss from "@/styles/app.css?url";
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      {
-        title: "SOBA Agent — Terminal AI Coding Assistant",
-      },
-      {
-        name: "description",
-        content:
-          "Next-generation CLI coding agent with proactive context management, self-modifying architecture, and hybrid visual layer.",
-      },
-    ],
-    links: [{ rel: "stylesheet", href: appCss }],
-  }),
+  head: () => {
+    const fallback = getLandingSeo(i18n.defaultLanguage);
+
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: fallback.title },
+        { name: "description", content: fallback.description },
+        { name: "robots", content: "index, follow" },
+        { name: "theme-color", content: "#111111" },
+        { property: "og:site_name", content: "SOBA Agent" },
+        { property: "og:type", content: "website" },
+        { property: "og:title", content: fallback.title },
+        { property: "og:description", content: fallback.description },
+        { property: "og:url", content: canonicalUrl("/") },
+        { property: "og:image", content: previewImageUrl },
+        { property: "og:image:alt", content: "SOBA Agent terminal coding assistant preview" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: fallback.title },
+        { name: "twitter:description", content: fallback.description },
+        { name: "twitter:image", content: previewImageUrl },
+      ],
+      links: [
+        { rel: "stylesheet", href: appCss },
+        { rel: "sitemap", type: "application/xml", href: `${siteUrl}/sitemap.xml` },
+        { rel: "me", href: githubUrl },
+      ],
+    };
+  },
   component: RootComponent,
 });
 

@@ -18,6 +18,7 @@ import {
 import { SobaOrbitCanvas } from "@/components/soba-orbit-canvas";
 import { TerminalCanvas } from "@/components/terminal-canvas";
 import { baseOptions } from "@/lib/layout.shared";
+import { alternateLanguageLinks, canonicalUrl, getLandingSeo, previewImageUrl } from "@/lib/seo";
 
 const features = [
   {
@@ -249,6 +250,26 @@ const stats = [
 ];
 
 export const Route = createFileRoute("/$lang/")({
+  head: ({ params }) => {
+    const seo = getLandingSeo(params.lang);
+    const path = `/${params.lang}`;
+
+    return {
+      meta: [
+        { title: seo.title },
+        { name: "description", content: seo.description },
+        { property: "og:locale", content: seo.locale },
+        { property: "og:title", content: seo.title },
+        { property: "og:description", content: seo.description },
+        { property: "og:url", content: canonicalUrl(path) },
+        { property: "og:image", content: previewImageUrl },
+        { name: "twitter:title", content: seo.title },
+        { name: "twitter:description", content: seo.description },
+        { name: "twitter:image", content: previewImageUrl },
+      ],
+      links: [{ rel: "canonical", href: canonicalUrl(path) }, ...alternateLanguageLinks()],
+    };
+  },
   component: Home,
 });
 
