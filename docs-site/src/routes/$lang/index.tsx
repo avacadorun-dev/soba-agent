@@ -212,7 +212,7 @@ const copy = {
   },
   featuresTitle: {
     en: "Small pieces that help a lot",
-    ru: "Небольшие вещи, которые правда помогают",
+    ru: "Что помогает работать спокойнее",
     zh: "小组件，大帮助",
   },
   featuresEyebrow: {
@@ -368,19 +368,24 @@ function Home() {
                 <span>{t(copy.architectureInputLabel)}</span>
                 <strong>{t(copy.architectureInput)}</strong>
               </div>
-              <div className="architecture-flow">
-                {workflow.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <div key={item.title.en} className="workflow-card">
-                      <div className="workflow-icon">
-                        <Icon className="size-5" />
+              <div className="architecture-core-row">
+                <div className="architecture-agent-core">
+                  <img src="/brand/soba-mascot-alpha.png" alt="" aria-hidden />
+                </div>
+                <div className="architecture-flow">
+                  {workflow.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.title.en} className="workflow-card">
+                        <div className="workflow-icon">
+                          <Icon className="size-5" />
+                        </div>
+                        <h3>{t(item.title)}</h3>
+                        <p>{t(item.desc)}</p>
                       </div>
-                      <h3>{t(item.title)}</h3>
-                      <p>{t(item.desc)}</p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
               <div className="architecture-row">
                 <span>{t(copy.architectureOutputLabel)}</span>

@@ -4,10 +4,10 @@ export function baseOptions(locale?: string): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <>
-          <span className="font-bold text-fd-primary">SOBA</span>
-          <span className="ml-1 text-fd-muted-foreground">Agent Docs</span>
-        </>
+        <span className="site-logo" aria-label="SOBA Agent Docs">
+          <img className="site-logo-light" src="/brand/soba-wordmark-alpha-light.png" alt="" />
+          <img className="site-logo-dark" src="/brand/soba-wordmark-alpha-dark.png" alt="" />
+        </span>
       ),
     },
     links: [
