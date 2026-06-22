@@ -48,7 +48,7 @@ src/
 
 ## Versioning
 
-Documentation is organized by SOBA Agent versions. Current version: **v0.4.1**.
+Documentation is organized by SOBA Agent versions. Current version: **v0.4.2**.
 Version switcher in sidebar allows navigation between versions.
 
 ## Content Source

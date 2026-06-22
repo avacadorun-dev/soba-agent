@@ -671,6 +671,40 @@ function getCombinedStreamReasoning(
   );
 }
 
+function getStreamMessageItemId(
+  accumulator: StreamAccumulator,
+  index: number,
+): string {
+  const existing = accumulator.itemIds.get(index);
+  if (existing) {
+    return existing;
+  }
+  const itemId = generateItemId("msg");
+  accumulator.itemIds.set(index, itemId);
+  return itemId;
+}
+
+function buildReasoningDeltaEvents(
+  accumulator: StreamAccumulator,
+  index: number,
+  previous: string,
+  next: string,
+): StreamingEvent[] {
+  const delta = next.startsWith(previous) ? next.slice(previous.length) : next;
+  if (!delta) {
+    return [];
+  }
+  return [
+    {
+      type: "response.reasoning.delta",
+      item_id: getStreamMessageItemId(accumulator, index),
+      output_index: index,
+      content_index: 0,
+      delta,
+    },
+  ];
+}
+
 /**
  * Validate and parse a streaming SSE data line into zero or more StreamingEvents.
  */
@@ -741,8 +775,7 @@ function parseOpenAIChunk(
       if (!text.trim() && flushedFunctionCallIndexes.has(index)) {
         continue;
       }
-      const itemId = accumulator.itemIds.get(index) ?? generateItemId("msg");
-      accumulator.itemIds.set(index, itemId);
+      const itemId = getStreamMessageItemId(accumulator, index);
 
       if (!accumulator.sentMessageItemAdded.has(index)) {
         accumulator.sentMessageItemAdded.add(index);
@@ -912,6 +945,8 @@ function parseOpenAIChunk(
         accumulator.rawTextContent.set(index, nextRawText);
 
         const parsed = getVisibleAndReasoningContent(nextRawText, chunk.model);
+        const previousTaggedReasoning =
+          accumulator.taggedReasoningContent.get(index) ?? "";
         if (parsed.reasoningContent) {
           accumulator.taggedReasoningContent.set(index, parsed.reasoningContent);
         }
@@ -928,8 +963,7 @@ function parseOpenAIChunk(
           delta.trim().length > 0
         ) {
           accumulator.sentMessageItemAdded.add(index);
-          const itemId = generateItemId("msg");
-          accumulator.itemIds.set(index, itemId);
+          const itemId = getStreamMessageItemId(accumulator, index);
           events.push({
             type: "response.output_item.added",
             item: {
@@ -952,19 +986,37 @@ function parseOpenAIChunk(
         } else if (accumulator.sentMessageItemAdded.has(index) && delta) {
           events.push({
             type: "response.output_text.delta",
-            item_id: accumulator.itemIds.get(index) ?? generateItemId("msg"),
+            item_id: getStreamMessageItemId(accumulator, index),
             output_index: index,
             content_index: 0,
             delta,
           });
         }
+
+        if (parsed.reasoningContent) {
+          events.push(
+            ...buildReasoningDeltaEvents(
+              accumulator,
+              index,
+              previousTaggedReasoning,
+              parsed.reasoningContent,
+            ),
+          );
+        }
       }
 
       // Capture reasoning_content (DeepSeek thinking mode)
       if (choice.delta?.reasoning_content) {
-        accumulator.reasoningContent.set(
-          index,
-          (accumulator.reasoningContent.get(index) ?? "") + choice.delta.reasoning_content,
+        const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
+        const nextReasoning = previousReasoning + choice.delta.reasoning_content;
+        accumulator.reasoningContent.set(index, nextReasoning);
+        events.push(
+          ...buildReasoningDeltaEvents(
+            accumulator,
+            index,
+            previousReasoning,
+            nextReasoning,
+          ),
         );
       }
 
@@ -973,15 +1025,21 @@ function parseOpenAIChunk(
       );
       if (reasoningDetailsText) {
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
-        accumulator.reasoningContent.set(
-          index,
-          isMiniMaxModel(chunk.model)
-            ? mergeProviderContentDelta(
-                previousReasoning,
-                reasoningDetailsText,
-                chunk.model,
-              )
-            : previousReasoning + reasoningDetailsText,
+        const nextReasoning = isMiniMaxModel(chunk.model)
+          ? mergeProviderContentDelta(
+              previousReasoning,
+              reasoningDetailsText,
+              chunk.model,
+            )
+          : previousReasoning + reasoningDetailsText;
+        accumulator.reasoningContent.set(index, nextReasoning);
+        events.push(
+          ...buildReasoningDeltaEvents(
+            accumulator,
+            index,
+            previousReasoning,
+            nextReasoning,
+          ),
         );
       }
 

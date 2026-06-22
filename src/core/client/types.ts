@@ -391,6 +391,14 @@ export interface ResponseOutputTextDeltaStreamingEvent {
   delta: string;
 }
 
+export interface ResponseReasoningDeltaStreamingEvent {
+  type: "response.reasoning.delta";
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  delta: string;
+}
+
 export interface ResponseFunctionCallArgumentsDeltaStreamingEvent {
   type: "response.function_call_arguments.delta";
   item_id: string;
@@ -418,6 +426,7 @@ export type StreamingEvent =
   | ResponseOutputItemAddedStreamingEvent
   | ResponseOutputItemDoneStreamingEvent
   | ResponseOutputTextDeltaStreamingEvent
+  | ResponseReasoningDeltaStreamingEvent
   | ResponseFunctionCallArgumentsDeltaStreamingEvent
   | ResponseFunctionCallArgumentsDoneStreamingEvent
   | ErrorStreamingEvent;

@@ -159,9 +159,9 @@ const workflow = [
 
 const copy = {
   badge: {
-    en: "SOBA Agent v0.4.1 · cute terminal coding agent",
-    ru: "SOBA Agent v0.4.1",
-    zh: "SOBA Agent v0.4.1 · 可爱的终端编码代理",
+    en: "SOBA Agent v0.4.2 · cute terminal coding agent",
+    ru: "SOBA Agent v0.4.2",
+    zh: "SOBA Agent v0.4.2 · 可爱的终端编码代理",
   },
   headlineA: { en: "A tiny coding agent", ru: "Помощник для кода", zh: "一个小小的编码代理" },
   headlineB: { en: "that remembers", ru: "в консоли", zh: "会记住事情" },
@@ -435,7 +435,7 @@ function Home() {
         <footer className="landing-footer">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 text-sm text-fd-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
             <p>
-              SOBA Agent v0.4.1 —{" "}
+              SOBA Agent v0.4.2 —{" "}
               {lang === "ru"
                 ? "консольный помощник для разработки"
                 : lang === "zh"

@@ -70,6 +70,13 @@ soba -r
 | `Page Up` / `Page Down` | 滚动 TUI 消息历史 | 主区域 |
 | `Home` | 跳到历史开头 | 主区域 |
 | `End` | 跳到当前历史末尾 | 主区域 |
+| `Ctrl+M` | 打开 provider/model 选择器 | 主区域 |
+
+### 模型选择器
+
+`Ctrl+M` 会打开一个紧凑的双列选择器。左侧是 providers，右侧是当前高亮 provider 的模型；搜索框会同时过滤 provider 名称、模型名称和模型 ID。
+
+用 `↑` / `↓` 在模型间移动，用 `←` / `→` 或 `Tab` / `Shift+Tab` 切换 provider，用 `Enter` 选择高亮模型。顶部会显示当前 provider/model；每个模型行会显示 context window、max output、streaming 和 thinking 支持情况（如果 provider 提供了这些元数据）。打开选择器也会刷新内置 providers 的 discovery，因此新模型通常可以不用重启整个 session 就出现在列表里。
 
 ---
 

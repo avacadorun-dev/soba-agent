@@ -103,6 +103,18 @@ describe("ProviderStore", () => {
     }
   });
 
+  test("built-in providers without discovered models stay visible as disabled placeholders", () => {
+    const { store } = makeStore();
+    const deepseek = store.filteredGroups().find((group) => group.provider.id === "deepseek");
+
+    expect(deepseek).toBeDefined();
+    expect(deepseek?.models).toHaveLength(1);
+    expect(deepseek?.models[0]).toMatchObject({
+      id: "",
+      selectable: false,
+    });
+  });
+
   test("setSearch filters by model id substring (case-insensitive)", () => {
     const { store } = makeStore();
     store.setSearch("GPT");
@@ -115,6 +127,14 @@ describe("ProviderStore", () => {
         expect(haystack).toContain("gpt");
       }
     }
+  });
+
+  test("setSearch filters by provider name and keeps provider models", () => {
+    const { store } = makeStore();
+    store.setSearch("Anthropic");
+    const groups = store.filteredGroups();
+    expect(groups.map((group) => group.provider.id)).toEqual(["anthropic"]);
+    expect(groups[0]?.models.map((model) => model.id)).toEqual(["claude-sonnet-4"]);
   });
 
   test("setSearch resets highlightedIndex to 0", () => {
@@ -196,6 +216,18 @@ describe("ProviderStore", () => {
     expect(store.isOpen()).toBe(false);
   });
 
+  test("select() on a disabled discovery placeholder is a no-op", () => {
+    const { store } = makeStore();
+    store.open();
+
+    const status = store.select();
+
+    expect(status.kind).toBe("idle");
+    expect(store.activeProviderId()).toBe("deepseek");
+    expect(store.activeModelId()).toBe("");
+    expect(store.isOpen()).toBe(true);
+  });
+
   test("select() with explicit ids switches and returns switched status", () => {
     const { store, registry } = makeStore();
     const groq = registry.getProvider("groq");
@@ -270,6 +302,25 @@ describe("ProviderStore", () => {
     const model = registry.getModel("ollama", provider.defaultModel!);
     if (!model) throw new Error("ollama default model missing");
     expect(store.activeLabel()).toBe(`${provider.name} / ${model.name}`);
+  });
+
+  test("activeEntry exposes model metadata for the selector header", () => {
+    const { store, registry } = makeStore();
+    const provider = registry.getProvider("ollama");
+    if (!provider) throw new Error("ollama missing");
+
+    store.select("ollama", "llama3");
+
+    expect(store.activeEntry()).toMatchObject({
+      providerId: "ollama",
+      modelId: "llama3",
+      providerName: "Ollama (local)",
+      modelName: "Llama 3",
+      contextWindow: 8192,
+      maxOutput: 4096,
+      supportsStreaming: true,
+      supportsThinking: false,
+    });
   });
 
   test("t() returns a translated string for known keys", () => {

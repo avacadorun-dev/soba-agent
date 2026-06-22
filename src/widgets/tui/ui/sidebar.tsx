@@ -92,7 +92,6 @@ function SidebarHeader(props: { store: TuiStore; width: number }) {
       <box style={{ paddingLeft: 0 }}>
         <BrandLogo store={props.store} width={props.width} />
       </box>
-      <ActivePaneLabel store={props.store} />
       <text> </text>
     </>
   );
@@ -115,9 +114,10 @@ const ACTIVE_PANE_KEYS: Record<
   overlay: { label: "tui.activePane.overlay", hint: "tui.activePane.overlayHint" },
 };
 
-function ActivePaneLabel(props: { store: TuiStore }) {
+function ActivePaneLabel(props: { store: TuiStore; width: number }) {
   const theme = () => getTuiTheme(props.store.themeName());
   const pane = () => ACTIVE_PANE_KEYS[props.store.activePane()];
+  const isNarrow = () => shouldUseCompactSidebarLogo(props.width);
 
   return (
     <>
@@ -125,10 +125,31 @@ function ActivePaneLabel(props: { store: TuiStore }) {
         <span style={{ fg: theme().muted }}>{props.store.l("tui.activePane.title")} </span>
         <span style={{ fg: theme().secondary, bold: true }}>{props.store.l(pane().label)}</span>
       </text>
-      <text fg={theme().dim} wrapMode="none" truncate>
-        {props.store.l(pane().hint)}
-      </text>
+      <Show when={!isNarrow()}>
+        <text fg={theme().dim} wrapMode="none" truncate>
+          {props.store.l(pane().hint)}
+        </text>
+      </Show>
     </>
+  );
+}
+
+function SidebarFooter(props: { store: TuiStore; width: number }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+
+  return (
+    <box
+      height={shouldUseCompactSidebarLogo(props.width) ? 1 : 2}
+      backgroundColor={theme().panel}
+      style={{
+        flexDirection: "column",
+        flexShrink: 0,
+        paddingLeft: 1,
+        paddingRight: 1,
+      }}
+    >
+      <ActivePaneLabel store={props.store} width={props.width} />
+    </box>
   );
 }
 
@@ -221,6 +242,46 @@ function ProgressBar(props: { percent: number; store: TuiStore }) {
   );
 }
 
+export function getTrustBadgeParts(trusted: boolean): {
+  icon: string;
+  label: string;
+  detail: string;
+  tone: "trusted" | "untrusted";
+} {
+  return trusted
+    ? { icon: "✓", label: "trusted", detail: "skills on", tone: "trusted" }
+    : { icon: "⚠", label: "untrusted", detail: "approve", tone: "untrusted" };
+}
+
+function TrustStatusLine(props: { store: TuiStore }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+  const badge = () => getTrustBadgeParts(props.store.projectTrusted());
+  const color = () => (badge().tone === "trusted" ? theme().success : theme().warning);
+
+  return (
+    <text fg={theme().text} wrapMode="none" truncate>
+      <span style={{ fg: color(), bold: true }}>
+        {badge().icon} {badge().label}
+      </span>
+      <span style={{ fg: theme().dim }}> · {badge().detail}</span>
+    </text>
+  );
+}
+
+function ProjectStatus(props: { store: TuiStore; cwd: string }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+
+  return (
+    <>
+      <Section label="project" store={props.store} />
+      <text fg={theme().muted} wrapMode="none" truncate>
+        {props.cwd}
+      </text>
+      <TrustStatusLine store={props.store} />
+    </>
+  );
+}
+
 // ─── Mode: Session ───
 
 function SessionMode(props: { store: TuiStore }) {
@@ -238,6 +299,9 @@ function SessionMode(props: { store: TuiStore }) {
 
   return (
     <>
+      <ProjectStatus store={props.store} cwd={cwd()} />
+      <text> </text>
+
       <Section label="session" store={props.store} />
       <KV
         key="id"
@@ -266,17 +330,6 @@ function SessionMode(props: { store: TuiStore }) {
         {formatTokens(ctxTokens())} / {formatTokens(ctxWindow())}
       </text>
       <ProgressBar percent={pct()} store={props.store} />
-      <text> </text>
-
-      <Section label="workdir" store={props.store} />
-      <text fg={theme().muted} wrapMode="none" truncate>
-        {cwd()}
-      </text>
-      <KV
-        key="trusted"
-        value={props.store.projectTrusted() ? "yes" : "no"}
-        store={props.store}
-      />
       <text> </text>
 
       <Section label="perms" store={props.store} />
@@ -390,11 +443,7 @@ function ToolsMode(props: { store: TuiStore }) {
 
       <Section label="permissions" store={props.store} />
       <KV key="mode" value={props.store.permissionMode()} store={props.store} />
-      <KV
-        key="trusted"
-        value={props.store.projectTrusted() ? "yes" : "no"}
-        store={props.store}
-      />
+      <TrustStatusLine store={props.store} />
       <text> </text>
 
       <Section label="model" store={props.store} />
@@ -451,44 +500,52 @@ export function Sidebar(props: { store: TuiStore; width: number }) {
   const mode = () => props.store.sidebarMode();
 
   return (
-    <scrollbox
+    <box
+      backgroundColor={theme().panel}
+      border={["right"]}
+      borderColor={theme().border}
       style={{
         width: props.width,
         height: "100%",
+        flexDirection: "column",
         flexShrink: 0,
-        rootOptions: {
-          border: ["right"],
-          borderColor: theme().border,
-          backgroundColor: theme().panel,
-        },
-        contentOptions: { paddingLeft: 1, paddingRight: 1 },
-        scrollbarOptions: { showArrows: false },
       }}
     >
-      <SidebarHeader store={props.store} width={props.width} />
-      <ModeLabel mode={mode()} store={props.store} />
-      <text> </text>
+      <scrollbox
+        style={{
+          flexGrow: 1,
+          width: "100%",
+          rootOptions: { backgroundColor: theme().panel },
+          contentOptions: { paddingLeft: 1, paddingRight: 1 },
+          scrollbarOptions: { showArrows: false },
+        }}
+      >
+        <SidebarHeader store={props.store} width={props.width} />
+        <ModeLabel mode={mode()} store={props.store} />
+        <text> </text>
 
-      <Switch>
-        <Match when={mode() === "session"}>
-          <SessionMode store={props.store} />
-        </Match>
-        <Match when={mode() === "changes"}>
-          <ChangesMode store={props.store} />
-        </Match>
-        <Match when={mode() === "files"}>
-          <FilesMode store={props.store} />
-        </Match>
-        <Match when={mode() === "tools"}>
-          <ToolsMode store={props.store} />
-        </Match>
-        <Match when={mode() === "debug"}>
-          <DebugMode store={props.store} />
-        </Match>
-        <Match when={mode() === "help"}>
-          <HelpMode store={props.store} />
-        </Match>
-      </Switch>
-    </scrollbox>
+        <Switch>
+          <Match when={mode() === "session"}>
+            <SessionMode store={props.store} />
+          </Match>
+          <Match when={mode() === "changes"}>
+            <ChangesMode store={props.store} />
+          </Match>
+          <Match when={mode() === "files"}>
+            <FilesMode store={props.store} />
+          </Match>
+          <Match when={mode() === "tools"}>
+            <ToolsMode store={props.store} />
+          </Match>
+          <Match when={mode() === "debug"}>
+            <DebugMode store={props.store} />
+          </Match>
+          <Match when={mode() === "help"}>
+            <HelpMode store={props.store} />
+          </Match>
+        </Switch>
+      </scrollbox>
+      <SidebarFooter store={props.store} width={props.width} />
+    </box>
   );
 }

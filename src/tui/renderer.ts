@@ -38,6 +38,8 @@ export class TuiRenderer {
 
   // Streaming state
   private streaming = new StreamingMarkdown();
+  private reasoningStreaming = new StreamingMarkdown();
+  private streamedReasoningIds = new Set<string>();
   private spinner = new Spinner(["∿", "∼", "≈"], 500);
 
   constructor(config: RendererConfig) {
@@ -109,9 +111,24 @@ export class TuiRenderer {
         this.streaming.feed(event.delta as string);
         break;
 
+      case "agent_reasoning_delta":
+        if (this.streaming.isActive) {
+          this.streaming.done();
+        }
+        this.spinner.stop();
+        this.streamedReasoningIds.add(event.messageId as string);
+        if (!this.reasoningStreaming.isActive) {
+          this.reasoningStreaming.reset(tFg("accent", bold(`🍜 ${this.config.i18n.t("tui.reasoning")}`)));
+        }
+        this.reasoningStreaming.feed(event.delta as string);
+        break;
+
       case "agent_text_done": {
         const fullText = event.fullText as string;
-        const reasoningContent = event.reasoningContent as string | undefined;
+        const hasStreamedReasoning = this.streamedReasoningIds.has(event.messageId as string);
+        const reasoningContent = hasStreamedReasoning
+          ? undefined
+          : (event.reasoningContent as string | undefined);
 
         // If we were streaming, finalize the stream
         if (this.streaming.isActive) {
@@ -126,6 +143,7 @@ export class TuiRenderer {
           // Render full message (e.g. non-streaming mode)
           this.renderAssistantMessage(fullText, reasoningContent);
         }
+        this.streamedReasoningIds.delete(event.messageId as string);
         break;
       }
 
@@ -274,6 +292,15 @@ export class TuiRenderer {
         });
         break;
 
+      case "assistant_reasoning_delta":
+        this.emit({
+          type: "agent_reasoning_delta",
+          timestamp: event.timestamp,
+          messageId: event.messageId,
+          delta: event.delta,
+        });
+        break;
+
       case "assistant_text_done":
         this.emit({
           type: "agent_text_done",
@@ -387,6 +414,9 @@ export class TuiRenderer {
   private flushStream(): void {
     if (this.streaming.isActive) {
       this.streaming.done();
+    }
+    if (this.reasoningStreaming.isActive) {
+      this.reasoningStreaming.done();
     }
   }
 }

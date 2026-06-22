@@ -19,7 +19,7 @@ export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
 ] as const;
 
 const DEFAULT_CLIENT_NAME = "soba-agent";
-const DEFAULT_CLIENT_VERSION = "0.4.1";
+const DEFAULT_CLIENT_VERSION = "0.4.2";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export interface McpClientOptions {

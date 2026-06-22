@@ -5,7 +5,7 @@ description: Built-in DeepSeek, Moonshot Kimi, Alibaba Qwen, and OpenRouter prov
 
 SOBA works with any OpenAI-compatible API. This guide explains how to use built-in providers, switch models, add custom providers, and diagnose common connection problems.
 
-**Important in v0.4.0:** models are no longer kept in hard-coded lists. SOBA discovers them dynamically through `GET /v1/models`, so new provider models can appear without a SOBA release.
+**Important in v0.4.2:** models are no longer kept in hard-coded lists. SOBA discovers them dynamically through `GET /v1/models`, so new provider models can appear without a SOBA release.
 
 ---
 
@@ -37,7 +37,7 @@ SOBA uses a provider **registry**. It combines:
 
 ## 2. Built-in providers
 
-SOBA v0.4.0 ships with four built-in providers. All of them use the OpenAI-compatible adapter.
+SOBA v0.4.2 ships with four built-in providers. All of them use the OpenAI-compatible adapter.
 
 | ID | Name | Base URL | API key env | Notes |
 |---|---|---|---|---|
@@ -66,7 +66,11 @@ The output groups providers and models by provider. The active model is marked w
 
 ### 3.2. Select a model
 
-In the TUI, switch models with `Ctrl+M`. For one run, pass a model through CLI or env:
+In the TUI, switch models with `Ctrl+M`. The selector shows providers in the left column and models for the highlighted provider in the right column. Search filters both provider and model names/ids; each model row includes context window, max output, streaming, and thinking badges when known.
+
+Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select. Opening the selector refreshes built-in provider discovery, so it is also the quickest way to pick up newly published models during a running TUI session.
+
+For one run, pass a model through CLI or env:
 
 ```bash
 # One CLI run

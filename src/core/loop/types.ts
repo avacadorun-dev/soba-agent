@@ -33,6 +33,7 @@ export type AgentEventType =
   | "assistant_message"
   | "assistant_message_start"
   | "assistant_text_delta"
+  | "assistant_reasoning_delta"
   | "assistant_text_done"
   | "function_call_delta"
   | "function_call_done"
@@ -167,6 +168,12 @@ export interface AssistantTextDeltaEvent extends BaseAgentEvent {
   delta: string;
 }
 
+export interface AssistantReasoningDeltaEvent extends BaseAgentEvent {
+  type: "assistant_reasoning_delta";
+  messageId: string;
+  delta: string;
+}
+
 export interface AssistantTextDoneEvent extends BaseAgentEvent {
   type: "assistant_text_done";
   messageId: string;
@@ -238,6 +245,7 @@ export type AgentEvent =
   | AssistantMessageEvent
   | AssistantMessageStartEvent
   | AssistantTextDeltaEvent
+  | AssistantReasoningDeltaEvent
   | AssistantTextDoneEvent
   | FunctionCallDeltaEvent
   | FunctionCallDoneEvent

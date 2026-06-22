@@ -767,7 +767,7 @@ describe("OpenAIAdapter stream parsing", () => {
 
   test("reasoning-only stream создаёт завершённое сообщение без подмены видимого текста", () => {
     const acc = adapter.createStreamAccumulator();
-    adapter.processStreamLine(
+    const deltaEvents = adapter.processStreamLine(
       JSON.stringify({
         id: "chunk-reasoning-only",
         object: "chat.completion.chunk",
@@ -783,6 +783,11 @@ describe("OpenAIAdapter stream parsing", () => {
       }),
       acc,
     );
+    const reasoningDelta = deltaEvents.find((event) => event.type === "response.reasoning.delta");
+    expect(reasoningDelta?.type).toBe("response.reasoning.delta");
+    if (reasoningDelta?.type === "response.reasoning.delta") {
+      expect(reasoningDelta.delta).toBe("Нужно сформулировать финальный ответ.");
+    }
 
     const events = adapter.processStreamLine("[DONE]", acc);
     const done = events.find((event) => event.type === "response.output_item.done");
@@ -820,6 +825,11 @@ describe("OpenAIAdapter stream parsing", () => {
     );
 
     expect(deltaEvents.some((event) => event.type === "response.output_text.delta")).toBe(false);
+    const reasoningDelta = deltaEvents.find((event) => event.type === "response.reasoning.delta");
+    expect(reasoningDelta?.type).toBe("response.reasoning.delta");
+    if (reasoningDelta?.type === "response.reasoning.delta") {
+      expect(reasoningDelta.delta).toBe("Нужно осмотреть проект.");
+    }
 
     const events = adapter.processStreamLine("[DONE]", acc);
     const done = events.find((event) => event.type === "response.output_item.done");
@@ -928,9 +938,10 @@ describe("OpenAIAdapter stream parsing", () => {
 
   test("MiniMax reasoning_details поддерживает delta и snapshot chunks", () => {
     const acc = adapter.createStreamAccumulator();
+    const reasoningDeltas: string[] = [];
 
     for (const reasoningText of ["В", "Всё", " проходит"]) {
-      adapter.processStreamLine(
+      const events = adapter.processStreamLine(
         JSON.stringify({
           id: "chunk-minimax-reasoning",
           object: "chat.completion.chunk",
@@ -953,6 +964,11 @@ describe("OpenAIAdapter stream parsing", () => {
         }),
         acc,
       );
+      for (const event of events) {
+        if (event.type === "response.reasoning.delta") {
+          reasoningDeltas.push(event.delta);
+        }
+      }
     }
 
     adapter.processStreamLine(
@@ -983,6 +999,7 @@ describe("OpenAIAdapter stream parsing", () => {
     const events = adapter.processStreamLine("[DONE]", acc);
     const done = events.find((event) => event.type === "response.output_item.done");
 
+    expect(reasoningDeltas.join("")).toBe("Всё проходит");
     expect(done?.type).toBe("response.output_item.done");
     if (done?.type === "response.output_item.done" && done.item.type === "message") {
       expect(done.item.reasoning_content).toBe(

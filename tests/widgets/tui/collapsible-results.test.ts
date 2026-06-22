@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, test, vi } from "bun:test";
 import type { AgentEvent } from "../../../src/core/loop/types";
 import { TuiStore } from "../../../src/widgets/tui/model/tui-store";
+import { createToolResultMouseToggle } from "../../../src/widgets/tui/ui/tool-result-block";
 
 function event(value: Record<string, unknown>): AgentEvent {
   return { ...value, timestamp: Date.now(), turnIndex: 1 } as unknown as AgentEvent;
@@ -53,6 +54,46 @@ describe("B2 — Collapsible Tool Results", () => {
 
   beforeEach(() => {
     store = createStore();
+  });
+
+  describe("Mouse interaction", () => {
+    test("plain mouse click toggles collapsed tool result", () => {
+      let toggles = 0;
+      const mouse = createToolResultMouseToggle(() => {
+        toggles += 1;
+      });
+
+      mouse.onMouseDown({ x: 4, y: 8 } as any);
+      mouse.onMouseUp({ x: 4, y: 8 } as any);
+
+      expect(toggles).toBe(1);
+    });
+
+    test("drag selection inside expanded tool result does not toggle", () => {
+      let toggles = 0;
+      const mouse = createToolResultMouseToggle(() => {
+        toggles += 1;
+      });
+
+      mouse.onMouseDown({ x: 4, y: 8 } as any);
+      mouse.onMouseDrag();
+      mouse.onMouseDragEnd();
+      mouse.onMouseUp({ x: 18, y: 8 } as any);
+
+      expect(toggles).toBe(0);
+    });
+
+    test("mouse release in another terminal cell is treated as selection", () => {
+      let toggles = 0;
+      const mouse = createToolResultMouseToggle(() => {
+        toggles += 1;
+      });
+
+      mouse.onMouseDown({ x: 4, y: 8 } as any);
+      mouse.onMouseUp({ x: 5, y: 8 } as any);
+
+      expect(toggles).toBe(0);
+    });
   });
 
   describe("Tool-result is now always emitted", () => {

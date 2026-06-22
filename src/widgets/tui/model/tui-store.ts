@@ -83,6 +83,7 @@ export class TuiStore {
   private nextQueueId = 1;
   private streamMessageId: string | null = null;
   private streamTuiId: number | null = null;
+  private readonly reasoningTuiIds = new Map<string, number>();
   private finalizedIds = new Set<string>();
   private noodleTimer: ReturnType<typeof setInterval> | null = null;
   private turnActive = false;
@@ -323,6 +324,7 @@ export class TuiStore {
   clearMessages(): void {
     this.setMessages([]);
     this.finalizedIds.clear();
+    this.reasoningTuiIds.clear();
   }
 
   /** Stop the active tool, or cancel the turn when no tool is running. */
@@ -340,6 +342,7 @@ export class TuiStore {
     this.add({ type: "info", content: this.l("tui.info.cancelled") });
     this.streamMessageId = null;
     this.streamTuiId = null;
+    this.reasoningTuiIds.clear();
   }
 
   copyLastAssistant(): boolean {
@@ -531,6 +534,28 @@ export class TuiStore {
           });
         }
         break;
+      case "assistant_reasoning_delta": {
+        this.stopNoodle();
+        this.setStatus(this.l("tui.thinking"));
+        const existingReasoningId = this.reasoningTuiIds.get(event.messageId);
+        if (existingReasoningId !== undefined) {
+          this.updateReasoning(existingReasoningId, (content) => content + event.delta);
+          break;
+        }
+
+        const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.delta };
+        this.reasoningTuiIds.set(event.messageId, reasoningMsg.id);
+        this.setMessages((messages) => {
+          if (this.streamMessageId === event.messageId && this.streamTuiId !== null) {
+            const index = messages.findIndex((m) => m.id === this.streamTuiId);
+            if (index >= 0) {
+              return [...messages.slice(0, index), reasoningMsg, ...messages.slice(index)];
+            }
+          }
+          return [...messages, reasoningMsg];
+        });
+        break;
+      }
       case "assistant_text_done": {
         const tuiId = this.streamTuiId;
         if (!this.finalizedIds.has(event.messageId) && tuiId !== null) {
@@ -540,14 +565,20 @@ export class TuiStore {
             this.setLastAssistantText(event.fullText);
             // Insert reasoning BEFORE the assistant message
             if (event.reasoningContent) {
-              const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.reasoningContent };
-              this.setMessages((messages) => {
-                const index = messages.findIndex((m) => m.id === tuiId);
-                if (index < 0) return messages;
-                return [...messages.slice(0, index), reasoningMsg, ...messages.slice(index)];
-              });
+              const existingReasoningId = this.reasoningTuiIds.get(event.messageId);
+              if (existingReasoningId !== undefined) {
+                this.updateReasoning(existingReasoningId, () => event.reasoningContent as string);
+              } else {
+                const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.reasoningContent };
+                this.setMessages((messages) => {
+                  const index = messages.findIndex((m) => m.id === tuiId);
+                  if (index < 0) return messages;
+                  return [...messages.slice(0, index), reasoningMsg, ...messages.slice(index)];
+                });
+              }
             }
           });
+          this.reasoningTuiIds.delete(event.messageId);
           this.streamMessageId = null;
           this.streamTuiId = null;
         }
@@ -841,6 +872,19 @@ export class TuiStore {
       if (message.type !== "assistant") return messages;
       const updated: TuiMessage = { ...message, content: update(message.content), streaming };
       // Replace only the changed item — keep references for all others
+      const next = messages.slice();
+      next[idx] = updated;
+      return next;
+    });
+  }
+
+  private updateReasoning(id: number, update: (content: string) => string): void {
+    this.setMessages((messages) => {
+      const idx = messages.findIndex((m) => m.id === id);
+      if (idx === -1) return messages;
+      const message = messages[idx];
+      if (message.type !== "reasoning") return messages;
+      const updated: TuiMessage = { ...message, content: update(message.content) };
       const next = messages.slice();
       next[idx] = updated;
       return next;

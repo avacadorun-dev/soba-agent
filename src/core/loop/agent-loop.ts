@@ -2673,6 +2673,7 @@ export class AgentLoop {
       number,
       { id: string; name: string; args: string }
     > = new Map();
+    const currentReasoning = new Map<string, string>();
 
     for await (const event of this.client.createStream(request)) {
       switch (event.type) {
@@ -2684,6 +2685,10 @@ export class AgentLoop {
           const item = event.item;
 
           if (item.type === "message") {
+            const reasoning = currentReasoning.get(item.id);
+            if (reasoning) {
+              (item as MessageField).reasoning_content = reasoning;
+            }
             assistantMessages.push(item as MessageField);
             this.emit({
               type: "assistant_message_start",
@@ -2705,6 +2710,25 @@ export class AgentLoop {
               });
             }
           }
+          break;
+        }
+
+        case "response.reasoning.delta": {
+          const previous = currentReasoning.get(event.item_id) ?? "";
+          const next = previous + event.delta;
+          currentReasoning.set(event.item_id, next);
+
+          const msg = assistantMessages.find((m) => m.id === event.item_id);
+          if (msg) {
+            msg.reasoning_content = next;
+          }
+
+          this.emit({
+            type: "assistant_reasoning_delta",
+            timestamp: Date.now(),
+            messageId: event.item_id,
+            delta: event.delta,
+          });
           break;
         }
 

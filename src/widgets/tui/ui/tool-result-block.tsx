@@ -13,6 +13,7 @@
  */
 
 import { Show, createMemo } from "solid-js";
+import type { MouseEvent } from "@opentui/core";
 import { BLOCK, getToolMeta } from "../lib/message-blocks";
 import { getTuiTheme } from "../lib/theme";
 import { buildToolOutputPreview } from "../lib/tool-output-preview";
@@ -51,6 +52,41 @@ function buildSummary(message: ToolResultMessage): { lines: number; bytes: numbe
   if (bytes > 0) parts.push(formatSize(bytes));
 
   return { lines, bytes, label: parts.join(" · ") };
+}
+
+const TOOL_RESULT_CLICK_DRAG_THRESHOLD = 0;
+
+export function createToolResultMouseToggle(onToggle: () => void): {
+  onMouseDown: (event: MouseEvent) => void;
+  onMouseUp: (event: MouseEvent) => void;
+  onMouseDrag: () => void;
+  onMouseDragEnd: () => void;
+} {
+  let mouseDownPosition: { x: number; y: number } | null = null;
+  let dragged = false;
+
+  return {
+    onMouseDown: (event) => {
+      mouseDownPosition = { x: event.x, y: event.y };
+      dragged = false;
+    },
+    onMouseUp: (event) => {
+      if (!mouseDownPosition) return;
+      const delta =
+        Math.abs(event.x - mouseDownPosition.x) +
+        Math.abs(event.y - mouseDownPosition.y);
+      const shouldToggle = !dragged && delta <= TOOL_RESULT_CLICK_DRAG_THRESHOLD;
+      mouseDownPosition = null;
+      dragged = false;
+      if (shouldToggle) onToggle();
+    },
+    onMouseDrag: () => {
+      dragged = true;
+    },
+    onMouseDragEnd: () => {
+      dragged = true;
+    },
+  };
 }
 
 /**
@@ -107,6 +143,7 @@ export function ToolResultBlock(props: {
   const summary = createMemo(() => buildSummary(props.message));
   const preview = createMemo(() => buildToolOutputPreview(props.message.content || ""));
   const details = createMemo(() => props.message.details ?? []);
+  const mouseToggle = createToolResultMouseToggle(props.onToggle);
 
   return (
     <box
@@ -127,7 +164,10 @@ export function ToolResultBlock(props: {
         gap: BLOCK.gap,
       }}
       ref={(el) => {
-        el.onMouseDown = () => props.onToggle();
+        el.onMouseDown = mouseToggle.onMouseDown;
+        el.onMouseUp = mouseToggle.onMouseUp;
+        el.onMouseDrag = mouseToggle.onMouseDrag;
+        el.onMouseDragEnd = mouseToggle.onMouseDragEnd;
       }}
     >
       {/* Summary header: always visible */}

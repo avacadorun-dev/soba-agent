@@ -1155,6 +1155,78 @@ describe("AgentLoop", () => {
     expect(events.some((e) => e.type === "turn_end")).toBe(true);
   });
 
+  test("эмитит reasoning delta из streaming response", async () => {
+    const finalResponse = makeTextResponse("Готово");
+    const message = finalResponse.output[0];
+    if (message?.type === "message") {
+      message.id = "msg_stream";
+      message.reasoning_content = "Думаю вслух.";
+    }
+
+    const client = {
+      ...makeClient([finalResponse]),
+      createStream: mock(async function* () {
+        yield {
+          type: "response.created" as const,
+          response: { ...finalResponse, output: [], status: "in_progress" },
+        };
+        yield {
+          type: "response.output_item.added" as const,
+          output_index: 0,
+          item: {
+            type: "message" as const,
+            id: "msg_stream",
+            status: "in_progress",
+            role: "assistant",
+            content: [],
+          },
+        };
+        yield {
+          type: "response.reasoning.delta" as const,
+          item_id: "msg_stream",
+          output_index: 0,
+          content_index: 0,
+          delta: "Думаю ",
+        };
+        yield {
+          type: "response.reasoning.delta" as const,
+          item_id: "msg_stream",
+          output_index: 0,
+          content_index: 0,
+          delta: "вслух.",
+        };
+        yield {
+          type: "response.output_text.delta" as const,
+          item_id: "msg_stream",
+          output_index: 0,
+          content_index: 0,
+          delta: "Готово",
+        };
+        yield {
+          type: "response.output_item.done" as const,
+          output_index: 0,
+          item: finalResponse.output[0],
+        };
+        yield { type: "response.completed" as const, response: finalResponse };
+      }),
+    };
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: true,
+      stream: true,
+    });
+
+    const reasoningDeltas: string[] = [];
+    loop.onEvent((e) => {
+      if (e.type === "assistant_reasoning_delta") reasoningDeltas.push(e.delta);
+    });
+
+    await loop.runTurn("Hi");
+
+    expect(reasoningDeltas.join("")).toBe("Думаю вслух.");
+  });
+
   test("эмитит tool_call события при использовании инструментов", async () => {
     const client = makeClient([
       makeToolCallResponse("event-tool", '{"input":"x"}'),

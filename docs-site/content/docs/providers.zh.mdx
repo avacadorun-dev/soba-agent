@@ -5,7 +5,7 @@ description: 内置 DeepSeek、Moonshot Kimi、Alibaba Qwen、OpenRouter provide
 
 SOBA 可以使用任何 OpenAI-compatible API。本页说明如何使用内置 providers、切换模型、添加自定义 providers，以及排查常见连接问题。
 
-**v0.4.0 的重要变化：** 模型不再保存在硬编码列表里。SOBA 会通过 `GET /v1/models` 动态发现模型，所以 provider 新增模型后，通常不需要等待 SOBA 发版。
+**v0.4.2 的重要变化：** 模型不再保存在硬编码列表里。SOBA 会通过 `GET /v1/models` 动态发现模型，所以 provider 新增模型后，通常不需要等待 SOBA 发版。
 
 ---
 
@@ -37,7 +37,7 @@ SOBA 使用 provider **registry**。它包含：
 
 ## 2. 内置 providers
 
-SOBA v0.4.0 提供 4 个内置 providers。它们都使用 OpenAI-compatible adapter。
+SOBA v0.4.2 提供 4 个内置 providers。它们都使用 OpenAI-compatible adapter。
 
 | ID | 名称 | Base URL | API key env | 说明 |
 |---|---|---|---|---|
@@ -66,7 +66,11 @@ soba provider list
 
 ### 3.2. 选择模型
 
-在 TUI 中可以用 `Ctrl+M` 切换模型。单次运行可以通过 CLI 或 env 传入模型：
+在 TUI 中可以用 `Ctrl+M` 切换模型。选择器左侧显示 providers，右侧显示当前高亮 provider 的模型。搜索会同时过滤 provider 名称、模型名称和模型 ID；模型行会在可用时显示 context window、max output、streaming 和 thinking 标签。
+
+用 `↑` / `↓` 在模型间移动，用 `←` / `→` 或 `Tab` / `Shift+Tab` 切换 provider，用 `Enter` 选择高亮模型。打开选择器也会刷新内置 providers 的 discovery，所以在 TUI session 运行中获取新发布模型时，这是最快的方式。
+
+单次运行可以通过 CLI 或 env 传入模型：
 
 ```bash
 # 单次 CLI 运行

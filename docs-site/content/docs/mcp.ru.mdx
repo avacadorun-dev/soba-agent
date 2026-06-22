@@ -3,10 +3,10 @@ title: MCP-серверы
 description: Настройка project-local MCP stdio и Streamable HTTP servers, auth, trustMode, команды /mcp и troubleshooting.
 ---
 
-SOBA v0.4.0 работает как MCP-клиент: запускает локальные stdio MCP-серверы или подключается к remote Streamable HTTP
+SOBA v0.4.2 работает как MCP-клиент: запускает локальные stdio MCP-серверы или подключается к remote Streamable HTTP
 endpoints, читает `tools/list` и публикует готовые tools в общий `ToolRegistry`.
 
-Не входят в scope v0.4.0: SOBA как MCP-сервер, marketplace discovery, signed servers, deprecated HTTP+SSE как отдельный
+Не входят в scope v0.4.2: SOBA как MCP-сервер, marketplace discovery, signed servers, deprecated HTTP+SSE как отдельный
 transport и security-решения на основе MCP tool annotations.
 
 ---
@@ -267,7 +267,7 @@ Optional stdio template:
 | Timeout | Вызов превысил `timeoutMs` | Увеличивайте timeout только после проверки server health/network latency. |
 | Malformed SSE | Endpoint вернул невалидный Streamable HTTP event stream | Убедитесь, что URL ведёт на единый Streamable HTTP MCP endpoint, а не на старый standalone `/sse` endpoint или обычный web URL. |
 | `crashed` | Child process завершился, remote request упал или protocol data некорректны | Смотрите redacted last error в `/mcp status`. |
-| Missing tools capability | Server не отдаёт MCP tools | В v0.4.0 нужны tools-capable MCP servers. |
+| Missing tools capability | Server не отдаёт MCP tools | В v0.4.2 нужны tools-capable MCP servers. |
 | После правки config ничего не изменилось | Hot reload не поддержан | Перезапустите SOBA. |
 
 ---

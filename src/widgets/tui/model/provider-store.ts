@@ -19,13 +19,19 @@ import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../../../core/provider/model-defaults";
+import { findBuiltinProvider } from "../../../core/provider/providers";
 import { ProviderRegistry } from "../../../core/provider/registry";
-import type { ProviderDefinition } from "../../../core/provider/types";
+import type { ModelDefinition, ProviderDefinition } from "../../../core/provider/types";
 import type { NotificationStore } from "./notification-store";
+
+export type ModelSelectorModel = ModelDefinition & {
+  selectable: boolean;
+  discoveryStatus?: "pending" | "failed";
+};
 
 export interface ModelGroup {
   provider: ProviderDefinition;
-  models: ProviderDefinition["models"];
+  models: ModelSelectorModel[];
 }
 
 export interface ModelSelectorEntry {
@@ -33,7 +39,13 @@ export interface ModelSelectorEntry {
   modelId: string;
   modelName: string;
   providerName: string;
+  providerCustom: boolean;
   contextWindow: number;
+  maxOutput: number;
+  supportsStreaming: boolean;
+  supportsThinking: boolean;
+  selectable: boolean;
+  discoveryStatus?: "pending" | "failed";
 }
 
 export interface ProviderStoreOptions {
@@ -64,6 +76,7 @@ export class ProviderStore {
   private readonly _status: ReturnType<typeof createSignal<ModelSelectorStatus>>;
   private readonly _activeProviderId: ReturnType<typeof createSignal<string>>;
   private readonly _activeModelId: ReturnType<typeof createSignal<string>>;
+  private readonly _catalogVersion: ReturnType<typeof createSignal<number>>;
 
   constructor(options: ProviderStoreOptions) {
     this.registry = options.registry;
@@ -77,12 +90,14 @@ export class ProviderStore {
     this._searchQuery = createSignal("");
     this._highlightedIndex = createSignal(0);
     this._status = createSignal<ModelSelectorStatus>({ kind: "idle" });
+    this._catalogVersion = createSignal(0);
     // Subscribe to proxy.onChange so external setActive() / switchModel()
     // (e.g. from a future slash command) keeps the store in sync.
     this.unsubscribeProxy = this.proxy.onChange((info) => {
       batch(() => {
         this._activeProviderId[1](info.providerId);
         this._activeModelId[1](info.modelId);
+        this._catalogVersion[1]((version) => version + 1);
       });
     });
   }
@@ -111,6 +126,7 @@ export class ProviderStore {
    * tracks signal reads in JSX, so consumers re-derive on signal changes.
    */
   filteredGroups = (): ModelGroup[] => {
+    this._catalogVersion[0]();
     const query = this._searchQuery[0]().trim().toLowerCase();
     const groups: ModelGroup[] = [];
     for (const provider of this.registry.getAllProviders()) {
@@ -118,9 +134,13 @@ export class ProviderStore {
       // discovery cache for built-ins. Returns [] when neither is
       // set. For built-ins before discovery, we show a placeholder;
       // the wizard replaces it with real models after discovery.
-      let all = this.registry.getModelsFor(provider.id);
+      let all: ModelSelectorModel[] = this.registry
+        .getModelsFor(provider.id)
+        .map((model) => ({ ...model, selectable: true }));
       if (all.length === 0) {
-        const seed = provider.defaultModel;
+        const seed =
+          provider.defaultModel ??
+          (provider.id === this._activeProviderId[0]() ? this._activeModelId[0]() : "");
         if (seed) {
           all = [
             {
@@ -132,14 +152,37 @@ export class ProviderStore {
               maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
               supportsStreaming: true,
               supportsThinking: false,
+              selectable: true,
+            },
+          ];
+        } else if (findBuiltinProvider(provider.id)) {
+          const discovery = this.registry.getModelDiscoveryStatus(provider.id);
+          const failed = discovery.kind === "failed";
+          all = [
+            {
+              id: "",
+              name: failed
+                ? this.t("tui.modelSelector.discoveryFailedShort")
+                : this.t("tui.modelSelector.loadingModels"),
+              contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
+              maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
+              supportsStreaming: false,
+              supportsThinking: false,
+              selectable: false,
+              discoveryStatus: failed ? "failed" : "pending",
             },
           ];
         }
       }
+      const providerMatches =
+        query.length > 0 &&
+        (provider.id.toLowerCase().includes(query) || provider.name.toLowerCase().includes(query));
       const matched = query
-        ? all.filter(
-            (model) => model.id.toLowerCase().includes(query) || model.name.toLowerCase().includes(query),
-          )
+        ? providerMatches
+          ? all
+          : all.filter(
+              (model) => model.id.toLowerCase().includes(query) || model.name.toLowerCase().includes(query),
+            )
         : all;
       if (matched.length === 0) continue;
       groups.push({ provider, models: matched });
@@ -158,9 +201,35 @@ export class ProviderStore {
         modelId: model.id,
         modelName: model.name,
         providerName: group.provider.name,
+        providerCustom: group.provider.custom === true,
         contextWindow: model.contextWindow,
+        maxOutput: model.maxOutput,
+        supportsStreaming: model.supportsStreaming,
+        supportsThinking: model.supportsThinking,
+        selectable: model.selectable,
+        discoveryStatus: model.discoveryStatus,
       })),
     );
+  };
+
+  activeEntry = (): ModelSelectorEntry | null => {
+    const providerId = this._activeProviderId[0]();
+    const modelId = this._activeModelId[0]();
+    const provider = this.registry.getProvider(providerId);
+    const model = this.registry.getModel(providerId, modelId);
+    if (!provider || !model) return null;
+    return {
+      providerId,
+      modelId,
+      modelName: model.name,
+      providerName: provider.name,
+      providerCustom: provider.custom === true,
+      contextWindow: model.contextWindow,
+      maxOutput: model.maxOutput,
+      supportsStreaming: model.supportsStreaming,
+      supportsThinking: model.supportsThinking,
+      selectable: true,
+    };
   };
 
   /**
@@ -188,9 +257,16 @@ export class ProviderStore {
     // The list re-renders automatically through Solid signals when the
     // discovery cache is populated. Non-blocking — the picker shows
     // synthetic entries immediately and updates when results arrive.
-    void this.registry.refreshBuiltinModels().catch(() => {
-      // Discovery failure is non-fatal — synthetic entries stay visible.
-    });
+    void this.registry
+      .refreshBuiltinModels(() => {
+        this._catalogVersion[1]((version) => version + 1);
+      })
+      .catch(() => {
+        // Discovery failure is non-fatal — placeholders stay visible.
+      })
+      .finally(() => {
+        this._catalogVersion[1]((version) => version + 1);
+      });
   }
 
   close(): void {
@@ -209,7 +285,7 @@ export class ProviderStore {
     });
   }
 
-  moveHighlight(delta: 1 | -1): void {
+  moveHighlight(delta: number): void {
     const length = this.flatEntries().length;
     if (length === 0) return;
     const next = (this._highlightedIndex[0]() + delta + length) % length;
@@ -252,7 +328,7 @@ export class ProviderStore {
     } else {
       const entries = this.flatEntries();
       const entry = entries[this._highlightedIndex[0]()];
-      if (!entry) {
+      if (!entry || !entry.selectable) {
         const status: ModelSelectorStatus = { kind: "idle" };
         this._status[1](status);
         return status;

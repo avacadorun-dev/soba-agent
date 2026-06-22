@@ -12,6 +12,7 @@ import { TuiStore } from "../../../src/widgets/tui/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../src/widgets/tui/model/types";
 import {
   getProgressBarSegments,
+  getTrustBadgeParts,
   SIDEBAR_COMPACT_LOGO_MAX_WIDTH,
   shouldUseCompactSidebarLogo,
 } from "../../../src/widgets/tui/ui/sidebar";
@@ -62,6 +63,27 @@ describe("OpenTUI Solid store", () => {
 
     expect(store.messages()).toEqual([{ id: 1, type: "assistant", content: "**Hello**", streaming: false }]);
     expect(store.lastAssistantText()).toBe("**Hello**");
+  });
+
+  test("стримит reasoning в один блок и не дублирует его на финале", () => {
+    const store = createStore();
+    store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: "Думаю" }));
+    store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: " дальше" }));
+    store.onAgentEvent(event({ type: "assistant_message_start", messageId: "m1" }));
+    store.onAgentEvent(event({ type: "assistant_text_delta", messageId: "m1", delta: "Готово" }));
+    store.onAgentEvent(
+      event({
+        type: "assistant_text_done",
+        messageId: "m1",
+        fullText: "Готово",
+        reasoningContent: "Думаю дальше.",
+      }),
+    );
+
+    expect(store.messages()).toEqual([
+      { id: 1, type: "reasoning", content: "Думаю дальше." },
+      { id: 2, type: "assistant", content: "Готово", streaming: false },
+    ]);
   });
 
   test("собирает всю ленту сообщений в единый текст для копирования", () => {
@@ -1002,6 +1024,21 @@ describe("Sidebar reactivity", () => {
     expect(getProgressBarSegments(0)).toEqual({ filled: 0, empty: 10, roundedPercent: 0 });
     expect(getProgressBarSegments(42.4)).toEqual({ filled: 4, empty: 6, roundedPercent: 42 });
     expect(getProgressBarSegments(95.1)).toEqual({ filled: 10, empty: 0, roundedPercent: 95 });
+  });
+
+  test("trust badge uses explicit status labels instead of yes/no", () => {
+    expect(getTrustBadgeParts(true)).toMatchObject({
+      icon: "✓",
+      label: "trusted",
+      detail: "skills on",
+      tone: "trusted",
+    });
+    expect(getTrustBadgeParts(false)).toMatchObject({
+      icon: "⚠",
+      label: "untrusted",
+      detail: "approve",
+      tone: "untrusted",
+    });
   });
 
   test("brand logo switches to compact one-line variant for narrow sidebar", () => {

@@ -70,6 +70,13 @@ soba -r
 | `Page Up` / `Page Down` | Scroll the TUI message history | Main area |
 | `Home` | Jump to the beginning of history | Main area |
 | `End` | Jump to the current end of history | Main area |
+| `Ctrl+M` | Open the provider/model selector | Main area |
+
+### Model selector
+
+`Ctrl+M` opens a dense two-column selector. Providers are on the left, models for the highlighted provider are on the right, and the search box filters both provider and model names/ids.
+
+Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select the highlighted model. The header shows the current provider/model, and each model row shows context window, max output, streaming, and thinking support when that metadata is available. Opening the selector refreshes built-in provider discovery, so newly available provider models can appear without restarting the whole session.
 
 ---
 

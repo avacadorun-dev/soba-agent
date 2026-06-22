@@ -330,6 +330,26 @@ export class ProviderRegistry {
     return [];
   }
 
+  public getModelDiscoveryStatus(
+    providerId: string,
+  ):
+    | { kind: "loaded" }
+    | { kind: "pending" }
+    | { kind: "failed"; message: string } {
+    const provider = this.providers.get(providerId);
+    if (!provider) return { kind: "failed", message: "Unknown provider" };
+    if (provider.models && provider.models.length > 0) {
+      return { kind: "loaded" };
+    }
+    if (!findBuiltinProvider(providerId)) {
+      return { kind: "loaded" };
+    }
+    const cached = getCachedModels(provider, this.resolveApiKey(providerId));
+    if (!cached) return { kind: "pending" };
+    if (cached.ok) return { kind: "loaded" };
+    return { kind: "failed", message: cached.message };
+  }
+
   /**
    * B1e: no-op for built-in providers (catalogue is discovered at
    * runtime; the user just needs to pick from the picker). Still
@@ -351,13 +371,17 @@ export class ProviderRegistry {
    * Non-blocking best-effort: failures leave the synthetic entries
    * in place so the UX is never broken.
    */
-  public async refreshBuiltinModels(): Promise<void> {
+  public async refreshBuiltinModels(
+    onProviderSettled?: (providerId: string) => void,
+  ): Promise<void> {
     const promises = BUILTIN_PROVIDERS.map(async (p) => {
       const apiKey = this.resolveApiKey(p.id);
       try {
         await discoverModels(p, apiKey, { timeoutMs: 8_000 });
       } catch {
         // Discovery failure is non-fatal — synthetic entries stay visible.
+      } finally {
+        onProviderSettled?.(p.id);
       }
     });
     await Promise.allSettled(promises);
