@@ -1,6 +1,6 @@
 {
   "name": "soba-agent",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Bun-first CLI coding agent with terminal UI, proactive context management, skills, project memory, and MCP support.",
   "type": "module",
   "private": false,
@@ -46,14 +46,16 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@opentui/solid": "^0.4.1",
     "@types/bun": "latest",
     "biome": "^0.3.3",
+    "solid-js": "1.9.12",
     "ts-morph": "^28.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@opentui/solid": "^0.4.1",
-    "solid-js": "1.9.12",
+    "@opentui/core": "^0.4.1",
+    "bun": "1.3.14",
     "zod": "^4.4.3"
   }
 }

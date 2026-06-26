@@ -27,8 +27,8 @@ describe("CLI", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  test("release version is 0.4.2", () => {
-    expect(packageJson.version).toBe("0.4.2");
+  test("release version is 0.4.3", () => {
+    expect(packageJson.version).toBe("0.4.3");
   });
 });
 

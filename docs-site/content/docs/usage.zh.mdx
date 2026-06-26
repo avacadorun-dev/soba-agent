@@ -62,7 +62,7 @@ soba -r
 | `Enter` | 发送消息 | 输入行 |
 | `Ctrl+C` | 中断当前代理响应 | 代理正在工作时 |
 | `Ctrl+Z` | 挂起 SOBA (SIGTSTP) | 始终可用 |
-| `Ctrl+L` | 清屏 | 始终可用 |
+| `Ctrl+L` / `/clear` | 清屏 | 始终可用 |
 | `Ctrl+D` | 退出 TUI | 输入行为空时 |
 | `Escape` | 清空输入或关闭对话框 | 输入行 / 对话框 |
 | `Tab` | 补全斜杠命令 | 输入行 |
@@ -70,11 +70,16 @@ soba -r
 | `Page Up` / `Page Down` | 滚动 TUI 消息历史 | 主区域 |
 | `Home` | 跳到历史开头 | 主区域 |
 | `End` | 跳到当前历史末尾 | 主区域 |
-| `Ctrl+M` | 打开 provider/model 选择器 | 主区域 |
+| `F1` | 打开帮助侧栏 | 主区域 |
+| `F2` / `/model` | 打开 provider/model 选择器 | 主区域 |
+| `F3` / `/search` | 搜索会话历史 | 主区域 |
+| `F6` / `/sidebar` | 切换侧栏面板 | 主区域 |
+| `Ctrl+Shift+S` / `/sidebar toggle` | 折叠或展开侧栏 | 主区域 |
+| `/keys` | 显示运行时 keymap 和命令 fallback | 主区域 |
 
 ### 模型选择器
 
-`Ctrl+M` 会打开一个紧凑的双列选择器。左侧是 providers，右侧是当前高亮 provider 的模型；搜索框会同时过滤 provider 名称、模型名称和模型 ID。
+`F2` 或 `/model` 会打开一个紧凑的双列选择器。左侧是 providers，右侧是当前高亮 provider 的模型；搜索框会同时过滤 provider 名称、模型名称和模型 ID。`Ctrl+M` 仍作为旧别名保留，但很多终端会把它编码成 Enter，因此不要依赖它。
 
 用 `↑` / `↓` 在模型间移动，用 `←` / `→` 或 `Tab` / `Shift+Tab` 切换 provider，用 `Enter` 选择高亮模型。顶部会显示当前 provider/model；每个模型行会显示 context window、max output、streaming 和 thinking 支持情况（如果 provider 提供了这些元数据）。打开选择器也会刷新内置 providers 的 discovery，因此新模型通常可以不用重启整个 session 就出现在列表里。
 

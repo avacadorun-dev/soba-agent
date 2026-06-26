@@ -10,6 +10,7 @@
 import { For } from "solid-js";
 import { SLASH_COMMANDS } from "../../../cli/commands";
 import { slashCommandRegistry } from "../commands/registry";
+import { formatKeyBindings } from "../lib/keymap";
 import { getTuiTheme } from "../lib/theme";
 import type { TuiStore } from "../model/tui-store";
 
@@ -23,20 +24,21 @@ interface HotkeyEntry {
 const HOTKEYS: HotkeyEntry[] = [
   { key: "Enter", action: "Submit prompt" },
   { key: "Shift+Enter", action: "Insert newline" },
-  { key: "Ctrl+C", action: "Stop agent / Quit" },
-  { key: "Ctrl+Y", action: "Copy last assistant" },
-  { key: "Ctrl+L", action: "Clear messages" },
-  { key: "Ctrl+M", action: "Model selector" },
-  { key: "Ctrl+B", action: "Next sidebar mode" },
-  { key: "Ctrl+Shift+B", action: "Previous mode" },
-  { key: "Ctrl+Shift+S", action: "Toggle sidebar" },
-  { key: "Cmd/Shift+C", action: "Copy transcript" },
+  { key: formatKeyBindings("cancelOrQuit"), action: "Stop agent / Quit" },
+  { key: formatKeyBindings("copyLastAssistant"), action: "Copy last assistant" },
+  { key: `${formatKeyBindings("clearMessages")} / /clear`, action: "Clear messages" },
+  { key: `${formatKeyBindings("openModelSelector")} / /model`, action: "Model selector" },
+  { key: `${formatKeyBindings("openSearch")} / /search`, action: "Search conversation" },
+  { key: formatKeyBindings("nextSidebarMode"), action: "Next sidebar mode" },
+  { key: formatKeyBindings("previousSidebarMode"), action: "Previous mode" },
+  { key: formatKeyBindings("toggleSidebar"), action: "Toggle sidebar" },
+  { key: formatKeyBindings("copyTranscript"), action: "Copy transcript" },
   { key: "PgUp / PgDn", action: "Scroll page" },
   { key: "Home / End", action: "Scroll top / bottom" },
   { key: "↑ / ↓ in input", action: "Navigate history" },
   { key: "Esc", action: "Dismiss notification" },
   { key: "Tab", action: "Accept suggestion" },
-  { key: "Ctrl+H", action: "This help panel" },
+  { key: formatKeyBindings("openHelp"), action: "This help panel" },
 ];
 
 // ─── All commands (CLI + TUI) ───

@@ -1,5 +1,6 @@
 import type { CliRenderer, ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
+import { keyMatchesAction } from "../lib/keymap";
 import type { TrustDialogManager } from "../lib/trust-dialog-manager";
 import type { NotificationStore } from "../model/notification-store";
 import type { ProviderStore } from "../model/provider-store";
@@ -37,7 +38,7 @@ export function useTuiKeys(options: TuiKeysOptions): void {
       return;
     }
 
-    if ((key.meta || key.super || (key.ctrl && key.shift)) && key.name === "c") {
+    if (keyMatchesAction(key, "copyTranscript")) {
       key.preventDefault();
       const text = options.renderer.getSelection()?.getSelectedText();
       if (text?.trim() && options.renderer.copyToClipboardOSC52(text)) {
@@ -48,7 +49,7 @@ export function useTuiKeys(options: TuiKeysOptions): void {
       }
       return;
     }
-    if (key.ctrl && key.name === "c") {
+    if (keyMatchesAction(key, "cancelOrQuit")) {
       key.preventDefault();
       if (options.providerStore?.isOpen()) {
         options.providerStore.close();
@@ -61,45 +62,44 @@ export function useTuiKeys(options: TuiKeysOptions): void {
       }
       return;
     }
-    if (key.ctrl && key.name === "y") {
+    if (keyMatchesAction(key, "copyLastAssistant")) {
       key.preventDefault();
       options.store.copyLastAssistant();
       return;
     }
-    // Ctrl+F — open search overlay (Phase 2.5 B4)
-    if (key.ctrl && key.name === "f" && !options.store.isProcessing()) {
+    if (keyMatchesAction(key, "openSearch") && !options.store.isProcessing()) {
       key.preventDefault();
       if (options.openSearch) {
         options.openSearch();
       }
       return;
     }
-    if (key.ctrl && key.name === "l") {
+    if (keyMatchesAction(key, "clearMessages")) {
       key.preventDefault();
       options.store.clearMessages();
       return;
     }
-    if (key.ctrl && key.name === "m" && options.providerStore) {
+    if (keyMatchesAction(key, "openModelSelector") && options.providerStore) {
       key.preventDefault();
-      options.providerStore.toggle();
+      options.providerStore.open();
       return;
     }
-    if (key.ctrl && key.shift && key.name === "s") {
+    if (keyMatchesAction(key, "toggleSidebar")) {
       key.preventDefault();
       options.store.toggleSidebar();
       return;
     }
-    if (key.ctrl && key.shift && key.name === "b") {
+    if (keyMatchesAction(key, "previousSidebarMode")) {
       key.preventDefault();
       options.store.cycleSidebarMode(-1);
       return;
     }
-    if (key.ctrl && key.name === "b") {
+    if (keyMatchesAction(key, "nextSidebarMode")) {
       key.preventDefault();
       options.store.cycleSidebarMode(1);
       return;
     }
-    if (key.ctrl && key.name === "h") {
+    if (keyMatchesAction(key, "openHelp")) {
       key.preventDefault();
       options.store.openHelpSidebar();
       return;
@@ -135,8 +135,7 @@ export function useTuiKeys(options: TuiKeysOptions): void {
     }
   }
 
-  // Ctrl+E toggles the focused tool-result (Phase 2.5 B2)
-  if (key.ctrl && key.name === "e" && !options.store.isProcessing()) {
+  if (keyMatchesAction(key, "toggleToolResult") && !options.store.isProcessing()) {
     key.preventDefault();
     const tf = options.getToolFocus();
     if (tf) {
@@ -144,8 +143,7 @@ export function useTuiKeys(options: TuiKeysOptions): void {
     }
     return;
   }
-  // Ctrl+Down / Ctrl+Up cycle tool-result focus
-  if (key.ctrl && key.name === "down" && !options.store.isProcessing()) {
+  if (keyMatchesAction(key, "focusNextToolResult") && !options.store.isProcessing()) {
     key.preventDefault();
     const tf = options.getToolFocus();
     if (tf) {
@@ -153,7 +151,7 @@ export function useTuiKeys(options: TuiKeysOptions): void {
     }
     return;
   }
-  if (key.ctrl && key.name === "up" && !options.store.isProcessing()) {
+  if (keyMatchesAction(key, "focusPreviousToolResult") && !options.store.isProcessing()) {
     key.preventDefault();
     const tf = options.getToolFocus();
     if (tf) {

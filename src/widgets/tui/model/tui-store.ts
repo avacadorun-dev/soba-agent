@@ -7,9 +7,12 @@ import { CURRENT_SESSION_VERSION } from "../../../core/session/session-manager";
 import { ProjectTrustStore } from "../../../core/skills/project-trust-store";
 import { type PermissionMode, TrustManager } from "../../../core/trust/trust-manager";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../../tui/agent-status-line";
+import { registerKeysCommand } from "../commands/keys-command";
+import { registerModelCommand } from "../commands/model-command";
 import { registerClearCommand, registerNotificationsCommand } from "../commands/notification-command";
 import { slashCommandRegistry } from "../commands/registry";
 import { registerSearchCommand } from "../commands/search-command";
+import { registerSidebarCommand } from "../commands/sidebar-command";
 import type { SlashCommandContext } from "../commands/types";
 import { CommandHistory } from "../lib/command-history";
 import { formatToolArgs, formatToolResult, formatToolSummary } from "../lib/format-tool";
@@ -171,6 +174,18 @@ export class TuiStore {
     registerSearchCommand({
       openSearch: (initialQuery) => this.openSearch(initialQuery),
     });
+
+    registerSidebarCommand({
+      next: () => this.cycleSidebarMode(1),
+      previous: () => this.cycleSidebarMode(-1),
+      toggle: () => this.toggleSidebar(),
+      help: () => this.openHelpSidebar(),
+    });
+    registerKeysCommand();
+
+    if (this.options.providerStore) {
+      registerModelCommand({ providerStore: this.options.providerStore });
+    }
   }
 
   /**

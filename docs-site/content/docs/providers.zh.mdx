@@ -50,7 +50,7 @@ SOBA v0.4.2 提供 4 个内置 providers。它们都使用 OpenAI-compatible ada
 
 启动时，SOBA 会对 active provider 调用 `GET {baseUrl}/models`。结果缓存在当前进程内。随后 SOBA 会选择一个合适的默认模型，并优先选择偏代码的模型。
 
-缓存只存在于内存中。要刷新它，请重启 SOBA，或在 TUI 里用 `Ctrl+M` 打开模型选择器。
+缓存只存在于内存中。要刷新它，请重启 SOBA，或在 TUI 里用 `F2` 或 `/model` 打开模型选择器。
 
 ---
 
@@ -66,7 +66,7 @@ soba provider list
 
 ### 3.2. 选择模型
 
-在 TUI 中可以用 `Ctrl+M` 切换模型。选择器左侧显示 providers，右侧显示当前高亮 provider 的模型。搜索会同时过滤 provider 名称、模型名称和模型 ID；模型行会在可用时显示 context window、max output、streaming 和 thinking 标签。
+在 TUI 中可以用 `F2` 或 `/model` 切换模型。选择器左侧显示 providers，右侧显示当前高亮 provider 的模型。搜索会同时过滤 provider 名称、模型名称和模型 ID；模型行会在可用时显示 context window、max output、streaming 和 thinking 标签。`Ctrl+M` 仍作为 best-effort 旧别名保留，但很多终端会把它编码成 Enter。
 
 用 `↑` / `↓` 在模型间移动，用 `←` / `→` 或 `Tab` / `Shift+Tab` 切换 provider，用 `Enter` 选择高亮模型。打开选择器也会刷新内置 providers 的 discovery，所以在 TUI session 运行中获取新发布模型时，这是最快的方式。
 
@@ -252,14 +252,14 @@ soba provider list
 |---|---|---|
 | `401 Unauthorized` | API key 错误 | 检查 provider-specific env vars 或保存的 provider key |
 | `404 Not Found` | base URL 错误 | 检查 `--base-url` 或配置 |
-| `Model not found` | provider 不提供该模型 | 检查 `soba provider list`，打开 `Ctrl+M`，或传入有效的 `--model` |
+| `Model not found` | provider 不提供该模型 | 检查 `soba provider list`，打开 `F2` / `/model`，或传入有效的 `--model` |
 | `Context overflow` | 超过 context window | 降低 `maxOutputTokens` 或使用 compaction |
 | `429 Too Many Requests` | provider rate limit | 等待，或降低请求频率 |
 | Timeout | provider 没有响应 | 检查网络，或换一个 provider |
 
 ### 7.3. 刷新模型缓存
 
-模型缓存在当前进程内。如果 provider 新增了模型，请重启 SOBA，或打开 `Ctrl+M` 选择器重新 discovery。
+模型缓存在当前进程内。如果 provider 新增了模型，请重启 SOBA，或打开 `F2` / `/model` 选择器重新 discovery。
 
 ### 7.4. 遇到问题时切换 provider
 

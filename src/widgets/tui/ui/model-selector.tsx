@@ -1,5 +1,5 @@
 /**
- * ModelSelector — provider/model picker opened with Ctrl+M.
+ * ModelSelector — provider/model picker opened with F2 or /model.
  *
  * Dense two-column overlay:
  * - current selection and model limits are visible at the top
@@ -201,7 +201,7 @@ export function ModelSelector(props: {
             <b>{props.store.t("tui.modelSelector.title")}</b>
           </text>
           <text fg={theme().muted} wrapMode="none" truncate>
-            Ctrl+M
+            F2 / /model
           </text>
         </box>
 

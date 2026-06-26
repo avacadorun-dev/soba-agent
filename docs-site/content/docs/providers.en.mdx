@@ -50,7 +50,7 @@ SOBA v0.4.2 ships with four built-in providers. All of them use the OpenAI-compa
 
 On startup, SOBA calls `GET {baseUrl}/models` for the active provider. The result is cached in the current process. SOBA then chooses a suitable default model, with a preference for coding-oriented models.
 
-The cache lives only in memory. To refresh it, restart SOBA or open the TUI model picker with `Ctrl+M`.
+The cache lives only in memory. To refresh it, restart SOBA or open the TUI model picker with `F2` or `/model`.
 
 ---
 
@@ -66,7 +66,7 @@ The output groups providers and models by provider. The active model is marked w
 
 ### 3.2. Select a model
 
-In the TUI, switch models with `Ctrl+M`. The selector shows providers in the left column and models for the highlighted provider in the right column. Search filters both provider and model names/ids; each model row includes context window, max output, streaming, and thinking badges when known.
+In the TUI, switch models with `F2` or `/model`. The selector shows providers in the left column and models for the highlighted provider in the right column. Search filters both provider and model names/ids; each model row includes context window, max output, streaming, and thinking badges when known. `Ctrl+M` remains a best-effort legacy alias, but many terminals encode it as Enter.
 
 Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select. Opening the selector refreshes built-in provider discovery, so it is also the quickest way to pick up newly published models during a running TUI session.
 
@@ -252,14 +252,14 @@ soba provider list
 |---|---|---|
 | `401 Unauthorized` | Wrong API key | Check provider-specific env vars or saved provider key |
 | `404 Not Found` | Wrong base URL | Check `--base-url` or config |
-| `Model not found` | Model is not available from the provider | Check `soba provider list`, open `Ctrl+M`, or pass a valid `--model` |
+| `Model not found` | Model is not available from the provider | Check `soba provider list`, open `F2` / `/model`, or pass a valid `--model` |
 | `Context overflow` | Context window exceeded | Reduce `maxOutputTokens` or use compaction |
 | `429 Too Many Requests` | Provider rate limit | Wait or reduce request frequency |
 | Timeout | Provider is not responding | Check network or try another provider |
 
 ### 7.3. Refresh model cache
 
-Models are cached in the current process. If a provider adds a new model, restart SOBA or open the `Ctrl+M` selector to run discovery again.
+Models are cached in the current process. If a provider adds a new model, restart SOBA or open the `F2` / `/model` selector to run discovery again.
 
 ### 7.4. Switch provider when needed
 

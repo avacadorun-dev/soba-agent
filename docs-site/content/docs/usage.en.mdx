@@ -62,7 +62,7 @@ soba -r
 | `Enter` | Send the message | Input line |
 | `Ctrl+C` | Interrupt the current agent response | While the agent is working |
 | `Ctrl+Z` | Suspend SOBA (SIGTSTP) | Always |
-| `Ctrl+L` | Clear the screen | Always |
+| `Ctrl+L` / `/clear` | Clear the screen | Always |
 | `Ctrl+D` | Exit the TUI | Empty input line |
 | `Escape` | Clear input or close a dialog | Input line / dialog |
 | `Tab` | Complete slash commands | Input line |
@@ -70,11 +70,16 @@ soba -r
 | `Page Up` / `Page Down` | Scroll the TUI message history | Main area |
 | `Home` | Jump to the beginning of history | Main area |
 | `End` | Jump to the current end of history | Main area |
-| `Ctrl+M` | Open the provider/model selector | Main area |
+| `F1` | Open the help sidebar | Main area |
+| `F2` / `/model` | Open the provider/model selector | Main area |
+| `F3` / `/search` | Search conversation history | Main area |
+| `F6` / `/sidebar` | Cycle sidebar panels | Main area |
+| `Ctrl+Shift+S` / `/sidebar toggle` | Collapse or expand the sidebar | Main area |
+| `/keys` | Show the runtime keymap and command fallbacks | Main area |
 
 ### Model selector
 
-`Ctrl+M` opens a dense two-column selector. Providers are on the left, models for the highlighted provider are on the right, and the search box filters both provider and model names/ids.
+`F2` or `/model` opens a dense two-column selector. Providers are on the left, models for the highlighted provider are on the right, and the search box filters both provider and model names/ids. `Ctrl+M` is still accepted as a legacy alias when the terminal sends it, but many terminals encode it as Enter, so do not rely on it.
 
 Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select the highlighted model. The header shows the current provider/model, and each model row shows context window, max output, streaming, and thinking support when that metadata is available. Opening the selector refreshes built-in provider discovery, so newly available provider models can appear without restarting the whole session.
 
