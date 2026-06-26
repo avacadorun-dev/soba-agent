@@ -10,10 +10,12 @@ describe("fallback TUI commands", () => {
 
     expect(command.handler?.([], { addMessage: (message) => messages.push(message) })).toEqual({ handled: true });
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.type).toBe("info");
-    expect(messages[0]?.content).toContain("F2");
-    expect(messages[0]?.content).toContain("/model");
-    expect(messages[0]?.content).toContain("/sidebar");
+    const message = messages[0];
+    expect(message?.type).toBe("info");
+    if (message?.type !== "info") throw new Error("Expected /keys to emit an info message");
+    expect(message.content).toContain("F2");
+    expect(message.content).toContain("/model");
+    expect(message.content).toContain("/sidebar");
   });
 
   test("/sidebar defaults to next and supports explicit actions", () => {
