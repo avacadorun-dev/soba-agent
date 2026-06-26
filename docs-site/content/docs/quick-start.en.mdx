@@ -16,11 +16,16 @@ With npm:
 npm install -g soba-agent
 ```
 
+The npm package includes a pinned Bun runtime dependency, so users do not need to install Bun separately before running
+`soba`.
+
 With Bun:
 
 ```bash
 bun add -g soba-agent
 ```
+
+Use the Bun install path when Bun is already part of your toolchain and you want Bun to manage the global package.
 
 Standalone binaries for macOS and Linux are attached to GitHub Releases. For normal use, prefer the npm or Bun package;
 use a binary when you do not want a global package install.

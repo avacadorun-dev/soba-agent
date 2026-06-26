@@ -16,11 +16,17 @@ description: "快速启动 SOBA Agent v0.4.4：安装、provider、TUI、session
 npm install -g soba-agent
 ```
 
+npm 包包含固定版本的 Bun runtime 依赖，因此运行 `soba` 前不需要单独安装 Bun。
+
 使用 Bun：
 
 ```bash
 bun add -g soba-agent
 ```
+
+如果 Bun 已经是你的工具链的一部分，并且你希望由 Bun 管理全局包，可以使用这种方式。
+
+macOS 和 Linux 的 standalone binaries 会附在 GitHub Releases 中。普通使用建议优先选择 npm 或 Bun 包；如果不想全局安装包，可以使用二进制文件。
 
 检查 CLI：
 
