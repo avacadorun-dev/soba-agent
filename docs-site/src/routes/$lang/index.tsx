@@ -95,7 +95,7 @@ const features = [
     },
     desc: {
       en: "Read, edit, run, approve, or deny. Risky actions stay visible.",
-      ru: "Правки, команды и рискованные действия видно до того, как они случатся.",
+      ru: "Предлагает правки и предупреждает о рискованных действиях.",
       zh: "读取、编辑、运行、允许或拒绝。高风险操作会清楚显示。",
     },
   },
@@ -121,7 +121,7 @@ const features = [
     },
     desc: {
       en: "English, Russian, and Chinese UI/docs, with quick switching in the TUI.",
-      ru: "Интерфейс и документация на английском, русском и китайском.",
+      ru: "Интерфейс и документация на английском, русском и китайском языках.",
       zh: "英文、俄文和中文 UI/文档，可在 TUI 中快速切换。",
     },
   },
@@ -133,7 +133,7 @@ const workflow = [
     title: { en: "Read", ru: "Читает", zh: "读取" },
     desc: {
       en: "Looks at code, docs, memory, and session context first.",
-      ru: "Сначала разбирается в коде, документации и текущей сессии.",
+      ru: "Разбирается в коде, документации и текущей сессии.",
       zh: "先看代码、文档、记忆和会话上下文。",
     },
   },
@@ -151,7 +151,7 @@ const workflow = [
     title: { en: "Check", ru: "Проверяет", zh: "检查" },
     desc: {
       en: "Runs the project checks and leaves the result in the session.",
-      ru: "Запускает проверки и оставляет понятный результат.",
+      ru: "Запускает проверки и выдаёт понятный результат.",
       zh: "运行项目检查，并把结果留在会话里。",
     },
   },
@@ -163,14 +163,14 @@ const copy = {
     ru: "SOBA Agent v0.4.4",
     zh: "SOBA Agent v0.4.4 · 可爱的终端编码代理",
   },
-  headlineA: { en: "A tiny coding agent", ru: "Помощник для кода", zh: "一个小小的编码代理" },
+  headlineA: { en: "A tiny coding agent", ru: "Работа с кодом", zh: "一个小小的编码代理" },
   headlineB: { en: "that remembers", ru: "в консоли", zh: "会记住事情" },
   lead: {
     en: "SOBA helps with coding from the terminal. It remembers project notes, connects MCP tools over stdio or Streamable HTTP, keeps sessions tidy, and asks before risky moves.",
-    ru: "SOBA помогает разбираться с проектом, править код и не терять контекст. Без лишнего шума: команды, файлы, проверки и заметки остаются рядом.",
+    ru: "SOBA помогает вести проект, править код и структурировать файлы. Документы и заметки всегда остаются под рукой.",
     zh: "SOBA 在终端里帮你写代码。它记住项目笔记，通过 stdio 或 Streamable HTTP 连接 MCP 工具，整理会话，并在高风险操作前询问。",
   },
-  primaryCta: { en: "Read the docs", ru: "Читать доки", zh: "阅读文档" },
+  primaryCta: { en: "Read the docs", ru: "Документы", zh: "阅读文档" },
   secondaryCta: { en: "Quick start", ru: "Быстрый старт", zh: "快速入门" },
   githubCta: { en: "GitHub", ru: "GitHub", zh: "GitHub" },
   roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
@@ -179,7 +179,7 @@ const copy = {
     ru: ["Память", "MCP", "Консоль", "Сессии"],
     zh: ["项目记忆", "MCP 工具", "友好的 TUI", "长会话"],
   },
-  orbitEyebrow: { en: "How it fits", ru: "Как всё связано", zh: "如何组合" },
+  orbitEyebrow: { en: "How it fits", ru: "Архитектура", zh: "如何组合" },
   orbitTitle: {
     en: "One small core. Lots of helpful orbits.",
     ru: "Всё важное рядом",
@@ -187,7 +187,7 @@ const copy = {
   },
   orbitText: {
     en: "Memory, MCP, tools, sessions, capsules, and skills stay close to the agent core.",
-    ru: "Код, сессии, память проекта, инструменты и MCP собраны в один спокойный рабочий поток.",
+    ru: "Код, сессии, память проекта, инструменты и MCP собраны в один рабочий поток.",
     zh: "记忆、MCP、工具、会话、胶囊和技能围绕代理核心。",
   },
   architectureInput: {
@@ -212,13 +212,8 @@ const copy = {
   },
   featuresTitle: {
     en: "Small pieces that help a lot",
-    ru: "Что помогает работать спокойнее",
+    ru: "Что помогает в работе",
     zh: "小组件，大帮助",
-  },
-  featuresEyebrow: {
-    en: "SOBA capabilities",
-    ru: "Что умеет SOBA",
-    zh: "SOBA 能力",
   },
   workflowTitle: {
     en: "Read. Do. Check.",
@@ -227,17 +222,17 @@ const copy = {
   },
   terminalEyebrow: {
     en: "TUI preview",
-    ru: "Как это выглядит",
+    ru: "Интерфейс",
     zh: "TUI 预览",
   },
   terminalTitle: {
     en: "Still just your terminal",
-    ru: "Всё остаётся в консоли",
+    ru: "Интерактивный и one-shot режимы",
     zh: "仍然只是你的终端",
   },
   terminalText: {
     en: "Commands, tool output, compacted context, language switching, and checks stay visible in one calm place.",
-    ru: "Команды, правки, вывод инструментов и проверки остаются рядом.",
+    ru: "Для длинной работы есть интерактивная сессия с историей и контекстом. Для разовых задач — one-shot запуск одной командой.",
     zh: "命令、工具输出、压缩上下文、语言切换和检查都在一个安静的地方。",
   },
 };
@@ -398,7 +393,6 @@ function Home() {
         <section className="section-block border-t border-fd-border">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
             <div className="section-heading mx-auto max-w-3xl text-center">
-              <p className="eyebrow">{t(copy.featuresEyebrow)}</p>
               <h2>{t(copy.featuresTitle)}</h2>
             </div>
             <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
