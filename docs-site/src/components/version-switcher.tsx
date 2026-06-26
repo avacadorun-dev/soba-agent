@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 const versions = [
-  { label: "v0.4.2", value: "v0.4.2", latest: true },
+  { label: "v0.4.4", value: "v0.4.4", latest: true },
 ];
 
 export function VersionSwitcher({ lang }: { lang: string }) {
