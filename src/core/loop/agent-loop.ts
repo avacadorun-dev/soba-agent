@@ -28,9 +28,10 @@ import type {
   ResponseResource,
   Usage,
 } from "../client/types";
-import type { ContextManager, PreInferenceCheckResult } from "../compaction/context-manager";
+import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
+import { ContextController } from "../context/context-controller";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import {
   addRecoveryReflectionFix,
@@ -489,6 +490,7 @@ export class AgentLoop {
   private budgetTracker: BudgetTracker;
   private contextManager: ContextManager | undefined;
   private backgroundScheduler: BackgroundScheduler | undefined;
+  private contextController: ContextController;
   private skillManager: SkillManager | undefined;
   private autoCompactOverride: { enabled: boolean } | undefined;
   private projectMemory: ProjectMemorySource | undefined;
@@ -542,6 +544,12 @@ export class AgentLoop {
     this.skillManager = skillManager;
     this.autoCompactOverride = autoCompactOverride;
     this.projectMemory = projectMemory;
+    this.contextController = new ContextController({
+      contextManager: this.contextManager,
+      backgroundScheduler: this.backgroundScheduler,
+      autoCompactEnabled: () => this.autoCompactOverride?.enabled ?? true,
+      emit: (event) => this.emit(event),
+    });
     const permissionBroker = new PermissionBroker({
       trustManager: this.trustManager,
       requestPermission: createDangerousConfirmationAdapter({
@@ -697,130 +705,6 @@ export class AgentLoop {
     }
   }
 
-  /**
-   * Perform pre-inference check using ContextManager.
-   * Returns true if request can proceed, false if it should be blocked.
-   */
-  private async performPreInferenceCheck(
-    systemPromptTokens: number,
-    toolSchemaTokens: number,
-  ): Promise<PreInferenceCheckResult> {
-    if (!this.contextManager) {
-      return { canProceed: true, compactionPerformed: false };
-    }
-
-    const fingerprint = `turn_${this.state.turnCount}`;
-    const checkResult = await this.contextManager.preInferenceCheck(
-      systemPromptTokens,
-      toolSchemaTokens,
-      fingerprint,
-    );
-
-    if (checkResult.compactionPerformed && checkResult.outcome) {
-      this.emit({
-        type: "compaction_start",
-        timestamp: Date.now(),
-        reason: "pre_inference",
-        effectiveTokens: checkResult.outcome.metrics?.effectiveTokensBefore ?? 0,
-        hardLimit: 0, // Will be calculated from snapshot
-      });
-
-      this.emit({
-        type: "compaction_done",
-        timestamp: Date.now(),
-        reason: "pre_inference",
-        tokensBefore: checkResult.outcome.metrics?.effectiveTokensBefore ?? 0,
-        tokensAfter: checkResult.outcome.metrics?.estimatedTokensAfter ?? 0,
-        tokensSaved: checkResult.outcome.metrics?.reclaimedTokens ?? 0,
-        strategy: checkResult.outcome.strategy ?? "unknown",
-      });
-    }
-
-    if (!checkResult.canProceed) {
-      this.emit({
-        type: "context_error",
-        timestamp: Date.now(),
-        error: checkResult.error ?? "Pre-inference check failed",
-        effectiveTokens: 0,
-        hardLimit: 0,
-        recoveryAttempted: checkResult.compactionPerformed,
-      });
-    }
-
-    return checkResult;
-  }
-
-  /**
-   * Handle context overflow error using ContextManager.
-   * Returns true if recovery succeeded and request should be retried.
-   */
-  private async handleContextOverflow(
-    error: unknown,
-    systemPromptTokens: number,
-    toolSchemaTokens: number,
-  ): Promise<boolean> {
-    if (!this.contextManager) return false;
-
-    const errorKind = this.client.classifyError(error);
-    if (errorKind !== "context_overflow") return false;
-
-    const fingerprint = `turn_${this.state.turnCount}_overflow`;
-    
-    this.emit({
-      type: "compaction_start",
-      timestamp: Date.now(),
-      reason: "overflow_recovery",
-      effectiveTokens: 0,
-      hardLimit: 0,
-    });
-
-    const recoveryResult = await this.contextManager.handleContextOverflow(
-      systemPromptTokens,
-      toolSchemaTokens,
-      fingerprint,
-    );
-
-    if (recoveryResult.outcome) {
-      this.emit({
-        type: "compaction_done",
-        timestamp: Date.now(),
-        reason: "overflow_recovery",
-        tokensBefore: recoveryResult.outcome.metrics?.effectiveTokensBefore ?? 0,
-        tokensAfter: recoveryResult.outcome.metrics?.estimatedTokensAfter ?? 0,
-        tokensSaved: recoveryResult.outcome.metrics?.reclaimedTokens ?? 0,
-        strategy: recoveryResult.outcome.strategy ?? "unknown",
-      });
-    }
-
-    if (!recoveryResult.recovered || !recoveryResult.shouldRetry) {
-      this.emit({
-        type: "context_error",
-        timestamp: Date.now(),
-        error: recoveryResult.error ?? "Context overflow recovery failed",
-        effectiveTokens: 0,
-        hardLimit: 0,
-        recoveryAttempted: true,
-      });
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Record provider usage after successful inference.
-   */
-  private recordProviderUsage(response: ResponseResource): void {
-    if (!this.contextManager || !response.usage) return;
-
-    const fingerprint = `turn_${this.state.turnCount}`;
-    this.contextManager.recordProviderUsage(
-      response.usage.input_tokens,
-      null, // measuredThroughEntryId
-      fingerprint,
-    );
-  }
-
   private dispatchDangerousConfirmationEvent(event: DangerousConfirmationEvent): void {
     // Emit directly to listeners without going through the normal emit path
     // to bypass the emitEvents flag. Permission prompts must remain available
@@ -907,9 +791,7 @@ export class AgentLoop {
     }
 
     // Cancel any background compaction operation when starting a new turn
-    if (this.backgroundScheduler?.isRunning()) {
-      this.backgroundScheduler.cancel("new turn started");
-    }
+    this.contextController.cancelBackgroundCompaction("new turn started");
 
     this.state.isProcessing = true;
     this.state.turnCount++;
@@ -1011,45 +893,27 @@ export class AgentLoop {
       const verificationController = new VerificationController();
       let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
       const scheduleCheckpointCompaction = (checkpointEvents: CheckpointEvent[]): void => {
-        let milestone: CheckpointEvent | undefined;
-        for (let index = checkpointEvents.length - 1; index >= 0; index--) {
-          if (checkpointEvents[index].kind === "milestone") {
-            milestone = checkpointEvents[index];
-            break;
-          }
-        }
-        if (!milestone || !this.backgroundScheduler || !this.contextManager) return;
-
-        const autoCompactEnabled = this.autoCompactOverride?.enabled ?? true;
-        if (!autoCompactEnabled) return;
-
         const checkpointFingerprint = `turn_${turnIndex}_checkpoint_${iteration}`;
         const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
         const toolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
-        const { shouldCompact, snapshot } = this.contextManager.evaluateMilestone(
-          systemPromptTokens,
-          toolSchemaTokens,
-          checkpointFingerprint,
-        );
+        const decision = this.contextController.scheduleLatestMilestone({
+          checkpointEvents,
+          metrics: {
+            systemPromptTokens,
+            toolSchemaTokens,
+            requestFingerprint: checkpointFingerprint,
+          },
+        });
+        if (!decision.evaluated) return;
 
         this.debug({
           event: "loop/iteration",
           turn: turnIndex,
           iteration,
-          detail: shouldCompact
-            ? `milestone scheduled for capsule candidate: ${milestone.reason}`
-            : `milestone recorded without compaction: ${milestone.reason}`,
+          detail: decision.shouldCompact
+            ? `milestone scheduled for capsule candidate: ${decision.reason ?? ""}`
+            : `milestone recorded without compaction: ${decision.reason ?? ""}`,
         });
-
-        if (!shouldCompact) return;
-
-        this.backgroundScheduler.schedule(
-          "milestone",
-          snapshot,
-          systemPromptTokens,
-          toolSchemaTokens,
-          checkpointFingerprint,
-        );
       };
       const runAutoVerificationOpportunity = async (opportunity: string): Promise<boolean> => {
         const summaryBefore = evidenceLedger.getSummary();
@@ -1241,10 +1105,11 @@ export class AgentLoop {
         const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
         const toolSchemaTokens = Math.ceil(JSON.stringify(request.tools).length / 4);
         
-        const checkResult = await this.performPreInferenceCheck(
+        const checkResult = await this.contextController.performPreInferenceCheck({
           systemPromptTokens,
           toolSchemaTokens,
-        );
+          requestFingerprint: `turn_${this.state.turnCount}`,
+        });
         
         if (!checkResult.canProceed) {
           this.emit({ type: "thinking", timestamp: Date.now(), active: false });
@@ -1288,8 +1153,12 @@ export class AgentLoop {
             ? this.client.classifyError(error)
             : "unknown";
           if (errorType === "context_overflow") {
-            const canRecover = await this.handleContextOverflow(error, systemPromptTokens, toolSchemaTokens);
-            if (canRecover) {
+            const recoveryResult = await this.contextController.recoverContextOverflow({
+              systemPromptTokens,
+              toolSchemaTokens,
+              requestFingerprint: `turn_${this.state.turnCount}_overflow`,
+            });
+            if (recoveryResult.recovered && recoveryResult.shouldRetry) {
               // Recovery успешен, повторяем запрос
               this.emit({ type: "thinking", timestamp: Date.now(), active: true });
               continue;
@@ -1326,7 +1195,7 @@ export class AgentLoop {
         currentResponse = response;
         
         // Record provider usage for context tracking
-        this.recordProviderUsage(response);
+        this.contextController.recordProviderUsage(response, `turn_${this.state.turnCount}`);
         this.debug({
           event: "loop/response",
           turn: turnIndex,
@@ -1416,19 +1285,11 @@ export class AgentLoop {
 
           // Compute effective context tokens for the sidebar context counter.
           // Uses the context meter to estimate how full the context window is.
-          let effectiveContextTokens: number | undefined;
-          if (this.contextManager) {
-            try {
-              const ctxSnapshot = this.contextManager.getSnapshot(
-                systemPromptTokens,
-                toolSchemaTokens,
-                `turn_${turnIndex}_ctx`,
-              );
-              effectiveContextTokens = ctxSnapshot.effectiveTokens;
-            } catch {
-              // Swallow — context meter may not have enough data yet
-            }
-          }
+          const effectiveContextTokens = this.contextController.getEffectiveContextTokens({
+            systemPromptTokens,
+            toolSchemaTokens,
+            requestFingerprint: `turn_${turnIndex}_ctx`,
+          });
 
           this.emit({
             type: "budget_update",
@@ -2255,38 +2116,17 @@ export class AgentLoop {
           .length,
       });
 
-      // Schedule background compaction if turn completed successfully
-      if (
-        this.backgroundScheduler &&
-        this.contextManager &&
-        currentResponse?.status === "completed" &&
-        errors.length === 0
-      ) {
-        // Check if auto-compact is enabled (runtime toggle)
-        const autoCompactEnabled = this.autoCompactOverride?.enabled ?? true;
-        
-        if (autoCompactEnabled) {
-          const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
-          const toolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
-          const requestFingerprint = `turn_${turnIndex}_complete`;
-          
-          const { shouldCompact, snapshot } = this.contextManager.evaluateTurnComplete(
-            systemPromptTokens,
-            toolSchemaTokens,
-            requestFingerprint,
-          );
-          
-          if (shouldCompact) {
-            this.backgroundScheduler.schedule(
-              "turn_complete",
-              snapshot,
-              systemPromptTokens,
-              toolSchemaTokens,
-              requestFingerprint,
-            );
-          }
-        }
-      }
+      const turnCompleteSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
+      const turnCompleteToolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
+      this.contextController.scheduleTurnComplete({
+        responseStatus: currentResponse?.status,
+        errorCount: errors.length,
+        metrics: {
+          systemPromptTokens: turnCompleteSystemPromptTokens,
+          toolSchemaTokens: turnCompleteToolSchemaTokens,
+          requestFingerprint: `turn_${turnIndex}_complete`,
+        },
+      });
 
       return {
         items: allItems,
