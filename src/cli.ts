@@ -13,10 +13,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import packageJson from "../package.json";
+import { createSobaRuntime } from "./application/runtime-factory";
 import { parseArgs, printHelp } from "./cli/args";
 import { executeCommand } from "./cli/commands";
-import { ContextManager } from "./core/compaction/context-manager";
-import { BackgroundScheduler } from "./core/compaction/scheduler";
 import {
   firstTimeSetup,
   loadConfig,
@@ -27,31 +26,9 @@ import {
 import type { SobaConfig } from "./core/config/types";
 import { detectLocale, I18n, isLocale } from "./core/i18n/i18n";
 import type { Locale } from "./core/i18n/types";
-import { AgentLoop } from "./core/loop/agent-loop";
 import type { ApprovalDecision } from "./core/loop/types";
-import { McpClientManager } from "./core/mcp/client-manager";
-import { loadMcpConfig } from "./core/mcp/config";
-import { syncMcpToolsIntoRegistry } from "./core/mcp/tool-registry-sync";
-import { createMemoryTools } from "./core/memory/memory-tools";
-import { ProjectMemory } from "./core/memory/project-memory";
 import { SoundNotifier } from "./core/middleware/sound-notifier";
-import { OpenResponsesClientProxy } from "./core/provider/client-proxy";
-import { ProviderRegistry } from "./core/provider/registry";
 import { listSessions, SessionManager } from "./core/session/session-manager";
-import { SkillCatalog } from "./core/skills/catalog";
-import { SkillDiscovery } from "./core/skills/discovery";
-import { ProjectTrustStore } from "./core/skills/project-trust-store";
-import { SkillManager } from "./core/skills/skill-manager";
-import { bashTool } from "./core/tools/bash";
-import { checkpointTool } from "./core/tools/checkpoint";
-import { editTool } from "./core/tools/edit";
-import { inspectFileTool } from "./core/tools/inspect-file";
-import { lsTool } from "./core/tools/ls";
-import { readTool } from "./core/tools/read";
-import { searchFilesTool } from "./core/tools/search-files";
-import { ToolRegistry } from "./core/tools/tool-registry";
-import { writeTool } from "./core/tools/write";
-import { TrustManager } from "./core/trust/trust-manager";
 import { setColorDisabled } from "./tui/colors";
 import { createRenderer } from "./tui/renderer";
 import { initTheme } from "./tui/theme";
@@ -293,170 +270,30 @@ async function main() {
     session = interactive || cliArgs.prompt ? SessionManager.create(cwd) : SessionManager.inMemory(cwd);
   }
 
-  // Create provider registry (Phase 2.5 A1) — loads persisted state, exposes
-  // the active provider/model, and produces OpenResponsesClient instances.
-  // Everything else in the system holds a proxy, not a direct client, so
-  // switching providers/models at runtime (via /model or Ctrl+M) just works.
-  const persistedRegistry = await ProviderRegistry.loadFromFile();
-  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined);
-  // Reconcile: when CLI flags (--model, --base-url) change the active
-  // selection, override the persisted state for this run.
-  //
-  // Strategy:
-  // 1. If --model was explicitly passed or config.model diverges from the
-  //    persisted defaultModel, scan EVERY provider (custom + built-in) for
-  //    the model. Built-in getModel() returns synthetic fallback for any id,
-  //    which is acceptable here because the user explicitly asked for it.
-  // 2. Otherwise fall back to baseUrl matching (--base-url flag).
-  // 3. If nothing matched, leave the persisted selection intact.
-  const persistedDefaultModel = persistedRegistry?.defaultModel;
-  const modelExplicitlyPassed = Boolean(cliArgs.model);
-  const modelDiffersFromPersisted = config.model && config.model !== persistedDefaultModel;
-  let cliProviderId: string | undefined;
-  if (modelExplicitlyPassed || modelDiffersFromPersisted) {
-    for (const p of providerRegistry.getAllProviders()) {
-      if (providerRegistry.getModel(p.id, config.model)) {
-        cliProviderId = p.id;
-        break;
-      }
-    }
-  }
-  if (!cliProviderId) {
-    cliProviderId = providerRegistry.getAllProviders().find((p) => p.baseUrl === config.baseUrl)?.id;
-  }
-  if (cliProviderId) {
-    providerRegistry.setActive(cliProviderId, config.model);
-  }
-  const clientProxy = new OpenResponsesClientProxy(providerRegistry);
-  // Apply CLI --base-url override to the active provider so real HTTP
-  // requests use the overridden URL (not just the status-bar display).
-  if (cliArgs.baseUrl) {
-    providerRegistry.setBaseUrl(clientProxy.getActiveProviderId(), cliArgs.baseUrl);
-  }
-  // Backwards-compat: expose the proxy via `client` so the rest of the file
-  // (which expects OpenResponsesClient) keeps working unchanged.
-  const client = clientProxy;
-
-  // Create tool registry
-  const tools = new ToolRegistry();
-  tools.register(readTool);
-  tools.register(writeTool);
-  tools.register(bashTool);
-  tools.register(editTool);
-  tools.register(lsTool);
-  tools.register(searchFilesTool);
-  tools.register(inspectFileTool);
-  tools.register(checkpointTool);
-  for (const memoryTool of createMemoryTools()) {
-    tools.register(memoryTool);
-  }
-
-  const projectMemory = new ProjectMemory({ projectRoot: cwd });
-  projectMemory.initialize();
-
-  const trustManager = new TrustManager();
-  const mcpConfig = await loadMcpConfig({ projectRoot: cwd });
-  const mcpManager = mcpConfig ? new McpClientManager({ servers: mcpConfig.servers }) : undefined;
-  if (mcpManager) {
-    await syncMcpToolsIntoRegistry(tools, mcpManager, { trustManager });
-  }
-
-  // Create ContextManager and BackgroundScheduler for proactive compaction
-  const providerIdentity = client.getProviderIdentity();
-  const providerCapabilities = client.getProviderCapabilities();
-  
-  const contextManagerConfig = {
-    compaction: compactionConfig,
-    contextWindow: config.contextWindow,
-    maxOutputTokens: config.maxOutputTokens,
-    provider: providerIdentity,
-    capabilities: providerCapabilities,
-    generatorConfig: {
-      modelInvoker: {
-        invoke: async (prompt: string, _signal: AbortSignal): Promise<string> => {
-          const response = await client.create({
-            model: config.model,
-            input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
-            max_output_tokens: config.maxOutputTokens,
-          });
-          const textOutput = response.output.find((o) => o.type === "message" && o.role === "assistant");
-          return textOutput && "content" in textOutput
-            ? (textOutput as { content: Array<{ text: string }> }).content.map((c) => c.text).join("")
-            : "";
-        },
-      },
-    },
-  };
-  
-  const contextManager = new ContextManager(session, contextManagerConfig);
-  
-  const schedulerConfig = {
-    backgroundTimeoutMs: compactionConfig.backgroundTimeoutMs,
-  };
-  
-  const backgroundScheduler = new BackgroundScheduler(session, contextManager, schedulerConfig);
-
-  // Create SkillManager for skill discovery and activation
-  const sobaDir = join(homedir(), ".soba");
-  const trustStore = new ProjectTrustStore({ sobaDir });
-  const userSkillsPath = join(sobaDir, "skills");
-  
-  const bundledSkillsPath = process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills");
-  
-  const skillDiscovery = new SkillDiscovery({
-    projectPath: cwd,
-    userSkillsPath,
-    bundledSkillsPath,
-    trustStore,
-  });
-  
-  const skillCatalog = new SkillCatalog({ discovery: skillDiscovery });
-  
-  const skillManager = new SkillManager({
-    catalog: skillCatalog,
-    discovery: skillDiscovery,
-    trustStore,
-  });
-  
-  // Initial scan of skills
-  skillManager.refresh();
-
-  // Register activate_skill tool if skills are available
-  if (skillCatalog.getModelInvocable().length > 0) {
-    const { createActivateSkillTool } = await import("./core/tools/activate-skill");
-    const activateSkillTool = createActivateSkillTool({
-      catalog: skillCatalog,
-      onActivate: (ref) => {
-        // Update runtime activeSkills (for ephemeral messages + events)
-        skillManager.activate(ref.name);
-        // Persist activation in session
-        session.appendSkillActivation({ action: "activate", skill: ref });
-      },
-      isActive: (name, revision) => {
-        // Check if skill is already active with same revision
-        const activeSkills = skillManager.getActiveSkills();
-        return activeSkills.some(
-          (skill) => skill.name === name && skill.revision === revision,
-        );
-      },
-    });
-    tools.register(activateSkillTool);
-  }
-
-  // Create agent loop
-  // Streaming: enabled by default for interactive mode, can be overridden
-  const useStreaming = cliArgs.noStream ? false : cliArgs.stream || interactive;
-
-  const loop = new AgentLoop(client, session, tools, cwd, {
-    emitEvents: true,
+  const runtimeComposition = await createSobaRuntime({
+    cwd,
+    session,
+    config,
+    compactionConfig,
+    interactive,
+    modelExplicitlyPassed: Boolean(cliArgs.model),
+    baseUrlOverride: cliArgs.baseUrl,
+    noStream: cliArgs.noStream,
+    stream: cliArgs.stream,
     tokenBudget: cliArgs.budget ?? 0,
-    stream: useStreaming,
     debug: cliArgs.debug,
-    maxAgentIterations: config.maxAgentIterations,
-    maxStalledIterations: config.maxStalledIterations,
-    maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
-    bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
-  }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory);
+  });
+  const {
+    agentLoop: loop,
+    providerRegistry,
+    client,
+    tools,
+    contextManager,
+    skillManager,
+    trustStore,
+    mcpManager,
+    trustManager,
+  } = runtimeComposition;
 
   // Sound notifications — plays audio on agent events
   const soundNotifier = new SoundNotifier(soundConfig);
@@ -479,7 +316,7 @@ async function main() {
     const { ProviderStore } = await import("./widgets/tui/model/provider-store");
     const { slashCommandRegistry } = await import("./widgets/tui/commands/registry");
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
-    const providerStore = new ProviderStore({ registry: providerRegistry, proxy: clientProxy, i18n });
+    const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({
       cwd,
       tokenBudget: cliArgs.budget ?? 0,

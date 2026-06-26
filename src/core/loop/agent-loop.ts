@@ -38,6 +38,7 @@ import {
   type RecoveryReflectionDraft,
   writeRecoveryReflectionLesson,
 } from "../memory/reflection-memory-policy";
+import { extractTextFromOutput, ModelTurnRunner } from "../model-turn/model-turn-runner";
 import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SessionManager } from "../session/session-manager";
 import type {
@@ -46,6 +47,7 @@ import type {
   UserMessageItemParam,
 } from "../session/types";
 import type { SkillManager } from "../skills/skill-manager";
+import { ToolCallExecutor } from "../tool-execution/tool-call-executor";
 import { type CheckpointArgs, type CheckpointEvent, extractCheckpointEvent } from "../tools/checkpoint";
 import { createToolErrorResult } from "../tools/errors";
 import type { ToolRegistry } from "../tools/tool-registry";
@@ -91,16 +93,6 @@ export function createUserItem(text: string): UserMessageItemParam {
     role: "user",
     content: [{ type: "input_text", text }],
   };
-}
-
-/**
- * Extract text from output content blocks.
- */
-function extractTextFromOutput(item: MessageField): string {
-  return item.content
-    .filter((c): c is OutputTextContent => c.type === "output_text")
-    .map((c) => c.text)
-    .join("");
 }
 
 function extractToolResultText(result: ToolResult): string {
@@ -500,8 +492,7 @@ export class AgentLoop {
   private autoCompactOverride: { enabled: boolean } | undefined;
   private projectMemory: ProjectMemorySource | undefined;
   private _abortController: AbortController | null = null;
-  private _toolAbortController: AbortController | null = null;
-  private _directShellAbortController: AbortController | null = null;
+  private toolExecutor: ToolCallExecutor;
   private state = {
     totalUsage: {
       input_tokens: 0,
@@ -550,6 +541,14 @@ export class AgentLoop {
     this.skillManager = skillManager;
     this.autoCompactOverride = autoCompactOverride;
     this.projectMemory = projectMemory;
+    this.toolExecutor = new ToolCallExecutor({
+      registry: this.tools,
+      trustManager: this.trustManager,
+      toolContext: () => this.createToolContext(),
+      emit: (event) => this.emit(event),
+      requestConfirmation: (toolName, toolCallId, description, reason) =>
+        this.requestDangerousConfirmation(toolName, toolCallId, description, reason),
+    });
   }
 
   /** Get current total usage */
@@ -904,22 +903,11 @@ export class AgentLoop {
 
   /** Stop only the currently executing tool and allow the agent turn to continue. */
   abortActiveTool(): boolean {
-    if (this._directShellAbortController && !this._directShellAbortController.signal.aborted) {
-      this._directShellAbortController.abort();
-      return true;
-    }
-    if (!this._toolAbortController || this._toolAbortController.signal.aborted) {
-      return false;
-    }
-    this._toolAbortController.abort();
-    return true;
+    return this.toolExecutor.abortActiveTool();
   }
 
   hasActiveTool(): boolean {
-    return (
-      (this._directShellAbortController !== null && !this._directShellAbortController.signal.aborted) ||
-      (this._toolAbortController !== null && !this._toolAbortController.signal.aborted)
-    );
+    return this.toolExecutor.hasActiveTool();
   }
 
   /**
@@ -927,57 +915,7 @@ export class AgentLoop {
    * Explicit user shell commands bypass agent trust checks.
    */
   async runShellCommand(command: string, silent = false): Promise<ToolResult> {
-    if (this._directShellAbortController) {
-      throw new Error("A direct shell command is already running");
-    }
-    const tool = this.tools.get("bash");
-    if (!tool) {
-      throw new Error('Tool "bash" is not registered');
-    }
-
-    const toolCall = { call_id: `user_shell_${crypto.randomUUID()}`, name: "bash" };
-    const startTime = Date.now();
-    const controller = new AbortController();
-    this._directShellAbortController = controller;
-    this.emit({
-      type: "tool_call_start",
-      timestamp: startTime,
-      toolCallId: toolCall.call_id,
-      toolName: toolCall.name,
-      args: { command },
-    });
-
-    let result: ToolResult;
-    try {
-      result = await tool.execute({ command }, this.createToolContext(), controller.signal);
-    } catch (error) {
-      result = {
-        content: [{ type: "text", text: `Error executing "bash": ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      };
-    } finally {
-      if (this._directShellAbortController === controller) {
-        this._directShellAbortController = null;
-      }
-    }
-
-    if (!silent) {
-      this.emit({
-        type: "tool_call_result",
-        timestamp: Date.now(),
-        toolCallId: toolCall.call_id,
-        toolName: toolCall.name,
-        result,
-      });
-    }
-    this.emit({
-      type: "tool_call_end",
-      timestamp: Date.now(),
-      toolCallId: toolCall.call_id,
-      toolName: toolCall.name,
-      durationMs: Date.now() - startTime,
-    });
-    return result;
+    return this.toolExecutor.runDirectShellCommand(command, silent);
   }
 
   /**
@@ -1356,41 +1294,17 @@ export class AgentLoop {
 
         // Send to LLM — use streaming if enabled
         let response: ResponseResource;
-        const toolCalls: Array<FunctionCallField> = [];
-        const assistantMessages: Array<MessageField> = [];
+        let toolCalls: Array<FunctionCallField> = [];
+        let assistantMessages: Array<MessageField> = [];
 
         try {
-          if (this.options.stream) {
-            response = await this.runStreamingRequest(
-              request,
-              assistantMessages,
-              toolCalls,
-            );
-          } else {
-            response = await this.client.create(request);
-            // Extract output items from non-streaming response
-            for (const item of response.output) {
-              if (item.type === "function_call") {
-                toolCalls.push(item as FunctionCallField);
-              } else if (item.type === "message") {
-                assistantMessages.push(item as MessageField);
-              }
-            }
-
-            // Emit assistant messages for non-streaming
-            for (const msg of assistantMessages) {
-              const text = extractTextFromOutput(msg);
-              if (text) {
-                this.emit({
-                  type: "assistant_message",
-                  timestamp: Date.now(),
-                  messageId: msg.id,
-                  text,
-                  reasoningContent: msg.reasoning_content,
-                });
-              }
-            }
-          }
+          const modelTurn = await new ModelTurnRunner(this.client, {
+            stream: this.options.stream,
+            emit: (event) => this.emit(event),
+          }).run(request);
+          response = modelTurn.response;
+          toolCalls = modelTurn.toolCalls;
+          assistantMessages = modelTurn.assistantMessages;
         } catch (error) {
           this.emit({ type: "thinking", timestamp: Date.now(), active: false });
           
@@ -2085,215 +1999,60 @@ export class AgentLoop {
         let mutationSucceededInCurrentBatch = false;
         for (const toolCall of toolCalls) {
           hasUsedTools = true;
-          const startTime = Date.now();
 
-          // Emit tool call start
-          let parsedArgs: Record<string, unknown> = {};
-          try {
-            parsedArgs = JSON.parse(toolCall.arguments);
-          } catch {
-            parsedArgs = {};
-          }
+          const narrationArgs = safeParseArgs(toolCall.arguments);
 
           if (toolCall.name === "edit" || toolCall.name === "write") {
             emitNarrationOnce(
               "edit_intent",
               `Preparing a scoped ${toolCall.name} change before running verification.`,
             );
-          } else if (toolCall.name === "bash" && typeof parsedArgs.command === "string") {
-            const command = parsedArgs.command.toLowerCase();
+          } else if (toolCall.name === "bash" && typeof narrationArgs.command === "string") {
+            const command = narrationArgs.command.toLowerCase();
             if (isVerificationCommand(command)) {
               emitNarrationOnce("verification", "Running a project verification command.", [toolCall.call_id]);
             }
           }
 
-          this.emit({
-            type: "tool_call_start",
-            timestamp: startTime,
-            toolCallId: toolCall.call_id,
-            toolName: toolCall.name,
-            args: parsedArgs,
-          });
-
-          // Execute the tool (with trust check)
-          const tool = this.tools.get(toolCall.name);
-          let result: ToolResult;
-
-          // Check trust level before execution
-          const trustCheck =
-            toolCall.name === "bash" && typeof parsedArgs.command === "string"
-              ? this.trustManager.checkCommand(parsedArgs.command)
-              : this.trustManager.checkTool(toolCall.name);
-          if (trustCheck.needsConfirmation) {
-            // Build description for the confirmation prompt
-            const description =
-              toolCall.name === "bash" && typeof parsedArgs.command === "string"
-                ? `bash: ${parsedArgs.command}`
-                : `${toolCall.name}(${toolCall.arguments.slice(0, 200)})`;
-
-            // Ask user for confirmation via event (blocking until resolved)
-            const decision = await this.requestDangerousConfirmation(
-              toolCall.name,
-              toolCall.call_id,
-              description,
-              trustCheck.reason,
+          const execution = await this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
+          const { parsedArgs, result } = execution;
+          if (execution.denied) {
+            this.state.denialCount++;
+            this.state.lastDeniedOperation = execution.denied.description;
+            recordToolOutcome(
+              errors,
+              successfulToolCallIds,
+              toolCall,
+              true,
+              extractToolResultText(result),
+              iteration,
+              "security_denial",
             );
-
-            if (decision === "session") {
-              const approvalKind = toolCall.name === "bash" ? "command" : "tool";
-              const approvalValue =
-                toolCall.name === "bash" && typeof parsedArgs.command === "string"
-                  ? parsedArgs.command
-                  : toolCall.name;
-              this.trustManager.approveForSession(approvalKind, approvalValue);
-            } else if (decision === "repo" || decision === "full") {
-              this.trustManager.setPermissionMode(decision);
-            }
-
-            if (decision === "deny") {
-              this.state.denialCount++;
-              this.state.lastDeniedOperation = description;
-              result = {
-                ...createToolErrorResult({
-                  code: "trust_confirmation_denied",
-                  category: "trust",
-                  message: `Denied: ${trustCheck.reason}. The operation was cancelled by the user. Do NOT attempt alternative approaches — the user has decided this operation should not be performed.`,
-                  nextAction: "Stop or ask the user for explicit confirmation if this exact operation is still required.",
-                  fingerprint: `trust:confirmation_denied:${toolCall.name}`,
-                }),
-              };
-              this.emitToolResultAndEnd(toolCall, result, startTime);
-              recordToolOutcome(
-                errors,
-                successfulToolCallIds,
-                toolCall,
-                true,
-                extractToolResultText(result),
-                iteration,
-                "security_denial",
-              );
-              evidenceLedger.recordToolOutcome({
-                toolCallId: toolCall.call_id,
-                toolName: toolCall.name,
-                arguments: toolCall.arguments,
-                isError: true,
-                output: extractToolResultText(result),
-                iteration,
-              });
-              const outputItem = toolResultToOutputItem(
-                result,
-                toolCall.call_id,
-                toolCall.name,
-              );
-              this.session.appendItem(outputItem);
-              allItems.push(outputItem);
-              iterationOutcomes.push({
-                toolName: toolCall.name,
-                arguments: toolCall.arguments,
-                result: extractToolResultText(result),
-                isError: result.isError,
-                error: result.error,
-              });
-              continue;
-            }
-            // User allowed — continue to normal execution below
-          }
-
-          if (!tool) {
-            result = createToolErrorResult({
-              code: "tool_not_registered",
-              category: "validation",
-              message: `Tool "${toolCall.name}" is not registered. Available tools: ${this.tools.getNames().join(", ")}`,
-              nextAction: "Call one of the registered tools or inspect the available tool list before retrying.",
-              fingerprint: `validation:tool_not_registered:${toolCall.name}`,
+            evidenceLedger.recordToolOutcome({
+              toolCallId: toolCall.call_id,
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+              isError: true,
+              output: extractToolResultText(result),
+              iteration,
             });
-          } else {
-            try {
-              let args: Record<string, unknown> = parsedArgs;
-              if (tool.prepareArgs) {
-                try {
-                  args = tool.prepareArgs(parsedArgs) as Record<
-                    string,
-                    unknown
-                  >;
-                } catch (err) {
-                  result = createToolErrorResult({
-                    code: "tool_invalid_arguments",
-                    category: "validation",
-                    message: `Error preparing arguments for "${toolCall.name}": ${err instanceof Error ? err.message : String(err)}`,
-                    nextAction: "Fix the tool arguments to match the schema before retrying.",
-                    fingerprint: `validation:tool_invalid_arguments:${toolCall.name}`,
-                  });
-                  // Skip execution — args couldn't be parsed
-                  this.emitToolResultAndEnd(toolCall, result, startTime);
-                  recordToolOutcome(
-                    errors,
-                    successfulToolCallIds,
-                    toolCall,
-                    true,
-                    extractToolResultText(result),
-                    iteration,
-                  );
-                  evidenceLedger.recordToolOutcome({
-                    toolCallId: toolCall.call_id,
-                    toolName: toolCall.name,
-                    arguments: toolCall.arguments,
-                    isError: true,
-                    output: extractToolResultText(result),
-                    iteration,
-                  });
-                  const outputItem = toolResultToOutputItem(
-                    result,
-                    toolCall.call_id,
-                    toolCall.name,
-                  );
-                  this.session.appendItem(outputItem);
-                  allItems.push(outputItem);
-                  iterationOutcomes.push({
-                    toolName: toolCall.name,
-                    arguments: toolCall.arguments,
-                    result: extractToolResultText(result),
-                    isError: result.isError,
-                    error: result.error,
-                  });
-                  continue;
-                }
-              }
-
-              const toolAbortController = new AbortController();
-              this._toolAbortController = toolAbortController;
-              const turnSignal = this._abortController?.signal;
-              const abortToolWithTurn = () => toolAbortController.abort();
-              if (turnSignal?.aborted) {
-                toolAbortController.abort();
-              } else {
-                turnSignal?.addEventListener("abort", abortToolWithTurn, { once: true });
-              }
-              try {
-                result = await tool.execute(
-                  args,
-                  this.createToolContext(),
-                  toolAbortController.signal,
-                );
-              } finally {
-                turnSignal?.removeEventListener("abort", abortToolWithTurn);
-                if (this._toolAbortController === toolAbortController) {
-                  this._toolAbortController = null;
-                }
-              }
-            } catch (err) {
-              result = createToolErrorResult({
-                code: "tool_execution_failed",
-                category: "unknown",
-                message: `Error executing "${toolCall.name}": ${err instanceof Error ? err.message : String(err)}`,
-                nextAction: "Inspect the error, change the approach, and avoid retrying the same call unchanged.",
-                fingerprint: `unknown:tool_execution_failed:${toolCall.name}`,
-              });
-            }
+            const outputItem = toolResultToOutputItem(
+              result,
+              toolCall.call_id,
+              toolCall.name,
+            );
+            this.session.appendItem(outputItem);
+            allItems.push(outputItem);
+            iterationOutcomes.push({
+              toolName: toolCall.name,
+              arguments: toolCall.arguments,
+              result: extractToolResultText(result),
+              isError: result.isError,
+              error: result.error,
+            });
+            continue;
           }
 
-          // Emit result and end
-          this.emitToolResultAndEnd(toolCall, result, startTime);
           recordToolOutcome(
             errors,
             successfulToolCallIds,
@@ -2653,199 +2412,10 @@ export class AgentLoop {
         checkpointState,
       };
     } finally {
-      this._toolAbortController = null;
+      this.toolExecutor.clearActiveTool();
       this._abortController = null;
       this.state.isProcessing = false;
     }
-  }
-
-  /**
-   * Run a streaming request and populate toolCalls + assistantMessages arrays.
-   * Emits text deltas, function_call deltas, and done events in real time.
-   */
-  private async runStreamingRequest(
-    request: CreateResponseParams,
-    assistantMessages: MessageField[],
-    toolCalls: FunctionCallField[],
-  ): Promise<ResponseResource> {
-    let finalResponse: ResponseResource | null = null;
-    const currentFcArgs: Map<
-      number,
-      { id: string; name: string; args: string }
-    > = new Map();
-    const currentReasoning = new Map<string, string>();
-
-    for await (const event of this.client.createStream(request)) {
-      switch (event.type) {
-        case "response.created":
-          finalResponse = event.response;
-          break;
-
-        case "response.output_item.added": {
-          const item = event.item;
-
-          if (item.type === "message") {
-            const reasoning = currentReasoning.get(item.id);
-            if (reasoning) {
-              (item as MessageField).reasoning_content = reasoning;
-            }
-            assistantMessages.push(item as MessageField);
-            this.emit({
-              type: "assistant_message_start",
-              timestamp: Date.now(),
-              messageId: item.id,
-            });
-          } else if (item.type === "function_call") {
-            const fc = item as FunctionCallField;
-            toolCalls.push(fc);
-
-            // Function calls from streaming arrive with full arguments at [DONE]
-            if (fc.arguments) {
-              this.emit({
-                type: "function_call_done",
-                timestamp: Date.now(),
-                toolCallId: fc.call_id,
-                toolName: fc.name,
-                arguments: fc.arguments,
-              });
-            }
-          }
-          break;
-        }
-
-        case "response.reasoning.delta": {
-          const previous = currentReasoning.get(event.item_id) ?? "";
-          const next = previous + event.delta;
-          currentReasoning.set(event.item_id, next);
-
-          const msg = assistantMessages.find((m) => m.id === event.item_id);
-          if (msg) {
-            msg.reasoning_content = next;
-          }
-
-          this.emit({
-            type: "assistant_reasoning_delta",
-            timestamp: Date.now(),
-            messageId: event.item_id,
-            delta: event.delta,
-          });
-          break;
-        }
-
-        case "response.output_text.delta": {
-          this.emit({
-            type: "assistant_text_delta",
-            timestamp: Date.now(),
-            messageId: event.item_id,
-            delta: event.delta,
-          });
-
-          // Update the message content in our local list
-          const msg = assistantMessages.find((m) => m.id === event.item_id);
-          if (msg) {
-            if (msg.content.length === 0) {
-              msg.content.push({
-                type: "output_text",
-                text: event.delta,
-                annotations: [],
-              });
-            } else {
-              const lastContent = msg.content[msg.content.length - 1];
-              if (lastContent.type === "output_text") {
-                lastContent.text += event.delta;
-              }
-            }
-          }
-          break;
-        }
-
-        case "response.output_item.done": {
-          const item = event.item;
-
-          if (item.type === "message") {
-            this.emit({
-              type: "assistant_text_done",
-              timestamp: Date.now(),
-              messageId: item.id,
-              fullText: extractTextFromOutput(item),
-              reasoningContent: (item as MessageField).reasoning_content,
-            });
-
-            // Update the message in our list with final content
-            const idx = assistantMessages.findIndex((m) => m.id === item.id);
-            if (idx >= 0) {
-              assistantMessages[idx] = item as MessageField;
-            }
-          } else if (item.type === "function_call") {
-            // Update function call with final data (args + reasoning_content)
-            const fc = item as FunctionCallField;
-            const idx = toolCalls.findIndex((t) => t.call_id === fc.call_id);
-            if (idx >= 0) {
-              toolCalls[idx] = fc;
-            }
-          }
-          break;
-        }
-
-        case "response.function_call_arguments.delta": {
-          const fc = currentFcArgs.get(event.output_index) ?? {
-            id: event.item_id,
-            name: "",
-            args: "",
-          };
-          fc.id = event.item_id;
-          fc.args += event.delta;
-          currentFcArgs.set(event.output_index, fc);
-
-          this.emit({
-            type: "function_call_delta",
-            timestamp: Date.now(),
-            toolCallId: event.item_id,
-            toolName: fc.name,
-            delta: event.delta,
-          });
-          break;
-        }
-
-        case "response.function_call_arguments.done": {
-          const fc = currentFcArgs.get(event.output_index);
-          if (fc) {
-            fc.args = event.arguments;
-            currentFcArgs.set(event.output_index, fc);
-
-            // Update the function call item in toolCalls
-            const tc = toolCalls.find((t) => t.call_id === event.item_id);
-            if (tc) {
-              tc.arguments = event.arguments;
-            }
-
-            this.emit({
-              type: "function_call_done",
-              timestamp: Date.now(),
-              toolCallId: event.item_id,
-              toolName: fc.name,
-              arguments: event.arguments,
-            });
-          }
-          break;
-        }
-
-        case "response.completed":
-          finalResponse = event.response;
-          // Note: assistant_text_done is already emitted per-item in output_item.done.
-          // response.completed is NOT a second signal — skip to avoid duplicates.
-          break;
-
-        case "response.failed":
-          throw new Error(event.error.message);
-      }
-    }
-
-    if (!finalResponse) {
-      throw new Error("Stream completed without a final response");
-    }
-
-    return finalResponse;
   }
 
   private emitToolResultAndEnd(

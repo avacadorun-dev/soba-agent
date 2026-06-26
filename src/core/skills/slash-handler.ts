@@ -11,11 +11,6 @@
  * Spec: internal-design-notes § Activation
  */
 
-import type { SlashCommandRegistry } from "../../widgets/tui/commands/registry";
-import type {
-  SlashCommandContext,
-  SlashCommandResult,
-} from "../../widgets/tui/commands/types";
 import type { ActivatedSkillRef } from "../session/types-v2";
 import type { SkillManager } from "../skills/skill-manager";
 
@@ -24,6 +19,16 @@ export interface SkillSlashCommandResult {
   activation?: ActivatedSkillRef;
   userMessage?: string;
   error?: string;
+}
+
+export interface SlashCommandFallbackResult {
+  handled: boolean;
+  message?: string;
+  exit?: boolean;
+}
+
+export interface SlashCommandFallbackRegistry<TContext = unknown> {
+  dispatch(input: string, context: TContext): SlashCommandFallbackResult | undefined;
 }
 
 /**
@@ -112,10 +117,10 @@ export function isSkillSlashCommand(input: string): boolean {
  * @param context - Context for TUI interaction
  * @returns The dispatch result, or undefined if the command is not found
  */
-export function tryTuiRegistryFallback(
+export function tryTuiRegistryFallback<TContext>(
   input: string,
-  registry: SlashCommandRegistry,
-  context: SlashCommandContext,
-): SlashCommandResult | undefined {
+  registry: SlashCommandFallbackRegistry<TContext>,
+  context: TContext,
+): SlashCommandFallbackResult | undefined {
   return registry.dispatch(input, context);
 }
