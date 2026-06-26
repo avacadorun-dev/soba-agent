@@ -39,6 +39,10 @@ import {
   writeRecoveryReflectionLesson,
 } from "../memory/reflection-memory-policy";
 import { extractTextFromOutput, ModelTurnRunner } from "../model-turn/model-turn-runner";
+import {
+  createDangerousConfirmationAdapter,
+  PermissionBroker,
+} from "../permissions/permission-broker";
 import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SessionManager } from "../session/session-manager";
 import type {
@@ -75,8 +79,8 @@ import {
   type AgentLoopOptions,
   type AgentTurnError,
   type AgentTurnResult,
-  type ApprovalDecision,
   type CheckpointWorkPlanState,
+  type DangerousConfirmationEvent,
   DEFAULT_LOOP_OPTIONS,
   type TurnStopReasonEvent,
 } from "./types";
@@ -541,13 +545,18 @@ export class AgentLoop {
     this.skillManager = skillManager;
     this.autoCompactOverride = autoCompactOverride;
     this.projectMemory = projectMemory;
+    const permissionBroker = new PermissionBroker({
+      trustManager: this.trustManager,
+      requestPermission: createDangerousConfirmationAdapter({
+        hasListeners: () => this.listeners.length > 0,
+        dispatch: (event) => this.dispatchDangerousConfirmationEvent(event),
+      }),
+    });
     this.toolExecutor = new ToolCallExecutor({
       registry: this.tools,
-      trustManager: this.trustManager,
+      permissionBroker,
       toolContext: () => this.createToolContext(),
       emit: (event) => this.emit(event),
-      requestConfirmation: (toolName, toolCallId, description, reason) =>
-        this.requestDangerousConfirmation(toolName, toolCallId, description, reason),
     });
   }
 
@@ -815,46 +824,17 @@ export class AgentLoop {
     );
   }
 
-  /**
-   * Request user confirmation for a dangerous operation.
-   * Emits a DangerousConfirmationEvent and blocks until the resolve callback is called.
-   * If no listeners are registered, falls back to denying the operation.
-   */
-  private async requestDangerousConfirmation(
-    toolName: string,
-    toolCallId: string,
-    description: string,
-    reason: string,
-  ): Promise<ApprovalDecision> {
-    // Emit the confirmation event even if emitEvents is disabled —
-    // dangerous operation confirmations are a critical safety feature
-    // that must always be available to the UI layer.
-    if (this.listeners.length === 0) {
-      // No UI to ask — deny for safety
-      return "deny";
-    }
-
-    return new Promise<ApprovalDecision>((resolve) => {
-      const event: AgentEvent = {
-        type: "dangerous_confirmation",
-        timestamp: Date.now(),
-        toolName,
-        toolCallId,
-        description,
-        level: "dangerous",
-        reason,
-        resolve,
-      };
-      // Emit directly to listeners without going through the normal emit path
-      // to bypass the emitEvents flag
-      for (const listener of this.listeners) {
-        try {
-          listener(event);
-        } catch {
-          // Don't let listener errors crash the loop
-        }
+  private dispatchDangerousConfirmationEvent(event: DangerousConfirmationEvent): void {
+    // Emit directly to listeners without going through the normal emit path
+    // to bypass the emitEvents flag. Permission prompts must remain available
+    // even when ordinary event emission is disabled.
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {
+        // Don't let listener errors crash the loop.
       }
-    });
+    }
   }
 
   /**

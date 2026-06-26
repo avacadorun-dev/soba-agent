@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { FunctionCallField } from "../../../src/core/client/types";
 import type { AgentEvent, ApprovalDecision } from "../../../src/core/loop/types";
+import { PermissionBroker } from "../../../src/core/permissions/permission-broker";
 import { ToolCallExecutor } from "../../../src/core/tool-execution/tool-call-executor";
 import { ToolRegistry } from "../../../src/core/tools/tool-registry";
 import type { ToolDefinition } from "../../../src/core/tools/types";
@@ -40,12 +41,15 @@ function makeExecutor(input: {
   events?: AgentEvent[];
   confirmation?: () => ApprovalDecision | Promise<ApprovalDecision>;
 }): ToolCallExecutor {
+  const trustManager = input.trustManager ?? new TrustManager({ repoRoot: "/repo" });
   return new ToolCallExecutor({
     registry: input.registry,
-    trustManager: input.trustManager ?? new TrustManager({ repoRoot: "/repo" }),
+    permissionBroker: new PermissionBroker({
+      trustManager,
+      requestPermission: async () => input.confirmation?.() ?? "deny",
+    }),
     toolContext: () => ({ cwd: "/repo" }),
     emit: (event) => input.events?.push(event),
-    requestConfirmation: async () => input.confirmation?.() ?? "deny",
   });
 }
 

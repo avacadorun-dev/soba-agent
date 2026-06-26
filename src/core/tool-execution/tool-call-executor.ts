@@ -1,22 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { FunctionCallField } from "../client/types";
-import type { AgentEvent, ApprovalDecision } from "../loop/types";
+import type { AgentEvent } from "../loop/types";
+import type { PermissionBroker } from "../permissions/permission-broker";
 import { createToolErrorResult } from "../tools/errors";
 import type { ToolRegistry } from "../tools/tool-registry";
 import type { ToolContext, ToolResult } from "../tools/types";
-import type { TrustManager } from "../trust/trust-manager";
 
 export interface ToolCallExecutorOptions {
   registry: ToolRegistry;
-  trustManager: TrustManager;
+  permissionBroker: PermissionBroker;
   toolContext: () => ToolContext;
   emit: (event: AgentEvent) => void;
-  requestConfirmation: (
-    toolName: string,
-    toolCallId: string,
-    description: string,
-    reason: string,
-  ) => Promise<ApprovalDecision>;
 }
 
 export interface ToolExecutionResult {
@@ -32,19 +26,17 @@ export interface ToolExecutionResult {
 
 export class ToolCallExecutor {
   private readonly registry: ToolRegistry;
-  private readonly trustManager: TrustManager;
+  private readonly permissionBroker: PermissionBroker;
   private readonly toolContext: () => ToolContext;
   private readonly emit: (event: AgentEvent) => void;
-  private readonly requestConfirmation: ToolCallExecutorOptions["requestConfirmation"];
   private activeToolAbortController: AbortController | null = null;
   private directShellAbortController: AbortController | null = null;
 
   constructor(options: ToolCallExecutorOptions) {
     this.registry = options.registry;
-    this.trustManager = options.trustManager;
+    this.permissionBroker = options.permissionBroker;
     this.toolContext = options.toolContext;
     this.emit = options.emit;
-    this.requestConfirmation = options.requestConfirmation;
   }
 
   abortActiveTool(): boolean {
@@ -82,12 +74,12 @@ export class ToolCallExecutor {
       args: parsedArgs,
     });
 
-    const trustResult = await this.evaluateTrust(toolCall, parsedArgs);
-    if (trustResult.denied) {
+    const permissionDecision = await this.permissionBroker.authorizeToolCall(toolCall, parsedArgs);
+    if (!permissionDecision.approved) {
       const result = createToolErrorResult({
         code: "trust_confirmation_denied",
         category: "trust",
-        message: `Denied: ${trustResult.reason}. The operation was cancelled by the user. Do NOT attempt alternative approaches — the user has decided this operation should not be performed.`,
+        message: `Denied: ${permissionDecision.reason}. The operation was cancelled by the user. Do NOT attempt alternative approaches — the user has decided this operation should not be performed.`,
         nextAction: "Stop or ask the user for explicit confirmation if this exact operation is still required.",
         fingerprint: `trust:confirmation_denied:${toolCall.name}`,
       });
@@ -98,8 +90,8 @@ export class ToolCallExecutor {
         result,
         startTime,
         denied: {
-          description: trustResult.description,
-          reason: trustResult.reason,
+          description: permissionDecision.description,
+          reason: permissionDecision.reason,
         },
       };
     }
@@ -201,53 +193,6 @@ export class ToolCallExecutor {
       durationMs: Date.now() - startTime,
     });
     return result;
-  }
-
-  private async evaluateTrust(
-    toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
-    parsedArgs: Record<string, unknown>,
-  ): Promise<{ denied: false } | { denied: true; description: string; reason: string }> {
-    const trustCheck =
-      toolCall.name === "bash" && typeof parsedArgs.command === "string"
-        ? this.trustManager.checkCommand(parsedArgs.command)
-        : this.trustManager.checkTool(toolCall.name);
-
-    if (!trustCheck.needsConfirmation) {
-      return { denied: false };
-    }
-
-    const description =
-      toolCall.name === "bash" && typeof parsedArgs.command === "string"
-        ? `bash: ${parsedArgs.command}`
-        : `${toolCall.name}(${toolCall.arguments.slice(0, 200)})`;
-
-    const decision = await this.requestConfirmation(
-      toolCall.name,
-      toolCall.call_id,
-      description,
-      trustCheck.reason,
-    );
-
-    if (decision === "session") {
-      const approvalKind = toolCall.name === "bash" ? "command" : "tool";
-      const approvalValue =
-        toolCall.name === "bash" && typeof parsedArgs.command === "string"
-          ? parsedArgs.command
-          : toolCall.name;
-      this.trustManager.approveForSession(approvalKind, approvalValue);
-    } else if (decision === "repo" || decision === "full") {
-      this.trustManager.setPermissionMode(decision);
-    }
-
-    if (decision === "deny") {
-      return {
-        denied: true,
-        description,
-        reason: trustCheck.reason,
-      };
-    }
-
-    return { denied: false };
   }
 
   private async executeRegisteredTool(
