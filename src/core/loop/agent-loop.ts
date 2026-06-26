@@ -30,7 +30,7 @@ import type {
 } from "../client/types";
 import type { ContextManager, PreInferenceCheckResult } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
-import { FixUntilGreenController } from "../fix-until-green";
+import { CompletionController } from "../completion/completion-controller";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import {
   addRecoveryReflectionFix,
@@ -58,12 +58,10 @@ import type { ToolRegistry } from "../tools/tool-registry";
 import type { ToolContext, ToolResult } from "../tools/types";
 import { toolResultToOutputItem } from "../tools/types";
 import { TrustManager } from "../trust/trust-manager";
-import { type AutoVerifierToolCall, runAutoVerifier } from "../verification/auto-verifier";
+import type { AutoVerifierToolCall } from "../verification/auto-verifier";
+import { VerificationController } from "../verification/verification-controller";
 import {
   acknowledgeErrors,
-  diagnoseFinishArguments,
-  evaluateCompletion,
-  parseFinishRequest,
   recordToolOutcome,
 } from "./completion-gate";
 import { EvidenceLedger, isVerificationCommand } from "./evidence-ledger";
@@ -208,7 +206,6 @@ function autoVerifierTimeoutSeconds(maxTimeoutSeconds: number): number {
 }
 
 const FINISH_TOOL_NAME = "finish";
-const MAX_FINISH_REJECTIONS_PER_TURN = 3;
 const FINISH_TOOL: FunctionToolParam = {
   type: "function",
   name: FINISH_TOOL_NAME,
@@ -1002,17 +999,16 @@ export class AgentLoop {
       let iteration = 0;
       let continuationAttempts = 0;
       let autonomousFollowUps = 0;
-      let finishRejections = 0;
       let hasUsedTools = false;
       let needsVerification = false;
       let hasMutatedFiles = false;
       let checkpointState: CheckpointWorkPlanState | undefined;
       const successfulToolCallIds = new Set<string>();
       const verificationEvidenceCallIds = new Set<string>();
-      const autoVerificationAttempts = new Set<string>();
       const includeFullGate = wantsFullVerification(userText) || taskKind === "release_task";
       const loopGuard = new LoopGuard(this.options);
-      const fixUntilGreen = new FixUntilGreenController();
+      const completionController = new CompletionController();
+      const verificationController = new VerificationController();
       let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
       const scheduleCheckpointCompaction = (checkpointEvents: CheckpointEvent[]): void => {
         let milestone: CheckpointEvent | undefined;
@@ -1060,7 +1056,7 @@ export class AgentLoop {
         if (!summaryBefore.needsVerification) return false;
 
         const bashTool = this.tools.get("bash");
-        const result = await runAutoVerifier({
+        const autoVerification = await verificationController.runAutoVerification({
           cwd: this.cwd,
           taskKind,
           evidenceSummary: summaryBefore,
@@ -1073,7 +1069,6 @@ export class AgentLoop {
           includeReleaseGate: taskKind === "release_task",
           timeoutSeconds: autoVerifierTimeoutSeconds(this.options.bashMaxTimeoutSeconds),
           iteration,
-          attemptedFingerprints: autoVerificationAttempts,
           signal: this._abortController?.signal,
           onToolCallStart: (call) => {
             const fcItem = autoVerifierCallToSessionItem(call);
@@ -1109,9 +1104,9 @@ export class AgentLoop {
             allItems.push(outputItem);
           },
         });
+        const { result } = autoVerification;
 
-        const autoVerifierActivity = result.selected.length + result.skipped.length;
-        if (autoVerifierActivity > 0) {
+        if (autoVerification.activityCount > 0) {
           this.debug({
             event: "loop/iteration",
             turn: turnIndex,
@@ -1120,7 +1115,7 @@ export class AgentLoop {
           });
         }
 
-        if (result.executions.length === 0) return false;
+        if (!autoVerification.didExecute) return false;
 
         hasUsedTools = true;
         const summaryAfter = evidenceLedger.getSummary();
@@ -1498,43 +1493,36 @@ export class AgentLoop {
           toolCalls.length === 1 && toolCalls[0].name === FINISH_TOOL_NAME
             ? toolCalls[0]
             : null;
-        const finishRequest = finishCall
-          ? parseFinishRequest(finishCall)
-          : null;
-        if (finishCall && finishRequest) {
-          let decision = evaluateCompletion(finishRequest, {
+        if (finishCall) {
+          let finishEvaluation = completionController.evaluateFinishCall(finishCall, {
             ...evidenceLedger.toCompletionState(errors),
             taskKind,
             allowUnverifiedCompletion,
           });
-          if (!decision.accepted && evidenceLedger.getSummary().needsVerification) {
+          if (finishEvaluation.kind === "rejected" && evidenceLedger.getSummary().needsVerification) {
             const didAutoVerify = await runAutoVerificationOpportunity("finish");
             if (didAutoVerify) {
-              decision = evaluateCompletion(finishRequest, {
+              finishEvaluation = completionController.evaluateFinishCall(finishCall, {
                 ...evidenceLedger.toCompletionState(errors),
                 taskKind,
                 allowUnverifiedCompletion,
               });
             }
           }
-          if (!decision.accepted) {
-            evidenceLedger.recordFinishAttempt("rejected", decision.reasons.join("; "));
+
+          if (finishEvaluation.kind === "rejected" || finishEvaluation.kind === "invalid") {
+            evidenceLedger.recordFinishAttempt(
+              "rejected",
+              finishEvaluation.kind === "invalid"
+                ? "Invalid finish arguments"
+                : finishEvaluation.reasons.join("; "),
+            );
             const fcItem = outputItemToSessionItem(finishCall);
             if (fcItem) {
               this.session.appendItem(fcItem as unknown as SessionItemParam);
               allItems.push(fcItem);
             }
-            const rejection: ToolResult = {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    `Finish rejected by completion gate:\n- ${decision.reasons.join("\n- ")}\n` +
-                    "Resolve the issues, continue with tools, use criteria[].evidenceIds when you have matching evidence, or use status blocked with a concrete blocker.",
-                },
-              ],
-              isError: true,
-            };
+            const rejection = completionController.createRejectionResult(finishEvaluation);
             const outputItem = toolResultToOutputItem(
               rejection,
               finishCall.call_id,
@@ -1552,22 +1540,23 @@ export class AgentLoop {
               autonomousFollowUps,
               activeErrors: errors.filter((error) => error.status === "active")
                 .length,
-              detail: decision.reasons.join(" "),
+              detail: finishEvaluation.kind === "invalid"
+                ? finishEvaluation.diagnosis.join(" ")
+                : finishEvaluation.reasons.join(" "),
             });
-            finishRejections++;
-            if (finishRejections >= MAX_FINISH_REJECTIONS_PER_TURN) {
-              const message = `Completion gate rejected ${finishRejections} finish attempts in this turn: ${decision.reasons.join(" ")}`;
-              errors.push(createTurnError("timeout", message, iteration));
+            const rejectionState = completionController.recordRejection(finishEvaluation);
+            if (rejectionState.limitExceeded) {
+              errors.push(createTurnError("timeout", rejectionState.message, iteration));
               this.emit({
                 type: "turn_error",
                 timestamp: Date.now(),
-                error: message,
+                error: rejectionState.message,
               });
               this._emitStopReason(
                 turnIndex,
                 iteration,
                 "loop-guard",
-                message,
+                rejectionState.message,
                 hasUsedTools,
                 autonomousFollowUps,
               );
@@ -1577,6 +1566,7 @@ export class AgentLoop {
             continue;
           }
 
+          const finishRequest = finishEvaluation.request;
           acknowledgeErrors(errors, finishRequest.acknowledgedErrorIds);
           evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
           const finishMessage = finishRequestToMessage(
@@ -1626,52 +1616,6 @@ export class AgentLoop {
             autonomousFollowUps,
           );
           break;
-        } else if (finishCall) {
-          evidenceLedger.recordFinishAttempt("rejected", "Invalid finish arguments");
-          const fcItem = outputItemToSessionItem(finishCall);
-          if (fcItem) {
-            this.session.appendItem(fcItem as unknown as SessionItemParam);
-            allItems.push(fcItem);
-          }
-          const diagnosis = diagnoseFinishArguments(finishCall);
-          const rejection: ToolResult = {
-            content: [
-              {
-                type: "text",
-                text:
-                  `Finish rejected: invalid arguments. Fix these issues:\n- ${diagnosis.join("\n- ")}`,
-              },
-            ],
-            isError: true,
-          };
-          const outputItem = toolResultToOutputItem(
-            rejection,
-            finishCall.call_id,
-            finishCall.name,
-          );
-          this.session.appendItem(outputItem);
-          allItems.push(outputItem);
-          finishRejections++;
-          if (finishRejections >= MAX_FINISH_REJECTIONS_PER_TURN) {
-            const message = `Completion gate rejected invalid finish arguments ${finishRejections} times in this turn`;
-            errors.push(createTurnError("timeout", message, iteration));
-            this.emit({
-              type: "turn_error",
-              timestamp: Date.now(),
-              error: message,
-            });
-            this._emitStopReason(
-              turnIndex,
-              iteration,
-              "loop-guard",
-              message,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
-            break;
-          }
-          iteration++;
-          continue;
         }
 
         if (
@@ -2099,7 +2043,7 @@ export class AgentLoop {
             needsVerification = true;
             mutationSucceededInCurrentBatch = true;
             verificationEvidenceCallIds.clear();
-            fixUntilGreen.recordProgress(toolCall.call_id);
+            verificationController.recordMutationProgress(toolCall.call_id);
             if (recoveryReflectionDraft) {
               recoveryReflectionDraft = addRecoveryReflectionFix(
                 recoveryReflectionDraft,
@@ -2135,39 +2079,33 @@ export class AgentLoop {
 
           if (toolCall.name === "bash") {
             const command = extractCommandArgument(parsedArgs);
-            if (isVerificationCommand(command)) {
-              if (result.isError) {
-                const recoveryDecision = fixUntilGreen.recordVerificationFailure({
-                  command,
-                  output: extractToolResultText(result),
-                });
-                evidenceLedger.recordRecoveryIteration(recoveryDecision);
-                if (recoveryDecision.action === "recover") {
-                  recoveryReflectionDraft = createRecoveryReflectionDraft(recoveryDecision.diagnostic);
-                  fixUntilGreenFollowUp = recoveryDecision.message;
-                } else if (recoveryDecision.action === "stop") {
-                  recoveryReflectionDraft = null;
-                  fixUntilGreenStop = recoveryDecision.message;
-                }
-              } else {
-                const recoveryDecision = fixUntilGreen.recordVerificationPassed(command);
-                evidenceLedger.recordRecoveryIteration(recoveryDecision);
-                if (recoveryReflectionDraft) {
-                  const reflectionResult = writeRecoveryReflectionLesson(this.projectMemory, {
-                    task: userText,
-                    sessionId: this.session.getSessionId(),
-                    draft: recoveryReflectionDraft,
-                    verification: recoveryDecision.message,
-                    observableSuccess: true,
-                  });
-                  if (reflectionResult.status === "written") {
-                    evidenceLedger.recordReflection(`Stored recovery lesson: ${reflectionResult.capsule.summary}`);
-                  } else if (reflectionResult.reason !== "no_memory") {
-                    evidenceLedger.recordReflection(`Skipped recovery lesson: ${reflectionResult.reason}`);
-                  }
-                  recoveryReflectionDraft = null;
-                }
+            const verificationOutcome = verificationController.observeVerificationToolResult({
+              toolName: toolCall.name,
+              command,
+              isError: result.isError,
+              output: extractToolResultText(result),
+              ledger: evidenceLedger,
+            });
+            if (verificationOutcome.kind === "recover") {
+              recoveryReflectionDraft = createRecoveryReflectionDraft(verificationOutcome.decision.diagnostic);
+              fixUntilGreenFollowUp = verificationOutcome.message;
+            } else if (verificationOutcome.kind === "stop") {
+              recoveryReflectionDraft = null;
+              fixUntilGreenStop = verificationOutcome.message;
+            } else if (verificationOutcome.kind === "passed" && recoveryReflectionDraft) {
+              const reflectionResult = writeRecoveryReflectionLesson(this.projectMemory, {
+                task: userText,
+                sessionId: this.session.getSessionId(),
+                draft: recoveryReflectionDraft,
+                verification: verificationOutcome.decision.message,
+                observableSuccess: true,
+              });
+              if (reflectionResult.status === "written") {
+                evidenceLedger.recordReflection(`Stored recovery lesson: ${reflectionResult.capsule.summary}`);
+              } else if (reflectionResult.reason !== "no_memory") {
+                evidenceLedger.recordReflection(`Skipped recovery lesson: ${reflectionResult.reason}`);
               }
+              recoveryReflectionDraft = null;
             }
           }
 
