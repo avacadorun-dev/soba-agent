@@ -44,6 +44,8 @@ import type {
   LoadSessionInput,
   OpenSessionInput,
   ResumeSessionInput,
+  RuntimeCommandExecutor,
+  RuntimeEvent,
   RuntimeEventListener,
   RuntimeSessionConfigOption,
   RuntimeSessionInfo,
@@ -71,7 +73,22 @@ export interface RuntimeFactoryInput {
   tokenBudget: number;
   debug: boolean;
   toolDelegation?: RuntimeToolDelegation;
+  commandExecutorFactory?: (context: RuntimeCommandExecutorFactoryContext) => RuntimeCommandExecutor | undefined;
   providerRegistryConfigPath?: string;
+}
+
+export interface RuntimeCommandExecutorFactoryContext {
+  client: OpenResponsesClientProxy;
+  config: SobaConfig;
+  contextManager: ContextManager;
+  skillManager: SkillManager;
+  agentLoop: AgentLoop;
+  providerRegistry: ProviderRegistry;
+  mcpManager?: McpClientManager;
+  mcpSecretStore: McpSecretStore;
+  toolRegistry: ToolRegistry;
+  trustManager: TrustManager;
+  getSession: () => SessionManager;
 }
 
 export interface SobaRuntimeComposition {
@@ -97,6 +114,8 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   private session: SessionManager;
   private readonly sessionLifecycle: SessionLifecycleService;
   private readonly providerRegistry: ProviderRegistry;
+  private commandExecutor?: RuntimeCommandExecutor;
+  private readonly runtimeListeners = new Set<RuntimeEventListener>();
 
   constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: SessionLifecycleService, providerRegistry: ProviderRegistry) {
     this.loop = loop;
@@ -138,6 +157,14 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   listCommands(input?: ListCommandsInput): RuntimeCommandMetadata[] {
     return commandService.listCommands(input);
+  }
+
+  getSessionManager(): SessionManager {
+    return this.session;
+  }
+
+  setCommandExecutor(commandExecutor: RuntimeCommandExecutor | undefined): void {
+    this.commandExecutor = commandExecutor;
   }
 
   async listSessionConfigOptions(sessionId: string): Promise<RuntimeSessionConfigOption[]> {
@@ -187,6 +214,20 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   async runTurn(input: UserTurnInput): Promise<TurnResult> {
     this.assertActiveSession(input.sessionId);
+    const command = commandTextFromTurn(input);
+    if (command && this.commandExecutor) {
+      const result = await this.commandExecutor({
+        command,
+        source: input.source,
+        emit: (event) => this.emitRuntimeEvent(event),
+      });
+      if (result.handled) {
+        return emptyCommandTurnResult();
+      }
+      if (result.prompt) {
+        return this.loop.runTurn(result.prompt);
+      }
+    }
     return this.loop.runTurn(runtimeBlocksToText(input.content));
   }
 
@@ -196,7 +237,22 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   }
 
   onEvent(listener: RuntimeEventListener): () => void {
-    return this.loop.onEvent(listener as (event: AgentEvent) => void);
+    this.runtimeListeners.add(listener);
+    const unsubscribeLoop = this.loop.onEvent(listener as (event: AgentEvent) => void);
+    return () => {
+      this.runtimeListeners.delete(listener);
+      unsubscribeLoop();
+    };
+  }
+
+  private emitRuntimeEvent(event: RuntimeEvent): void {
+    for (const listener of this.runtimeListeners) {
+      try {
+        listener(event);
+      } catch {
+        // Keep runtime command output best-effort, matching AgentLoop event dispatch.
+      }
+    }
   }
 
   private assertActiveSession(sessionId: string): void {
@@ -216,6 +272,36 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
     this.session = session;
     this.loop.setSessionManager(session);
   }
+}
+
+function commandTextFromTurn(input: UserTurnInput): string | undefined {
+  if (input.command) {
+    const name = input.command.name.startsWith("/") ? input.command.name : `/${input.command.name}`;
+    return [name, ...input.command.args].join(" ").trim();
+  }
+
+  const firstBlock = input.content[0];
+  if (firstBlock?.type !== "text" || !firstBlock.text.startsWith("/")) {
+    return undefined;
+  }
+
+  return runtimeBlocksToText(input.content);
+}
+
+function emptyCommandTurnResult(): TurnResult {
+  return {
+    items: [],
+    response: {} as TurnResult["response"],
+    usage: {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens_details: { reasoning_tokens: 0 },
+    },
+    errors: [],
+    activeErrors: [],
+  };
 }
 
 function registerBuiltInTools(registry: ToolRegistry, delegation?: RuntimeToolDelegation): void {
@@ -248,6 +334,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     tokenBudget,
     debug,
     toolDelegation,
+    commandExecutorFactory,
     providerRegistryConfigPath,
   } = input;
 
@@ -366,9 +453,24 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
   }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory);
   const sessionLifecycle = new SessionLifecycleService(cwd);
+  const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
+  const commandExecutor = commandExecutorFactory?.({
+    client,
+    config,
+    contextManager,
+    skillManager,
+    agentLoop,
+    providerRegistry,
+    mcpManager,
+    mcpSecretStore,
+    toolRegistry: tools,
+    trustManager,
+    getSession: () => runtime.getSessionManager(),
+  });
+  runtime.setCommandExecutor(commandExecutor);
 
   return {
-    runtime: new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry),
+    runtime,
     agentLoop,
     providerRegistry,
     client,

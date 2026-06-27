@@ -105,7 +105,7 @@ export function createDelegatedBashTool(delegation: RuntimeToolDelegation): Tool
       });
       if (!delegated) return bashTool.execute(args, context, signal);
 
-      return formatDelegatedTerminalResult(delegated);
+      return formatDelegatedTerminalResult(args, delegated);
     },
   };
 }
@@ -166,7 +166,7 @@ function formatDelegatedReadResult(args: ReadArgs, text: string): ToolResult {
   };
 }
 
-function formatDelegatedTerminalResult(result: DelegatedTerminalResult): ToolResult {
+function formatDelegatedTerminalResult(args: BashArgs, result: DelegatedTerminalResult): ToolResult {
   const output = result.output ?? [result.stdout, result.stderr].filter(Boolean).join("\n");
   const exitCode = result.exitCode ?? 0;
   const isError = result.timedOut === true || exitCode !== 0;
@@ -174,6 +174,7 @@ function formatDelegatedTerminalResult(result: DelegatedTerminalResult): ToolRes
     content: [{ type: "text", text: redactSecrets(output) }],
     isError,
     details: {
+      command: args.command,
       terminalId: result.terminalId,
       exitCode,
       signalCode: result.signalCode ?? null,

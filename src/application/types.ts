@@ -1,6 +1,8 @@
 import type { AgentEvent, AgentTurnResult } from "../core/loop/types";
 import type { SessionInfo } from "../core/session/types";
-import type { ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
+import type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
+
+export type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
 
 export type RuntimeSource = "print" | "tui" | "acp";
 
@@ -27,6 +29,14 @@ export type RuntimeEvent = AgentEvent;
 export type RuntimeEventListener = (event: RuntimeEvent) => void;
 export type Unsubscribe = () => void;
 export type TurnResult = AgentTurnResult;
+
+export interface RuntimeCommandExecutionInput {
+  command: string;
+  source: RuntimeSource;
+  emit: (event: RuntimeEvent) => void;
+}
+
+export type RuntimeCommandExecutor = (input: RuntimeCommandExecutionInput) => CommandResult | Promise<CommandResult>;
 
 export interface CreateSessionInput {
   cwd: string;

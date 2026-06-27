@@ -283,6 +283,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
         isError: result.exitCode !== 0 || result.signalCode !== null || result.aborted,
         error,
         details: {
+          command: args.command,
           exitCode: result.exitCode,
           signalCode: result.signalCode ?? undefined,
           timedOut: result.timedOut,

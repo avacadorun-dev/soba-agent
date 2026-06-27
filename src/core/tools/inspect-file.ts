@@ -118,6 +118,7 @@ export const inspectFileTool: ToolDefinition<InspectFileArgs> = {
         content: [{ type: "text", text: truncated.text }],
         isError: false,
         details: {
+          path: absolutePath,
           totalLines: lines.length,
           startLine: range.startLine,
           endLine: range.endLine,

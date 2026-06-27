@@ -148,7 +148,18 @@ async function handleClientMessage(options: AcpServerOptions, dispatcher: AcpDis
 
   if (!response) return 0;
   await options.writeStdout(serializeJsonRpc(response));
+  await flushPostResponseEffects(options, dispatcher);
   return 1;
+}
+
+async function flushPostResponseEffects(options: AcpServerOptions, dispatcher: AcpDispatcher): Promise<void> {
+  for (const effect of dispatcher.takePostResponseEffects()) {
+    try {
+      await effect();
+    } catch (error) {
+      await logDiagnostic(options, toJsonRpcError(error));
+    }
+  }
 }
 
 function settleClientResponse(

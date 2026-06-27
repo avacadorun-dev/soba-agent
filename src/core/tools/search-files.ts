@@ -97,6 +97,8 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
 
     if (rgResult.status === "ok") {
       return formatSearchResult(rgResult.matches, {
+        path: args.path ?? ".",
+        query,
         maxMatches,
         truncated: rgResult.truncated,
         engine: "rg",
@@ -134,6 +136,8 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
     }
 
     return formatSearchResult(fallback.matches, {
+      path: args.path ?? ".",
+      query,
       maxMatches,
       truncated: fallback.truncated,
       engine: "fallback",
@@ -307,13 +311,13 @@ function parseRgOutput(output: string, cwd: string, maxMatches: number): SearchM
 
 function formatSearchResult(
   matches: SearchMatch[],
-  options: { maxMatches: number; truncated: boolean; engine: string },
+  options: { path: string; query: string; maxMatches: number; truncated: boolean; engine: string },
 ): ToolResult {
   if (matches.length === 0) {
     return {
       content: [{ type: "text", text: `No matches found. [engine=${options.engine}]` }],
       isError: false,
-      details: { matchCount: 0, engine: options.engine },
+      details: { path: options.path, query: options.query, matchCount: 0, engine: options.engine, matches: [] },
     };
   }
 
@@ -327,7 +331,10 @@ function formatSearchResult(
     content: [{ type: "text", text: truncated.text }],
     isError: false,
     details: {
+      path: options.path,
+      query: options.query,
       matchCount: matches.length,
+      matches,
       truncated: options.truncated || truncated.truncated,
       engine: options.engine,
     },

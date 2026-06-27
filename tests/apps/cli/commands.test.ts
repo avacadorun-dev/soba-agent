@@ -13,6 +13,7 @@ import { SessionManager } from "../../../src/core/session/session-manager";
 import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
 import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
 import type { SkillManager } from "../../../src/core/skills/skill-manager";
+import { TrustManager } from "../../../src/core/trust/trust-manager";
 
 describe("slash commands", () => {
   function appendCapsuleCheckpoint(session: SessionManager, checkpointId = "ck_111111111111"): void {
@@ -571,6 +572,27 @@ describe("slash commands", () => {
         expect(typeof messages[key]).toBe("string");
       }
     }
+  });
+
+  test("/permissions показывает и меняет режим разрешений", async () => {
+    const output: Array<{ type: string; message?: string }> = [];
+    const trustManager = new TrustManager();
+    const context = {
+      ...makeCommandContext(SessionManager.inMemory(process.cwd()), output),
+      trustManager,
+    } as unknown as CommandContext;
+
+    await executeCommand("/permissions", context);
+    await executeCommand("/permissions repo", context);
+    await executeCommand("/permissions full", context);
+    await executeCommand("/permissions clear", context);
+
+    expect(output.map((event) => event.type)).toEqual(["info", "info", "info", "info"]);
+    expect(output[0]?.message).toContain("Permission mode: ask");
+    expect(output[1]?.message).toContain("repo");
+    expect(output[2]?.message).toContain("full");
+    expect(output[3]?.message).toContain("permission mode: ask");
+    expect(trustManager.getPermissionMode()).toBe("ask");
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ACP_LIFECYCLE_FEATURES, type AcpFeatureSet } from "../../../src/adapters/acp/capabilities";
 import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
+import { listRuntimeCommands } from "../../../src/application/command-service";
 import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { runAcpServer } from "../../../src/apps/acp/server";
 
@@ -8,6 +9,7 @@ interface MockRuntimeState {
   lastTurnInput?: UserTurnInput;
   emitToolEvents?: boolean;
   emitEditEvents?: boolean;
+  emitBashEvents?: boolean;
   emitPermission?: boolean;
   waitForCancel?: boolean;
   permissionDecision?: string;
@@ -61,8 +63,8 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
     async listSessions(input) {
       return sessions.length > 0 ? sessions : [{ id: "session_existing", cwd: input.cwd, title: "Existing session" }];
     },
-    listCommands() {
-      return [];
+    listCommands(input) {
+      return listRuntimeCommands(input);
     },
     async listSessionConfigOptions() {
       return state.configOptions ?? [];
@@ -148,6 +150,44 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
                 newText: "const value = 2;\n",
               },
             },
+          } as RuntimeEvent),
+        );
+      }
+      if (state.emitBashEvents) {
+        listeners.forEach((listener) =>
+          listener({
+            type: "tool_call_start",
+            timestamp: Date.now(),
+            toolCallId: "tool_bash",
+            toolName: "bash",
+            args: { command: "bun test tests/adapters/acp/acp-server.test.ts", timeout: 10 },
+          } as RuntimeEvent),
+        );
+        listeners.forEach((listener) =>
+          listener({
+            type: "tool_call_result",
+            timestamp: Date.now(),
+            toolCallId: "tool_bash",
+            toolName: "bash",
+            result: {
+              content: [{ type: "text", text: "failing output\n[Exit code: 1]" }],
+              isError: true,
+              details: {
+                command: "bun test tests/adapters/acp/acp-server.test.ts",
+                exitCode: 1,
+                timedOut: false,
+                truncated: false,
+              },
+            },
+          } as RuntimeEvent),
+        );
+        listeners.forEach((listener) =>
+          listener({
+            type: "tool_call_end",
+            timestamp: Date.now(),
+            toolCallId: "tool_bash",
+            toolName: "bash",
+            durationMs: 123,
           } as RuntimeEvent),
         );
       }
@@ -332,6 +372,22 @@ describe("ACP stdio server foundation", () => {
       id: "new",
       result: { sessionId: "session_1" },
     });
+    expect(result.messages[1]).toMatchObject({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId: "session_1",
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: expect.arrayContaining([
+            expect.objectContaining({ name: "mcp", description: "Manage MCP servers.", input: { hint: expect.stringContaining("status") } }),
+            expect.objectContaining({ name: "session", description: "Show session statistics." }),
+            expect.objectContaining({ name: "budget", description: "Show token budget usage." }),
+            expect.objectContaining({ name: "help", description: "Show available commands." }),
+          ]),
+        },
+      },
+    });
   });
 
   test("returns session config options for model and provider selectors", async () => {
@@ -446,8 +502,18 @@ describe("ACP stdio server foundation", () => {
         },
       },
     });
-    expect(result.messages[2]).toMatchObject({ id: "load", result: {} });
-    expect(result.messages[3]).toMatchObject({ id: "resume", result: {} });
+    expect(result.messages).toContainEqual(expect.objectContaining({ id: "load", result: {} }));
+    expect(result.messages).toContainEqual(expect.objectContaining({ id: "resume", result: {} }));
+    expect(result.messages).toContainEqual(expect.objectContaining({
+      method: "session/update",
+      params: expect.objectContaining({
+        sessionId: "session_loaded",
+        update: expect.objectContaining({
+          sessionUpdate: "available_commands_update",
+          availableCommands: expect.arrayContaining([expect.objectContaining({ name: "mcp" })]),
+        }),
+      }),
+    }));
   });
 
   test("aliases stale ACP session ids to a live runtime session", async () => {
@@ -474,16 +540,26 @@ describe("ACP stdio server foundation", () => {
 
     expect(result.messages[0]).toMatchObject({ id: "load", result: {} });
     expect(state.lastTurnInput).toMatchObject({ sessionId: "session_1" });
-    expect(result.messages[1]).toMatchObject({
+    expect(result.messages).toContainEqual(expect.objectContaining({
       method: "session/update",
-      params: {
+      params: expect.objectContaining({
         sessionId: "zed_stale_session",
-        update: {
+        update: expect.objectContaining({
+          sessionUpdate: "available_commands_update",
+          availableCommands: expect.arrayContaining([expect.objectContaining({ name: "mcp" })]),
+        }),
+      }),
+    }));
+    expect(result.messages).toContainEqual(expect.objectContaining({
+      method: "session/update",
+      params: expect.objectContaining({
+        sessionId: "zed_stale_session",
+        update: expect.objectContaining({
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "echo:hello" },
-        },
-      },
-    });
+        }),
+      }),
+    }));
   });
 
   test("rejects load and resume when session loading is not advertised", async () => {
@@ -680,11 +756,19 @@ describe("ACP stdio server foundation", () => {
         update: {
           sessionUpdate: "tool_call",
           toolCallId: "tool_1",
-          title: "read",
+          title: "Read src/app.ts",
           kind: "read",
           status: "pending",
           rawInput: { path: "src/app.ts" },
           locations: [{ path: "src/app.ts" }],
+          _meta: {
+            tool_name: "read",
+            soba: {
+              toolName: "read",
+              kind: "read",
+              path: "src/app.ts",
+            },
+          },
         },
       },
     });
@@ -694,9 +778,18 @@ describe("ACP stdio server foundation", () => {
         update: {
           sessionUpdate: "tool_call_update",
           toolCallId: "tool_1",
+          title: "Read src/app.ts",
           status: "completed",
           content: [{ type: "content", content: { type: "text", text: "file text" } }],
           locations: [{ path: "src/app.ts", line: 3 }],
+          _meta: {
+            tool_name: "read",
+            soba: {
+              toolName: "read",
+              kind: "read",
+              path: "src/app.ts",
+            },
+          },
         },
       },
     });
@@ -715,6 +808,81 @@ describe("ACP stdio server foundation", () => {
         },
       },
     });
+  });
+
+  test("emits rich ACP bash metadata without overwriting failed results on tool end", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "run tests" }] },
+        })}\n`,
+      ],
+      { state: { emitBashEvents: true } },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tool_bash",
+          title: "Run: bun test tests/adapters/acp/acp-server.test.ts",
+          kind: "execute",
+          status: "pending",
+          rawInput: { command: "bun test tests/adapters/acp/acp-server.test.ts", timeout: 10 },
+          _meta: {
+            tool_name: "bash",
+            soba: {
+              toolName: "bash",
+              kind: "execute",
+              command: "bun test tests/adapters/acp/acp-server.test.ts",
+            },
+          },
+        },
+      },
+    });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool_bash",
+          title: "Run: bun test tests/adapters/acp/acp-server.test.ts (exit 1)",
+          status: "failed",
+          content: [{ type: "content", content: { type: "text", text: "failing output\n[Exit code: 1]" } }],
+          _meta: {
+            tool_name: "bash",
+            soba: {
+              toolName: "bash",
+              kind: "execute",
+              command: "bun test tests/adapters/acp/acp-server.test.ts",
+              exitCode: 1,
+              timedOut: false,
+              truncated: false,
+            },
+          },
+        },
+      },
+    });
+    expect(result.messages[2]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool_bash",
+          _meta: {
+            tool_name: "bash",
+            soba: {
+              durationMs: 123,
+            },
+          },
+        },
+      },
+    });
+    expect((result.messages[2] as { params: { update: Record<string, unknown> } }).params.update.status).toBeUndefined();
   });
 
   test("emits ACP diff content for edit tool results", async () => {
@@ -788,13 +956,22 @@ describe("ACP stdio server foundation", () => {
         sessionId: "session_1",
         toolCall: {
           toolCallId: "tool_danger",
-          title: "bash",
+          title: "Run: rm -rf dist",
           kind: "execute",
           status: "pending",
           rawInput: {
+            command: "rm -rf dist",
             description: "rm -rf dist",
             reason: "Deletes files",
             level: "dangerous",
+          },
+          _meta: {
+            tool_name: "bash",
+            soba: {
+              toolName: "bash",
+              kind: "execute",
+              command: "rm -rf dist",
+            },
           },
         },
       },

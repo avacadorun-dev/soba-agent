@@ -105,6 +105,7 @@ export const readTool: ToolDefinition<ReadArgs> = {
           ],
           isError: false,
           details: {
+            path: absolutePath,
             image: { data: base64, mimeType },
           },
         };
@@ -169,8 +170,11 @@ export const readTool: ToolDefinition<ReadArgs> = {
         content: [{ type: "text", text: redactSecrets(outputText) }],
         isError: false,
         details: {
+          path: absolutePath,
           totalLines,
           readLines: selectedLineCount,
+          startLine: startDisplay,
+          endLine: endDisplay,
           truncated: truncated.truncated,
         },
       };

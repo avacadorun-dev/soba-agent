@@ -15,6 +15,7 @@ import { createInterface } from "node:readline";
 import packageJson from "../../../package.json";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { createSobaRuntime } from "../../application/runtime-factory";
+import type { RuntimeEvent } from "../../application/types";
 import {
   firstTimeSetup,
   loadConfig,
@@ -43,6 +44,43 @@ function resolveLang(cliLang?: Locale): Locale {
   const envLang = process.env.SOBA_LANG;
   if (envLang && isLocale(envLang)) return envLang;
   return detectLocale();
+}
+
+function emitAcpCommandOutput(
+  event: { type: string; timestamp?: number; message?: unknown; [key: string]: unknown },
+  messageId: string,
+  emit: (event: RuntimeEvent) => void,
+): void {
+  const text = commandOutputText(event);
+  if (!text) return;
+  emit({
+    type: "assistant_text_delta",
+    timestamp: event.timestamp ?? Date.now(),
+    messageId,
+    delta: `${text}\n`,
+  });
+}
+
+function commandOutputText(event: { type: string; message?: unknown; [key: string]: unknown }): string | undefined {
+  if (typeof event.message === "string" && event.message.trim().length > 0) {
+    return event.type === "error" ? `Error: ${event.message}` : event.message;
+  }
+
+  if (event.type === "compaction_start") {
+    const tokensBefore = typeof event.tokensBefore === "number" ? ` (${event.tokensBefore} tokens)` : "";
+    return `Compaction started${tokensBefore}.`;
+  }
+
+  if (event.type === "compaction_done") {
+    const before = typeof event.tokensBefore === "number" ? event.tokensBefore : undefined;
+    const after = typeof event.tokensAfter === "number" ? event.tokensAfter : undefined;
+    if (before !== undefined && after !== undefined) {
+      return `Compaction complete: ${before} -> ${after} tokens.`;
+    }
+    return "Compaction complete.";
+  }
+
+  return undefined;
 }
 
 /**
@@ -264,6 +302,26 @@ async function main() {
       tokenBudget: cliArgs.budget ?? 0,
       debug: cliArgs.debug,
       toolDelegation: acpToolDelegation,
+      commandExecutorFactory: (context) => async ({ command, emit }) => {
+        const messageId = `cmd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+        return executeCommand(command, {
+          client: context.client,
+          session: context.getSession(),
+          config: context.config,
+          i18n,
+          renderer: {
+            emit: (event) => emitAcpCommandOutput(event, messageId, emit),
+          },
+          contextManager: context.contextManager,
+          skillManager: context.skillManager,
+          agentLoop: context.agentLoop,
+          registry: context.providerRegistry,
+          mcpManager: context.mcpManager,
+          mcpSecretStore: context.mcpSecretStore,
+          toolRegistry: context.toolRegistry,
+          trustManager: context.trustManager,
+        });
+      },
       providerRegistryConfigPath: configPath,
     });
     const { runAcpServer } = await import("../acp/server");

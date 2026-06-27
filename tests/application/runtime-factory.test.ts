@@ -149,6 +149,92 @@ describe("createSobaRuntime", () => {
     expect(events).toContain("turn_end");
   });
 
+  test("routes ACP slash commands through the shared command executor before the model", async () => {
+    const session = SessionManager.inMemory(projectRoot);
+    const commands: string[] = [];
+    const deltas: string[] = [];
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+      commandExecutorFactory: () => async ({ command, emit }) => {
+        commands.push(command);
+        emit({
+          type: "assistant_text_delta",
+          timestamp: Date.now(),
+          messageId: "cmd_test",
+          delta: `ran ${command}`,
+        });
+        return { handled: true };
+      },
+    });
+    composition.client.create = async () => {
+      throw new Error("model should not run for handled ACP slash commands");
+    };
+    composition.runtime.onEvent((event) => {
+      if (event.type === "assistant_text_delta") deltas.push(event.delta);
+    });
+    const acpSession = await composition.runtime.createSession({ cwd: projectRoot });
+
+    await composition.runtime.runTurn({
+      sessionId: acpSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "/mcp status" }],
+    });
+    await composition.runtime.runTurn({
+      sessionId: acpSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "/budget" }],
+    });
+    await composition.runtime.runTurn({
+      sessionId: acpSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "ignored" }],
+      command: { name: "session", args: [] },
+    });
+
+    expect(commands).toEqual(["/mcp status", "/budget", "/session"]);
+    expect(deltas).toEqual(["ran /mcp status", "ran /budget", "ran /session"]);
+  });
+
+  test("keeps leading-space slash text as a normal ACP prompt", async () => {
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+      commandExecutorFactory: () => async () => {
+        throw new Error("command executor should not run for escaped slash text");
+      },
+    });
+    composition.client.create = async () => makeTextResponse("normal prompt");
+    const acpSession = await composition.runtime.createSession({ cwd: projectRoot });
+
+    const result = await composition.runtime.runTurn({
+      sessionId: acpSession.id,
+      source: "acp",
+      content: [{ type: "text", text: " /mcp status" }],
+    });
+
+    expect(result.response.id).toBe("resp_runtime_factory");
+  });
+
   test("uses provider streaming for non-interactive ACP runtime turns when enabled", async () => {
     const session = SessionManager.inMemory(projectRoot);
     const composition = await createSobaRuntime({

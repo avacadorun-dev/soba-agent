@@ -33,7 +33,7 @@ import { ProjectTrustStore } from "../../core/skills/project-trust-store";
 import type { SkillManager } from "../../core/skills/skill-manager";
 import { handleSkillSlashCommand, isSkillSlashCommand, tryTuiRegistryFallback } from "../../core/skills/slash-handler";
 import type { ToolRegistry } from "../../core/tools/tool-registry";
-import type { TrustManager } from "../../core/trust/trust-manager";
+import type { PermissionMode, TrustManager } from "../../core/trust/trust-manager";
 import type { SlashCommandRegistry } from "../../ui/terminal/interactive/commands/registry";
 import type { SlashCommandContext } from "../../ui/terminal/interactive/commands/types";
 import { notify } from "../../ui/terminal/interactive/lib/notification";
@@ -945,6 +945,60 @@ async function handleProjectTrust(args: string[], ctx: CommandContext): Promise<
   return { handled: true };
 }
 
+function handlePermissions(args: string[], ctx: CommandContext): CommandResult {
+  const trustManager = ctx.trustManager ?? ctx.agentLoop?.getTrustManager();
+  if (!trustManager) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.permissions.usage"),
+    });
+    return { handled: true };
+  }
+
+  const mode = args[0]?.toLowerCase();
+  if (!mode) {
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.permissions.current", { mode: trustManager.getPermissionMode() }),
+    });
+    return { handled: true };
+  }
+
+  if (mode === "clear") {
+    trustManager.clearSessionApprovals();
+    trustManager.setPermissionMode("ask");
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.permissions.cleared"),
+    });
+    return { handled: true };
+  }
+
+  if (isPermissionMode(mode)) {
+    trustManager.setPermissionMode(mode);
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.permissions.changed", { mode }),
+    });
+    return { handled: true };
+  }
+
+  ctx.renderer.emit({
+    type: "error",
+    timestamp: Date.now(),
+    message: ctx.i18n.t("tui.permissions.usage"),
+  });
+  return { handled: true };
+}
+
+function isPermissionMode(value: string): value is PermissionMode {
+  return value === "ask" || value === "repo" || value === "full";
+}
+
 async function handleMcp(args: string[], ctx: CommandContext): Promise<CommandResult> {
   const subcommand = args[0]?.toLowerCase() ?? "status";
 
@@ -1309,6 +1363,7 @@ const COMMAND_HANDLERS: Record<
   config: handleConfig,
   lang: handleLang,
   theme: handleTheme,
+  permissions: handlePermissions,
   skill: handleSkill,
   "project-trust": handleProjectTrust,
   mcp: handleMcp,

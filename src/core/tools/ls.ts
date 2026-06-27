@@ -111,7 +111,7 @@ export const lsTool: ToolDefinition<LsArgs> = {
         return {
           content: [{ type: "text", text: "(empty directory)" }],
           isError: false,
-          details: { entryCount: 0 },
+          details: { path: dirPath, entryCount: 0 },
         };
       }
 
@@ -137,6 +137,7 @@ export const lsTool: ToolDefinition<LsArgs> = {
         content: [{ type: "text", text: outputText }],
         isError: false,
         details: {
+          path: dirPath,
           entryCount: results.length,
           truncated: truncated.truncated,
         },
