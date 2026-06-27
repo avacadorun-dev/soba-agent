@@ -29,6 +29,7 @@ import type { Locale } from "./core/i18n/types";
 import type { ApprovalDecision } from "./core/loop/types";
 import { SoundNotifier } from "./core/middleware/sound-notifier";
 import { listSessions, SessionManager } from "./core/session/session-manager";
+import type { AcpClientRequester } from "./protocol-adapters/acp/client-delegation";
 import { setColorDisabled } from "./tui/colors";
 import { createRenderer } from "./tui/renderer";
 import { initTheme } from "./tui/theme";
@@ -244,6 +245,9 @@ async function main() {
 
     const cwd = process.cwd();
     const session = SessionManager.inMemory(cwd);
+    const { AcpClientToolDelegation } = await import("./protocol-adapters/acp/client-delegation");
+    let acpRequestClient: AcpClientRequester | undefined;
+    const acpToolDelegation = new AcpClientToolDelegation(() => acpRequestClient);
     const runtimeComposition = await createSobaRuntime({
       cwd,
       session,
@@ -256,6 +260,7 @@ async function main() {
       stream: false,
       tokenBudget: cliArgs.budget ?? 0,
       debug: cliArgs.debug,
+      toolDelegation: acpToolDelegation,
     });
     const { runAcpServer } = await import("./apps/acp-server/server");
     await runAcpServer({
@@ -269,6 +274,12 @@ async function main() {
         process.stderr.write(chunk);
       },
       agentInfo: { name: "soba-agent", version: VERSION },
+      onClientRequester: (requestClient) => {
+        acpRequestClient = requestClient;
+      },
+      onClientCapabilities: (_capabilities, raw) => {
+        acpToolDelegation.updateCapabilities(raw);
+      },
     });
     return;
   }

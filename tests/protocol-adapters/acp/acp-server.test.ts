@@ -407,6 +407,12 @@ describe("ACP stdio server foundation", () => {
       [
         `${JSON.stringify({
           jsonrpc: "2.0",
+          id: "init",
+          method: "initialize",
+          params: { clientCapabilities: { methods: ["session/request_permission"] } },
+        })}\n`,
+        `${JSON.stringify({
+          jsonrpc: "2.0",
           id: "prompt",
           method: "session/prompt",
           params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
@@ -439,6 +445,40 @@ describe("ACP stdio server foundation", () => {
       "repo",
       "full",
     ]);
+    expect(result.messages.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("correlates stdio client responses for outbound permission requests", async () => {
+    const state: MockRuntimeState = { emitPermission: true };
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "init",
+          method: "initialize",
+          params: { clientCapabilities: { methods: ["session/request_permission"] } },
+        })}\n`,
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "client_1", result: { decision: "once" } })}\n`,
+      ],
+      { state },
+    );
+
+    expect(state.permissionDecision).toBe("once");
+    expect(result.messages[1]).toMatchObject({
+      jsonrpc: "2.0",
+      id: "client_1",
+      method: "session/request_permission",
+    });
     expect(result.messages.at(-1)).toEqual({
       jsonrpc: "2.0",
       id: "prompt",

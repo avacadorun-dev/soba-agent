@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { RuntimeContentBlock, RuntimeEvent, RuntimeSessionInfo, SobaRuntime, TurnResult } from "../../application/types";
 import { ACP_LIFECYCLE_FEATURES, ACP_PROTOCOL_VERSION, type AcpFeatureSet, buildAgentCapabilities } from "./capabilities";
+import { type AcpClientCapabilities, EMPTY_ACP_CLIENT_CAPABILITIES, parseAcpClientCapabilities } from "./client-capabilities";
 import {
   JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_INVALID_PARAMS,
@@ -39,6 +40,7 @@ export interface AcpDispatcherOptions {
   features?: AcpFeatureSet;
   notify?: (method: string, params: JsonValue) => void | Promise<void>;
   requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
+  onClientCapabilities?: (capabilities: AcpClientCapabilities, raw: JsonValue | undefined) => void | Promise<void>;
 }
 
 export interface AcpDispatchContext {
@@ -52,6 +54,8 @@ export class AcpDispatcher {
   private readonly features: AcpFeatureSet;
   private readonly notify?: (method: string, params: JsonValue) => void | Promise<void>;
   private readonly requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
+  private readonly onClientCapabilities?: (capabilities: AcpClientCapabilities, raw: JsonValue | undefined) => void | Promise<void>;
+  private clientCapabilities: AcpClientCapabilities = EMPTY_ACP_CLIENT_CAPABILITIES;
   private readonly requestRegistry = new AcpRequestRegistry();
 
   constructor(options: AcpDispatcherOptions) {
@@ -61,6 +65,7 @@ export class AcpDispatcher {
     this.features = options.features ?? ACP_LIFECYCLE_FEATURES;
     this.notify = options.notify;
     this.requestClient = options.requestClient;
+    this.onClientCapabilities = options.onClientCapabilities;
   }
 
   async dispatch(request: JsonRpcRequest): Promise<JsonValue | undefined> {
@@ -112,11 +117,14 @@ export class AcpDispatcher {
     }
   }
 
-  private handleInitialize(params: JsonValue | undefined): JsonValue {
+  private async handleInitialize(params: JsonValue | undefined): Promise<JsonValue> {
     const result = initializeParamsSchema.safeParse(params ?? {});
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
+    const rawCapabilities = result.data.clientCapabilities as JsonValue | undefined;
+    this.clientCapabilities = parseAcpClientCapabilities(rawCapabilities);
+    await this.onClientCapabilities?.(this.clientCapabilities, rawCapabilities);
 
     return {
       protocolVersion: ACP_PROTOCOL_VERSION,
@@ -283,7 +291,7 @@ export class AcpDispatcher {
   }
 
   private async handlePermissionRequest(sessionId: string, event: Extract<RuntimeEvent, { type: "dangerous_confirmation" }>): Promise<void> {
-    if (!this.requestClient) {
+    if (!this.requestClient || !this.clientCapabilities.requestPermission) {
       event.resolve("deny");
       return;
     }

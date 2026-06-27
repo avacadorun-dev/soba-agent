@@ -61,6 +61,23 @@ const jsonRpcRequestSchema = z.object({
   params: jsonValueSchema.optional(),
 });
 
+const jsonRpcResponseSchema = z.union([
+  z.object({
+    jsonrpc: z.literal("2.0"),
+    id: jsonRpcIdSchema,
+    result: jsonValueSchema,
+  }),
+  z.object({
+    jsonrpc: z.literal("2.0"),
+    id: jsonRpcIdSchema,
+    error: z.object({
+      code: z.number().int(),
+      message: z.string(),
+      data: jsonValueSchema.optional(),
+    }),
+  }),
+]);
+
 export class JsonRpcError extends Error {
   readonly code: number;
   readonly data?: JsonValue;
@@ -74,14 +91,7 @@ export class JsonRpcError extends Error {
 }
 
 export function parseJsonRpcRequest(line: string): JsonRpcRequest {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch (error) {
-    throw new JsonRpcError(JSON_RPC_PARSE_ERROR, "Parse error", {
-      reason: error instanceof Error ? error.message : String(error),
-    });
-  }
+  const parsed = parseJson(line);
 
   const result = jsonRpcRequestSchema.safeParse(parsed);
   if (!result.success) {
@@ -94,6 +104,46 @@ export function parseJsonRpcRequest(line: string): JsonRpcRequest {
   }
 
   return result.data;
+}
+
+export function parseJsonRpcMessage(line: string): JsonRpcMessage {
+  const parsed = parseJson(line);
+  const request = jsonRpcRequestSchema.safeParse(parsed);
+  if (request.success) return request.data;
+
+  const response = jsonRpcResponseSchema.safeParse(parsed);
+  if (response.success) return response.data;
+
+  throw new JsonRpcError(JSON_RPC_INVALID_REQUEST, "Invalid Request", {
+    issues: request.error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    })),
+  });
+}
+
+function parseJson(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch (error) {
+    throw new JsonRpcError(JSON_RPC_PARSE_ERROR, "Parse error", {
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export function isJsonRpcResponse(message: JsonRpcMessage): message is JsonRpcResponse {
+  return "id" in message && ("result" in message || "error" in message) && !("method" in message);
+}
+
+export function makeJsonRpcRequest(id: JsonRpcId, method: string, params?: JsonValue): JsonRpcRequest {
+  const request: JsonRpcRequest = {
+    jsonrpc: "2.0",
+    id,
+    method,
+  };
+  if (params !== undefined) request.params = params;
+  return request;
 }
 
 export function makeJsonRpcSuccess(id: JsonRpcId, result: JsonValue): JsonRpcSuccess {

@@ -29,6 +29,12 @@ import { writeTool } from "../core/tools/write";
 import { TrustManager } from "../core/trust/trust-manager";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "./command-service";
 import { SessionLifecycleService } from "./session-lifecycle";
+import {
+  createDelegatedBashTool,
+  createDelegatedReadTool,
+  createDelegatedWriteTool,
+  type RuntimeToolDelegation,
+} from "./tool-delegation";
 import type {
   CreateSessionInput,
   ListSessionsInput,
@@ -58,6 +64,7 @@ export interface RuntimeFactoryInput {
   stream: boolean;
   tokenBudget: number;
   debug: boolean;
+  toolDelegation?: RuntimeToolDelegation;
 }
 
 export interface SobaRuntimeComposition {
@@ -161,10 +168,10 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   }
 }
 
-function registerBuiltInTools(registry: ToolRegistry): void {
-  registry.register(readTool);
-  registry.register(writeTool);
-  registry.register(bashTool);
+function registerBuiltInTools(registry: ToolRegistry, delegation?: RuntimeToolDelegation): void {
+  registry.register(delegation ? createDelegatedReadTool(delegation) : readTool);
+  registry.register(delegation ? createDelegatedWriteTool(delegation) : writeTool);
+  registry.register(delegation ? createDelegatedBashTool(delegation) : bashTool);
   registry.register(editTool);
   registry.register(lsTool);
   registry.register(searchFilesTool);
@@ -188,6 +195,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     stream,
     tokenBudget,
     debug,
+    toolDelegation,
   } = input;
 
   const persistedRegistry = await ProviderRegistry.loadFromFile();
@@ -216,7 +224,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   }
 
   const tools = new ToolRegistry();
-  registerBuiltInTools(tools);
+  registerBuiltInTools(tools, toolDelegation);
 
   const projectMemory = new ProjectMemory({ projectRoot: cwd });
   projectMemory.initialize();
