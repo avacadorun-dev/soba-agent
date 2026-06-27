@@ -157,4 +157,83 @@ describe("createSobaRuntime", () => {
 
     expect(composition.client.getConfig().apiKey).toBe("fake-api-key");
   });
+
+  test("falls back to a configured provider with credentials when the active provider has no key", async () => {
+    const registry = {
+      defaultProvider: "missing-key-provider",
+      defaultModel: "missing-model",
+      providers: {
+        "usable-provider": { apiKey: "usable-api-key" },
+      },
+      customProviders: {
+        "missing-key-provider": {
+          id: "missing-key-provider",
+          name: "Missing Key Provider",
+          baseUrl: "https://missing.example.test/v1",
+          apiKeyEnv: "MISSING_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "missing-model",
+          models: [
+            {
+              id: "missing-model",
+              name: "Missing Model",
+              contextWindow: 128000,
+              maxOutput: 8192,
+              supportsStreaming: true,
+              supportsThinking: false,
+            },
+          ],
+          custom: true,
+        },
+        "usable-provider": {
+          id: "usable-provider",
+          name: "Usable Provider",
+          baseUrl: "https://usable.example.test/v1",
+          apiKeyEnv: "USABLE_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "usable-model",
+          models: [
+            {
+              id: "usable-model",
+              name: "Usable Model",
+              contextWindow: 128000,
+              maxOutput: 8192,
+              supportsStreaming: true,
+              supportsThinking: false,
+            },
+          ],
+          custom: true,
+        },
+      },
+    };
+    mkdirSync(join(testHome, ".soba"), { recursive: true });
+    await Bun.write(join(testHome, ".soba", "config.json"), JSON.stringify({ registry }, null, 2));
+
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: {
+        ...makeConfig(),
+        apiKey: "",
+        baseUrl: "https://missing.example.test/v1",
+        model: "missing-model",
+        registry,
+      },
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: false,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+    });
+
+    expect(composition.client.getActiveProviderId()).toBe("usable-provider");
+    expect(composition.client.getConfig()).toMatchObject({
+      apiKey: "usable-api-key",
+      baseUrl: "https://usable.example.test/v1",
+      model: "usable-model",
+    });
+  });
 });

@@ -415,7 +415,12 @@ export function validateConfig(config: SobaConfig): string[] {
     const persistedKey = config.registry.providers?.[providerId]?.apiKey;
     if (!provider) {
       missing.push(`provider:${providerId}`);
-    } else if (provider.apiKeyEnv && !persistedKey && !process.env[provider.apiKeyEnv]) {
+    } else if (
+      provider.apiKeyEnv &&
+      !persistedKey &&
+      !process.env[provider.apiKeyEnv] &&
+      !hasUsableRegistryFallback(config, providerId)
+    ) {
       missing.push(provider.apiKeyEnv);
     }
     return missing;
@@ -431,6 +436,27 @@ export function validateConfig(config: SobaConfig): string[] {
   if (!config.apiKey) missing.push("apiKey");
   if (!config.baseUrl) missing.push("baseUrl");
   return missing;
+}
+
+function hasUsableRegistryFallback(config: SobaConfig, activeProviderId: string): boolean {
+  const registry = config.registry;
+  if (!registry) return false;
+  const providers = new Map<string, ProviderDefinition>();
+  for (const provider of BUILTIN_PROVIDERS) providers.set(provider.id, provider);
+  for (const [providerId, provider] of Object.entries(registry.customProviders ?? {})) {
+    providers.set(providerId, provider);
+  }
+
+  for (const [providerId, secret] of Object.entries(registry.providers ?? {})) {
+    if (providerId === activeProviderId || !secret.apiKey) continue;
+    if (providers.has(providerId)) return true;
+  }
+
+  for (const [providerId, provider] of providers) {
+    if (providerId === activeProviderId) continue;
+    if (!provider.apiKeyEnv || process.env[provider.apiKeyEnv]) return true;
+  }
+  return false;
 }
 
 /**

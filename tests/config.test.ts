@@ -291,6 +291,42 @@ describe("Config validation", () => {
     }
   });
 
+  test("registry provider with missing key is valid when another configured provider has a key", () => {
+    const config: SobaConfig = {
+      ...DEFAULT_CONFIG,
+      registry: {
+        defaultProvider: "minimax",
+        defaultModel: "MiniMax-M3",
+        providers: {
+          openrouter: { apiKey: "fake-openrouter-key" },
+        },
+        customProviders: {
+          minimax: {
+            id: "minimax",
+            name: "Minimax",
+            baseUrl: "https://api.minimax.io/v1",
+            apiKeyEnv: "MINIMAX_API_KEY",
+            adapter: "openai",
+            defaultModel: "MiniMax-M3",
+            models: [
+              {
+                id: "MiniMax-M3",
+                name: "MiniMax M3",
+                contextWindow: 256000,
+                maxOutput: 32000,
+                supportsStreaming: true,
+                supportsThinking: true,
+              },
+            ],
+            custom: true,
+          },
+        },
+      },
+    };
+
+    expect(validateConfig(config)).toEqual([]);
+  });
+
   test("--no-auto-compact override отключает proactive compaction", () => {
     const config = { ...DEFAULT_CONFIG, compaction: { auto: true } };
     expect(resolveCompactionConfig(config, true).auto).toBe(false);
