@@ -234,6 +234,63 @@ describe("Config validation", () => {
     expect(missing).toContain("baseUrl");
   });
 
+  test("registry provider with persisted apiKey is valid", () => {
+    const config: SobaConfig = {
+      ...DEFAULT_CONFIG,
+      registry: {
+        defaultProvider: "openrouter",
+        defaultModel: "openai/gpt-4.1-mini",
+        providers: {
+          openrouter: { apiKey: "fake-api-key" },
+        },
+        customProviders: {},
+      },
+    };
+
+    expect(validateConfig(config)).toEqual([]);
+  });
+
+  test("registry provider with missing required env key is invalid", () => {
+    const previous = process.env.TEST_PROVIDER_KEY;
+    delete process.env.TEST_PROVIDER_KEY;
+    const config: SobaConfig = {
+      ...DEFAULT_CONFIG,
+      registry: {
+        defaultProvider: "test-provider",
+        defaultModel: "test-model",
+        providers: {},
+        customProviders: {
+          "test-provider": {
+            id: "test-provider",
+            name: "Test Provider",
+            baseUrl: "https://api.example.test/v1",
+            apiKeyEnv: "TEST_PROVIDER_KEY",
+            adapter: "openai",
+            defaultModel: "test-model",
+            models: [
+              {
+                id: "test-model",
+                name: "Test Model",
+                contextWindow: 128000,
+                maxOutput: 8192,
+                supportsStreaming: true,
+                supportsThinking: false,
+              },
+            ],
+            custom: true,
+          },
+        },
+      },
+    };
+
+    try {
+      expect(validateConfig(config)).toContain("TEST_PROVIDER_KEY");
+    } finally {
+      if (previous === undefined) delete process.env.TEST_PROVIDER_KEY;
+      else process.env.TEST_PROVIDER_KEY = previous;
+    }
+  });
+
   test("--no-auto-compact override отключает proactive compaction", () => {
     const config = { ...DEFAULT_CONFIG, compaction: { auto: true } };
     expect(resolveCompactionConfig(config, true).auto).toBe(false);

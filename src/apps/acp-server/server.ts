@@ -25,6 +25,7 @@ export interface AcpServerOptions {
   writeStderr?: (chunk: string) => void | Promise<void>;
   dispatcher?: AcpDispatcher;
   agentInfo?: AcpDispatcherOptions["agentInfo"];
+  features?: AcpDispatcherOptions["features"];
   requestClient?: AcpDispatcherOptions["requestClient"];
   onClientRequester?: (requestClient: NonNullable<AcpDispatcherOptions["requestClient"]>) => void;
   onClientCapabilities?: AcpDispatcherOptions["onClientCapabilities"];
@@ -66,6 +67,7 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
       runtime: options.runtime,
       cwd: options.cwd,
       agentInfo: options.agentInfo,
+      features: options.features,
       notify: async (method, params) => {
         await options.writeStdout(serializeJsonRpc(makeJsonRpcNotification(method, params)));
       },

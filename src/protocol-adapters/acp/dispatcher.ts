@@ -164,6 +164,9 @@ export class AcpDispatcher {
   }
 
   private async handleSessionLoad(params: JsonValue | undefined): Promise<JsonValue> {
+    if (!this.features.loadSession) {
+      throw new JsonRpcError(JSON_RPC_METHOD_NOT_FOUND, "Method not found: session/load");
+    }
     const result = sessionIdParamsSchema.safeParse(params ?? {});
     if (!result.success) {
       throw invalidParams(result.error.issues);
@@ -174,6 +177,9 @@ export class AcpDispatcher {
   }
 
   private async handleSessionResume(params: JsonValue | undefined): Promise<JsonValue> {
+    if (!this.features.loadSession) {
+      throw new JsonRpcError(JSON_RPC_METHOD_NOT_FOUND, "Method not found: session/resume");
+    }
     const result = sessionIdParamsSchema.safeParse(params ?? {});
     if (!result.success) {
       throw invalidParams(result.error.issues);

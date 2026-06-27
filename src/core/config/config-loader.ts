@@ -404,13 +404,20 @@ export function loadConfigFromEnv(): Partial<SobaConfig> {
  */
 export function validateConfig(config: SobaConfig): string[] {
   const missing: string[] = [];
-  // Phase 2.5: if a registry block with a default provider is present,
-  // treat the config as fully configured. Built-in providers always have
-  // a baseUrl baked in, and per-provider apiKey lives in
-  // registry.providers[id].apiKey. Custom providers are keyless unless
-  // an apiKeyEnv is set; the key itself is read at request time from
-  // the environment, so we don't validate its presence here.
+  // Phase 2.5: registry is the primary config shape. Built-in providers
+  // carry a baseUrl, while secrets come from registry.providers[id].apiKey
+  // or the provider-specific environment variable.
   if (config.registry?.defaultProvider) {
+    const providerId = config.registry.defaultProvider;
+    const provider =
+      config.registry.customProviders?.[providerId] ??
+      BUILTIN_PROVIDERS.find((candidate) => candidate.id === providerId);
+    const persistedKey = config.registry.providers?.[providerId]?.apiKey;
+    if (!provider) {
+      missing.push(`provider:${providerId}`);
+    } else if (provider.apiKeyEnv && !persistedKey && !process.env[provider.apiKeyEnv]) {
+      missing.push(provider.apiKeyEnv);
+    }
     return missing;
   }
   // Backward compat: old key name.

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { runAcpServer } from "../../../src/apps/acp-server/server";
+import { ACP_LIFECYCLE_FEATURES, type AcpFeatureSet } from "../../../src/protocol-adapters/acp/capabilities";
 import type { JsonValue } from "../../../src/protocol-adapters/acp/json-rpc";
 
 interface MockRuntimeState {
@@ -172,6 +173,7 @@ async function runLines(
   options: {
     state?: MockRuntimeState;
     requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
+    features?: AcpFeatureSet;
   } = {},
 ) {
   const stdout: string[] = [];
@@ -188,6 +190,7 @@ async function runLines(
     },
     agentInfo: { name: "soba-agent", version: "0.5.0" },
     requestClient: options.requestClient,
+    features: options.features,
   });
 
   return {
@@ -238,7 +241,7 @@ describe("ACP stdio server foundation", () => {
         protocolVersion: 1,
         agentInfo: { name: "soba-agent", version: "0.5.0" },
         agentCapabilities: {
-          loadSession: true,
+          loadSession: false,
           promptCapabilities: {
             embeddedContext: true,
             image: true,
@@ -248,7 +251,6 @@ describe("ACP stdio server foundation", () => {
             close: {},
             delete: {},
             list: {},
-            resume: {},
           },
         },
       },
@@ -273,11 +275,14 @@ describe("ACP stdio server foundation", () => {
   });
 
   test("lists, loads and resumes sessions", async () => {
-    const result = await runLines([
-      `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`,
-      `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded" } })}\n`,
-      `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded" } })}\n`,
-    ]);
+    const result = await runLines(
+      [
+        `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded" } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded" } })}\n`,
+      ],
+      { features: { ...ACP_LIFECYCLE_FEATURES, loadSession: true } },
+    );
 
     expect(result.messages[0]).toMatchObject({
       id: "list",
@@ -295,6 +300,22 @@ describe("ACP stdio server foundation", () => {
     });
     expect(result.messages[2]).toMatchObject({ id: "load", result: { sessionId: "session_loaded" } });
     expect(result.messages[3]).toMatchObject({ id: "resume", result: { sessionId: "session_loaded" } });
+  });
+
+  test("rejects load and resume when session loading is not advertised", async () => {
+    const result = await runLines([
+      `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "missing" } })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "missing" } })}\n`,
+    ]);
+
+    expect(result.messages[0]).toMatchObject({
+      id: "load",
+      error: { code: -32601, message: "Method not found: session/load" },
+    });
+    expect(result.messages[1]).toMatchObject({
+      id: "resume",
+      error: { code: -32601, message: "Method not found: session/resume" },
+    });
   });
 
   test("runs prompts and emits session updates", async () => {
