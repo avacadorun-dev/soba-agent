@@ -178,6 +178,42 @@ describe("OpenTUI Solid store", () => {
     ]);
   });
 
+  test("убирает superseded assistant prose перед финальным finish-ответом", () => {
+    const store = createStore();
+    store.onAgentEvent(event({ type: "assistant_message_start", messageId: "m1" }));
+    store.onAgentEvent(event({ type: "assistant_text_delta", messageId: "m1", delta: "Готово: " }));
+    store.onAgentEvent(event({ type: "assistant_text_delta", messageId: "m1", delta: "проект создан" }));
+    store.onAgentEvent(
+      event({
+        type: "assistant_text_done",
+        messageId: "m1",
+        fullText: "Готово: проект создан",
+      }),
+    );
+
+    expect(store.messages()).toEqual([
+      { id: 1, type: "assistant", content: "Готово: проект создан", streaming: false },
+    ]);
+
+    store.onAgentEvent(
+      event({
+        type: "assistant_message_superseded",
+        messageId: "m1",
+        reason: "autonomous_followup",
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "assistant_message",
+        messageId: "finish_1",
+        text: "Готово: проект создан\n\n**Evidence**\n- Status: verified",
+      }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["assistant", "evidence"]);
+    expect(store.messages()[0]).toMatchObject({ type: "assistant", content: "Готово: проект создан" });
+  });
+
   test("собирает всю ленту сообщений в единый текст для копирования", () => {
     const store = createStore();
     store.onAgentEvent(event({ type: "turn_start", turnIndex: 1, userInput: "Проверь проект" }));

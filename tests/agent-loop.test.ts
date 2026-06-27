@@ -663,6 +663,16 @@ describe("AgentLoop", () => {
 
     expect(result.errors).toHaveLength(0);
     expect(requests).toHaveLength(4);
+    const assistantTexts = result.items
+      .filter((item) => item.type === "message" && item.role === "assistant")
+      .flatMap((item) =>
+        item.content
+          .filter((content) => content.type === "output_text")
+          .map((content) => content.text),
+      );
+    expect(assistantTexts).toHaveLength(1);
+    expect(assistantTexts[0]).toContain("Готово, проверки прошли.");
+    expect(assistantTexts[0]).toContain("**Evidence**");
     const followUpInput = requests[3]?.input;
     expect(Array.isArray(followUpInput)).toBe(true);
     if (Array.isArray(followUpInput)) {
