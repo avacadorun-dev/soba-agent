@@ -29,6 +29,9 @@ import type {
   StreamingEvent,
 } from "./types";
 
+const SOBA_APP_NAME = "soba-agent";
+const SOBA_APP_URL = "https://github.com/avacadorun-dev/soba-agent";
+
 // ─── Types ───
 
 export interface OpenResponsesClientConfig {
@@ -180,10 +183,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       try {
         const response = await fetch(url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.config.apiKey}`,
-          },
+          headers: this.getRequestHeaders(),
           body: JSON.stringify(request),
           signal: AbortSignal.timeout(300000),
         });
@@ -312,10 +312,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       try {
         const response = await fetch(url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.config.apiKey}`,
-          },
+          headers: this.getRequestHeaders(),
           body: JSON.stringify(request),
           signal: AbortSignal.timeout(120000),
         });
@@ -364,6 +361,16 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       );
     }
     return false;
+  }
+
+  private getRequestHeaders(): Record<string, string> {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${this.config.apiKey}`,
+      "HTTP-Referer": SOBA_APP_URL,
+      "X-Title": SOBA_APP_NAME,
+      "User-Agent": SOBA_APP_NAME,
+    };
   }
 
   private getProviderConfig() {
