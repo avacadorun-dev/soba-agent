@@ -39,11 +39,14 @@ describe("System Prompt", () => {
     expect(prompt).toContain("use ls only for directory shape or filename discovery");
     expect(prompt).toContain("use read for images or whole-file reads");
     expect(prompt).toContain("Do not use bash for pwd, ls/find/grep/rg/sed/cat inspection");
+    expect(prompt).toContain("routine file inspection through bash is rejected");
     expect(prompt).toContain("Use bash for verification commands");
     expect(prompt).toContain("Run final verification commands directly");
     expect(prompt).toContain("Do not pipe final verification through head/tail");
-    expect(prompt).toContain("do not present --help, --version, which");
-    expect(prompt).toContain("prefer temp directories, env-configured storage paths, or test fixtures");
+    expect(prompt).toContain("filtered verification commands are rejected");
+    expect(prompt).toContain("Do not present --help, --version, which");
+    expect(prompt).toContain("use mktemp -d or another unique temp directory");
+    expect(prompt).toContain("env-configured storage paths, or test fixtures");
     expect(prompt).toContain("Do not remove project data with rm -rf");
     expect(prompt).toContain("Use edit for precise changes");
     expect(prompt).toContain("Use checkpoint only for meaningful milestones or plan pivots in long tasks");
@@ -51,7 +54,9 @@ describe("System Prompt", () => {
     expect(prompt).toContain("Work autonomously until the user's task is actually complete");
     expect(prompt).toContain("Simple Q&A or explanation-only turns that use no tools may end with normal text");
     expect(prompt).toContain("After using tools, plain text without final_answer is intermediate");
-    expect(prompt).toContain("Use status blocked only for a real external blocker");
+    expect(prompt).toContain("do not write a final prose summary as an assistant message");
+    expect(prompt).toContain("call finish immediately with status completed");
+    expect(prompt).toContain("Use blocked only for a real external blocker");
     expect(prompt).toContain("Do not repeat the same command");
     expect(prompt).toContain("optional tooling or non-critical implementation choices");
     expect(prompt).toContain("make at most one targeted check");
@@ -106,6 +111,7 @@ describe("System Prompt", () => {
     expect(prompt).not.toContain("Available tools:");
     expect(prompt).toContain("call finish");
     expect(prompt).toContain("After using tools, plain text without final_answer is intermediate");
+    expect(prompt).toContain("do not write a final prose summary as an assistant message");
     expect(prompt).toContain("Do not repeat the same command");
     expect(prompt).toContain("understand, inspect, plan, act, verify, reflect, finish");
   });
@@ -134,6 +140,7 @@ describe("System Prompt", () => {
     expect(prompt).toContain("inspect_file: Inspect bounded line-numbered text ranges");
     expect(prompt).toContain("bash: Run project commands, verification workflows");
     expect(prompt).toContain("Do not use for pwd, ls/find/grep/rg/sed/cat inspection");
+    expect(prompt).toContain("routine file inspection through bash is rejected");
   });
 
   test("промпт содержит дату и рабочую директорию", () => {

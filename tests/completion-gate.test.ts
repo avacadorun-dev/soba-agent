@@ -45,6 +45,7 @@ function baseState(overrides: {
   unverifiedMutationIds?: string[];
   unverifiedCodeMutationIds?: string[];
   unverifiedDocsMutationIds?: string[];
+  unresolvedVerificationFailureIds?: string[];
   evidenceIds?: Set<string>;
   allowUnverifiedCompletion?: boolean;
 } = {}) {
@@ -62,6 +63,7 @@ function baseState(overrides: {
     unverifiedMutationIds: overrides.unverifiedMutationIds ?? [],
     unverifiedCodeMutationIds: overrides.unverifiedCodeMutationIds ?? [],
     unverifiedDocsMutationIds: overrides.unverifiedDocsMutationIds ?? [],
+    unresolvedVerificationFailureIds: overrides.unresolvedVerificationFailureIds ?? [],
     taskKind: overrides.taskKind,
     evidenceIds: overrides.evidenceIds,
     allowUnverifiedCompletion: overrides.allowUnverifiedCompletion,
@@ -366,6 +368,41 @@ describe("evaluateCompletion", () => {
     expect(decision.accepted).toBe(true);
   });
 
+  test("completed rejects unresolved failed verification even when older passing evidence exists", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "feature",
+        hasMutatedFiles: true,
+        hasCodeMutations: true,
+        verificationEvidenceCallIds: new Set(["test_1"]),
+        verificationKinds: new Set(["test"]),
+        unresolvedVerificationFailureIds: ["ev_verification_lint_failed"],
+      }),
+    );
+
+    expect(decision.accepted).toBe(false);
+    if (!decision.accepted) {
+      expect(decision.reasons.join("\n")).toContain("unresolved failed verification checks");
+    }
+  });
+
+  test("completed accepts failed verification after later successful retry clears it", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "feature",
+        hasMutatedFiles: true,
+        hasCodeMutations: true,
+        verificationEvidenceCallIds: new Set(["lint_retry"]),
+        verificationKinds: new Set(["lint"]),
+        unresolvedVerificationFailureIds: [],
+      }),
+    );
+
+    expect(decision.accepted).toBe(true);
+  });
+
   test("UC-AL-04 допускает docs-only mutation после inspection evidence", () => {
     const decision = evaluateCompletion(
       completedRequest(),
@@ -439,7 +476,7 @@ describe("evaluateCompletion", () => {
     expect(decision.accepted).toBe(true);
   });
 
-  test("criteria evidenceIds are optional hints and unknown values do not block completion", () => {
+  test("criteria evidenceIds are optional but must match recorded evidence when provided", () => {
     const decision = evaluateCompletion(
       {
         summary: "Готово",
@@ -452,7 +489,11 @@ describe("evaluateCompletion", () => {
       }),
     );
 
-    expect(decision.accepted).toBe(true);
+    expect(decision.accepted).toBe(false);
+    if (!decision.accepted) {
+      expect(decision.reasons.join("\n")).toContain("criteria[].evidenceIds contains IDs");
+      expect(decision.reasons.join("\n")).toContain("missing_ev");
+    }
   });
 
   test("completed_with_unverified_changes is rejected unless explicitly allowed", () => {

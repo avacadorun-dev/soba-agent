@@ -79,6 +79,7 @@ export interface EvidenceLedgerSummary {
   unverifiedCodeMutationIds: string[];
   unverifiedDocsMutationIds: string[];
   activeDiagnosticIds: string[];
+  unresolvedVerificationFailureIds: string[];
   entries: EvidenceEntry[];
 }
 
@@ -329,6 +330,7 @@ export class EvidenceLedger {
       if (entry.kind === "diagnostic" && entry.status === "active") return [entry.id];
       return [];
     });
+    const unresolvedVerificationFailureIds = unresolvedVerificationFailures(this.entries).map((entry) => entry.id);
 
     return {
       successfulToolCallIds: new Set(this.successfulToolCallIds),
@@ -344,6 +346,7 @@ export class EvidenceLedger {
       unverifiedCodeMutationIds,
       unverifiedDocsMutationIds,
       activeDiagnosticIds,
+      unresolvedVerificationFailureIds,
       entries: this.getEntries(),
     };
   }
@@ -364,6 +367,7 @@ export class EvidenceLedger {
       unverifiedMutationIds: summary.unverifiedMutationIds,
       unverifiedCodeMutationIds: summary.unverifiedCodeMutationIds,
       unverifiedDocsMutationIds: summary.unverifiedDocsMutationIds,
+      unresolvedVerificationFailureIds: summary.unresolvedVerificationFailureIds,
       evidenceIds: new Set(summary.entries.map((entry) => entry.id)),
     };
   }
@@ -432,6 +436,27 @@ export class EvidenceLedger {
     this.entries.push(entry);
     return { ...entry, mutationIds: entry.mutationIds?.slice(), resolves: entry.resolves?.slice() };
   }
+}
+
+function unresolvedVerificationFailures(entries: EvidenceEntry[]): EvidenceEntry[] {
+  const laterPassingKinds = new Set<VerificationKind>();
+  const unresolved: EvidenceEntry[] = [];
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.kind !== "verification" || !entry.verificationKind) continue;
+
+    if (entry.status === "success") {
+      laterPassingKinds.add(entry.verificationKind);
+      continue;
+    }
+
+    if (entry.status === "failure" && !laterPassingKinds.has(entry.verificationKind)) {
+      unresolved.push(entry);
+    }
+  }
+
+  return unresolved.reverse();
 }
 
 function readFiles(args: string): string[] {

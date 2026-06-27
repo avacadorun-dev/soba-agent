@@ -122,14 +122,30 @@ export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): Verifi
 export function inferTaskKindFromPrompt(prompt: string): TaskKind {
   const normalized = prompt.toLowerCase();
   if (containsAny(normalized, ["review", "ревью", "code review", "посмотри изменения"])) return "review";
-  if (containsAny(normalized, ["readme", "docs", "documentation", "документац", "доки", "доках", "roadmap"])) {
-    return "docs_change";
+  if (
+    containsAny(normalized, [
+      "from scratch",
+      "new project",
+      "create project",
+      "cli project",
+      "cli-проект",
+      "с нуля",
+      "создай проект",
+      "создать проект",
+      "сделай проект",
+      "приложение",
+    ])
+  ) {
+    return "feature";
   }
   if (containsAny(normalized, ["lint", "biome", "линт"])) return "lint_failure";
   if (containsAny(normalized, ["test", "tests", "тест", "тесты", "тестов", "падает тест"])) return "test_failure";
   if (containsAny(normalized, ["refactor", "рефактор"])) return "refactor";
   if (containsAny(normalized, ["add", "support", "feature", "добавь", "поддержк"])) return "feature";
   if (containsAny(normalized, ["fix", "bug", "почини", "исправь", "падает", "ошибк"])) return "bug_fix";
+  if (containsAny(normalized, ["readme", "docs", "documentation", "документац", "доки", "доках", "roadmap"])) {
+    return "docs_change";
+  }
   if (containsAny(normalized, ["what", "why", "how", "что", "почему", "как"])) return "read_only_question";
   return "unknown";
 }

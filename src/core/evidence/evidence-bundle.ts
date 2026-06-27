@@ -213,7 +213,37 @@ function buildChecks(ledger: EvidenceLedgerSummary, commands: EvidenceCommandRun
     });
   }
 
-  return checks;
+  return suppressSupersededChecks(checks);
+}
+
+function suppressSupersededChecks(checks: EvidenceCheck[]): EvidenceCheck[] {
+  const laterPassingKinds = new Set<VerificationKind>();
+  const retained: EvidenceCheck[] = [];
+
+  for (let index = checks.length - 1; index >= 0; index -= 1) {
+    const check = checks[index];
+    if (!check.verificationKind) {
+      retained.push(check);
+      continue;
+    }
+
+    if (check.status === "passed") {
+      laterPassingKinds.add(check.verificationKind);
+      retained.push(check);
+      continue;
+    }
+
+    if (
+      (check.status === "failed" || check.status === "skipped" || check.status === "not_run") &&
+      laterPassingKinds.has(check.verificationKind)
+    ) {
+      continue;
+    }
+
+    retained.push(check);
+  }
+
+  return retained.reverse();
 }
 
 function checkFromEntry(entry: EvidenceEntry, commands: EvidenceCommandRun[]): EvidenceCheck[] {

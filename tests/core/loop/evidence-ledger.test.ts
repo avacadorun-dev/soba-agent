@@ -104,7 +104,43 @@ describe("EvidenceLedger", () => {
     expect(summary.needsVerification).toBe(false);
     expect(summary.unverifiedMutationIds).toEqual([]);
     expect(summary.activeDiagnosticIds).toEqual([]);
+    expect(summary.unresolvedVerificationFailureIds).toEqual([]);
     expect(summary.verificationEvidenceCallIds).toEqual(new Set(["test_pass"]));
+  });
+
+  test("failed verification remains unresolved until same kind passes later", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_1",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "src/parser.ts" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+    ledger.recordToolOutcome({
+      toolCallId: "typecheck_fail",
+      toolName: "bash",
+      arguments: recordArgs("bun run typecheck"),
+      isError: true,
+      output: "typecheck failed",
+      iteration: 2,
+    });
+    const failed = ledger.getEntries().find((entry) => entry.kind === "verification" && entry.status === "failure");
+
+    expect(failed).toBeDefined();
+    expect(ledger.getSummary().unresolvedVerificationFailureIds).toEqual([failed?.id]);
+
+    ledger.recordToolOutcome({
+      toolCallId: "typecheck_pass",
+      toolName: "bash",
+      arguments: recordArgs("bun run typecheck"),
+      isError: false,
+      output: "typecheck passed",
+      iteration: 3,
+    });
+
+    expect(ledger.getSummary().unresolvedVerificationFailureIds).toEqual([]);
   });
 
   test("successful probe commands do not verify previous mutations", () => {

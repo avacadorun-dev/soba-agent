@@ -106,16 +106,20 @@ describe("bash tool", () => {
     expect(result.error?.code).toBe("bash_invalid_arguments");
   });
 
-  test("выполняет ls в рабочей директории", async () => {
+  test("отклоняет routine file inspection через bash", async () => {
     const cwd = makeCwd();
     writeFileSync(join(cwd, "file1.txt"), "content1");
     writeFileSync(join(cwd, "file2.txt"), "content2");
 
-    const result = await bashTool.execute({ command: "ls" }, { cwd });
+    const result = await bashTool.execute({ command: "pwd && ls -la" }, { cwd });
 
-    expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain("file1.txt");
-    expect(result.content[0].text).toContain("file2.txt");
+    expect(result.isError).toBe(true);
+    expect(result.error).toMatchObject({
+      code: "bash_routine_filesystem_inspection",
+      category: "validation",
+      retryable: false,
+    });
+    expect(result.content[0].text).toContain("Use ls for directory structure");
   });
 
   test("команда без вывода возвращает (no output)", async () => {
@@ -146,10 +150,25 @@ describe("bash tool", () => {
     const cwd = makeCwd();
     writeFileSync(join(cwd, "project-file.txt"), "project content");
 
-    const result = await bashTool.execute({ command: "cat project-file.txt" }, { cwd });
+    const result = await bashTool.execute({
+      command: "node -e \"console.log(require('fs').readFileSync('project-file.txt', 'utf8'))\"",
+    }, { cwd });
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("project content");
+  });
+
+  test("отклоняет verification commands, пропущенные через head/tail", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute({ command: "bun test 2>&1 | tail -10" }, { cwd });
+
+    expect(result.isError).toBe(true);
+    expect(result.error).toMatchObject({
+      code: "bash_verification_output_filter",
+      category: "validation",
+      retryable: false,
+    });
+    expect(result.content[0].text).toContain("verification commands must not be piped through head or tail");
   });
 
   test("truncateOutput ограничивает длинный вывод", async () => {

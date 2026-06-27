@@ -23,9 +23,11 @@ describe("tool choice descriptions", () => {
   test("mutation and shell tools discourage overly broad use", () => {
     expect(writeTool.description).toContain("Prefer edit for localized changes");
     expect(bashTool.description).toContain("Do not use bash for pwd, routine directory listing");
+    expect(bashTool.description).toContain("routine file inspection through bash is rejected");
     expect(bashTool.description).toContain("verification workflows");
     expect(bashTool.description).toContain("--help/--version/which probes");
     expect(bashTool.description).toContain("head/tail are diagnostic only");
+    expect(bashTool.description).toContain("filtered verification commands are rejected");
   });
 
   test("long-task and memory tools are scoped", () => {
