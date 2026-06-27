@@ -1,0 +1,255 @@
+---
+title: "ACP и Zed"
+description: "Текущая реализация SOBA Agent как ACP v1 server: запуск через soba acp, поддержанные методы, sessions, permissions, tool updates, evidence metadata и ограничения."
+---
+
+SOBA умеет работать как Agent Client Protocol server для редакторов, которые запускают agent по stdio. Практический
+сценарий сейчас — [Zed](https://zed.dev/): редактор стартует `soba acp`, создаёт ACP session и отправляет prompts через Agent
+Panel, а SOBA возвращает assistant text, tool lifecycle, permissions, usage и evidence metadata через ACP updates.
+
+ACP в SOBA — это adapter поверх общего runtime. Он не содержит собственной политики проверки, permissions, MCP, memory
+или completion. Те же runtime-команды и проверки, которые доступны в CLI/TUI, используются и в ACP-пути.
+
+## 1. Запуск
+
+Минимальная команда server:
+
+```bash
+soba acp
+```
+
+В ACP mode:
+
+- `stdout` содержит только newline-delimited JSON-RPC сообщения;
+- diagnostic logs пишутся в `stderr` с префиксом `[soba acp]`;
+- конфигурация provider/model читается обычным SOBA config path;
+- если нет обязательной provider-конфигурации, процесс завершится с понятной ошибкой до старта JSON-RPC loop.
+
+В Zed настройте agent server так, чтобы command запускал `soba`, а args содержали `acp`. Если вы запускаете SOBA из
+исходников, используйте эквивалентную команду вашего dev-окружения, например `bun run src/cli.ts acp`.
+
+## 2. Protocol Version And Capabilities
+
+SOBA advertises ACP protocol version `1`.
+
+На `initialize` SOBA возвращает:
+
+- `agentInfo.name`: `soba-agent`;
+- `agentInfo.version`: версия из `package.json`;
+- `agentCapabilities.loadSession`: `true`;
+- `promptCapabilities.embeddedContext`: `true`;
+- `promptCapabilities.image`: `true`;
+- `promptCapabilities.audio`: `false`;
+- `sessionCapabilities`: `close`, `delete`, `list`, `resume`.
+
+SOBA также читает `clientCapabilities` и включает дополнительные client-backed paths, если редактор их рекламирует:
+
+| Client capability | Что делает SOBA |
+|---|---|
+| `session/request_permission` | Запрашивает разрешение dangerous operations через редактор |
+| `fs/read_text_file` | Может делегировать чтение файла редактору |
+| `fs/write_text_file` | Может делегировать запись файла редактору |
+| `terminal: true` или terminal methods | Может делегировать terminal execution редактору |
+
+Если capability не объявлена, SOBA использует собственный runtime path или отказывает действие безопасным способом.
+
+## 3. Server Methods
+
+SOBA реализует текущий ACP v1 server surface:
+
+| ACP method | Статус | Runtime mapping |
+|---|---:|---|
+| `authenticate` | yes | no-op success для local/server-managed auth |
+| `logout` | yes | no-op success для local/server-managed auth |
+| `initialize` | yes | protocol handshake и capability exchange |
+| `session/list` | yes | список SOBA sessions для cwd |
+| `session/new` | yes | создать новую runtime session |
+| `session/load` | yes | загрузить persisted session и replay entries |
+| `session/resume` | yes | продолжить persisted session |
+| `session/prompt` | yes | запустить turn через общий `SobaRuntime` |
+| `session/cancel` | yes | отменить активный turn/request по session |
+| `session/close` | yes | закрыть session |
+| `session/delete` | yes | удалить session |
+| `session/set_config_option` | yes | изменить provider/model config option |
+| `session/set_mode` | yes | изменить режим session, включая permission/workflow modes |
+
+Unknown methods возвращают JSON-RPC `Method not found`.
+
+## 4. Prompt Content
+
+`session/prompt` принимает ACP content blocks и переводит их в protocol-neutral runtime blocks:
+
+| ACP block | Runtime block |
+|---|---|
+| `text` | обычный user text |
+| `resource` | embedded resource с `uri`, `text`, optional `mimeType` |
+| `resource_link` | ссылка на ресурс с `uri`, `name`, optional `mimeType` |
+| `image` | image block с `mimeType` и base64 `data` |
+
+Embedded resources считаются untrusted context. Они помогают модели понять текущий файл/выделение, но не заменяют
+проверку через tools, diff или commands.
+
+ACP `command` внутри prompt тоже поддержан. Например команда `/mcp reload` или `/sessions list` идёт через общий
+command executor до обращения к модели.
+
+## 5. Available Commands
+
+После создания, загрузки или resume session SOBA отправляет `available_commands_update`. Команды берутся из общего
+runtime metadata, фильтруются по ACP surface и рекламируются с usage hints.
+
+Сейчас через ACP доступны:
+
+```text
+/compact
+/rewind
+/session
+/sessions
+/capsule
+/auto-compact
+/budget
+/config
+/lang
+/permissions
+/skill
+/project-trust
+/mcp
+/help
+```
+
+TUI-only команды вроде `/clear`, `/notifications`, `/model`, `/sidebar` и `/keys` не рекламируются через ACP, потому что
+они управляют локальным terminal UI, а не editor protocol session.
+
+## 6. Tool Updates
+
+SOBA мапит runtime tool events в ACP `session/update`:
+
+| Runtime event | ACP update |
+|---|---|
+| `tool_call_start` | `tool_call` со статусом `pending` |
+| `tool_call_result` | `tool_call_update` со статусом `completed` или `failed` |
+| `tool_call_end` | `tool_call_update` с duration metadata |
+| `budget_update` | `usage_update` |
+| assistant streaming | `agent_message_chunk` |
+
+Для filesystem/edit/read/search/bash tools SOBA добавляет structured metadata:
+
+- `toolCallId`;
+- `title`;
+- `kind`;
+- `status`;
+- `rawInput`;
+- `locations`, если известен path/line;
+- `_meta.tool_name`;
+- `_meta.soba.toolName`;
+- `_meta.soba.kind`.
+
+Для edits SOBA отправляет ACP diff content:
+
+```text
+type: "diff"
+path: "/repo/src/app.ts"
+oldText: "..."
+newText: "..."
+```
+
+Для bash/terminal calls metadata включает command, exit code, timeout/truncation flags и output preview.
+
+## 7. Permissions
+
+Dangerous operations в ACP идут через тот же trust/permissions layer, что и CLI/TUI. Если editor поддерживает
+`session/request_permission`, SOBA отправляет permission request с tool call summary и вариантами:
+
+| Option | SOBA decision |
+|---|---|
+| `deny` | отклонить |
+| `once` | разрешить один раз |
+| `session` | разрешить для текущей session |
+| `repo` | включить repo-scoped режим |
+| `full` | включить full permission mode |
+
+Если client request недоступен или падает, SOBA выбирает безопасный default: `deny`.
+
+## 8. Evidence Metadata
+
+Финальный handoff строится через общий Evidence Bundle. ACP adapter не решает, достаточно ли проверок; он только
+передаёт результат пользователю и редактору.
+
+Когда assistant message содержит evidence handoff, ACP update получает:
+
+```text
+_meta.soba.evidence.source = "assistant_handoff"
+_meta.soba.evidence.status
+_meta.soba.evidence.changedFiles
+_meta.soba.evidence.diff
+_meta.soba.evidence.checks
+_meta.soba.evidence.risks
+_meta.soba.evidence.reviewActions
+```
+
+Tool lifecycle updates тоже содержат `_meta.soba.evidence` с phase `start`, `result` или `end`, status, path/command и
+preview output. Поэтому Zed может показать не только итоговый текст, но и то, какие команды запускались, какие
+файлы менялись и где остались риски.
+
+## 9. Sessions
+
+ACP session id может отличаться от внутреннего SOBA session id. Adapter хранит alias mapping, поэтому stale editor ids
+могут быть привязаны к live runtime session после `load` или `resume`.
+
+`session/load` replay-ит persisted entries обратно в editor через `session/update`, затем отправляет актуальные config
+options и available commands.
+
+`session/list` возвращает:
+
+- `sessionId`;
+- `cwd`;
+- `title`;
+- `updatedAt`.
+
+## 10. Client-Backed Delegation
+
+Если ACP client поддерживает filesystem или terminal methods, SOBA может использовать editor-backed operations:
+
+| Client method | Использование |
+|---|---|
+| `fs/read_text_file` | editor-backed read |
+| `fs/write_text_file` | editor-backed write |
+| `terminal/create` | создать terminal для command |
+| `terminal/output` | получить output |
+| `terminal/wait_for_exit` | дождаться exit |
+| `terminal/kill` | остановить terminal при abort |
+| `terminal/release` | освободить terminal |
+
+Эта delegation не меняет trust model: dangerous commands всё равно проходят через SOBA approval path.
+
+## 11. Ограничения
+
+- ACP v2 сейчас не заявлен как полный target; текущая реализация рекламирует protocol version `1`.
+- Audio prompt blocks не поддержаны.
+- OAuth/auth provider integrations для ACP не являются отдельным пользовательским workflow: `authenticate` и `logout`
+  сейчас завершаются успешно как local/server-managed no-op.
+- MCP tools внутри SOBA работают через обычную `.soba/mcp.json` конфигурацию. После правки config используйте `/mcp reload`
+  через ACP command path.
+- Zed manual smoke зависит от установленного редактора и его ACP surface; автоматические тесты покрывают stdio
+  server, dispatcher, lifecycle, permissions, tool metadata, diff content и evidence metadata.
+
+## 12. Проверки Для Разработки
+
+Основной regression set:
+
+```bash
+bun test tests/adapters/acp
+bun test tests/application/runtime-factory.test.ts
+bun test tests/architecture/post-acp-architecture-gate.test.ts
+```
+
+Для полного gate:
+
+```bash
+bun test
+bun run lint
+bunx tsc --noEmit
+bun run build
+```
+
+Архитектурное правило: ACP code живёт в `src/adapters/acp` и `src/apps/acp`; core/runtime policy не должен импортировать
+protocol adapter.

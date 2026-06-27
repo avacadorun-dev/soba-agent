@@ -96,6 +96,11 @@ soba -r
 |---|---|
 | `/session` | Показать информацию о текущей сессии (ID, количество ходов, бюджет) |
 | `/session rewind <turn-id>` | Откатить сессию к указанному ходу (создаётся ветка) |
+| `/sessions list` | Показать доступные сессии, активную сессию и краткую evidence-сводку |
+| `/sessions resume <id>` | Активировать выбранную сессию |
+| `/sessions load <id>` | Загрузить выбранную сессию |
+| `/sessions close [id]` | Закрыть текущую или указанную сессию |
+| `/sessions delete <id>` | Удалить неактивную сессию |
 
 ### 3.2. Compaction и бюджет
 
@@ -145,6 +150,7 @@ soba -r
 | `/mcp start <server>` | Запустить MCP-сервер и зарегистрировать его tools |
 | `/mcp stop <server>` | Остановить MCP-сервер |
 | `/mcp restart <server>` | Перезапустить MCP-сервер и синхронизировать tools |
+| `/mcp reload` | Перечитать `.soba/mcp.json`, остановить удалённые servers и синхронизировать tools без перезапуска SOBA |
 | `/mcp auth status <server>` | Показать remote auth state и next action |
 | `/mcp auth login <server>` | Запустить OAuth login для remote MCP server |
 | `/mcp auth logout <server>` | Очистить сохранённые OAuth credentials |

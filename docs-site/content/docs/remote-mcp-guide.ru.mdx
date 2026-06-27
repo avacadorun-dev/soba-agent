@@ -3,7 +3,7 @@ title: "Remote MCP: пошаговый гайд"
 description: Как подключить hosted Streamable HTTP MCP server к SOBA, выбрать auth mode, проверить tools и разобрать типовые ошибки.
 ---
 
-Этот гайд подключает SOBA v0.4.4 к hosted MCP server через актуальный `streamableHttp` transport.
+Этот гайд подключает SOBA v0.5.0 к hosted MCP server через актуальный `streamableHttp` transport.
 
 Используйте его для провайдеров, которые дают один MCP endpoint вида `https://mcp.example.com/mcp`. Не настраивайте
 deprecated HTTP+SSE transport со старой парой SSE/messages endpoints. SSE stream как формат ответа внутри Streamable HTTP
@@ -21,7 +21,7 @@ deprecated HTTP+SSE transport со старой парой SSE/messages endpoint
 https://mcp.example.com/mcp
 ```
 
-Не подходит для SOBA v0.4.4:
+Не подходит для SOBA v0.5.0:
 
 ```text
 https://mcp.example.com/sse

@@ -43,8 +43,9 @@ Tagged GitHub releases build standalone binaries for macOS and Linux. Download t
 release, make it executable, and run it directly:
 
 ```bash
-chmod +x ./soba-linux-x64-v0.5.0
-./soba-linux-x64-v0.5.0 --version
+VERSION="$(node -p "require('./package.json').version")"
+chmod +x "./soba-linux-x64-v${VERSION}"
+"./soba-linux-x64-v${VERSION}" --version
 ```
 
 ## Development

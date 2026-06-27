@@ -24,6 +24,7 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   ],
   ru: [
     { slug: "", path: "index.ru.mdx", title: "Руководство пользователя SOBA" },
+    { slug: "acp", path: "acp.ru.mdx", title: "ACP и Zed" },
     { slug: "cli-reference", path: "cli-reference.ru.mdx", title: "CLI reference" },
     { slug: "compaction", path: "compaction.ru.mdx", title: "Compaction и Context Capsules" },
     { slug: "configuration", path: "configuration.ru.mdx", title: "Конфигурация" },
@@ -43,7 +44,7 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
     {
       slug: "walkthrough-building-a-project",
       path: "walkthrough-building-a-project.ru.mdx",
-      title: "Проект шаг за шагом: профессиональный workflow",
+      title: "Проект шаг за шагом: v0.5 workflow",
     },
   ],
   zh: [

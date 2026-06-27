@@ -1,9 +1,9 @@
 ---
 title: Быстрый старт
-description: "Актуальный быстрый старт SOBA v0.4.4: запуск, provider, TUI, sessions, Project Memory, MCP, capsules и проверки."
+description: "Актуальный быстрый старт SOBA v0.5.0: запуск, first-run init, provider, TUI, sessions, Project Memory, MCP, capsules и проверки."
 ---
 
-Этот гайд доводит от чистого запуска до рабочего SOBA v0.4.4 workflow. Он не заменяет справочник, а показывает
+Этот гайд доводит от чистого запуска до рабочего SOBA v0.5.0 workflow. Он не заменяет справочник, а показывает
 минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, сохранить память проекта и проверить
 MCP.
 
@@ -35,6 +35,7 @@ Standalone-бинарники для macOS и Linux публикуются в Gi
 ```bash
 soba --version
 soba --help
+soba init --check
 ```
 
 Если вы работаете из исходников:
@@ -90,6 +91,7 @@ soba -i --lang ru --theme graphite
 
 ```text
 /session
+/sessions list
 /budget
 /permissions
 /auto-compact on
@@ -163,6 +165,7 @@ soba -s <SESSION_ID> "Продолжи задачу"
 
 ```text
 /session
+/sessions list
 /budget
 ```
 
@@ -245,6 +248,7 @@ MCP config хранится в проекте:
 ```text
 /mcp status
 /mcp start <server>
+/mcp reload
 /mcp status
 ```
 

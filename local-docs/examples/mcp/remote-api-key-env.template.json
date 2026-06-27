@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "servers": {
+    "hosted-api-key": {
+      "name": "Hosted API-key MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "apiKeyEnv",
+        "header": "X-API-Key",
+        "env": "REMOTE_MCP_API_KEY"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": false
+    }
+  }
+}

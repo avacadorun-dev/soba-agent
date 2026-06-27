@@ -48,8 +48,8 @@ src/
 
 ## Versioning
 
-Documentation is organized by SOBA Agent versions. Current version: **v0.4.4**.
-Version switcher in sidebar allows navigation between versions.
+Documentation is organized by SOBA Agent versions. Rendered app surfaces read the current version from the root
+`package.json` through `src/lib/version.ts`. Version switcher in sidebar allows navigation between versions.
 
 ## Content Source
 

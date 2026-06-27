@@ -15,14 +15,15 @@ import {
   Workflow,
 } from "lucide-react";
 import { baseOptions } from "@/lib/layout.shared";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 type Localized = Record<string, string>;
 
 const copy = {
   badge: {
-    en: "Roadmap · v0.4.4 focus",
+    en: `Roadmap · ${APP_VERSION_LABEL} focus`,
     ru: "Дорожная карта · что делаем дальше",
-    zh: "路线图 · v0.4.4 重点",
+    zh: `路线图 · ${APP_VERSION_LABEL} 重点`,
   },
   title: {
     en: "From terminal helper to verifiable delegation",
@@ -72,7 +73,7 @@ const copy = {
 const stages = [
   {
     icon: ShieldCheck,
-    release: "v0.4.4",
+    release: APP_VERSION_LABEL,
     state: { en: "Current focus", ru: "Сейчас в работе", zh: "当前重点" },
     title: {
       en: "Trust foundation",
@@ -259,7 +260,7 @@ function RoadmapPage() {
             <div className="roadmap-now-panel">
               <div className="roadmap-now-header">
                 <span>{t(copy.nowLabel)}</span>
-                <strong>v0.4.4</strong>
+                <strong>{APP_VERSION_LABEL}</strong>
               </div>
               <div className="roadmap-now-body">
                 <ShieldCheck className="size-8" />

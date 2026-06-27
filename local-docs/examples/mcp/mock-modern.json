@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "servers": {
+    "mock-modern": {
+      "name": "Local mock MCP server",
+      "command": "bun",
+      "args": ["run", "tests/fixtures/mcp/mock-mcp-server.ts"],
+      "cwd": ".",
+      "env": {
+        "SOBA_MOCK_MCP_SCENARIO": "modern"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}

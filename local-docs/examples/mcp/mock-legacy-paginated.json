@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "servers": {
+    "mock-legacy": {
+      "name": "Local legacy paginated mock MCP server",
+      "command": "bun",
+      "args": ["run", "tests/fixtures/mcp/mock-mcp-server.ts"],
+      "cwd": ".",
+      "env": {
+        "SOBA_MOCK_MCP_SCENARIO": "legacy",
+        "SOBA_MOCK_MCP_PAGE_SIZE": "2"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}

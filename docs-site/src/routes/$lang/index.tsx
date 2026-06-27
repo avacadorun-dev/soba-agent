@@ -19,6 +19,7 @@ import { SobaOrbitCanvas } from "@/components/soba-orbit-canvas";
 import { TerminalCanvas } from "@/components/terminal-canvas";
 import { baseOptions } from "@/lib/layout.shared";
 import { alternateLanguageLinks, canonicalUrl, getLandingSeo, previewImageUrl } from "@/lib/seo";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 const features = [
   {
@@ -159,9 +160,9 @@ const workflow = [
 
 const copy = {
   badge: {
-    en: "SOBA Agent v0.4.4 · cute terminal coding agent",
-    ru: "SOBA Agent v0.4.4",
-    zh: "SOBA Agent v0.4.4 · 可爱的终端编码代理",
+    en: `SOBA Agent ${APP_VERSION_LABEL} · cute terminal coding agent`,
+    ru: `SOBA Agent ${APP_VERSION_LABEL}`,
+    zh: `SOBA Agent ${APP_VERSION_LABEL} · 可爱的终端编码代理`,
   },
   headlineA: { en: "A tiny coding agent", ru: "Работа с кодом", zh: "一个小小的编码代理" },
   headlineB: { en: "that remembers", ru: "в консоли", zh: "会记住事情" },
@@ -434,7 +435,7 @@ function Home() {
         <footer className="landing-footer">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 text-sm text-fd-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
             <p>
-              SOBA Agent v0.4.4 —{" "}
+              SOBA Agent {APP_VERSION_LABEL} —{" "}
               {lang === "ru"
                 ? "консольный помощник для разработки"
                 : lang === "zh"

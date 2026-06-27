@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "servers": {
+    "hosted-docs": {
+      "name": "Hosted docs MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "none"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": false
+    }
+  }
+}

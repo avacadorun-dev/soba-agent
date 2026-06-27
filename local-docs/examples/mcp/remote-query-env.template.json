@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "servers": {
+    "hosted-query-auth": {
+      "name": "Hosted query-auth MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp?apiKey=${ENV:REMOTE_MCP_API_KEY}",
+      "auth": {
+        "type": "none"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": false
+    }
+  }
+}

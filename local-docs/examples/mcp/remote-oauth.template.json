@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "servers": {
+    "hosted-oauth": {
+      "name": "Hosted OAuth MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "oauth"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": false
+    }
+  }
+}

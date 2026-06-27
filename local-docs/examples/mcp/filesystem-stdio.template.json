@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "servers": {
+    "filesystem": {
+      "name": "Filesystem MCP",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "cwd": ".",
+      "env": {},
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "dangerous",
+      "enabled": false
+    }
+  }
+}

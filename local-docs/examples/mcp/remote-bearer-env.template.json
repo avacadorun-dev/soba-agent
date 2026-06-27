@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "servers": {
+    "hosted-bearer": {
+      "name": "Hosted bearer MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "bearerEnv",
+        "env": "REMOTE_MCP_BEARER_TOKEN"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": false
+    }
+  }
+}
