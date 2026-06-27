@@ -118,7 +118,7 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
       name: READ_PROJECT_MEMORY_TOOL_NAME,
       label: "read project memory",
       description:
-        "Read bounded project memory. Supports knowledge/capsule filtering by tags, capsule type, priority, date range and query. Output is sanitized and size-limited.",
+        "Read bounded project memory through the managed memory API, not general project files. Supports knowledge/capsule filtering by tags, capsule type, priority, date range and query. Output is sanitized and size-limited.",
       parameters: {
         type: "object",
         properties: {
@@ -187,7 +187,7 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
       name: WRITE_PROJECT_MEMORY_TOOL_NAME,
       label: "write project memory",
       description:
-        "Write project memory. Can create a memory capsule or replace/append one allowed knowledge file inside .soba/memory. Rejects secret-like content and path traversal.",
+        "Write project memory through the managed memory API. Can create a memory capsule or replace/append one allowed knowledge file inside .soba/memory. Rejects secret-like content and path traversal. Never use write/edit/bash to modify .soba/memory directly.",
       parameters: {
         type: "object",
         properties: {

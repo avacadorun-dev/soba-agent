@@ -36,6 +36,23 @@ describe("search_files tool", () => {
     expect(textOf(result)).toContain("Output truncated");
     expect(result.details?.truncated).toBe(true);
   });
+
+  test("fallback search works when ripgrep is unavailable", async () => {
+    const cwd = await makeTempDir();
+    await writeFile(join(cwd, "fallback.txt"), "alpha\nneedle here\nomega\n", "utf-8");
+    const previousPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      const result = await searchFilesTool.execute({ query: "needle", path: "." }, makeContext(cwd));
+
+      expect(result.isError).toBe(false);
+      expect(textOf(result)).toContain("fallback.txt:2:");
+      expect(result.details?.engine).toBe("fallback");
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
 });
 
 describe("inspect_file tool", () => {
@@ -64,6 +81,21 @@ describe("inspect_file tool", () => {
       category: "filesystem",
     });
     expect(result.error?.nextAction).toContain("corrected path");
+  });
+
+  test("large files are inspected as bounded ranges", async () => {
+    const cwd = await makeTempDir();
+    const lines = Array.from({ length: 5000 }, (_, index) => `line ${index + 1}`).join("\n");
+    await writeFile(join(cwd, "large.txt"), lines, "utf-8");
+
+    const result = await inspectFileTool.execute({ path: "large.txt", startLine: 10, endLine: 12 }, makeContext(cwd));
+    const output = textOf(result);
+
+    expect(result.isError).toBe(false);
+    expect(output).toContain("10 | line 10");
+    expect(output).toContain("12 | line 12");
+    expect(output).not.toContain("5000 | line 5000");
+    expect(result.details?.truncated).toBe(true);
   });
 });
 

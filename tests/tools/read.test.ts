@@ -63,6 +63,19 @@ describe("read tool", () => {
     expect(result.content[0].text).not.toContain("line3");
   });
 
+  test("limit keeps large reads bounded and returns continuation hint", async () => {
+    const cwd = setup({
+      "large.txt": Array.from({ length: 5000 }, (_, index) => `line${index + 1}`).join("\n"),
+    });
+    const result = await readTool.execute({ path: "large.txt", offset: 10, limit: 2 }, { cwd });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain("line10");
+    expect(result.content[0].text).toContain("line11");
+    expect(result.content[0].text).not.toContain("line5000");
+    expect(result.content[0].text).toContain("Use offset=12");
+  });
+
   test("offset за пределами файла возвращает ошибку", async () => {
     const cwd = setup({ "small.txt": "only one line" });
     const result = await readTool.execute({ path: "small.txt", offset: 100 }, { cwd });

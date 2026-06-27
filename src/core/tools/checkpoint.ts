@@ -49,9 +49,9 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
   name: "checkpoint",
   label: "checkpoint",
   description:
-    "Mark a milestone or plan pivot during a long task. " +
-    "This does NOT end the turn. Use it to signal that a significant subtask " +
-    "is complete or that the plan has changed. " +
+    "Mark a meaningful milestone or plan pivot during a long task. " +
+    "This does NOT end the turn and should not be used for routine progress logging. Use it when a significant subtask " +
+    "is complete or the plan has changed. " +
     "Provide completed items and pending items for context tracking.",
   parameters: {
     type: "object",

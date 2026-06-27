@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { createToolErrorResult, redactSecrets } from "./errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 import { truncateOutput } from "./types";
@@ -31,7 +33,7 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
   name: "search_files",
   label: "search_files",
   description:
-    "Search project files for text or regex matches with bounded output. Prefer this over hand-written grep/find shell pipelines before editing. Returns file, line, column, and compact matching text.",
+    "Search file contents for text, regex, or symbol matches with bounded output. Prefer this over hand-written grep/find shell pipelines when looking for code or prose. Not a directory listing tool; use ls for path discovery. Returns file, line, column, and compact matching text.",
   parameters: {
     type: "object",
     properties: {
@@ -243,21 +245,16 @@ async function runFallbackSearch(options: {
       scannedFiles += 1;
       if (scannedFiles > FALLBACK_MAX_FILES) break;
 
-      const text = await readFile(filePath, "utf-8").catch(() => "");
-      const lines = text.split("\n");
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-        pattern.lastIndex = 0;
-        const match = pattern.exec(lines[lineIndex]);
-        if (!match) continue;
-        matches.push({
-          path: relative(options.cwd, filePath) || ".",
-          line: lineIndex + 1,
-          column: match.index + 1,
-          text: lines[lineIndex],
-        });
-        if (matches.length >= options.maxMatches) {
-          return { status: "ok", matches, truncated: true };
-        }
+      const fileMatches = await scanFileForMatches({
+        cwd: options.cwd,
+        filePath,
+        pattern,
+        remaining: options.maxMatches - matches.length,
+        signal: options.signal,
+      });
+      matches.push(...fileMatches);
+      if (matches.length >= options.maxMatches) {
+        return { status: "ok", matches, truncated: true };
       }
     }
 
@@ -268,6 +265,51 @@ async function runFallbackSearch(options: {
       message: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function scanFileForMatches(options: {
+  cwd: string;
+  filePath: string;
+  pattern: RegExp;
+  remaining: number;
+  signal?: AbortSignal;
+}): Promise<SearchMatch[]> {
+  const matches: SearchMatch[] = [];
+  const stream = createReadStream(options.filePath, { encoding: "utf-8" });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  let lineNumber = 0;
+  let aborted = false;
+  const abort = () => {
+    aborted = true;
+    rl.close();
+    stream.destroy();
+  };
+  options.signal?.addEventListener("abort", abort, { once: true });
+
+  try {
+    for await (const line of rl) {
+      if (options.signal?.aborted) break;
+      lineNumber += 1;
+      options.pattern.lastIndex = 0;
+      const match = options.pattern.exec(line);
+      if (!match) continue;
+      matches.push({
+        path: relative(options.cwd, options.filePath) || ".",
+        line: lineNumber,
+        column: match.index + 1,
+        text: line,
+      });
+      if (matches.length >= options.remaining) break;
+    }
+  } catch {
+    if (!aborted) return [];
+  } finally {
+    options.signal?.removeEventListener("abort", abort);
+    rl.close();
+    stream.destroy();
+  }
+
+  return matches;
 }
 
 async function collectSearchFiles(root: string, glob: string | undefined, signal?: AbortSignal): Promise<string[]> {

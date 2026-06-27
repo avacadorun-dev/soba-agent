@@ -107,6 +107,60 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationEvidenceCallIds).toEqual(new Set(["test_pass"]));
   });
 
+  test("successful probe commands do not verify previous mutations", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "edit_1",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "src/parser.ts" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const probe = ledger.recordToolOutcome({
+      toolCallId: "lint_help",
+      toolName: "bash",
+      arguments: recordArgs("bun lint --help 2>&1 | head -20"),
+      isError: false,
+      output: "Usage: bun",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(probe).toMatchObject({ kind: "inspect", status: "success", toolCallId: "lint_help" });
+    expect(summary.needsVerification).toBe(true);
+    expect(summary.unverifiedMutationIds).toEqual([mutation.id]);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set());
+    expect(summary.verificationKinds).toEqual(new Set());
+  });
+
+  test("verification piped through tail is diagnostic only", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "write_1",
+      toolName: "write",
+      arguments: JSON.stringify({ path: "src/app.ts" }),
+      isError: false,
+      output: "wrote",
+      iteration: 1,
+    });
+
+    const masked = ledger.recordToolOutcome({
+      toolCallId: "test_tail",
+      toolName: "bash",
+      arguments: recordArgs("bun test 2>&1 | tail -80"),
+      isError: false,
+      output: "50 pass",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(masked).toMatchObject({ kind: "inspect", status: "success" });
+    expect(summary.needsVerification).toBe(true);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set());
+  });
+
   test("summary maps ledger evidence to completion state", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({
@@ -127,4 +181,3 @@ describe("EvidenceLedger", () => {
     expect(completionState.verificationEvidenceCallIds).toEqual(new Set());
   });
 });
-

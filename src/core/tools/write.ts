@@ -45,7 +45,7 @@ export const writeTool: ToolDefinition<WriteArgs> = {
   name: "write",
   label: "write",
   description:
-    "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
+    "Create a new file or overwrite a whole file. Prefer edit for localized changes to an existing file. Automatically creates parent directories.",
   parameters: {
     type: "object",
     properties: {

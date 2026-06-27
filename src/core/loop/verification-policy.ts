@@ -149,7 +149,8 @@ export function allowsUnverifiedCompletion(prompt: string): boolean {
 }
 
 export function verificationKindFromCommand(command: string): VerificationKind | null {
-  const normalized = command.toLowerCase();
+  const normalized = normalizeWhitespace(command).toLowerCase();
+  if (isNonVerificationProbeCommand(normalized)) return null;
   if (/\bgit\s+(diff|show|status)\b/.test(normalized)) return "diff_inspection";
   if (/\b(tsc|typecheck)\b/.test(normalized)) return "typecheck";
   if (/\b(biome|lint)\b/.test(normalized)) return "lint";
@@ -157,6 +158,25 @@ export function verificationKindFromCommand(command: string): VerificationKind |
   if (/\bbuild\b/.test(normalized)) return "build";
   if (/\b(run|start|dev)\b/.test(normalized)) return "run";
   return null;
+}
+
+export function isNonVerificationProbeCommand(command: string): boolean {
+  const normalized = normalizeWhitespace(command).toLowerCase();
+  if (normalized.length === 0) return true;
+  if (isRoutineInspectionShellCommand(normalized)) return true;
+  if (hasHeadTailPipeline(normalized)) return true;
+  if (/(?:^|\s)(?:--help|--version|-h|-v)(?:\s|$)/.test(normalized)) return true;
+  if (/(?:^|[;&|]\s*)(?:which|command\s+-v|type|man)\s+/.test(normalized)) return true;
+  if (/(?:^|[;&|]\s*)[^\s;&|]+\s+help(?:\s|$)/.test(normalized)) return true;
+  return false;
+}
+
+function isRoutineInspectionShellCommand(command: string): boolean {
+  return /(?:^|[;&|]\s*)(?:pwd|ls|find|grep|rg|sed|cat|head|tail)\b/.test(command);
+}
+
+function hasHeadTailPipeline(command: string): boolean {
+  return /\|\s*&?\s*(?:head|tail)\b/.test(command);
 }
 
 export function isDocumentationPath(path: string): boolean {
@@ -181,4 +201,8 @@ function extensionOf(path: string): string {
 
 function containsAny(value: string, needles: string[]): boolean {
   return needles.some((needle) => value.includes(needle));
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replaceAll(/\s+/g, " ").trim();
 }

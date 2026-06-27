@@ -209,6 +209,7 @@ function autoVerifierTimeoutSeconds(maxTimeoutSeconds: number): number {
 }
 
 const FINISH_TOOL_NAME = "finish";
+const PARALLEL_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files"]);
 const FINISH_TOOL: FunctionToolParam = {
   type: "function",
   name: FINISH_TOOL_NAME,
@@ -254,6 +255,10 @@ const FINISH_TOOL: FunctionToolParam = {
   },
   strict: true,
 };
+
+function canExecuteReadOnlyBatchInParallel(toolCalls: FunctionCallField[]): boolean {
+  return toolCalls.length > 1 && toolCalls.every((toolCall) => PARALLEL_READ_ONLY_TOOLS.has(toolCall.name));
+}
 
 function finishRequestToMessage(
   toolCall: FunctionCallField,
@@ -326,7 +331,7 @@ function getAutonomousFollowUpReason(
   }
 
   if (needsVerification) {
-    return "You changed project files but stopped before verifying the result.";
+    return "You changed project files but stopped before verifying the result. Run the project-appropriate verification workflow now; do not call finish until verification evidence exists unless verification is impossible for a concrete external reason.";
   }
 
   if (activeErrors.length > 0) {
@@ -336,7 +341,7 @@ function getAutonomousFollowUpReason(
           `${error.id} (${error.toolName ?? error.type}: ${error.message.slice(0, 120)})`,
       )
       .join("\n    ");
-    return `Active tool errors (fix their cause before finishing):\n    ${errorList}`;
+    return `Active tool errors must be resolved before finishing. Fix their cause with tools, or use status blocked only if a concrete external blocker makes recovery impossible:\n    ${errorList}`;
   }
 
   if (hasFinishIntentReasoning(assistantMessages)) {
@@ -345,12 +350,12 @@ function getAutonomousFollowUpReason(
 
   if (assistantMessages.some((message) => message.phase === "final_answer")) {
     if (hasMutatedFiles) {
-      return "You changed project files. Complete through the finish tool with concrete completion criteria.";
+      return "You changed project files. Complete through the finish tool with concrete completion criteria after verification evidence exists.";
     }
     return null;
   }
 
-  return "You stopped without calling finish. If the task is done, call finish now with your final response and completion criteria. If not done, continue with tools.";
+  return "You stopped without calling finish. If the task is done and verified, call finish now with your final response and completion criteria. If not done, continue with tools.";
 }
 
 /**
@@ -1959,7 +1964,17 @@ export class AgentLoop {
         let fixUntilGreenFollowUp: string | null = null;
         let fixUntilGreenStop: string | null = null;
         let mutationSucceededInCurrentBatch = false;
-        for (const toolCall of toolCalls) {
+        const parallelReadOnlyExecutions = canExecuteReadOnlyBatchInParallel(toolCalls)
+          ? await Promise.all(
+              toolCalls.map((toolCall) => {
+                hasUsedTools = true;
+                return this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
+              }),
+            )
+          : null;
+        for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex += 1) {
+          const toolCall = toolCalls[toolCallIndex];
+          if (!toolCall) continue;
           hasUsedTools = true;
 
           const narrationArgs = safeParseArgs(toolCall.arguments);
@@ -1976,7 +1991,10 @@ export class AgentLoop {
             }
           }
 
-          const execution = await this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
+          const execution = parallelReadOnlyExecutions
+            ? parallelReadOnlyExecutions[toolCallIndex]
+            : await this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
+          if (!execution) continue;
           const { parsedArgs, result } = execution;
           if (execution.denied) {
             this.state.denialCount++;

@@ -5,9 +5,10 @@
  * Limits: 2000 lines / 50KB per read.
  */
 
-import { constants } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { classifyFileSystemError, createToolErrorResult, redactSecrets } from "./errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 import { truncateOutput } from "./types";
@@ -43,7 +44,7 @@ export const readTool: ToolDefinition<ReadArgs> = {
   name: "read",
   label: "read",
   description:
-    "Read the contents of a file. Supports text files and images (png, jpg, gif, webp). For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+    "Read a whole file or image. Supports text files and images (png, jpg, gif, webp). Prefer inspect_file for exact line-numbered text ranges before edit/write. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
   parameters: {
     type: "object",
     properties: {
@@ -119,6 +120,10 @@ export const readTool: ToolDefinition<ReadArgs> = {
       }
     }
 
+    if (args.limit !== undefined) {
+      return readLimitedTextRange(absolutePath, args, signal);
+    }
+
     // Read text content
     try {
       const buffer = await readFile(absolutePath);
@@ -188,3 +193,110 @@ export const readTool: ToolDefinition<ReadArgs> = {
     }
   },
 };
+
+async function readLimitedTextRange(
+  absolutePath: string,
+  args: ReadArgs,
+  signal?: AbortSignal,
+): Promise<ToolResult> {
+  const requestedLimit = normalizeLimit(args.limit);
+  if (requestedLimit.status === "error") {
+    return createToolErrorResult({
+      code: "read_invalid_limit",
+      category: "validation",
+      message: requestedLimit.message,
+      nextAction: "Retry with a positive integer line limit.",
+      fingerprint: `validation:read_invalid_limit:${args.path}`,
+    });
+  }
+
+  const startLine = args.offset ? Math.max(1, Math.floor(args.offset)) : 1;
+  const endLine = startLine + requestedLimit.value - 1;
+  const selected: string[] = [];
+  let lineNumber = 0;
+  let hasMore = false;
+  let aborted = false;
+  const stream = createReadStream(absolutePath, { encoding: "utf-8" });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  const abort = () => {
+    aborted = true;
+    rl.close();
+    stream.destroy();
+  };
+  signal?.addEventListener("abort", abort, { once: true });
+
+  try {
+    for await (const line of rl) {
+      lineNumber += 1;
+      if (lineNumber < startLine) continue;
+      if (lineNumber <= endLine) {
+        selected.push(line);
+        continue;
+      }
+      hasMore = true;
+      break;
+    }
+  } catch (error) {
+    if (!aborted) throw error;
+  } finally {
+    signal?.removeEventListener("abort", abort);
+    rl.close();
+    stream.destroy();
+  }
+
+  if (aborted || signal?.aborted) {
+    return createToolErrorResult({
+      code: "read_aborted",
+      category: "aborted",
+      message: "Operation aborted.",
+      nextAction: "Do not retry automatically; narrow the read or ask before restarting.",
+      fingerprint: "aborted:read_aborted",
+    });
+  }
+
+  if (selected.length === 0 && startLine > Math.max(1, lineNumber)) {
+    return createToolErrorResult({
+      code: "read_offset_out_of_range",
+      category: "validation",
+      message: `Offset ${args.offset} is beyond end of file (${Math.max(1, lineNumber)} lines total).`,
+      nextAction: "Retry with an offset within the reported line count or read the file from the start.",
+      fingerprint: `validation:read_offset_out_of_range:${args.path}`,
+    });
+  }
+
+  const selectedContent = selected.join("\n");
+  const truncated = truncateOutput(selectedContent, MAX_LINES, MAX_BYTES);
+  let outputText = truncated.text;
+  const startDisplay = startLine;
+  const endDisplay = startLine + selected.length - 1;
+
+  if (truncated.truncated) {
+    outputText += `\n\n[Showing lines ${startDisplay}-${endDisplay}. Use offset=${endDisplay + 1} to continue.]`;
+  } else if (hasMore) {
+    outputText += `\n\n[More lines in file. Use offset=${endDisplay + 1} to continue.]`;
+  }
+
+  return {
+    content: [{ type: "text", text: redactSecrets(outputText) }],
+    isError: false,
+    details: {
+      path: absolutePath,
+      totalLines: hasMore ? undefined : Math.max(1, lineNumber),
+      readLines: selected.length,
+      startLine: startDisplay,
+      endLine: endDisplay,
+      truncated: truncated.truncated || hasMore,
+    },
+  };
+}
+
+function normalizeLimit(limit: number | undefined): { status: "ok"; value: number } | { status: "error"; message: string } {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return { status: "error", message: "limit must be a finite number." };
+  }
+  const normalized = Math.floor(limit);
+  if (normalized < 1) {
+    return { status: "error", message: "limit must be greater than zero." };
+  }
+  return { status: "ok", value: normalized };
+}

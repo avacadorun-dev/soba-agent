@@ -131,4 +131,49 @@ describe("ToolCallExecutor", () => {
 
     release();
   });
+
+  test("aborts all concurrently active registered tools", async () => {
+    const registry = new ToolRegistry();
+    let startedCount = 0;
+    let resolveStarted = () => {};
+    const bothStarted = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    const markStarted = () => {
+      startedCount += 1;
+      if (startedCount === 2) resolveStarted();
+    };
+    registry.register(makeTool("read", async (_args, _context, signal) => {
+      markStarted();
+      await new Promise<void>((resolve) => {
+        signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      return {
+        content: [{ type: "text", text: signal?.aborted ? "read stopped" : "read done" }],
+        isError: Boolean(signal?.aborted),
+      };
+    }));
+    registry.register(makeTool("inspect_file", async (_args, _context, signal) => {
+      markStarted();
+      await new Promise<void>((resolve) => {
+        signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      return {
+        content: [{ type: "text", text: signal?.aborted ? "inspect stopped" : "inspect done" }],
+        isError: Boolean(signal?.aborted),
+      };
+    }));
+    const executor = makeExecutor({ registry });
+
+    const read = executor.executeToolCall(toolCall("read", '{"path":"a.ts"}'));
+    const inspect = executor.executeToolCall(toolCall("inspect_file", '{"path":"b.ts"}'));
+    await bothStarted;
+
+    expect(executor.hasActiveTool()).toBe(true);
+    expect(executor.abortActiveTool()).toBe(true);
+    const results = await Promise.all([read, inspect]);
+
+    expect(results.every((result) => result.result.isError)).toBe(true);
+    expect(executor.hasActiveTool()).toBe(false);
+  });
 });
