@@ -27,6 +27,7 @@ import { searchFilesTool } from "../core/tools/search-files";
 import { ToolRegistry } from "../core/tools/tool-registry";
 import { writeTool } from "../core/tools/write";
 import { TrustManager } from "../core/trust/trust-manager";
+import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "./command-service";
 import { SessionLifecycleService } from "./session-lifecycle";
 import type {
   CreateSessionInput,
@@ -105,6 +106,10 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   async listSessions(input: ListSessionsInput): Promise<RuntimeSessionInfo[]> {
     return this.sessionLifecycle.listSessions(input);
+  }
+
+  listCommands(input?: ListCommandsInput): RuntimeCommandMetadata[] {
+    return commandService.listCommands(input);
   }
 
   async closeSession(sessionId: string): Promise<void> {

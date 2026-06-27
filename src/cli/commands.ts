@@ -6,6 +6,11 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  parseRuntimeCommandInput,
+  RUNTIME_COMMANDS,
+  type RuntimeCommandMetadata,
+} from "../application/command-service";
 import { PortableCapsuleService, PortableCapsuleServiceError } from "../core/capsules";
 import type { OpenResponsesClient } from "../core/client/openresponses-client";
 import { compact, getCurrentTokens } from "../core/compaction/compaction";
@@ -54,27 +59,7 @@ export interface CommandContext {
 
 export type CommandResult = { handled: true; exit?: boolean } | { handled: false; prompt?: string };
 
-export const SLASH_COMMANDS = [
-  { name: "/compact", descriptionKey: "command.description.compact" },
-  { name: "/rewind", descriptionKey: "command.description.rewind" },
-  { name: "/session", descriptionKey: "command.description.session" },
-  { name: "/capsule", descriptionKey: "command.description.capsule" },
-  { name: "/auto-compact", descriptionKey: "command.description.autoCompact" },
-  { name: "/budget", descriptionKey: "command.description.budget" },
-  { name: "/config", descriptionKey: "command.description.config" },
-
-  { name: "/lang", descriptionKey: "command.description.lang" },
-  { name: "/theme", descriptionKey: "command.description.theme" },
-  { name: "/queue", descriptionKey: "command.description.queue" },
-  { name: "/permissions", descriptionKey: "command.description.permissions" },
-  { name: "/notifications", descriptionKey: "command.description.notifications" },
-  { name: "/skill", descriptionKey: "command.description.skill" },
-  { name: "/project-trust", descriptionKey: "command.description.projectTrust" },
-  { name: "/mcp", descriptionKey: "command.description.mcp" },
-  { name: "/clear", descriptionKey: "command.description.clear" },
-  { name: "/help", descriptionKey: "command.description.help" },
-  { name: "/exit", descriptionKey: "command.description.exit" },
-] as const;
+export const SLASH_COMMANDS: readonly RuntimeCommandMetadata[] = RUNTIME_COMMANDS;
 
 // ─── Command Handlers ───
 
@@ -636,24 +621,15 @@ function handleAutoCompact(args: string[], ctx: CommandContext): CommandResult {
 }
 
 function handleHelp(_args: string[], ctx: CommandContext): CommandResult {
-  const usages: Partial<Record<(typeof SLASH_COMMANDS)[number]["name"], string>> = {
-    "/compact": "/compact [instructions]",
-    "/rewind": "/rewind [checkpoint-id]",
-    "/capsule": "/capsule [checkpoint-id] | create <objective> | export <checkpoint-id> <path> | load <path>",
-
-    "/lang": "/lang <en|ru|zh>",
+  const usages: Partial<Record<string, string>> = {
     "/theme": `/theme <${TUI_THEME_NAMES.join("|")}>`,
     "/queue": "/queue [edit <id> <message> | cancel <id|all>]",
-    "/permissions": "/permissions [ask|repo|full|clear]",
-    "/skill": "/skill list|new|edit|eval|promote|history|rollback|rm",
-    "/project-trust": "/project-trust status|approve|revoke",
-    "/mcp": "/mcp status|start <server>|stop <server>|restart <server>|auth status|login|logout <server>",
   };
   const helpText = [
     ctx.i18n.t("command.help.title"),
     ...SLASH_COMMANDS.map((command) =>
       ctx.i18n.t("command.help.line", {
-        command: usages[command.name] ?? command.name,
+        command: command.usage ?? usages[command.name] ?? command.name,
         description: ctx.i18n.t(command.descriptionKey),
       }),
     ),
@@ -1312,10 +1288,8 @@ export async function executeCommand(input: string, ctx: CommandContext): Promis
     return { handled: true };
   }
 
-  const trimmed = input.slice(1).trim();
-  const parts = trimmed.split(/\s+/);
-  const cmd = parts[0]?.toLowerCase();
-  const args = parts.slice(1);
+  const parsed = parseRuntimeCommandInput(input);
+  const cmd = parsed?.id;
 
   if (!cmd) return { handled: true };
 
@@ -1349,5 +1323,5 @@ export async function executeCommand(input: string, ctx: CommandContext): Promis
     return { handled: true };
   }
 
-  return handler(args, ctx);
+  return handler(parsed.args, ctx);
 }

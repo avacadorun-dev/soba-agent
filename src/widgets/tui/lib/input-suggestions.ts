@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { SLASH_COMMANDS } from "../../../cli/commands";
+import { RUNTIME_COMMANDS } from "../../../application/command-service";
 import type { I18n } from "../../../core/i18n/i18n";
 import type { TranslationKey } from "../../../core/i18n/types";
 
@@ -45,7 +45,7 @@ export function getInputSuggestions(input: string, cursor: number, cwd: string, 
   const beforeCursor = input.slice(0, cursor);
   if (/^\/\S*$/.test(beforeCursor)) {
     const query = beforeCursor.toLowerCase();
-    return SLASH_COMMANDS.filter((command) => command.name.startsWith(query))
+    return RUNTIME_COMMANDS.filter((command) => command.surfaces.includes("tui") && command.name.startsWith(query))
       .map((command) => ({
         label: command.name,
         description: i18n?.t(command.descriptionKey as TranslationKey) ?? command.descriptionKey,

@@ -132,6 +132,7 @@ describe("createSobaRuntime", () => {
 
     expect(composition.agentLoop.getSessionManager()).toBe(session);
     expect(composition.tools.getNames()).toContain("read");
+    expect(composition.runtime.listCommands({ surface: "acp" }).map((command) => command.name)).toContain("/session");
     expect(result.response.id).toBe("resp_runtime_factory");
     expect(events).toContain("turn_start");
     expect(events).toContain("turn_end");

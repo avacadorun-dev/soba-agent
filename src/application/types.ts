@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTurnResult } from "../core/loop/types";
 import type { SessionInfo } from "../core/session/types";
+import type { ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
 
 export type RuntimeSource = "print" | "tui" | "acp";
 
@@ -78,6 +79,7 @@ export interface SobaRuntime {
   loadSession(input: LoadSessionInput): Promise<RuntimeSessionSnapshot>;
   resumeSession(input: ResumeSessionInput): Promise<RuntimeSessionInfo>;
   listSessions(input: ListSessionsInput): Promise<RuntimeSessionInfo[]>;
+  listCommands(input?: ListCommandsInput): RuntimeCommandMetadata[];
   closeSession(sessionId: string): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   setSessionConfig(input: SetSessionConfigInput): Promise<RuntimeSessionInfo>;

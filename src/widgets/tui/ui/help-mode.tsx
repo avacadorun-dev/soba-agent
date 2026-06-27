@@ -8,7 +8,7 @@
  */
 
 import { For } from "solid-js";
-import { SLASH_COMMANDS } from "../../../cli/commands";
+import { RUNTIME_COMMANDS } from "../../../application/command-service";
 import { slashCommandRegistry } from "../commands/registry";
 import { formatKeyBindings } from "../lib/keymap";
 import { getTuiTheme } from "../lib/theme";
@@ -44,8 +44,8 @@ const HOTKEYS: HotkeyEntry[] = [
 // ─── All commands (CLI + TUI) ───
 
 function getAllCommands(store: TuiStore) {
-  // CLI slash commands from src/cli/commands.ts
-  const cliCommands = SLASH_COMMANDS.map((cmd) => ({
+  // Shared runtime slash commands advertised to TUI.
+  const cliCommands = RUNTIME_COMMANDS.filter((command) => command.surfaces.includes("tui")).map((cmd) => ({
     name: cmd.name,
     description: store.l(cmd.descriptionKey),
   }));
