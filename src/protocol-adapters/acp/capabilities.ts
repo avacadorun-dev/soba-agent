@@ -5,8 +5,6 @@ export interface AcpFeatureSet {
   sessionNew: boolean;
   sessionPrompt: boolean;
   loadSession: boolean;
-  sessionConfig: boolean;
-  sessionModes: boolean;
   embeddedContext: boolean;
   image: boolean;
   audio: boolean;
@@ -19,29 +17,28 @@ export const ACP_LIFECYCLE_FEATURES: AcpFeatureSet = {
   sessionNew: true,
   sessionPrompt: true,
   loadSession: true,
-  sessionConfig: true,
-  sessionModes: true,
   embeddedContext: true,
   image: true,
   audio: false,
 };
 
 export function buildAgentCapabilities(features: AcpFeatureSet = ACP_LIFECYCLE_FEATURES): JsonValue {
+  const sessionCapabilities: Record<string, JsonValue> = {
+    close: {},
+    delete: {},
+    list: {},
+  };
+  if (features.loadSession) {
+    sessionCapabilities.resume = {};
+  }
+
   return {
+    loadSession: features.loadSession,
     promptCapabilities: {
       audio: features.audio,
       embeddedContext: features.embeddedContext,
       image: features.image,
     },
-    sessionCapabilities: {
-      cancel: true,
-      close: true,
-      delete: true,
-      list: true,
-      load: features.loadSession,
-      update: true,
-    },
-    sessionConfig: features.sessionConfig,
-    sessionModes: features.sessionModes,
+    sessionCapabilities,
   };
 }

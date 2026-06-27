@@ -228,21 +228,18 @@ describe("ACP stdio server foundation", () => {
         protocolVersion: 1,
         agentInfo: { name: "soba-agent", version: "0.5.0" },
         agentCapabilities: {
+          loadSession: true,
           promptCapabilities: {
             embeddedContext: true,
             image: true,
             audio: false,
           },
           sessionCapabilities: {
-            cancel: true,
-            close: true,
-            delete: true,
-            list: true,
-            load: true,
-            update: true,
+            close: {},
+            delete: {},
+            list: {},
+            resume: {},
           },
-          sessionConfig: true,
-          sessionModes: true,
         },
       },
     });
