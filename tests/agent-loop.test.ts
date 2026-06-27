@@ -635,6 +635,50 @@ describe("AgentLoop", () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  test("после tool-assisted final prose follow-up прямо требует finish без commentary", async () => {
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("edit", '{"input":"change"}', "edit_1"),
+      makeToolCallResponse("bash", '{"input":"bun test"}', "verify_1"),
+      makeTextResponse("Готово, проверки прошли.", "final_answer"),
+      makeFinishResponse("Готово, проверки прошли."),
+    ];
+    let responseIndex = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("edit"));
+    tools.register(makeDummyTool("bash"));
+    const loop = new AgentLoop(client, session, tools, "/test");
+
+    const result = await loop.runTurn("Измени интеграцию");
+
+    expect(result.errors).toHaveLength(0);
+    expect(requests).toHaveLength(4);
+    const followUpInput = requests[3]?.input;
+    expect(Array.isArray(followUpInput)).toBe(true);
+    if (Array.isArray(followUpInput)) {
+      const lastItem = followUpInput.at(-1);
+      expect(lastItem?.type).toBe("message");
+      if (lastItem?.type === "message" && lastItem.role === "user") {
+        const text = lastItem.content
+          .filter((content) => content.type === "input_text")
+          .map((content) => content.text)
+          .join("");
+        expect(text).toContain("Call finish now");
+        expect(text).toContain("Do not output commentary");
+      }
+    }
+  });
+
   test("опасная bash-команда запрашивает подтверждение и блокируется при отказе", async () => {
     let executed = false;
     const client = makeClient([

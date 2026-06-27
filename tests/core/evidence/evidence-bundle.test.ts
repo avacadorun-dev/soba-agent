@@ -202,6 +202,51 @@ describe("Evidence Bundle builder", () => {
     ]);
   });
 
+  test("does not keep earlier failed verification as an active risk after later same-kind pass", () => {
+    const entries: EvidenceEntry[] = [
+      mutationEntry({
+        id: "ev_mutation_edit_1",
+        status: "success",
+        toolCallId: "edit_1",
+        toolName: "edit",
+        files: ["src/app.ts"],
+        resolves: ["bash_2"],
+      }),
+      verificationEntry({
+        id: "ev_verification_bash_1",
+        status: "failure",
+        toolCallId: "bash_1",
+        command: "bun run typecheck",
+        verificationKind: "typecheck",
+      }),
+      verificationEntry({
+        id: "ev_verification_bash_2",
+        status: "success",
+        toolCallId: "bash_2",
+        command: "bun run typecheck",
+        verificationKind: "typecheck",
+        mutationIds: ["ev_mutation_edit_1"],
+      }),
+    ];
+
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_retry",
+      completionStatus: "completed",
+      summary: "Typecheck failed, was fixed, then passed.",
+      ledger: summary(entries, { hasCodeMutations: true }),
+      now: () => NOW,
+    });
+
+    expect(bundle.status).toBe("verified");
+    expect(bundle.commands).toMatchObject([
+      { command: "bun run typecheck", status: "failed" },
+      { command: "bun run typecheck", status: "passed" },
+    ]);
+    expect(bundle.checks).toMatchObject([{ label: "Typecheck", status: "passed", verificationKind: "typecheck" }]);
+    expect(bundle.risks).toEqual([]);
+  });
+
   test("represents skipped verification as a skipped check", () => {
     const entries: EvidenceEntry[] = [
       mutationEntry({
@@ -442,9 +487,29 @@ function summary(
     unverifiedCodeMutationIds: unverifiedMutationIds,
     unverifiedDocsMutationIds: [],
     activeDiagnosticIds: [],
+    unresolvedVerificationFailureIds: unresolvedVerificationFailures(entries),
     entries,
     ...overrides,
   };
+}
+
+function unresolvedVerificationFailures(entries: EvidenceEntry[]): string[] {
+  const laterPassingKinds = new Set<string>();
+  const unresolved: string[] = [];
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.kind !== "verification" || !entry.verificationKind) continue;
+    if (entry.status === "success") {
+      laterPassingKinds.add(entry.verificationKind);
+      continue;
+    }
+    if (entry.status === "failure" && !laterPassingKinds.has(entry.verificationKind)) {
+      unresolved.push(entry.id);
+    }
+  }
+
+  return unresolved.reverse();
 }
 
 function mutationEntry(input: Partial<EvidenceEntry> & Pick<EvidenceEntry, "id" | "status">): EvidenceEntry {

@@ -184,6 +184,33 @@ describe("Working Narration", () => {
     expect(narration.find((event) => event.eventType === "verification")?.evidenceIds).toEqual(["verify_1"]);
   });
 
+  test("does not narrate package installation as verification evidence", async () => {
+    const client = createMockClient([
+      makeToolCallResponse("edit", { path: "src/app.ts" }, "edit_1"),
+      makeToolCallResponse("bash", { command: "bun install" }, "install_1"),
+      makeToolCallResponse("bash", { command: "bun test" }, "verify_1"),
+      makeFinishResponse(),
+    ]);
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeTool("edit", "edited app"));
+    tools.register(makeTool("bash", "command passed"));
+    const loop = new AgentLoop(client, session, tools, "/test", { emitEvents: true });
+    const events: AgentEvent[] = [];
+    loop.onEvent((event) => events.push(event));
+
+    await loop.runTurn("Создай с нуля TypeScript/Bun CLI-проект");
+
+    const narration = events.filter((event): event is Extract<AgentEvent, { type: "working_narration" }> => {
+      return event.type === "working_narration";
+    });
+    const verification = narration.find((event) => event.eventType === "verification");
+
+    expect(verification?.evidenceIds).toEqual(["verify_1"]);
+    expect(verification?.message).toContain("project verification command");
+    expect(verification?.evidenceIds).not.toContain("install_1");
+  });
+
   test("sanitizes private reasoning, prompt text and secrets from narration", () => {
     expect(sanitizeWorkingNarrationMessage("my chain of thought is hidden")).toContain("redacted");
     expect(sanitizeWorkingNarrationMessage("system prompt says do X")).toContain("redacted");

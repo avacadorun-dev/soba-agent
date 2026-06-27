@@ -350,12 +350,12 @@ function getAutonomousFollowUpReason(
 
   if (assistantMessages.some((message) => message.phase === "final_answer")) {
     if (hasMutatedFiles) {
-      return "You changed project files. Complete through the finish tool with concrete completion criteria after verification evidence exists.";
+      return "You changed project files and already have verification evidence. Do not write another prose summary. Call finish now with status completed, your final response in summary, and concrete completion criteria.";
     }
     return null;
   }
 
-  return "You stopped without calling finish. If the task is done and verified, call finish now with your final response and completion criteria. If not done, continue with tools.";
+  return "Tool-assisted turns must end through finish. If the task is done and verified, call finish now with status completed, final summary, and concrete criteria. Do not write commentary. If not done, continue with tools.";
 }
 
 /**
@@ -2091,6 +2091,11 @@ export class AgentLoop {
             }
           }
 
+          const producedVerificationEvidence = !result.isError &&
+            !mutationSucceededInCurrentBatch &&
+            (toolCall.name === "read" ||
+              (toolCall.name === "bash" && isVerificationCommand(extractCommandArgument(parsedArgs))));
+
           if (
             !result.isError &&
             isMutationToolName(toolCall.name)
@@ -2107,28 +2112,24 @@ export class AgentLoop {
               );
             }
           } else if (
-            !result.isError &&
             needsVerification &&
-            !mutationSucceededInCurrentBatch &&
-            (toolCall.name === "read" || toolCall.name === "bash")
+            producedVerificationEvidence
           ) {
             needsVerification = false;
             verificationEvidenceCallIds.add(toolCall.call_id);
             emitNarrationOnce(
               "verification",
-              `Recorded ${toolCall.name} as verification evidence after mutation.`,
+              `Recorded ${toolCall.name} as accepted verification evidence after mutation.`,
               [toolCall.call_id],
             );
           } else if (
-            !result.isError &&
             hasMutatedFiles &&
-            !mutationSucceededInCurrentBatch &&
-            (toolCall.name === "read" || toolCall.name === "bash")
+            producedVerificationEvidence
           ) {
             verificationEvidenceCallIds.add(toolCall.call_id);
             emitNarrationOnce(
               "verification",
-              `Recorded ${toolCall.name} as verification evidence after mutation.`,
+              `Recorded ${toolCall.name} as accepted verification evidence after mutation.`,
               [toolCall.call_id],
             );
           }

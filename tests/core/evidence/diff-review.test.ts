@@ -202,6 +202,7 @@ function emptySummary(): EvidenceLedgerSummary {
     unverifiedCodeMutationIds: [],
     unverifiedDocsMutationIds: [],
     activeDiagnosticIds: [],
+    unresolvedVerificationFailureIds: [],
     entries: [],
   };
 }

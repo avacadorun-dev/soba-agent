@@ -65,6 +65,12 @@ describe("verification policy", () => {
     expect(inferTaskKindFromPrompt("Обнови README под новую команду")).toBe("docs_change");
     expect(inferTaskKindFromPrompt("Сделай ревью изменений")).toBe("review");
     expect(inferTaskKindFromPrompt("Добавь поддержку флага --json")).toBe("feature");
+    expect(inferTaskKindFromPrompt("Создай с нуля TypeScript/Bun CLI-проект NoteVault с README")).toBe("feature");
+    expect(
+      inferTaskKindFromPrompt(
+        "Создай с нуля TypeScript/Bun CLI-проект NoteVault. Написать тесты. Добавить package scripts: test, typecheck, lint если линтер уместен.",
+      ),
+    ).toBe("feature");
   });
 
   test("detects explicit user permission for unverified completion", () => {

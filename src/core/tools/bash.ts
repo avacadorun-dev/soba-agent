@@ -25,7 +25,7 @@ function validateBashArgs(args: BashArgs): ToolResult | null {
   const raw = args as unknown as Record<string, unknown>;
 
   if (typeof raw.command === "string" && raw.command.trim().length > 0) {
-    return null;
+    return validateCommandIntent(raw.command);
   }
 
   return createToolErrorResult({
@@ -38,6 +38,32 @@ function validateBashArgs(args: BashArgs): ToolResult | null {
   });
 }
 
+function validateCommandIntent(command: string): ToolResult | null {
+  if (isVerificationPipedToHeadOrTail(command)) {
+    return createToolErrorResult({
+      code: "bash_verification_output_filter",
+      category: "validation",
+      message: "Invalid bash command: verification commands must not be piped through head or tail.",
+      nextAction:
+        "Run the verification command directly and let the tool truncate long output, for example `bun test` instead of `bun test | tail`.",
+      fingerprint: "validation:bash_verification_output_filter",
+    });
+  }
+
+  if (isRoutineFilesystemInspection(command)) {
+    return createToolErrorResult({
+      code: "bash_routine_filesystem_inspection",
+      category: "validation",
+      message: "Invalid bash command: routine file-system inspection should use the dedicated file tools.",
+      nextAction:
+        "Use ls for directory structure, search_files for content search, and read or inspect_file for file contents. Reserve bash for project commands, verification, git, package managers, and shell-only workflows.",
+      fingerprint: "validation:bash_routine_filesystem_inspection",
+    });
+  }
+
+  return null;
+}
+
 // ─── Constants ───
 
 const DEFAULT_TIMEOUT = 30; // seconds
@@ -46,6 +72,11 @@ const DEFAULT_MAX_TIMEOUT = 300; // seconds
 const MAX_LINES = 2000;
 const MAX_BYTES = 50 * 1024; // 50KB
 const REDACTION_CARRY_CHARS = 4096;
+const ROUTINE_FILESYSTEM_COMMAND_RE = /(?:^|[;&|()]\s*)(?:pwd|ls|find|grep|rg|sed|cat|head|tail)\b/i;
+const PROJECT_ACTION_COMMAND_RE =
+  /(?:^|[;&|()]\s*)(?:bun|npm|pnpm|yarn|deno|node|tsx|tsc|biome|vitest|jest|pytest|python|cargo|go|make|git)\b/i;
+const VERIFICATION_COMMAND_RE = /\b(?:test|spec|lint|biome|tsc|typecheck|build)\b/i;
+const HEAD_TAIL_PIPE_RE = /\|\s*&?\s*(?:head|tail)\b/i;
 
 // ─── Helpers ───
 
@@ -317,13 +348,21 @@ function normalizeTimeout(
   };
 }
 
+function isVerificationPipedToHeadOrTail(command: string): boolean {
+  return HEAD_TAIL_PIPE_RE.test(command) && VERIFICATION_COMMAND_RE.test(command);
+}
+
+function isRoutineFilesystemInspection(command: string): boolean {
+  return ROUTINE_FILESYSTEM_COMMAND_RE.test(command) && !PROJECT_ACTION_COMMAND_RE.test(command);
+}
+
 // ─── Tool Definition ───
 
 export const bashTool: ToolDefinition<BashArgs> = {
   name: "bash",
   label: "bash",
   description:
-    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Do not use bash for pwd, routine directory listing, text search, or file reads when ls, search_files, read, or inspect_file fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail are diagnostic only. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
+    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Do not use bash for pwd, routine directory listing, text search, or file reads when ls, search_files, read, or inspect_file fit; routine file inspection through bash is rejected. Run final verification directly; --help/--version/which probes and verification piped through head/tail are diagnostic only and filtered verification commands are rejected. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
   parameters: {
     type: "object",
     properties: {

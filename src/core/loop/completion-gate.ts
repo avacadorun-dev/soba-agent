@@ -32,6 +32,7 @@ export interface CompletionState {
   unverifiedMutationIds?: string[];
   unverifiedCodeMutationIds?: string[];
   unverifiedDocsMutationIds?: string[];
+  unresolvedVerificationFailureIds?: string[];
   taskKind?: TaskKind;
   evidenceIds?: Set<string>;
   allowUnverifiedCompletion?: boolean;
@@ -141,6 +142,7 @@ export function evaluateCompletion(request: FinishRequest, state: CompletionStat
   const activeErrors = state.errors.filter((error) => error.status === "active");
   const activeErrorIds = new Set(activeErrors.map((error) => error.id));
   const unknownAcknowledgements = request.acknowledgedErrorIds.filter((id) => !activeErrorIds.has(id));
+  const unknownEvidenceIds = unknownCriterionEvidenceIds(request, state.evidenceIds);
   const unacknowledgedErrors = activeErrors.filter((error) => !request.acknowledgedErrorIds.includes(error.id));
   const verificationKinds = state.verificationKinds ?? new Set<VerificationKind>();
   const acceptedCommandKinds = policy.acceptedKinds.filter(
@@ -186,14 +188,35 @@ export function evaluateCompletion(request: FinishRequest, state: CompletionStat
   if (unknownAcknowledgements.length > 0) {
     reasons.push("Finish contains internal error acknowledgements that do not match active tool errors.");
   }
+  if (unknownEvidenceIds.length > 0) {
+    reasons.push(
+      `criteria[].evidenceIds contains IDs that do not match recorded evidence: ${unknownEvidenceIds.join(", ")}. Omit evidenceIds unless you have exact public evidence IDs.`,
+    );
+  }
   if (unacknowledgedErrors.length > 0 && request.status !== "blocked") {
     const formatted = unacknowledgedErrors.map(formatError).join("; ");
     reasons.push(
       `Fix active tool errors with additional tool calls before finishing, or use status blocked with a concrete blocker if they are unfixable: ${formatted}`,
     );
   }
+  if (request.status === "completed" && (state.unresolvedVerificationFailureIds?.length ?? 0) > 0) {
+    reasons.push(
+      "A completed outcome cannot include unresolved failed verification checks. Re-run the failing check successfully or use blocked only for a concrete external blocker.",
+    );
+  }
 
   return reasons.length === 0 ? { accepted: true, request } : { accepted: false, reasons };
+}
+
+function unknownCriterionEvidenceIds(request: FinishRequest, knownIds: Set<string> | undefined): string[] {
+  if (!knownIds) return [];
+  return [
+    ...new Set(
+      request.criteria.flatMap((criterion) =>
+        (criterion.evidenceIds ?? []).filter((evidenceId) => !knownIds.has(evidenceId)),
+      ),
+    ),
+  ];
 }
 
 function appendVerificationReasons(input: {
