@@ -11,7 +11,7 @@ import { syncMcpToolsIntoRegistry } from "../core/mcp/tool-registry-sync";
 import { createMemoryTools } from "../core/memory/memory-tools";
 import { ProjectMemory } from "../core/memory/project-memory";
 import { OpenResponsesClientProxy } from "../core/provider/client-proxy";
-import { discoverModels, toModelDefinitions } from "../core/provider/discovery";
+import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../core/provider/discovery";
 import { ProviderRegistry } from "../core/provider/registry";
 import type { ModelDefinition, ProviderDefinition } from "../core/provider/types";
 import type { SessionManager } from "../core/session/session-manager";
@@ -258,6 +258,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     providerRegistry.setApiKey(providerRegistry.getActiveProvider().id, config.apiKey);
   }
   await selectFallbackProviderWithCredentials(providerRegistry);
+  await selectChatModelForActiveProvider(providerRegistry);
 
   const client = new OpenResponsesClientProxy(providerRegistry);
   const explicitBaseUrlOverride = baseUrlOverride ?? (baseUrlExplicitlyPassed ? config.baseUrl : undefined);
@@ -367,8 +368,9 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   };
 }
 
-function buildProviderConfigOptions(providerRegistry: ProviderRegistry): RuntimeSessionConfigOption[] {
+async function buildProviderConfigOptions(providerRegistry: ProviderRegistry): Promise<RuntimeSessionConfigOption[]> {
   const activeProvider = providerRegistry.getActiveProvider();
+  await refreshModelsForProvider(providerRegistry, activeProvider);
   const activeModel = providerRegistry.getActiveModel();
   const providerOptions = providerRegistry.getAllProviders().map((provider) => ({
     value: provider.id,
@@ -417,6 +419,16 @@ async function selectFallbackProviderWithCredentials(providerRegistry: ProviderR
   }
 }
 
+async function selectChatModelForActiveProvider(providerRegistry: ProviderRegistry): Promise<void> {
+  const activeProvider = providerRegistry.getActiveProvider();
+  const activeModel = providerRegistry.getActiveModel();
+  if (activeModel.id && isLikelyChatModelId(activeModel.id)) return;
+  const model = await usableModelForProvider(providerRegistry, activeProvider);
+  if (model && model.id !== activeModel.id) {
+    providerRegistry.setActive(activeProvider.id, model.id);
+  }
+}
+
 async function findFallbackProviderSelection(
   providerRegistry: ProviderRegistry,
   activeProviderId: string,
@@ -446,12 +458,27 @@ function providerHasCredentials(providerRegistry: ProviderRegistry, provider: Pr
 }
 
 async function usableModelForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<ModelDefinition | null> {
+  await refreshModelsForProvider(providerRegistry, provider);
   const existingModels = providerRegistry.getModelsFor(provider.id);
-  const existingModel = existingModels.find((model) => model.id === provider.defaultModel) ?? existingModels[0];
+  const chatModels = existingModels.filter((model) => isLikelyChatModelId(model.id));
+  const candidateModels = chatModels.length > 0 ? chatModels : existingModels;
+  const existingModel =
+    candidateModels.find((model) => model.id === provider.defaultModel) ??
+    candidateModels.find((model) => model.id.toLowerCase().includes("chat")) ??
+    candidateModels.find((model) => model.id.toLowerCase().includes("code")) ??
+    candidateModels[0];
   if (existingModel) return existingModel;
 
   const discovery = await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
   if (!discovery.ok) return null;
   const discoveredModels = toModelDefinitions(discovery, provider);
-  return discoveredModels.find((model) => model.id === discovery.suggestedDefault) ?? discoveredModels[0] ?? null;
+  const discoveredChatModels = discoveredModels.filter((model) => isLikelyChatModelId(model.id));
+  const discoveredCandidates = discoveredChatModels.length > 0 ? discoveredChatModels : discoveredModels;
+  return discoveredCandidates.find((model) => model.id === discovery.suggestedDefault) ?? discoveredCandidates[0] ?? null;
+}
+
+async function refreshModelsForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<void> {
+  if (provider.models && provider.models.length > 0) return;
+  if (!providerHasCredentials(providerRegistry, provider)) return;
+  await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
 }

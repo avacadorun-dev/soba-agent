@@ -287,7 +287,7 @@ describe("ACP stdio server foundation", () => {
     });
   });
 
-  test("emits session config options for model and provider selectors", async () => {
+  test("returns session config options for model and provider selectors", async () => {
     const result = await runLines(
       [
         `${JSON.stringify({
@@ -320,22 +320,59 @@ describe("ACP stdio server foundation", () => {
     );
 
     expect(result.messages[0]).toMatchObject({
-      method: "session/update",
-      params: {
+      jsonrpc: "2.0",
+      id: "new",
+      result: {
         sessionId: "session_1",
-        update: {
-          sessionUpdate: "config_option_update",
+        configOptions: [
+          { id: "provider", type: "select", currentValue: "openrouter" },
+          { id: "model", type: "select", currentValue: "openai/gpt-4.1" },
+        ],
+      },
+    });
+  });
+
+  test("returns refreshed config options after setting a config option", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "set-config",
+          method: "session/set_config_option",
+          params: { sessionId: "session_1", configId: "provider", value: "openrouter" },
+        })}\n`,
+      ],
+      {
+        state: {
           configOptions: [
-            { id: "provider", type: "select", currentValue: "openrouter" },
-            { id: "model", type: "select", currentValue: "openai/gpt-4.1" },
+            {
+              id: "provider",
+              name: "Provider",
+              type: "select",
+              currentValue: "openrouter",
+              options: [{ value: "openrouter", name: "OpenRouter" }],
+            },
+            {
+              id: "model",
+              name: "Model",
+              type: "select",
+              currentValue: "openai/gpt-4.1",
+              options: [{ value: "openai/gpt-4.1", name: "GPT-4.1" }],
+            },
           ],
         },
       },
-    });
-    expect(result.messages[1]).toEqual({
+    );
+
+    expect(result.messages[0]).toMatchObject({
       jsonrpc: "2.0",
-      id: "new",
-      result: { sessionId: "session_1" },
+      id: "set-config",
+      result: {
+        configOptions: [
+          { id: "provider", type: "select", currentValue: "openrouter" },
+          { id: "model", type: "select", currentValue: "openai/gpt-4.1" },
+        ],
+      },
     });
   });
 
@@ -697,7 +734,7 @@ describe("ACP stdio server foundation", () => {
     expect(result.messages[0]).toMatchObject({ result: { cancelled: true } });
     expect(result.messages[1]).toMatchObject({ result: {} });
     expect(result.messages[2]).toMatchObject({ result: {} });
-    expect(result.messages[3]).toMatchObject({ result: { session: { title: "model:test-model" } } });
+    expect(result.messages[3]).toMatchObject({ result: { configOptions: [] } });
     expect(result.messages[4]).toMatchObject({ result: { session: { title: "planning:true" } } });
   });
 

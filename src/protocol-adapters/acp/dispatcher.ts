@@ -166,9 +166,10 @@ export class AcpDispatcher {
     }
 
     const session = await this.runtime.createSession({ cwd: result.data.cwd });
-    await this.emitSessionConfigOptions(session.id, session.id);
+    const configOptions = await this.sessionConfigOptions(session.id);
     return {
       sessionId: session.id,
+      ...(configOptions.length > 0 ? { configOptions } : {}),
     };
   }
 
@@ -310,8 +311,8 @@ export class AcpDispatcher {
       value: result.data.value,
     });
     this.rememberSessionAlias(clientSessionId, session.id);
-    await this.emitSessionConfigOptions(clientSessionId, session.id);
-    return { session: sessionToAcp({ ...session, id: clientSessionId }) };
+    const configOptions = await this.sessionConfigOptions(session.id);
+    return { configOptions };
   }
 
   private async handleSetSessionMode(params: JsonValue | undefined): Promise<JsonValue> {

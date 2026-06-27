@@ -323,6 +323,65 @@ describe("createSobaRuntime", () => {
     });
   });
 
+  test("refreshes built-in provider models and avoids image models as chat defaults", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "google/gemini-3.1-flash-image", context_window: 32768, max_output_tokens: 8192 },
+            { id: "minimax/minimax-m3", context_window: 200000, max_output_tokens: 16384 },
+            { id: "moonshotai/kimi-k2.7-code", context_window: 256000, max_output_tokens: 32768 },
+          ],
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+    try {
+      const registry = {
+        defaultProvider: "openrouter",
+        defaultModel: "google/gemini-3.1-flash-image",
+        providers: {
+          openrouter: { apiKey: "refresh-test-key" },
+        },
+        customProviders: {},
+      };
+      const session = SessionManager.inMemory(projectRoot);
+      const composition = await createSobaRuntime({
+        cwd: projectRoot,
+        session,
+        config: {
+          ...makeConfig(),
+          apiKey: "",
+          baseUrl: "https://openrouter.ai/api/v1",
+          model: "google/gemini-3.1-flash-image",
+          registry,
+        },
+        compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+        interactive: false,
+        modelExplicitlyPassed: false,
+        noStream: true,
+        stream: false,
+        tokenBudget: 0,
+        debug: false,
+        providerRegistryConfigPath: registryConfigPath(),
+      });
+      const runtimeSession = await composition.runtime.createSession({ cwd: projectRoot });
+      const options = await composition.runtime.listSessionConfigOptions?.(runtimeSession.id);
+      const modelOption = options?.find((option) => option.id === "model");
+
+      expect(composition.client.getActiveProviderId()).toBe("openrouter");
+      expect(composition.client.getConfig().model).toBe("moonshotai/kimi-k2.7-code");
+      expect(modelOption?.currentValue).toBe("moonshotai/kimi-k2.7-code");
+      expect(modelOption?.options.map((option) => option.value)).toEqual([
+        "google/gemini-3.1-flash-image",
+        "minimax/minimax-m3",
+        "moonshotai/kimi-k2.7-code",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("exposes and applies provider/model session config options", async () => {
     const registry = {
       defaultProvider: "first-provider",

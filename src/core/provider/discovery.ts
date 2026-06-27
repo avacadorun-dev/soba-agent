@@ -253,6 +253,32 @@ export function toModelDefinitions(
   return result.models.map((m) => toModelDefinition(m, provider.id));
 }
 
+export function isLikelyChatModelId(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  const blockedFragments = [
+    "audio",
+    "clip",
+    "content-safety",
+    "dall-e",
+    "diffusion",
+    "embed",
+    "embedding",
+    "guard",
+    "imagen",
+    "image",
+    "moderation",
+    "rerank",
+    "sora",
+    "speech",
+    "stable-diffusion",
+    "transcribe",
+    "tts",
+    "vision-embed",
+    "whisper",
+  ];
+  return !blockedFragments.some((fragment) => id.includes(fragment));
+}
+
 /**
  * Pick the most "useful" default from a list of model ids. Pure
  * function so it's easy to unit-test. The heuristic favours coding /
@@ -264,16 +290,16 @@ export function pickSuggestedDefault(
   _providerId: string,
 ): string | null {
   if (models.length === 0) return null;
-  const ids = models.map((m) => m.id.toLowerCase());
 
-  // Generic preferences (any provider): chat > coder > instruct > first.
-  const genericOrder = ["chat", "coder", "instruct", "it"];
+  const chatModels = models.filter((model) => isLikelyChatModelId(model.id));
+  const candidates = chatModels.length > 0 ? chatModels : models;
+  const candidateIds = candidates.map((m) => m.id.toLowerCase());
+
+  // Generic preferences (any provider): chat > coder > instruct > first chat-like model.
+  const genericOrder = ["chat", "coder", "code", "instruct", "it"];
   for (const tag of genericOrder) {
-    const hit = ids.findIndex(
-      (id) =>
-        id.includes(tag) && !id.includes("embed") && !id.includes("image"),
-    );
-    if (hit >= 0) return models[hit]?.id ?? null;
+    const hit = candidateIds.findIndex((id) => id.includes(tag));
+    if (hit >= 0) return candidates[hit]?.id ?? null;
   }
-  return models[0]?.id ?? null;
+  return candidates[0]?.id ?? null;
 }
