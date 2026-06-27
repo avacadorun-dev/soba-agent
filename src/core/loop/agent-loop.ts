@@ -1436,23 +1436,40 @@ export class AgentLoop {
           });
         }
 
-        // Store assistant messages in session
-        for (const msg of assistantMessages) {
-          // Do not feed an invisible response back to the model. Some
-          // OpenAI-compatible reasoning models otherwise continue the same
-          // unfinished response instead of following the recovery instruction.
-          if (isInvisibleAssistantMessage(msg)) {
-            continue;
+        let assistantMessagesStored = false;
+        const appendAssistantMessagesToSession = () => {
+          if (assistantMessagesStored) return;
+          assistantMessagesStored = true;
+          for (const msg of assistantMessages) {
+            // Do not feed an invisible response back to the model. Some
+            // OpenAI-compatible reasoning models otherwise continue the same
+            // unfinished response instead of following the recovery instruction.
+            if (isInvisibleAssistantMessage(msg)) {
+              continue;
+            }
+            const sessionItem = outputItemToSessionItem(msg);
+            if (sessionItem) {
+              this.session.appendItem(sessionItem as unknown as SessionItemParam);
+              allItems.push(sessionItem);
+            }
           }
-          const sessionItem = outputItemToSessionItem(msg);
-          if (sessionItem) {
-            this.session.appendItem(sessionItem as unknown as SessionItemParam);
-            allItems.push(sessionItem);
+        };
+
+        const supersedeVisibleAssistantMessages = () => {
+          for (const msg of assistantMessages) {
+            if (isInvisibleAssistantMessage(msg)) continue;
+            this.emit({
+              type: "assistant_message_superseded",
+              timestamp: Date.now(),
+              messageId: msg.id,
+              reason: "autonomous_followup",
+            });
           }
-        }
+        };
 
         if (shouldContinue && toolCalls.length > 0) {
           if (continuationAttempts < this.options.maxContinuationAttempts) {
+            appendAssistantMessagesToSession();
             continuationAttempts++;
             const continuationItem = createUserItem(
               "Your previous response was cut off while generating a tool call. " +
@@ -1507,6 +1524,7 @@ export class AgentLoop {
           }
 
           if (finishEvaluation.kind === "rejected" || finishEvaluation.kind === "invalid") {
+            appendAssistantMessagesToSession();
             evidenceLedger.recordFinishAttempt(
               "rejected",
               finishEvaluation.kind === "invalid"
@@ -1666,6 +1684,7 @@ export class AgentLoop {
           toolCalls.length === 0 &&
           continuationAttempts < this.options.maxContinuationAttempts
         ) {
+          appendAssistantMessagesToSession();
           continuationAttempts++;
           const continuationItem = createUserItem(
             "Continue exactly where you stopped. Do not repeat completed text. Keep working until the task is complete.",
@@ -1724,6 +1743,7 @@ export class AgentLoop {
           (error) => error.type === "security_denial",
         );
         if (hadSecurityDenialThisTurn && autonomousReason) {
+          appendAssistantMessagesToSession();
           this._emitStopReason(
             turnIndex,
             iteration,
@@ -1739,6 +1759,7 @@ export class AgentLoop {
           autonomousReason &&
           autonomousFollowUps < this.options.maxAutonomousFollowUps
         ) {
+          supersedeVisibleAssistantMessages();
           autonomousFollowUps++;
           this.debug({
             event: "loop/auto-continue",
@@ -1777,6 +1798,7 @@ export class AgentLoop {
 
           // If there are active unresolved errors, stop with a loop-guard error.
           if (activeErrors.length > 0) {
+            appendAssistantMessagesToSession();
             const actualCount = autonomousFollowUps + 1;
             const message = `No tool calls or finish after ${actualCount} attempts. Active errors remain unresolved.`;
             emitNarrationOnce("blocked", message);
@@ -1799,6 +1821,7 @@ export class AgentLoop {
 
           // If visible text is still empty after all follow-up attempts, stop with an error.
           if (!hasVisibleAssistantText(assistantMessages)) {
+            appendAssistantMessagesToSession();
             const actualCount = autonomousFollowUps + 1;
             const message = `No visible response after ${actualCount} attempts. The model kept producing only thinking without substantive output.`;
             emitNarrationOnce("blocked", message);
@@ -1822,6 +1845,7 @@ export class AgentLoop {
           // No active errors — accept text-only response as final answer.
           // This covers both non-mutation turns and mutation turns where the model
           // completed work but didn't call finish (model-dependent compliance).
+          appendAssistantMessagesToSession();
           this._emitStopReason(
             turnIndex,
             iteration,
@@ -1841,6 +1865,7 @@ export class AgentLoop {
 
         // A phased final answer is the only text-only completion signal.
         if (toolCalls.length === 0) {
+          appendAssistantMessagesToSession();
           this._emitStopReason(
             turnIndex,
             iteration,
@@ -1855,6 +1880,7 @@ export class AgentLoop {
 
         // Store the complete assistant tool-call group before any tool outputs.
         // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
+        appendAssistantMessagesToSession();
         for (const toolCall of toolCalls) {
           const fcItem: FunctionCallItemParam = {
             type: "function_call",

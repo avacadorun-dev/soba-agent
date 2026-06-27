@@ -95,6 +95,8 @@ export class TuiStore {
   private streamMessageId: string | null = null;
   private streamTuiId: number | null = null;
   private readonly reasoningTuiIds = new Map<string, number>();
+  private readonly assistantTuiIds = new Map<string, number>();
+  private readonly assistantRelatedTuiIds = new Map<string, number[]>();
   private finalizedIds = new Set<string>();
   private noodleTimer: ReturnType<typeof setInterval> | null = null;
   private fileTreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -350,6 +352,8 @@ export class TuiStore {
     this.setMessages([]);
     this.finalizedIds.clear();
     this.reasoningTuiIds.clear();
+    this.assistantTuiIds.clear();
+    this.assistantRelatedTuiIds.clear();
   }
 
   /** Stop the active tool, or cancel the turn when no tool is running. */
@@ -368,6 +372,8 @@ export class TuiStore {
     this.streamMessageId = null;
     this.streamTuiId = null;
     this.reasoningTuiIds.clear();
+    this.assistantTuiIds.clear();
+    this.assistantRelatedTuiIds.clear();
   }
 
   copyLastAssistant(): boolean {
@@ -595,11 +601,14 @@ export class TuiStore {
         const tuiId = this.streamTuiId;
         if (!this.finalizedIds.has(event.messageId) && tuiId !== null) {
           this.finalizedIds.add(event.messageId);
+          this.assistantTuiIds.set(event.messageId, tuiId);
+          const relatedIds: number[] = [];
           batch(() => {
             const split = splitAssistantEvidence(event.fullText);
             this.updateAssistant(tuiId, () => split.body, false);
             if (split.evidence) {
-              this.insertAfter(tuiId, { type: "evidence", summary: split.evidence });
+              const evidence = this.insertAfter(tuiId, { type: "evidence", summary: split.evidence });
+              relatedIds.push(evidence.id);
             }
             this.setLastAssistantText(event.fullText);
             // Insert reasoning BEFORE the assistant message
@@ -607,8 +616,10 @@ export class TuiStore {
               const existingReasoningId = this.reasoningTuiIds.get(event.messageId);
               if (existingReasoningId !== undefined) {
                 this.updateReasoning(existingReasoningId, () => event.reasoningContent as string);
+                relatedIds.push(existingReasoningId);
               } else {
                 const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.reasoningContent };
+                relatedIds.push(reasoningMsg.id);
                 this.setMessages((messages) => {
                   const index = messages.findIndex((m) => m.id === tuiId);
                   if (index < 0) return messages;
@@ -617,10 +628,15 @@ export class TuiStore {
               }
             }
           });
+          this.assistantRelatedTuiIds.set(event.messageId, relatedIds);
           this.reasoningTuiIds.delete(event.messageId);
           this.streamMessageId = null;
           this.streamTuiId = null;
         }
+        break;
+      }
+      case "assistant_message_superseded": {
+        this.removeAssistantMessageByModelId(event.messageId);
         break;
       }
       case "assistant_message":
@@ -921,6 +937,23 @@ export class TuiStore {
     }
     if (split.evidence) {
       this.add({ type: "evidence", summary: split.evidence });
+    }
+  }
+
+  private removeAssistantMessageByModelId(messageId: string): void {
+    const assistantId = this.assistantTuiIds.get(messageId);
+    const relatedIds = this.assistantRelatedTuiIds.get(messageId) ?? [];
+    if (assistantId === undefined && relatedIds.length === 0) return;
+
+    const idsToRemove = new Set([assistantId, ...relatedIds].filter((id): id is number => id !== undefined));
+    this.setMessages((messages) => messages.filter((message) => !idsToRemove.has(message.id)));
+    this.assistantTuiIds.delete(messageId);
+    this.assistantRelatedTuiIds.delete(messageId);
+    this.reasoningTuiIds.delete(messageId);
+    this.finalizedIds.delete(messageId);
+    if (this.streamMessageId === messageId) {
+      this.streamMessageId = null;
+      this.streamTuiId = null;
     }
   }
 

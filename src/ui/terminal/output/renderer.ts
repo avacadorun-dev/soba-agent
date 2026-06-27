@@ -321,6 +321,9 @@ export class TuiRenderer {
         });
         break;
 
+      case "assistant_message_superseded":
+        break;
+
       case "function_call_delta":
       case "function_call_done":
         break;

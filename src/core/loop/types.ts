@@ -31,6 +31,7 @@ export type AgentEventType =
   | "turn_start"
   | "thinking"
   | "assistant_message"
+  | "assistant_message_superseded"
   | "assistant_message_start"
   | "assistant_text_delta"
   | "assistant_reasoning_delta"
@@ -75,6 +76,12 @@ export interface AssistantMessageEvent extends BaseAgentEvent {
   messageId: string;
   text: string;
   reasoningContent?: string;
+}
+
+export interface AssistantMessageSupersededEvent extends BaseAgentEvent {
+  type: "assistant_message_superseded";
+  messageId: string;
+  reason: "autonomous_followup";
 }
 
 export interface ToolCallStartEvent extends BaseAgentEvent {
@@ -244,6 +251,7 @@ export type AgentEvent =
   | TurnStartEvent
   | ThinkingEvent
   | AssistantMessageEvent
+  | AssistantMessageSupersededEvent
   | AssistantMessageStartEvent
   | AssistantTextDeltaEvent
   | AssistantReasoningDeltaEvent
