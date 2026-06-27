@@ -139,4 +139,22 @@ describe("createSobaRuntime", () => {
     expect(events).toContain("turn_start");
     expect(events).toContain("turn_end");
   });
+
+  test("passes flat config apiKey into the active provider client", async () => {
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+    });
+
+    expect(composition.client.getConfig().apiKey).toBe("fake-api-key");
+  });
 });

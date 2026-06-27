@@ -220,6 +220,9 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   if (cliProviderId) {
     providerRegistry.setActive(cliProviderId, config.model);
   }
+  if (config.apiKey) {
+    providerRegistry.setApiKey(providerRegistry.getActiveProvider().id, config.apiKey);
+  }
 
   const client = new OpenResponsesClientProxy(providerRegistry);
   if (baseUrlOverride) {
