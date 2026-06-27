@@ -185,6 +185,9 @@ async function execCommand(
 }
 
 class StreamingOutputCapture {
+  private readonly cwd: string;
+  private readonly maxLines: number;
+  private readonly maxBytes: number;
   private preview = "";
   private redactionCarry = "";
   private pendingFullOutput: string[] = [];
@@ -195,10 +198,14 @@ class StreamingOutputCapture {
   private _truncated = false;
 
   constructor(
-    private readonly cwd: string,
-    private readonly maxLines: number,
-    private readonly maxBytes: number,
-  ) {}
+    cwd: string,
+    maxLines: number,
+    maxBytes: number,
+  ) {
+    this.cwd = cwd;
+    this.maxLines = maxLines;
+    this.maxBytes = maxBytes;
+  }
 
   get truncated(): boolean {
     return this._truncated;
