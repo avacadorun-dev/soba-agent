@@ -1,3 +1,4 @@
+import { APP_VERSION } from "../version";
 import type { McpClientState, McpClientStateSnapshot } from "./client-state";
 import { JsonRpcEndpoint, JsonRpcError, type JsonRpcNotification, type JsonRpcParams } from "./json-rpc";
 import { type McpTransport, McpTransportError, type McpTransportEvent, type McpTransportEventHandler } from "./transport";
@@ -19,7 +20,6 @@ export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
 ] as const;
 
 const DEFAULT_CLIENT_NAME = "soba-agent";
-const DEFAULT_CLIENT_VERSION = "0.5.0";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export interface McpClientOptions {
@@ -106,7 +106,7 @@ export class McpClient {
     this.requestTimeoutMs = options.requestTimeoutMs ?? options.server.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.clientInfo = options.clientInfo ?? {
       name: DEFAULT_CLIENT_NAME,
-      version: DEFAULT_CLIENT_VERSION,
+      version: APP_VERSION,
     };
     this.clientCapabilities = options.clientCapabilities ?? {
       tools: {},

@@ -6,6 +6,7 @@
  */
 
 import type { TuiMessage } from "../model/types";
+import { formatTuiEvidenceSummary } from "./evidence-summary";
 
 export interface SearchMatch {
   /** Start offset in the extracted text (code-units). */
@@ -47,6 +48,8 @@ export function extractSearchText(msg: TuiMessage): string {
     case "warning":
     case "error":
       return stripAnsi(msg.content);
+    case "evidence":
+      return stripAnsi(formatTuiEvidenceSummary(msg.summary));
     case "tool-start":
       return stripAnsi(msg.summary);
     case "tool-result":

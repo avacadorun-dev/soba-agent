@@ -90,22 +90,6 @@ export class JsonRpcError extends Error {
   }
 }
 
-export function parseJsonRpcRequest(line: string): JsonRpcRequest {
-  const parsed = parseJson(line);
-
-  const result = jsonRpcRequestSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new JsonRpcError(JSON_RPC_INVALID_REQUEST, "Invalid Request", {
-      issues: result.error.issues.map((issue) => ({
-        path: issue.path.join("."),
-        message: issue.message,
-      })),
-    });
-  }
-
-  return result.data;
-}
-
 export function parseJsonRpcMessage(line: string): JsonRpcMessage {
   const parsed = parseJson(line);
   const request = jsonRpcRequestSchema.safeParse(parsed);

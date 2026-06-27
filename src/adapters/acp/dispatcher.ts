@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { type ParsedEvidenceHandoff, splitEvidenceHandoff } from "../../application/evidence-handoff";
 import type {
   RuntimeCommandMetadata,
   RuntimeContentBlock,
@@ -447,11 +448,16 @@ export class AcpDispatcher {
           content: { type: "text", text: event.delta },
         };
       case "assistant_message":
-        return {
-          sessionUpdate: "agent_message_chunk",
+        return agentMessageUpdate({
           messageId: event.messageId,
-          content: { type: "text", text: event.text },
-        };
+          text: event.text,
+        });
+      case "assistant_text_done":
+        return agentMessageUpdate({
+          messageId: event.messageId,
+          text: event.fullText,
+          metadataOnly: true,
+        });
       case "tool_call_start": {
         const key = this.toolCallKey(sessionId, event.toolCallId);
         this.activeToolCalls.set(key, { toolName: event.toolName, args: event.args });
@@ -489,6 +495,12 @@ export class AcpDispatcher {
           _meta: {
             eventType: event.eventType,
             evidenceIds: event.evidenceIds,
+            soba: {
+              evidence: {
+                source: "working_narration",
+                evidenceIds: event.evidenceIds,
+              },
+            },
           },
         };
       case "turn_error":
@@ -561,6 +573,7 @@ const ACP_COMMAND_DESCRIPTIONS: Record<string, string> = {
   compact: "Summarize the conversation to free up context.",
   rewind: "Rewind the session to a checkpoint.",
   session: "Show session statistics.",
+  sessions: "List, resume, close, or delete sessions.",
   capsule: "Create, export, load, or inspect context capsules.",
   "auto-compact": "Show or change automatic compaction.",
   budget: "Show token budget usage.",
@@ -642,6 +655,25 @@ function acpContentToRuntime(content: z.infer<typeof sessionPromptParamsSchema>[
     mimeType: content.mimeType,
     data: content.data,
   };
+}
+
+function agentMessageUpdate(input: { messageId: string; text: string; metadataOnly?: boolean }): JsonValue | undefined {
+  const evidence = splitEvidenceHandoff(input.text).evidence;
+  if (!evidence && input.metadataOnly) return undefined;
+
+  const update: { [key: string]: JsonValue } = {
+    sessionUpdate: "agent_message_chunk",
+    messageId: input.messageId,
+    content: { type: "text", text: input.metadataOnly ? "" : input.text },
+  };
+  if (evidence) {
+    update._meta = {
+      soba: {
+        evidence: evidenceHandoffMeta(evidence),
+      },
+    };
+  }
+  return update;
 }
 
 function toolCallStartUpdate(toolCallId: string, toolName: string, args: Record<string, unknown>): JsonValue {
@@ -801,11 +833,48 @@ function toolMeta(
     entryCount: numberField(details, "entryCount"),
     matchCount: numberField(details, "matchCount"),
     durationMs: numberField(extra, "durationMs"),
+    evidence: toolEvidenceMeta(toolName, args, result, extra),
   });
   return {
     tool_name: toolName,
     soba,
   };
+}
+
+function evidenceHandoffMeta(evidence: ParsedEvidenceHandoff): JsonValue {
+  return compactJsonObject({
+    source: "assistant_handoff",
+    status: evidence.status,
+    changedFiles: evidence.changedFiles,
+    diff: evidence.diff,
+    checks: evidence.checks,
+    risks: evidence.risks,
+    reviewActions: evidence.reviewActions,
+    rawLines: evidence.rawLines,
+  });
+}
+
+function toolEvidenceMeta(
+  toolName: string,
+  args?: Record<string, unknown>,
+  result?: { content?: unknown; details?: Record<string, unknown>; isError?: boolean },
+  extra?: Record<string, unknown>,
+): JsonValue {
+  const details = result?.details;
+  const durationMs = numberField(extra, "durationMs");
+  return compactJsonObject({
+    source: "tool_lifecycle",
+    phase: durationMs !== undefined ? "end" : result ? "result" : "start",
+    toolName,
+    kind: toolKind(toolName),
+    status: result ? result.isError ? "failed" : "completed" : durationMs !== undefined ? "completed" : "pending",
+    command: commandFrom(args, details),
+    path: pathFrom(args, details),
+    query: stringField(args, "query") ?? stringField(details, "query"),
+    exitCode: numberOrNullField(details, "exitCode"),
+    durationMs,
+    outputPreview: toolOutputPreview(result),
+  });
 }
 
 function normalizedToolName(toolName: string): string {
@@ -927,6 +996,19 @@ function toolResultContent(result: { content?: unknown; details?: Record<string,
   }
 
   return content;
+}
+
+function toolOutputPreview(result: { content?: unknown } | undefined): string | undefined {
+  if (!Array.isArray(result?.content)) return undefined;
+  const text = result.content
+    .flatMap((item) => {
+      if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") return [];
+      return [item.text];
+    })
+    .join("\n")
+    .trim();
+  if (text.length === 0) return undefined;
+  return truncateInline(text, 500);
 }
 
 function diffContent(details: Record<string, unknown> | undefined): JsonValue | undefined {

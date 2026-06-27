@@ -34,6 +34,13 @@ export const RUNTIME_COMMANDS = [
     surfaces: ["print", "tui", "acp"],
   },
   {
+    id: "sessions",
+    name: "/sessions",
+    descriptionKey: "command.description.sessions",
+    usage: "/sessions list|resume <id>|load <id>|close [id]|delete <id>",
+    surfaces: ["print", "tui", "acp"],
+  },
+  {
     id: "capsule",
     name: "/capsule",
     descriptionKey: "command.description.capsule",
@@ -108,7 +115,7 @@ export const RUNTIME_COMMANDS = [
     id: "mcp",
     name: "/mcp",
     descriptionKey: "command.description.mcp",
-    usage: "/mcp status|start <server>|stop <server>|restart <server>|auth status|login|logout <server>|secret list|set|unset",
+    usage: "/mcp status|reload|start <server>|stop <server>|restart <server>|auth status|login|logout <server>|secret list|set|unset",
     surfaces: ["print", "tui", "acp"],
   },
   {

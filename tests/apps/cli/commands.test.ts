@@ -522,6 +522,51 @@ describe("slash commands", () => {
     expect(output[0]?.message).toContain("Next action: Run /mcp auth login remote");
   });
 
+  test("/mcp reload вызывает runtime hotreload и показывает сводку", async () => {
+    const output: Array<{ type: string; message?: string }> = [];
+    const calls: string[] = [];
+    const mcpRuntime = {
+      getManager: () => undefined,
+      syncTools: async () => ({
+        removed: 0,
+        registered: [],
+        trustRules: [],
+        skipped: [],
+      }),
+      reload: async () => {
+        calls.push("reload");
+        return {
+          previousServerIds: ["old"],
+          serverIds: ["docs", "github"],
+          addedServerIds: ["github"],
+          removedServerIds: ["old"],
+          restartedServerIds: ["docs"],
+          toolSync: {
+            removed: 1,
+            registered: ["mcp_docs_search", "mcp_github_issue"],
+            trustRules: [],
+            skipped: [],
+          },
+        };
+      },
+    };
+    const context = {
+      ...makeCommandContext(SessionManager.inMemory(process.cwd()), output),
+      mcpRuntime,
+    } as unknown as CommandContext;
+
+    await executeCommand("/mcp reload", context);
+
+    expect(calls).toEqual(["reload"]);
+    expect(output[0]?.type).toBe("info");
+    expect(output[0]?.message).toContain("MCP reload:");
+    expect(output[0]?.message).toContain("configured=2");
+    expect(output[0]?.message).toContain("added=github");
+    expect(output[0]?.message).toContain("removed=old");
+    expect(output[0]?.message).toContain("restarted=docs");
+    expect(output[0]?.message).toContain("tools=2");
+  });
+
   test("/mcp secret set/list/unset stores names without echoing secret values", async () => {
     const output: Array<{ type: string; message?: string }> = [];
     const tempDir = mkdtempSync(join(tmpdir(), "soba-mcp-secret-command-"));
@@ -539,7 +584,7 @@ describe("slash commands", () => {
       expect(await mcpSecretStore.get("REMOTE_MCP_API_KEY")).toBeNull();
       expect(output.map((entry) => entry.type)).toEqual(["info", "info", "info"]);
       expect(output[0]?.message).toContain("REMOTE_MCP_API_KEY");
-      expect(output[0]?.message).toContain("Restart Soba/Zed");
+      expect(output[0]?.message).toContain("/mcp reload");
       expect(output[1]?.message).toContain("REMOTE_MCP_API_KEY");
       expect(output[2]?.message).toContain("removed");
       expect(output.map((entry) => entry.message ?? "").join("\n")).not.toContain("tavily-secret-value");
@@ -564,6 +609,9 @@ describe("slash commands", () => {
       "command.mcp.secret.set",
       "command.mcp.secret.unset",
       "command.mcp.secret.usage",
+      "command.mcp.reload.error",
+      "command.mcp.reload.result",
+      "command.mcp.reload.unavailable",
     ];
 
     for (const locale of ["en", "ru", "zh"]) {

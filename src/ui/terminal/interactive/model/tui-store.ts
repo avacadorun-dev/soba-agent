@@ -15,6 +15,7 @@ import { registerSearchCommand } from "../commands/search-command";
 import { registerSidebarCommand } from "../commands/sidebar-command";
 import type { SlashCommandContext } from "../commands/types";
 import { CommandHistory } from "../lib/command-history";
+import { formatTuiEvidenceSummary, splitAssistantEvidence } from "../lib/evidence-summary";
 import { formatToolArgs, formatToolResult, formatToolSummary } from "../lib/format-tool";
 import { buildFileTree, readChangeStats } from "../lib/project-info";
 import type { NotificationStore } from "./notification-store";
@@ -375,6 +376,8 @@ export class TuiStore {
             return `${this.l("tui.label.you")}\n${message.content}`;
           case "assistant":
             return `${this.l("tui.label.assistant")}\n${message.content}`;
+          case "evidence":
+            return formatTuiEvidenceSummary(message.summary);
           case "reasoning":
             return `🍜 ${this.l("tui.reasoning")}\n${message.content}`;
           case "narration":
@@ -584,7 +587,11 @@ export class TuiStore {
         if (!this.finalizedIds.has(event.messageId) && tuiId !== null) {
           this.finalizedIds.add(event.messageId);
           batch(() => {
-            this.updateAssistant(tuiId, () => event.fullText, false);
+            const split = splitAssistantEvidence(event.fullText);
+            this.updateAssistant(tuiId, () => split.body, false);
+            if (split.evidence) {
+              this.insertAfter(tuiId, { type: "evidence", summary: split.evidence });
+            }
             this.setLastAssistantText(event.fullText);
             // Insert reasoning BEFORE the assistant message
             if (event.reasoningContent) {
@@ -614,7 +621,7 @@ export class TuiStore {
           if (event.reasoningContent) {
             this.add({ type: "reasoning", content: event.reasoningContent });
           }
-          this.add({ type: "assistant", content: event.text, streaming: false });
+          this.addAssistantFinalText(event.text);
           this.setLastAssistantText(event.text);
         }
         break;
@@ -880,6 +887,26 @@ export class TuiStore {
     const withId = { ...message, id: this.nextId++ } as TuiMessage;
     this.setMessages((messages) => [...messages, withId]);
     return withId;
+  }
+
+  private insertAfter(afterId: number, message: TuiMessageInput): TuiMessage {
+    const withId = { ...message, id: this.nextId++ } as TuiMessage;
+    this.setMessages((messages) => {
+      const index = messages.findIndex((candidate) => candidate.id === afterId);
+      if (index < 0) return [...messages, withId];
+      return [...messages.slice(0, index + 1), withId, ...messages.slice(index + 1)];
+    });
+    return withId;
+  }
+
+  private addAssistantFinalText(text: string): void {
+    const split = splitAssistantEvidence(text);
+    if (split.body.trim().length > 0 || !split.evidence) {
+      this.add({ type: "assistant", content: split.body, streaming: false });
+    }
+    if (split.evidence) {
+      this.add({ type: "evidence", summary: split.evidence });
+    }
   }
 
   /**

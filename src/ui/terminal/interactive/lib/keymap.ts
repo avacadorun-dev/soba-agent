@@ -89,9 +89,9 @@ export const TUI_KEYMAP_ACTION_LABELS: Record<TuiKeyAction, string> = {
   nextSidebarMode: "Next sidebar panel",
   previousSidebarMode: "Previous sidebar panel",
   openHelp: "Open help panel",
-  toggleToolResult: "Toggle focused tool result",
-  focusNextToolResult: "Focus next tool result",
-  focusPreviousToolResult: "Focus previous tool result",
+  toggleToolResult: "Toggle focused block",
+  focusNextToolResult: "Focus next block",
+  focusPreviousToolResult: "Focus previous block",
 };
 
 export function keyMatchesAction(key: KeyEvent, action: TuiKeyAction): boolean {

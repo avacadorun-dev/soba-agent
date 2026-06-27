@@ -12,7 +12,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import packageJson from "../../../package.json";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { createSobaRuntime } from "../../application/runtime-factory";
 import type { RuntimeEvent } from "../../application/types";
@@ -29,13 +28,14 @@ import type { Locale } from "../../core/i18n/types";
 import type { ApprovalDecision } from "../../core/loop/types";
 import { SoundNotifier } from "../../core/middleware/sound-notifier";
 import { listSessions, SessionManager } from "../../core/session/session-manager";
+import { APP_VERSION } from "../../core/version";
 import { setColorDisabled } from "../../ui/terminal/output/colors";
 import { createRenderer } from "../../ui/terminal/output/renderer";
 import { initTheme } from "../../ui/terminal/output/theme";
 import { parseArgs, printHelp } from "./args";
 import { executeCommand } from "./commands";
 
-const VERSION = packageJson.version;
+const VERSION = APP_VERSION;
 
 // ─── Helpers ───
 
@@ -224,6 +224,29 @@ async function main() {
     return;
   }
 
+  if (cliArgs.init) {
+    const { parseInitCommandArgs, runInitCommand } = await import("./init-command");
+    let options;
+    try {
+      options = parseInitCommandArgs(cliArgs.initArgs);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+    const result = await runInitCommand(
+      {
+        ...options,
+        cwd: process.cwd(),
+        configPath: process.env.SOBA_CONFIG_PATH,
+      },
+      i18n,
+    );
+    for (const line of result.stdout) console.log(line);
+    for (const line of result.stderr) console.error(line);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
   // --no-color
   if (cliArgs.noColor) {
     setColorDisabled(true);
@@ -307,6 +330,8 @@ async function main() {
         return executeCommand(command, {
           client: context.client,
           session: context.getSession(),
+          sessionLifecycle: context.sessionLifecycle,
+          setSession: context.setSession,
           config: context.config,
           i18n,
           renderer: {
@@ -316,6 +341,7 @@ async function main() {
           skillManager: context.skillManager,
           agentLoop: context.agentLoop,
           registry: context.providerRegistry,
+          mcpRuntime: context.mcpRuntime,
           mcpManager: context.mcpManager,
           mcpSecretStore: context.mcpSecretStore,
           toolRegistry: context.toolRegistry,
@@ -406,10 +432,13 @@ async function main() {
     contextManager,
     skillManager,
     trustStore,
+    sessionLifecycle,
+    mcpRuntime,
     mcpManager,
     trustManager,
     mcpSecretStore,
   } = runtimeComposition;
+  let activeSession = session;
 
   // Sound notifications — plays audio on agent events
   const soundNotifier = new SoundNotifier(soundConfig);
@@ -454,7 +483,12 @@ async function main() {
       executeCommand: (input, output) =>
         executeCommand(input, {
           client,
-          session,
+          session: activeSession,
+          sessionLifecycle,
+          setSession: (nextSession) => {
+            activeSession = nextSession;
+            loop.setSessionManager(nextSession);
+          },
           config,
           i18n,
           renderer: { emit: output },
@@ -462,6 +496,7 @@ async function main() {
           skillManager,
           agentLoop: loop,
           registry: providerRegistry,
+          mcpRuntime,
           mcpManager,
           mcpSecretStore,
           toolRegistry: tools,

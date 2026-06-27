@@ -90,6 +90,7 @@ export interface RuntimeSessionInfo {
   cwd: string;
   title?: string;
   updatedAt?: string;
+  entries?: number;
 }
 
 export interface RuntimeSessionSnapshot {
@@ -119,6 +120,7 @@ export function sessionInfoToRuntime(info: SessionInfo): RuntimeSessionInfo {
     id: info.id,
     cwd: info.cwd,
     updatedAt: info.timestamp,
+    entries: info.entries,
   };
 }
 

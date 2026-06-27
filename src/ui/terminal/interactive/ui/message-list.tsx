@@ -5,11 +5,12 @@ import { getMarkdownStyle, getTuiTheme } from "../lib/theme";
 import { computeTurnMap, computeTurnStarts, isTurnStart as checkTurnStart } from "../lib/turn-grouping";
 import type { TuiStore } from "../model/tui-store";
 import type { TuiMessage } from "../model/types";
+import { EvidenceBlock } from "./evidence-block";
 import { ToolResultBlock } from "./tool-result-block";
 import { TurnSeparator } from "./turn-separator";
 
 /**
- * Callback interface for keyboard-driven tool-result focus.
+ * Callback interface for keyboard-driven inspectable block focus.
  * The parent wires these to Enter / Tab / Shift+Tab.
  */
 export interface ToolResultFocusRef {
@@ -121,6 +122,17 @@ function Message(props: {
       <Match when={props.message.type === "assistant" && props.message}>
         {(message) => <AssistantMessage message={message()} store={props.store} />}
       </Match>
+      <Match when={props.message.type === "evidence" && props.message}>
+        {(message) => (
+          <EvidenceBlock
+            message={message()}
+            store={props.store}
+            expanded={props.expanded}
+            focused={props.focused}
+            onToggle={props.onToggle}
+          />
+        )}
+      </Match>
       <Match when={props.message.type === "reasoning" && props.message}>
         {(message) => <ReasoningMessage content={message().content} store={props.store} />}
       </Match>
@@ -187,12 +199,12 @@ export function MessageList(props: {
   // For each message index, return the turn index it belongs to (-1 if before first turn)
   const turnForIndex = createMemo(() => computeTurnMap(turnStarts(), props.messages.length));
 
-  // Derived list of message indices that are tool-result messages
-  const toolResultIndices = createMemo(() => {
+  // Derived list of message indices that can be focused and expanded.
+  const inspectableIndices = createMemo(() => {
     const indices: number[] = [];
     const msgs = props.messages;
     for (let i = 0; i < msgs.length; i++) {
-      if (msgs[i].type === "tool-result") {
+      if (msgs[i].type === "tool-result" || msgs[i].type === "evidence") {
         indices.push(i);
       }
     }
@@ -204,11 +216,12 @@ export function MessageList(props: {
     const msgs = props.messages;
     const currentExpanded = expandedIds();
 
-    // Expand any new error messages that aren't yet in the set
+    // Expand any new error/evidence messages that aren't yet in the set
     let changed = false;
     const newExpanded = new Set(currentExpanded);
     for (const msg of msgs) {
-      if (msg.type === "tool-result" && msg.isError && !newExpanded.has(msg.id)) {
+      if ((msg.type === "tool-result" && msg.isError) || msg.type === "evidence") {
+        if (newExpanded.has(msg.id)) continue;
         newExpanded.add(msg.id);
         changed = true;
       }
@@ -229,7 +242,7 @@ export function MessageList(props: {
       const fi = focusedIndex();
       if (fi < 0) return;
       const msg = props.messages[fi];
-      if (msg?.type === "tool-result") {
+      if (msg?.type === "tool-result" || msg?.type === "evidence") {
         batch(() => {
           const current = expandedIds();
           const next = new Set(current);
@@ -243,7 +256,7 @@ export function MessageList(props: {
       }
     },
     focusNext: () => {
-      const indices = toolResultIndices();
+      const indices = inspectableIndices();
       if (indices.length === 0) return;
       const current = focusedIndex();
       const currentPos = indices.indexOf(current);
@@ -252,7 +265,7 @@ export function MessageList(props: {
       props.store.setActiveUiPane("output");
     },
     focusPrev: () => {
-      const indices = toolResultIndices();
+      const indices = inspectableIndices();
       if (indices.length === 0) return;
       const current = focusedIndex();
       const currentPos = indices.indexOf(current);
@@ -327,14 +340,15 @@ export function MessageList(props: {
           }
 
           const isHighlighted = () => highlightedIndex() === i;
-          const isExpanded = () => message.type === "tool-result" && expandedIds().has(message.id);
+          const isExpanded = () =>
+            (message.type === "tool-result" || message.type === "evidence") && expandedIds().has(message.id);
           const isFocused = () => {
             const fi = focusedIndex();
             if (fi < 0) return false;
             return props.messages[fi]?.id === message.id;
           };
           const onToggle = () => {
-            if (message.type !== "tool-result") return;
+            if (message.type !== "tool-result" && message.type !== "evidence") return;
             batch(() => {
               const current = expandedIds();
               const next = new Set(current);

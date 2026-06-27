@@ -1249,6 +1249,32 @@ describe("AgentLoop", () => {
     expect(events.some((e) => e.type === "tool_call_end")).toBe(true);
   });
 
+  test("flight recorder persists redacted turn artifacts even when event emission is disabled", async () => {
+    const client = makeClient([
+      makeToolCallResponse("event-tool", '{"input":"x","apiKey":"sk-secret"}'),
+      makeFinishResponse("Done"),
+    ]);
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("event-tool"));
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: false,
+    });
+
+    await loop.runTurn("Use tool");
+
+    const records = session.getFlightRecords();
+    const kinds = records.map((record) => record.data.kind);
+    expect(kinds).toContain("prompt_snapshot");
+    expect(kinds).toContain("runtime_event");
+    expect(kinds).toContain("tool_call");
+    expect(kinds).toContain("tool_result");
+    expect(kinds).toContain("evidence_bundle");
+    expect(kinds).toContain("completion_decision");
+    expect(JSON.stringify(records)).not.toContain("sk-secret");
+    expect(JSON.stringify(records)).toContain("[REDACTED]");
+  });
+
   test("не эмитит события при emitEvents: false", async () => {
     const client = makeClient([makeTextResponse("Silent response")]);
     const session = SessionManager.inMemory("/test");
@@ -1614,9 +1640,12 @@ describe("AgentLoop", () => {
     const finalMessage = result.items.at(-1);
     expect(finalMessage?.type).toBe("message");
     if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
-      expect(finalMessage.content[0]?.type === "output_text" && finalMessage.content[0].text).toContain(
-        "Completed with unverified changes:",
-      );
+      const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
+      expect(text).toContain("Completed with unverified changes:");
+      expect(text).toContain("**Evidence**");
+      expect(text).toContain("Status: unverified");
+      expect(text).toContain("Mutation verification not run");
+      expect(text).toContain("Some file mutations are not covered by passing verification evidence.");
     }
     expect(result.activeErrors).toHaveLength(0);
   });

@@ -12,6 +12,8 @@ import {
   RUNTIME_COMMANDS,
   type RuntimeCommandMetadata,
 } from "../../application/command-service";
+import type { McpRuntimeControllerLike, McpRuntimeReloadResult } from "../../application/mcp-runtime-controller";
+import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import { PortableCapsuleService, PortableCapsuleServiceError } from "../../core/capsules";
 import type { OpenResponsesClient } from "../../core/client/openresponses-client";
 import { compact, getCurrentTokens } from "../../core/compaction/compaction";
@@ -27,6 +29,7 @@ import { redactMcpSensitiveText } from "../../core/mcp/security";
 import { syncMcpToolsIntoRegistry } from "../../core/mcp/tool-registry-sync";
 import type { ProviderRegistry } from "../../core/provider/registry";
 import { estimateTokens, type SessionManager } from "../../core/session/session-manager";
+import type { FlightRecordEntry } from "../../core/session/types";
 import type { ContextCapsuleEntry } from "../../core/session/types-v2";
 import { isContextCapsuleEntry } from "../../core/session/types-v2";
 import { ProjectTrustStore } from "../../core/skills/project-trust-store";
@@ -44,6 +47,8 @@ import type { TuiRenderer } from "../../ui/terminal/output/renderer";
 export interface CommandContext {
   client: OpenResponsesClient;
   session: SessionManager;
+  sessionLifecycle?: SessionLifecycleService;
+  setSession?: (session: SessionManager) => void;
   config: SobaConfig;
   i18n: I18n;
   renderer: Pick<TuiRenderer, "emit">;
@@ -52,6 +57,7 @@ export interface CommandContext {
   skillManager?: SkillManager;
   agentLoop?: AgentLoop;
   registry?: ProviderRegistry;
+  mcpRuntime?: McpRuntimeControllerLike;
   mcpManager?: McpClientManager;
   mcpSecretStore?: McpSecretStore;
   toolRegistry?: ToolRegistry;
@@ -239,6 +245,170 @@ function handleSession(_args: string[], ctx: CommandContext): CommandResult {
   });
 
   return { handled: true };
+}
+
+function handleSessions(args: string[], ctx: CommandContext): CommandResult {
+  const action = args[0]?.toLowerCase() ?? "list";
+  const lifecycle = ctx.sessionLifecycle;
+
+  if (!lifecycle) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: "Sessions lifecycle is not configured.",
+    });
+    return { handled: true };
+  }
+
+  try {
+    switch (action) {
+      case "list":
+      case "ls":
+        emitSessionsList(ctx, lifecycle);
+        break;
+      case "resume":
+      case "load":
+      case "open":
+        resumeSessionCommand(args[1], ctx, lifecycle);
+        break;
+      case "close":
+        closeSessionCommand(args[1], ctx, lifecycle);
+        break;
+      case "delete":
+      case "remove":
+      case "rm":
+        deleteSessionCommand(args[1], ctx, lifecycle);
+        break;
+      default:
+        ctx.renderer.emit({
+          type: "error",
+          timestamp: Date.now(),
+          message: "Usage: /sessions list|resume <id>|load <id>|close [id]|delete <id>",
+        });
+    }
+  } catch (error) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: `Sessions error: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  return { handled: true };
+}
+
+function emitSessionsList(ctx: CommandContext, lifecycle: SessionLifecycleService): void {
+  const sessions = lifecycle.listSessions({ cwd: ctx.session.getCwd() });
+  if (sessions.length === 0) {
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: "Sessions:\n  none",
+    });
+    return;
+  }
+
+  const activeId = ctx.session.getSessionId();
+  const lines = [
+    "Sessions:",
+    ...sessions.map((session) => {
+      const active = session.id === activeId ? " active" : "";
+      const evidence = sessionEvidenceSummary(lifecycle, session.id);
+      return `  ${session.id.slice(0, 8)}${active} entries=${session.entries ?? 0} updated=${session.updatedAt ?? "unknown"} evidence=${evidence} cwd=${session.cwd}`;
+    }),
+  ];
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: lines.join("\n"),
+  });
+}
+
+function resumeSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
+  if (!sessionId) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: "Usage: /sessions resume <id>",
+    });
+    return;
+  }
+
+  const next = lifecycle.resumeSessionManager({ sessionId });
+  activateSession(ctx, next);
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: `Session resumed: ${next.getSessionId().slice(0, 8)} (${next.getCwd()})`,
+  });
+}
+
+function closeSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
+  const target = sessionId ?? ctx.session.getSessionId();
+  lifecycle.closeSession(target);
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: `Session closed: ${target.slice(0, 8)}`,
+  });
+}
+
+function deleteSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
+  if (!sessionId) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: "Usage: /sessions delete <id>",
+    });
+    return;
+  }
+
+  const activeId = ctx.session.getSessionId();
+  if (activeId.startsWith(sessionId) || sessionId === activeId) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: "Cannot delete the active session. Resume another session first.",
+    });
+    return;
+  }
+
+  lifecycle.deleteSession(sessionId);
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: `Session deleted: ${sessionId.slice(0, 8)}`,
+  });
+}
+
+function activateSession(ctx: CommandContext, session: SessionManager): void {
+  ctx.setSession?.(session);
+  ctx.agentLoop?.setSessionManager(session);
+}
+
+function sessionEvidenceSummary(lifecycle: SessionLifecycleService, sessionId: string): string {
+  try {
+    const session = lifecycle.loadSessionManager({ sessionId });
+    const records = session.getFlightRecords();
+    let evidence: FlightRecordEntry | undefined = records[records.length - 1];
+    for (let index = records.length - 1; index >= 0; index--) {
+      if (records[index]?.data.kind === "evidence_bundle") {
+        evidence = records[index];
+        break;
+      }
+      evidence = undefined;
+    }
+    if (!evidence) {
+      return records.length > 0 ? `records:${records.length}` : "none";
+    }
+    const payload = evidence.data.payload;
+    if (payload && typeof payload === "object" && "status" in payload && typeof payload.status === "string") {
+      return payload.status;
+    }
+    return "recorded";
+  } catch {
+    return "unavailable";
+  }
 }
 
 function handleBudget(_args: string[], ctx: CommandContext): CommandResult {
@@ -1006,6 +1176,8 @@ async function handleMcp(args: string[], ctx: CommandContext): Promise<CommandRe
     case "status":
       emitMcpStatus(ctx);
       return { handled: true };
+    case "reload":
+      return handleMcpReload(ctx);
     case "start":
     case "stop":
     case "restart":
@@ -1107,7 +1279,7 @@ async function handleMcpSecret(args: string[], ctx: CommandContext): Promise<Com
 }
 
 function emitMcpStatus(ctx: CommandContext): void {
-  const manager = ctx.mcpManager;
+  const manager = getMcpManager(ctx);
   if (!manager) {
     ctx.renderer.emit({
       type: "info",
@@ -1176,7 +1348,8 @@ async function handleMcpLifecycle(
     return { handled: true };
   }
 
-  if (!ctx.mcpManager) {
+  const manager = getMcpManager(ctx);
+  if (!manager) {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -1191,11 +1364,11 @@ async function handleMcpLifecycle(
 
   try {
     if (action === "start") {
-      await ctx.mcpManager.start(serverId);
+      await manager.start(serverId);
     } else if (action === "stop") {
-      await ctx.mcpManager.stop(serverId);
+      await manager.stop(serverId);
     } else {
-      await ctx.mcpManager.restart(serverId);
+      await manager.restart(serverId);
     }
 
     await syncMcpRegistryAfterLifecycle(ctx);
@@ -1216,7 +1389,7 @@ async function handleMcpLifecycle(
       message: ctx.i18n.t("command.mcp.result", {
         operation: action,
         server: serverId,
-        result: redactMcpManagerError(serverId, error instanceof Error ? error.message : String(error), ctx.mcpManager),
+        result: redactMcpManagerError(serverId, error instanceof Error ? error.message : String(error), manager),
       }),
     });
   }
@@ -1236,7 +1409,8 @@ async function handleMcpAuth(args: string[], ctx: CommandContext): Promise<Comma
     return { handled: true };
   }
 
-  if (!ctx.mcpManager) {
+  const manager = getMcpManager(ctx);
+  if (!manager) {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -1250,7 +1424,7 @@ async function handleMcpAuth(args: string[], ctx: CommandContext): Promise<Comma
   }
 
   try {
-    const result = await runMcpAuthAction(ctx.mcpManager, action, serverId);
+    const result = await runMcpAuthAction(manager, action, serverId);
     ctx.renderer.emit({
       type: "info",
       timestamp: Date.now(),
@@ -1263,7 +1437,7 @@ async function handleMcpAuth(args: string[], ctx: CommandContext): Promise<Comma
       message: ctx.i18n.t("command.mcp.result", {
         operation: `auth ${action}`,
         server: serverId,
-        result: redactMcpManagerError(serverId, error instanceof Error ? error.message : String(error), ctx.mcpManager),
+        result: redactMcpManagerError(serverId, error instanceof Error ? error.message : String(error), manager),
       }),
     });
   }
@@ -1331,13 +1505,68 @@ function formatMcpAuthStatus(status: McpManagedServerAuthStatus | undefined): st
 }
 
 async function syncMcpRegistryAfterLifecycle(ctx: CommandContext): Promise<void> {
-  if (!ctx.mcpManager || !ctx.toolRegistry) {
+  if (ctx.mcpRuntime) {
+    await ctx.mcpRuntime.syncTools();
     return;
   }
 
-  await syncMcpToolsIntoRegistry(ctx.toolRegistry, ctx.mcpManager, {
+  const manager = getMcpManager(ctx);
+  if (!manager || !ctx.toolRegistry) {
+    return;
+  }
+
+  await syncMcpToolsIntoRegistry(ctx.toolRegistry, manager, {
     trustManager: ctx.trustManager ?? ctx.agentLoop?.getTrustManager(),
   });
+}
+
+async function handleMcpReload(ctx: CommandContext): Promise<CommandResult> {
+  if (!ctx.mcpRuntime) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("command.mcp.reload.unavailable"),
+    });
+    return { handled: true };
+  }
+
+  try {
+    const result = await ctx.mcpRuntime.reload();
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: formatMcpReloadResult(result, ctx),
+    });
+  } catch (error) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("command.mcp.reload.error", {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    });
+  }
+
+  return { handled: true };
+}
+
+function formatMcpReloadResult(result: McpRuntimeReloadResult, ctx: CommandContext): string {
+  return ctx.i18n.t("command.mcp.reload.result", {
+    configured: result.serverIds.length,
+    added: formatList(result.addedServerIds),
+    removed: formatList(result.removedServerIds),
+    restarted: formatList(result.restartedServerIds),
+    tools: result.toolSync.registered.length,
+    skipped: result.toolSync.skipped.length,
+  });
+}
+
+function formatList(values: string[]): string {
+  return values.length > 0 ? values.join(", ") : "-";
+}
+
+function getMcpManager(ctx: CommandContext): McpClientManager | undefined {
+  return ctx.mcpRuntime?.getManager() ?? ctx.mcpManager;
 }
 
 function redactMcpManagerError(serverId: string, message: string, manager: McpClientManager): string {
@@ -1357,6 +1586,7 @@ const COMMAND_HANDLERS: Record<
   compact: handleCompact,
   rewind: handleRewind,
   session: handleSession,
+  sessions: handleSessions,
   capsule: handleCapsule,
   "auto-compact": handleAutoCompact,
   budget: handleBudget,

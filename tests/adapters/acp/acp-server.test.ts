@@ -4,6 +4,7 @@ import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
 import { listRuntimeCommands } from "../../../src/application/command-service";
 import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { runAcpServer } from "../../../src/apps/acp/server";
+import { APP_VERSION } from "../../../src/core/version";
 
 interface MockRuntimeState {
   lastTurnInput?: UserTurnInput;
@@ -17,6 +18,7 @@ interface MockRuntimeState {
   configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
   missingSessionIds?: Set<string>;
   assistantDeltas?: string[];
+  assistantMessage?: string;
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -210,9 +212,17 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           );
         });
       }
-      const assistantDeltas = state.assistantDeltas ?? [
-        `echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`,
-      ];
+      const assistantDeltas = state.assistantMessage === undefined
+        ? state.assistantDeltas ?? [`echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`]
+        : [];
+      if (state.assistantMessage !== undefined) {
+        listeners.forEach((listener) => listener({
+          type: "assistant_message",
+          timestamp: Date.now(),
+          messageId: "msg_1",
+          text: state.assistantMessage ?? "",
+        } as RuntimeEvent));
+      }
       assistantDeltas.forEach((delta) => {
         listeners.forEach((listener) => listener({
           type: "assistant_text_delta",
@@ -287,7 +297,7 @@ async function runLines(
     writeStderr: (chunk) => {
       stderr.push(chunk);
     },
-    agentInfo: { name: "soba-agent", version: "0.5.0" },
+    agentInfo: { name: "soba-agent", version: APP_VERSION },
     requestClient: options.requestClient,
     features: options.features,
   });
@@ -338,7 +348,7 @@ describe("ACP stdio server foundation", () => {
       id: 1,
       result: {
         protocolVersion: 1,
-        agentInfo: { name: "soba-agent", version: "0.5.0" },
+        agentInfo: { name: "soba-agent", version: APP_VERSION },
         agentCapabilities: {
           loadSession: true,
           promptCapabilities: {
@@ -767,6 +777,12 @@ describe("ACP stdio server foundation", () => {
               toolName: "read",
               kind: "read",
               path: "src/app.ts",
+              evidence: {
+                source: "tool_lifecycle",
+                phase: "start",
+                status: "pending",
+                path: "src/app.ts",
+              },
             },
           },
         },
@@ -788,6 +804,13 @@ describe("ACP stdio server foundation", () => {
               toolName: "read",
               kind: "read",
               path: "src/app.ts",
+              evidence: {
+                source: "tool_lifecycle",
+                phase: "result",
+                status: "completed",
+                path: "src/app.ts",
+                outputPreview: "file text",
+              },
             },
           },
         },
@@ -839,6 +862,12 @@ describe("ACP stdio server foundation", () => {
               toolName: "bash",
               kind: "execute",
               command: "bun test tests/adapters/acp/acp-server.test.ts",
+              evidence: {
+                source: "tool_lifecycle",
+                phase: "start",
+                status: "pending",
+                command: "bun test tests/adapters/acp/acp-server.test.ts",
+              },
             },
           },
         },
@@ -862,6 +891,14 @@ describe("ACP stdio server foundation", () => {
               exitCode: 1,
               timedOut: false,
               truncated: false,
+              evidence: {
+                source: "tool_lifecycle",
+                phase: "result",
+                status: "failed",
+                command: "bun test tests/adapters/acp/acp-server.test.ts",
+                exitCode: 1,
+                outputPreview: "failing output [Exit code: 1]",
+              },
             },
           },
         },
@@ -913,6 +950,61 @@ describe("ACP stdio server foundation", () => {
             },
             { type: "content", content: { type: "text", text: "edited" } },
           ],
+        },
+      },
+    });
+  });
+
+  test("emits ACP evidence metadata for final assistant handoff", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "finish" }] },
+        })}\n`,
+      ],
+      {
+        state: {
+          assistantMessage: [
+            "Done.",
+            "",
+            "**Evidence**",
+            "- Status: partially verified",
+            "- Changed files: modified src/app.ts (+3/-1)",
+            "- Diff: 1 file, +3/-1",
+            "- Checks: Tests passed (bun test)",
+            "- Risks: Some file mutations are not covered by passing verification evidence.",
+            "- Review: Rejected file change: src/generated.ts",
+          ].join("\n"),
+        },
+      },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg_1",
+          content: {
+            type: "text",
+            text: expect.stringContaining("**Evidence**"),
+          },
+          _meta: {
+            soba: {
+              evidence: {
+                source: "assistant_handoff",
+                status: "partially verified",
+                changedFiles: ["modified src/app.ts (+3/-1)"],
+                diff: "1 file, +3/-1",
+                checks: ["Tests passed (bun test)"],
+                risks: ["Some file mutations are not covered by passing verification evidence."],
+                reviewActions: ["Rejected file change: src/generated.ts"],
+              },
+            },
+          },
         },
       },
     });

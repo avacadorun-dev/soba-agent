@@ -5,6 +5,7 @@ import type { I18n } from "../../../../core/i18n/i18n";
 import type { AgentLoop } from "../../../../core/loop/agent-loop";
 import type { OpenResponsesClientProxy } from "../../../../core/provider/client-proxy";
 import type { ProjectTrustStore } from "../../../../core/skills/project-trust-store";
+import type { TuiEvidenceSummary } from "../lib/evidence-summary";
 import type { NotificationStore } from "./notification-store";
 import type { ProviderStore } from "./provider-store";
 
@@ -56,6 +57,7 @@ export interface QueuedMessage {
 export type TuiMessage =
   | { id: number; type: "user"; content: string }
   | { id: number; type: "assistant"; content: string; streaming: boolean }
+  | { id: number; type: "evidence"; summary: TuiEvidenceSummary }
   | { id: number; type: "reasoning"; content: string }
   | { id: number; type: "narration"; eventType: string; content: string; evidenceIds: string[] }
   | { id: number; type: "tool-start"; toolName: string; summary: string }

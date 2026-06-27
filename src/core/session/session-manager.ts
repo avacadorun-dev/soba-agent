@@ -19,11 +19,14 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { redactFlightRecordData } from "./flight-record";
 import type {
   CompactionEntry,
   CompactionSummaryItemParam,
   DebugEntry,
   FileEntry,
+  FlightRecordData,
+  FlightRecordEntry,
   ItemParam,
   SessionEntry,
   SessionHeader,
@@ -463,6 +466,16 @@ export class SessionManager {
     this._persist(entry);
   }
 
+  appendFlightRecord(data: FlightRecordData): void {
+    const entry: FlightRecordEntry = {
+      type: "flight_record",
+      timestamp: new Date().toISOString(),
+      data: redactFlightRecordData(data),
+    };
+    this.fileEntries.push(entry);
+    this._persist(entry);
+  }
+
   /**
    * Append a compaction checkpoint.
    * Creates a CompactionEntry as child of current leaf.
@@ -573,6 +586,10 @@ export class SessionManager {
   /** Get diagnostic sidecar entries. Returns a copy. */
   getDebugEntries(): DebugEntry[] {
     return this.fileEntries.filter((e): e is DebugEntry => e.type === "debug");
+  }
+
+  getFlightRecords(): FlightRecordEntry[] {
+    return this.fileEntries.filter((e): e is FlightRecordEntry => e.type === "flight_record");
   }
 
   /** Get session working directory */

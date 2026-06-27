@@ -125,6 +125,38 @@ describe("OpenTUI Solid store", () => {
     expect(store.lastAssistantText()).toBe("**Hello**");
   });
 
+  test("выносит evidence handoff в отдельный TUI block", () => {
+    const store = createStore();
+    store.onAgentEvent(
+      event({
+        type: "assistant_message",
+        messageId: "m1",
+        text: [
+          "Готово",
+          "",
+          "**Evidence**",
+          "- Status: verified",
+          "- Changed files: modified src/app.ts (+1/-0)",
+          "- Checks: Tests passed (bun test)",
+          "- Risks: none",
+        ].join("\n"),
+      }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["assistant", "evidence"]);
+    expect(store.messages()[0]).toMatchObject({ type: "assistant", content: "Готово" });
+    expect(store.messages()[1]).toMatchObject({
+      type: "evidence",
+      summary: {
+        status: "verified",
+        changedFiles: ["modified src/app.ts (+1/-0)"],
+        checks: ["Tests passed (bun test)"],
+        risks: [],
+      },
+    });
+    expect(store.getTranscriptText()).toContain("Evidence\nStatus: verified");
+  });
+
   test("стримит reasoning в один блок и не дублирует его на финале", () => {
     const store = createStore();
     store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: "Думаю" }));

@@ -82,6 +82,24 @@ describe("SearchEngine: extractSearchText", () => {
     expect(extractSearchText(msg)).toBe("Read file.ts path: file.ts const x = 1;");
   });
 
+  test("extracts structured evidence text", () => {
+    const msg: TuiMessage = {
+      id: 12,
+      type: "evidence",
+      summary: {
+        status: "verified",
+        changedFiles: ["modified src/app.ts (+1/-0)"],
+        checks: ["Tests passed (bun test)"],
+        risks: [],
+        reviewActions: ["Accepted file change: src/app.ts"],
+        rawLines: [],
+      },
+    };
+
+    expect(extractSearchText(msg)).toContain("Evidence");
+    expect(extractSearchText(msg)).toContain("Accepted file change");
+  });
+
   test("extracts toolName from tool-end", () => {
     const msg: TuiMessage = { id: 6, type: "tool-end", toolName: "bash", durationMs: 12 };
     expect(extractSearchText(msg)).toBe("bash");

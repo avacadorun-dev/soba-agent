@@ -178,6 +178,7 @@ export function SearchOverlay(props: SearchOverlayProps) {
                   const labels = {
                     user: "◆",
                     assistant: "AI",
+                    evidence: "EV",
                     reasoning: "🍜",
                     "tool-start": "⚙",
                     "tool-result": "📋",

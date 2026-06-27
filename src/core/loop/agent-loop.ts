@@ -32,6 +32,7 @@ import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
 import { ContextController } from "../context/context-controller";
+import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../evidence";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import {
   addRecoveryReflectionFix,
@@ -48,6 +49,7 @@ import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SessionManager } from "../session/session-manager";
 import type {
   DebugEntry,
+  FlightRecordData,
   ItemParam as SessionItemParam,
   UserMessageItemParam,
 } from "../session/types";
@@ -257,10 +259,12 @@ function finishRequestToMessage(
   toolCall: FunctionCallField,
   summary: string,
   status: "completed" | "blocked" | "completed_with_unverified_changes",
+  evidenceText?: string,
 ): MessageField {
-  const text = status === "completed_with_unverified_changes"
+  const baseText = status === "completed_with_unverified_changes"
     ? `Completed with unverified changes:\n${summary}`
     : summary;
+  const text = evidenceText ? `${baseText}\n${evidenceText}` : baseText;
   return {
     type: "message",
     id: `finish_${toolCall.call_id}`,
@@ -679,6 +683,50 @@ export class AgentLoop {
     this.session.appendDebug(data);
   }
 
+  private flight(data: Omit<FlightRecordData, "version">): void {
+    this.session.appendFlightRecord({ version: 1, ...data });
+  }
+
+  private recordRuntimeFlight(event: AgentEvent): void {
+    const turn = "turnIndex" in event
+      ? event.turnIndex
+      : "turn" in event && typeof event.turn === "number"
+        ? event.turn
+        : undefined;
+    const iteration = "iteration" in event && typeof event.iteration === "number" ? event.iteration : undefined;
+
+    this.flight({
+      kind: "runtime_event",
+      turn,
+      iteration,
+      payload: event,
+    });
+
+    if (event.type === "tool_call_start") {
+      this.flight({
+        kind: "tool_call",
+        turn,
+        iteration,
+        payload: {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        },
+      });
+    } else if (event.type === "tool_call_result") {
+      this.flight({
+        kind: "tool_result",
+        turn,
+        iteration,
+        payload: {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          result: event.result,
+        },
+      });
+    }
+  }
+
   /** Emit a turn_stop_reason event and debug entry */
   private _emitStopReason(
     turn: number,
@@ -726,6 +774,7 @@ export class AgentLoop {
 
   /** Emit an event to all listeners */
   private emit(event: AgentEvent): void {
+    this.recordRuntimeFlight(event);
     if (!this.options.emitEvents) return;
     for (const listener of this.listeners) {
       try {
@@ -737,12 +786,41 @@ export class AgentLoop {
   }
 
   private dispatchDangerousConfirmationEvent(event: DangerousConfirmationEvent): void {
+    this.flight({
+      kind: "approval",
+      payload: {
+        status: "requested",
+        toolName: event.toolName,
+        toolCallId: event.toolCallId,
+        description: event.description,
+        level: event.level,
+        reason: event.reason,
+      },
+    });
+    const recordingEvent: DangerousConfirmationEvent = {
+      ...event,
+      resolve: (decision) => {
+        this.flight({
+          kind: "approval",
+          payload: {
+            status: "decided",
+            decision,
+            toolName: event.toolName,
+            toolCallId: event.toolCallId,
+            description: event.description,
+            level: event.level,
+            reason: event.reason,
+          },
+        });
+        event.resolve(decision);
+      },
+    };
     // Emit directly to listeners without going through the normal emit path
     // to bypass the emitEvents flag. Permission prompts must remain available
     // even when ordinary event emission is disabled.
     for (const listener of this.listeners) {
       try {
-        listener(event);
+        listener(recordingEvent);
       } catch {
         // Don't let listener errors crash the loop.
       }
@@ -903,6 +981,19 @@ export class AgentLoop {
       const maxCompletionTokens = this.client.getConfig().maxCompletionTokens ?? 0;
       const contextWindow = this.client.getConfig().contextWindow;
       const temperature = this.client.getConfig().temperature;
+      this.flight({
+        kind: "prompt_snapshot",
+        turn: turnIndex,
+        payload: {
+          cwd: this.cwd,
+          userInput: userText,
+          taskKind,
+          model,
+          selectedTools: this.tools.getNames(),
+          contextFiles: contextFiles.map((file) => file.path),
+          systemPrompt,
+        },
+      });
       emitNarrationOnce(
         "plan",
         "Proceeding in small steps: inspect relevant context, act with tools, then verify before completion.",
@@ -1417,6 +1508,19 @@ export class AgentLoop {
                 ? "Invalid finish arguments"
                 : finishEvaluation.reasons.join("; "),
             );
+            this.flight({
+              kind: "completion_decision",
+              turn: turnIndex,
+              iteration,
+              payload: {
+                status: "rejected",
+                kind: finishEvaluation.kind,
+                toolCallId: finishCall.call_id,
+                detail: finishEvaluation.kind === "invalid"
+                  ? finishEvaluation.diagnosis.join(" ")
+                  : finishEvaluation.reasons.join("; "),
+              },
+            });
             const fcItem = outputItemToSessionItem(finishCall);
             if (fcItem) {
               this.session.appendItem(fcItem as unknown as SessionItemParam);
@@ -1469,10 +1573,44 @@ export class AgentLoop {
           const finishRequest = finishEvaluation.request;
           acknowledgeErrors(errors, finishRequest.acknowledgedErrorIds);
           evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
+          const evidenceBundle = buildEvidenceBundle({
+            sessionId: this.session.getSessionId(),
+            turnId: `turn_${turnIndex}`,
+            completionStatus: finishRequest.status,
+            summary: finishRequest.summary,
+            ledger: evidenceLedger.getSummary(),
+          });
+          if (evidenceBundle.diff) {
+            this.flight({
+              kind: "diff_summary",
+              turn: turnIndex,
+              iteration,
+              payload: evidenceBundle.diff,
+            });
+          }
+          this.flight({
+            kind: "evidence_bundle",
+            turn: turnIndex,
+            iteration,
+            payload: evidenceBundle,
+          });
+          this.flight({
+            kind: "completion_decision",
+            turn: turnIndex,
+            iteration,
+            payload: {
+              status: "accepted",
+              completionStatus: finishRequest.status,
+              summary: finishRequest.summary,
+              criteria: finishRequest.criteria,
+              acknowledgedErrorIds: finishRequest.acknowledgedErrorIds,
+            },
+          });
           const finishMessage = finishRequestToMessage(
             finishCall,
             finishRequest.summary,
             finishRequest.status,
+            formatEvidenceBundleForHandoff(evidenceBundle),
           );
           const text = extractTextFromOutput(finishMessage);
           const sessionItem = outputItemToSessionItem(finishMessage);

@@ -5,10 +5,8 @@ import { BackgroundScheduler } from "../core/compaction/scheduler";
 import type { CompactionConfig, SobaConfig } from "../core/config/types";
 import { AgentLoop } from "../core/loop/agent-loop";
 import type { AgentEvent } from "../core/loop/types";
-import { McpClientManager } from "../core/mcp/client-manager";
-import { loadMcpConfig } from "../core/mcp/config";
+import type { McpClientManager } from "../core/mcp/client-manager";
 import { McpSecretStore } from "../core/mcp/secret-store";
-import { syncMcpToolsIntoRegistry } from "../core/mcp/tool-registry-sync";
 import { createMemoryTools } from "../core/memory/memory-tools";
 import { ProjectMemory } from "../core/memory/project-memory";
 import { OpenResponsesClientProxy } from "../core/provider/client-proxy";
@@ -31,6 +29,7 @@ import { ToolRegistry } from "../core/tools/tool-registry";
 import { writeTool } from "../core/tools/write";
 import { TrustManager } from "../core/trust/trust-manager";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "./command-service";
+import { McpRuntimeController } from "./mcp-runtime-controller";
 import { SessionLifecycleService } from "./session-lifecycle";
 import {
   createDelegatedBashTool,
@@ -84,6 +83,9 @@ export interface RuntimeCommandExecutorFactoryContext {
   skillManager: SkillManager;
   agentLoop: AgentLoop;
   providerRegistry: ProviderRegistry;
+  sessionLifecycle: SessionLifecycleService;
+  setSession: (session: SessionManager) => void;
+  mcpRuntime: McpRuntimeController;
   mcpManager?: McpClientManager;
   mcpSecretStore: McpSecretStore;
   toolRegistry: ToolRegistry;
@@ -106,6 +108,7 @@ export interface SobaRuntimeComposition {
   trustStore: ProjectTrustStore;
   sessionLifecycle: SessionLifecycleService;
   mcpSecretStore: McpSecretStore;
+  mcpRuntime: McpRuntimeController;
   mcpManager?: McpClientManager;
 }
 
@@ -161,6 +164,10 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   getSessionManager(): SessionManager {
     return this.session;
+  }
+
+  activateSessionManager(session: SessionManager): void {
+    this.activateSession(session);
   }
 
   setCommandExecutor(commandExecutor: RuntimeCommandExecutor | undefined): void {
@@ -377,12 +384,14 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   const sobaDir = join(homedir(), ".soba");
   const trustManager = new TrustManager();
   const mcpSecretStore = new McpSecretStore({ homeDir: homedir() });
-  const mcpEnv = await mcpSecretStore.env();
-  const mcpConfig = await loadMcpConfig({ projectRoot: cwd, env: mcpEnv, allowMissingEnv: true });
-  const mcpManager = mcpConfig ? new McpClientManager({ servers: mcpConfig.servers, env: mcpEnv }) : undefined;
-  if (mcpManager) {
-    await syncMcpToolsIntoRegistry(tools, mcpManager, { trustManager });
-  }
+  const mcpRuntime = new McpRuntimeController({
+    projectRoot: cwd,
+    secretStore: mcpSecretStore,
+    toolRegistry: tools,
+    trustManager,
+  });
+  await mcpRuntime.initialize();
+  const mcpManager = mcpRuntime.getManager();
 
   const providerIdentity = client.getProviderIdentity();
   const providerCapabilities = client.getProviderCapabilities();
@@ -461,6 +470,9 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     skillManager,
     agentLoop,
     providerRegistry,
+    sessionLifecycle,
+    setSession: (nextSession) => runtime.activateSessionManager(nextSession),
+    mcpRuntime,
     mcpManager,
     mcpSecretStore,
     toolRegistry: tools,
@@ -484,6 +496,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     trustStore,
     sessionLifecycle,
     mcpSecretStore,
+    mcpRuntime,
     mcpManager,
   };
 }

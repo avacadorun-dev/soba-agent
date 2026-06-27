@@ -26,6 +26,14 @@ describe("CLI adaptive loop options", () => {
     expect(parseArgs([]).debug).toBe(false);
   });
 
+  test("распознаёт top-level init и отдаёт его флаги отдельному parser", () => {
+    const args = parseArgs(["init", "--check", "--skip-mcp"]);
+
+    expect(args.init).toBe(true);
+    expect(args.initArgs).toEqual(["--check", "--skip-mcp"]);
+    expect(args.prompt).toBeUndefined();
+  });
+
   test("принимает только известные темы и отклоняет неизвестные", () => {
     expect(parseArgs(["--theme", "aurora"]).theme).toBe("aurora");
     // Unknown theme should error out
@@ -58,6 +66,7 @@ describe("printHelp with i18n", () => {
       const output = logs.join("\n");
       expect(output).toContain("terminal AI coding assistant");
       expect(output).toContain("Usage: soba");
+      expect(output).toContain("soba init");
       expect(output).toContain("Modes:");
       expect(output).toContain("Options:");
       expect(output).toContain("Interactive commands");
@@ -83,6 +92,7 @@ describe("printHelp with i18n", () => {
       const output = logs.join("\n");
       expect(output).toContain("консольный AI-ассистент");
       expect(output).toContain("Использование: soba");
+      expect(output).toContain("soba init");
       expect(output).toContain("Режимы:");
       expect(output).toContain("Опции:");
       expect(output).toContain("Интерактивные команды");
@@ -104,6 +114,7 @@ describe("printHelp with i18n", () => {
       const output = logs.join("\n");
       expect(output).toContain("终端 AI 编码助手");
       expect(output).toContain("用法: soba");
+      expect(output).toContain("soba init");
       expect(output).toContain("模式:");
       expect(output).toContain("选项:");
       expect(output).toContain("交互命令");

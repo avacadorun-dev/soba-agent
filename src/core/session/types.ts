@@ -130,6 +130,34 @@ export interface DebugEntry {
   };
 }
 
+export type FlightRecordKind =
+  | "prompt_snapshot"
+  | "runtime_event"
+  | "tool_call"
+  | "tool_result"
+  | "approval"
+  | "diff_summary"
+  | "evidence_bundle"
+  | "completion_decision";
+
+export interface FlightRecordData {
+  version: 1;
+  kind: FlightRecordKind;
+  turn?: number;
+  iteration?: number;
+  payload: unknown;
+}
+
+/**
+ * Flight recorder entry — redacted turn artifact persisted for manual inspection.
+ * Not a conversation item; ignored by LLM input building.
+ */
+export interface FlightRecordEntry {
+  type: "flight_record";
+  timestamp: string;
+  data: FlightRecordData;
+}
+
 /**
  * Union of all OpenResponses item types used in session entries.
  * Phase 1 covers: user_message, assistant_message, system_message,
@@ -200,7 +228,7 @@ export type SessionEntry = SessionItemEntry | CompactionEntry | ContextCapsuleEn
  * All entries in the file (includes SessionHeader, DebugEntry, and v2 sidecars).
  * Debug entries, migration markers, and cursor entries are sidecar metadata, not part of the conversation tree.
  */
-export type FileEntry = SessionHeader | SessionEntry | DebugEntry | SessionMigrationEntry | SessionCursorEntry;
+export type FileEntry = SessionHeader | SessionEntry | DebugEntry | FlightRecordEntry | SessionMigrationEntry | SessionCursorEntry;
 
 // ─── Tree view ───
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import packageJson from "../package.json";
+import { APP_VERSION } from "../src/core/version";
 
 const expectedVersion = `v${packageJson.version}`;
 
@@ -27,8 +28,8 @@ describe("CLI", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  test("release version is 0.5.0", () => {
-    expect(packageJson.version).toBe("0.5.0");
+  test("application version comes from package.json", () => {
+    expect(APP_VERSION).toBe(packageJson.version);
   });
 });
 
