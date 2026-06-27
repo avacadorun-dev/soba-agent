@@ -5,7 +5,7 @@ description: Built-in DeepSeek, Moonshot Kimi, Alibaba Qwen, and OpenRouter prov
 
 SOBA works with any OpenAI-compatible API. This guide explains how to use built-in providers, switch models, add custom providers, and diagnose common connection problems.
 
-**Important in v0.4.4:** models are no longer kept in hard-coded lists. SOBA discovers them dynamically through `GET /v1/models`, so new provider models can appear without a SOBA release.
+**Important in v0.5.0:** models are no longer kept in hard-coded lists. SOBA discovers them dynamically through `GET /v1/models`, so new provider models can appear without a SOBA release.
 
 ---
 
@@ -37,7 +37,7 @@ SOBA uses a provider **registry**. It combines:
 
 ## 2. Built-in providers
 
-SOBA v0.4.4 ships with four built-in providers. All of them use the OpenAI-compatible adapter.
+SOBA v0.5.0 ships with four built-in providers. All of them use the OpenAI-compatible adapter.
 
 | ID | Name | Base URL | API key env | Notes |
 |---|---|---|---|---|

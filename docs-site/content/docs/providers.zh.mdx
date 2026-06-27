@@ -5,7 +5,7 @@ description: 内置 DeepSeek、Moonshot Kimi、Alibaba Qwen、OpenRouter provide
 
 SOBA 可以使用任何 OpenAI-compatible API。本页说明如何使用内置 providers、切换模型、添加自定义 providers，以及排查常见连接问题。
 
-**v0.4.4 的重要变化：** 模型不再保存在硬编码列表里。SOBA 会通过 `GET /v1/models` 动态发现模型，所以 provider 新增模型后，通常不需要等待 SOBA 发版。
+**v0.5.0 的重要变化：** 模型不再保存在硬编码列表里。SOBA 会通过 `GET /v1/models` 动态发现模型，所以 provider 新增模型后，通常不需要等待 SOBA 发版。
 
 ---
 
@@ -37,7 +37,7 @@ SOBA 使用 provider **registry**。它包含：
 
 ## 2. 内置 providers
 
-SOBA v0.4.4 提供 4 个内置 providers。它们都使用 OpenAI-compatible adapter。
+SOBA v0.5.0 提供 4 个内置 providers。它们都使用 OpenAI-compatible adapter。
 
 | ID | 名称 | Base URL | API key env | 说明 |
 |---|---|---|---|---|

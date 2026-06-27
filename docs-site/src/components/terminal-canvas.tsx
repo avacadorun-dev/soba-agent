@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 interface TerminalLine {
   text: string;
@@ -10,7 +11,7 @@ interface TerminalLine {
 
 const SESSION_LINES: TerminalLine[] = [
   { text: '$ soba "Add OAuth 2.0 support to the API"', type: "command", delay: 600 },
-  { text: "soba v0.4.4 — session a1b2c3d4  [Graphite]", type: "output", delay: 400 },
+  { text: `soba ${APP_VERSION_LABEL} — session a1b2c3d4  [Graphite]`, type: "output", delay: 400 },
   { text: "soba> /session", type: "prompt", delay: 500 },
   { text: "Session: a1b2c3d4 (v2) — 14 entries \u2022 3,240 effective tokens", type: "output", delay: 350 },
   { text: "soba> /skill list", type: "prompt", delay: 600 },
