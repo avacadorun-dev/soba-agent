@@ -1,0 +1,12 @@
+{
+  "name": "ts-morph-analyzer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deps": "bun add -d ts-morph",
+    "graph": "bun run scripts/dependency-graph.ts",
+    "impact": "bun run scripts/impact-analysis.ts",
+    "refs": "bun run scripts/find-references.ts",
+    "dead": "bun run scripts/dead-code.ts"
+  }
+}
