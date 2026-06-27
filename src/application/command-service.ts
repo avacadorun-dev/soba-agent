@@ -139,6 +139,8 @@ export interface ParsedRuntimeCommand {
   args: string[];
 }
 
+export type CommandResult = { handled: true; exit?: boolean } | { handled: false; prompt?: string };
+
 export interface ListCommandsInput {
   surface?: RuntimeCommandSurface;
 }

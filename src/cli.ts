@@ -284,6 +284,7 @@ async function main() {
     debug: cliArgs.debug,
   });
   const {
+    runtime,
     agentLoop: loop,
     providerRegistry,
     client,
@@ -297,7 +298,7 @@ async function main() {
 
   // Sound notifications — plays audio on agent events
   const soundNotifier = new SoundNotifier(soundConfig);
-  loop.onEvent((event) => soundNotifier.handleEvent(event));
+  runtime.onEvent((event) => soundNotifier.handleEvent(event));
 
   // Create renderer
   const renderer = createRenderer({
@@ -322,6 +323,7 @@ async function main() {
       tokenBudget: cliArgs.budget ?? 0,
       contextWindow: config.contextWindow,
       theme: config.theme,
+      runtime,
       agentLoop: loop,
       toolNames: tools.getNames(),
       i18n,
@@ -352,16 +354,16 @@ async function main() {
         }),
     });
 
-    loop.onEvent((event) => tui.onAgentEvent(event));
+    runtime.onEvent((event) => tui.onAgentEvent(event));
     await tui.run();
     return;
   }
 
   // Wire agent events to renderer (print mode only — not interactive)
-  loop.onEvent((event) => renderer.emitAgentEvent(event));
+  runtime.onEvent((event) => renderer.emitAgentEvent(event));
 
   // Handle dangerous operation confirmation in print mode
-  loop.onEvent((event) => {
+  runtime.onEvent((event) => {
     if (event.type === "dangerous_confirmation") {
       handleDangerousConfirmation(i18n, event.toolName, event.description, event.reason, event.resolve);
     }
@@ -381,7 +383,11 @@ async function main() {
   if (prompt) {
     renderer.renderSessionStart(session.getSessionId());
     try {
-      await loop.runTurn(prompt);
+      await runtime.runTurn({
+        sessionId: session.getSessionId(),
+        source: "print",
+        content: [{ type: "text", text: prompt }],
+      });
     } catch (error) {
       console.error(i18n.t("general.error", { message: error instanceof Error ? error.message : String(error) }));
     }

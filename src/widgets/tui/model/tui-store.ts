@@ -485,7 +485,15 @@ export class TuiStore {
     this.setIsIdle(false);
     this.setStatus(this.l("tui.status.working"));
     try {
-      await this.options.agentLoop.runTurn(input);
+      if (this.options.runtime) {
+        await this.options.runtime.runTurn({
+          sessionId: this.getSessionId(),
+          source: "tui",
+          content: [{ type: "text", text: input }],
+        });
+      } else {
+        await this.options.agentLoop.runTurn(input);
+      }
     } catch (error) {
       this.add({
         type: "error",

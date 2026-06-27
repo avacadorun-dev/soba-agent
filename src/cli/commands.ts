@@ -7,6 +7,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  type CommandResult,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
   type RuntimeCommandMetadata,
@@ -57,7 +58,7 @@ export interface CommandContext {
   tuiRegistry?: SlashCommandRegistry;
 }
 
-export type CommandResult = { handled: true; exit?: boolean } | { handled: false; prompt?: string };
+export type { CommandResult };
 
 export const SLASH_COMMANDS: readonly RuntimeCommandMetadata[] = RUNTIME_COMMANDS;
 

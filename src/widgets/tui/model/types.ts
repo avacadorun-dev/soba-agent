@@ -1,4 +1,5 @@
-import type { CommandResult } from "../../../cli/commands";
+import type { CommandResult } from "../../../application/command-service";
+import type { SobaRuntime } from "../../../application/types";
 import type { TuiThemeName } from "../../../core/config/types";
 import type { I18n } from "../../../core/i18n/i18n";
 import type { AgentLoop } from "../../../core/loop/agent-loop";
@@ -14,6 +15,8 @@ export interface InteractiveTUIOptions {
   tokenBudget: number;
   contextWindow: number;
   theme: TuiThemeName;
+  runtime?: SobaRuntime;
+  /** Legacy transition handle for shell shortcuts, status data and cancellation. */
   agentLoop: AgentLoop;
   toolNames: string[];
   executeCommand: (input: string, output: (event: CommandOutput) => void) => Promise<CommandResult>;

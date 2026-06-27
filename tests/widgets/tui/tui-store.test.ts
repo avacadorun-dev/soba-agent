@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { I18n } from "../../../src/core/i18n/i18n";
 import type { AgentLoop } from "../../../src/core/loop/agent-loop";
 import type { AgentEvent } from "../../../src/core/loop/types";
@@ -55,6 +56,65 @@ function event(value: Record<string, unknown>): AgentEvent {
 }
 
 describe("OpenTUI Solid store", () => {
+  test("uses SobaRuntime for TUI user turns when runtime is available", async () => {
+    let legacyRunTurnCalled = false;
+    let runtimeInput: UserTurnInput | undefined;
+    const agentLoop = {
+      getModel: () => "test-model",
+      runTurn: async () => {
+        legacyRunTurnCalled = true;
+      },
+      getSessionManager: () => ({
+        isPersisted: () => false,
+        getSessionId: () => "session_tui",
+      }),
+      getTrustManager: () => ({
+        getPermissionMode: () => "ask" as const,
+        setPermissionMode: (_mode: string) => {},
+        clearSessionApprovals: () => {},
+      }),
+      abortActiveTool: () => false,
+      abort: () => {},
+      runShellCommand: async () => ({ content: [{ type: "text" as const, text: "ok" }], isError: false }),
+      onEvent: () => () => {},
+    } as unknown as AgentLoop;
+    const runtime = {
+      runTurn: async (input: UserTurnInput) => {
+        runtimeInput = input;
+        return {} as Awaited<ReturnType<SobaRuntime["runTurn"]>>;
+      },
+    } as unknown as SobaRuntime;
+    const store = new TuiStore(
+      {
+        cwd: process.cwd(),
+        tokenBudget: 10_000,
+        contextWindow: 128_000,
+        theme: "graphite",
+        runtime,
+        agentLoop,
+        toolNames: ["read", "edit"],
+        executeCommand: async () => ({ handled: true }),
+        debug: false,
+        maxOutputTokens: 0,
+        maxCompletionTokens: 0,
+        maxAgentIterations: 0,
+        maxStalledIterations: 4,
+        maxRunMinutes: 0,
+        autoCompact: true,
+      },
+      () => {},
+    );
+
+    await store.submit("inspect runtime");
+
+    expect(legacyRunTurnCalled).toBe(false);
+    expect(runtimeInput).toEqual({
+      sessionId: "session_tui",
+      source: "tui",
+      content: [{ type: "text", text: "inspect runtime" }],
+    });
+  });
+
   test("собирает streaming-ответ ассистента в одно markdown-сообщение", () => {
     const store = createStore();
     store.onAgentEvent(event({ type: "assistant_message_start", messageId: "m1" }));
