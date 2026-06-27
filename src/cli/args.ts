@@ -76,6 +76,8 @@ export interface CliArgs {
   help: boolean;
   /** Show version */
   version: boolean;
+  /** Start ACP JSON-RPC server over stdio */
+  acp: boolean;
   /**
    * `soba provider <sub> ...` sub-route. When this is defined, the binary
    * dispatches into the provider-cli module and skips agent setup. The
@@ -109,6 +111,7 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   noAutoCompact: false,
   help: false,
   version: false,
+  acp: false,
   providerSubArgs: [],
 };
 
@@ -322,6 +325,10 @@ export function parseArgs(argv: string[]): CliArgs {
         }
         return args;
       }
+
+      case "acp":
+        args.acp = true;
+        return args;
 
       default:
         // Unknown flag starting with "-" — error out

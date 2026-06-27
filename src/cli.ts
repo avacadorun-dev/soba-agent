@@ -235,6 +235,44 @@ async function main() {
   const themeMode = config.theme === "forest" ? "forest" : config.theme === "paper" ? "light" : "dark";
   initTheme(themeMode);
 
+  if (cliArgs.acp) {
+    const missing = validateConfig(config);
+    if (missing.length > 0) {
+      console.error(`Error: missing required configuration for ACP mode: ${missing.join(", ")}`);
+      process.exit(1);
+    }
+
+    const cwd = process.cwd();
+    const session = SessionManager.inMemory(cwd);
+    const runtimeComposition = await createSobaRuntime({
+      cwd,
+      session,
+      config,
+      compactionConfig,
+      interactive: false,
+      modelExplicitlyPassed: Boolean(cliArgs.model),
+      baseUrlOverride: cliArgs.baseUrl,
+      noStream: true,
+      stream: false,
+      tokenBudget: cliArgs.budget ?? 0,
+      debug: cliArgs.debug,
+    });
+    const { runAcpServer } = await import("./apps/acp-server/server");
+    await runAcpServer({
+      runtime: runtimeComposition.runtime,
+      cwd,
+      input: process.stdin,
+      writeStdout: (chunk) => {
+        process.stdout.write(chunk);
+      },
+      writeStderr: (chunk) => {
+        process.stderr.write(chunk);
+      },
+      agentInfo: { name: "soba-agent", version: VERSION },
+    });
+    return;
+  }
+
   // First-time setup if no API key
   const missing = validateConfig(config);
   if (missing.length > 0) {

@@ -1,0 +1,116 @@
+import { z } from "zod";
+
+export type JsonRpcId = string | number | null;
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  id?: JsonRpcId;
+  method: string;
+  params?: JsonValue;
+}
+
+export interface JsonRpcSuccess {
+  jsonrpc: "2.0";
+  id: JsonRpcId;
+  result: JsonValue;
+}
+
+export interface JsonRpcFailure {
+  jsonrpc: "2.0";
+  id: JsonRpcId;
+  error: {
+    code: number;
+    message: string;
+    data?: JsonValue;
+  };
+}
+
+export type JsonRpcResponse = JsonRpcSuccess | JsonRpcFailure;
+export type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
+
+export const JSON_RPC_PARSE_ERROR = -32700;
+export const JSON_RPC_INVALID_REQUEST = -32600;
+export const JSON_RPC_METHOD_NOT_FOUND = -32601;
+export const JSON_RPC_INVALID_PARAMS = -32602;
+export const JSON_RPC_INTERNAL_ERROR = -32603;
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    z.number(),
+    z.string(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
+const jsonRpcIdSchema = z.union([z.string(), z.number(), z.null()]);
+
+const jsonRpcRequestSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: jsonRpcIdSchema.optional(),
+  method: z.string().min(1),
+  params: jsonValueSchema.optional(),
+});
+
+export class JsonRpcError extends Error {
+  readonly code: number;
+  readonly data?: JsonValue;
+
+  constructor(code: number, message: string, data?: JsonValue) {
+    super(message);
+    this.name = "JsonRpcError";
+    this.code = code;
+    this.data = data;
+  }
+}
+
+export function parseJsonRpcRequest(line: string): JsonRpcRequest {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch (error) {
+    throw new JsonRpcError(JSON_RPC_PARSE_ERROR, "Parse error", {
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const result = jsonRpcRequestSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new JsonRpcError(JSON_RPC_INVALID_REQUEST, "Invalid Request", {
+      issues: result.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+  }
+
+  return result.data;
+}
+
+export function makeJsonRpcSuccess(id: JsonRpcId, result: JsonValue): JsonRpcSuccess {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result,
+  };
+}
+
+export function makeJsonRpcFailure(id: JsonRpcId, error: JsonRpcError): JsonRpcFailure {
+  const response: JsonRpcFailure = {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: error.code,
+      message: error.message,
+    },
+  };
+  if (error.data !== undefined) response.error.data = error.data;
+  return response;
+}
+
+export function serializeJsonRpc(message: JsonRpcMessage): string {
+  return `${JSON.stringify(message)}\n`;
+}

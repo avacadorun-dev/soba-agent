@@ -18,6 +18,13 @@ import {
 } from "../../src/cli/args";
 
 describe("parseArgs — B1e: --max-tokens alias", () => {
+  test("parses ACP stdio server subcommand", () => {
+    const args = parseArgs(["acp"]);
+
+    expect(args.acp).toBe(true);
+    expect(args.prompt).toBeUndefined();
+  });
+
   test("--max-tokens populates maxOutputTokens", () => {
     _resetMaxTokensWarningForTests();
     const args = parseArgs(["--max-tokens", "4096"]);
