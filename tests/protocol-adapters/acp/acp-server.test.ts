@@ -12,6 +12,7 @@ interface MockRuntimeState {
   turnErrorType?: "api_error" | "cancelled" | "security_denial";
   configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
   missingSessionIds?: Set<string>;
+  assistantDeltas?: string[];
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -128,14 +129,17 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           );
         });
       }
-      listeners.forEach((listener) =>
-        listener({
+      const assistantDeltas = state.assistantDeltas ?? [
+        `echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`,
+      ];
+      assistantDeltas.forEach((delta) => {
+        listeners.forEach((listener) => listener({
           type: "assistant_text_delta",
           timestamp: Date.now(),
           messageId: "msg_1",
-          delta: `echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`,
-        } as RuntimeEvent),
-      );
+          delta,
+        } as RuntimeEvent));
+      });
       const turnError = state.turnErrorType
         ? {
           id: "err_1",
@@ -480,6 +484,52 @@ describe("ACP stdio server foundation", () => {
       },
     });
     expect(result.messages[1]).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("streams assistant deltas as separate ACP session updates before the prompt result", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      { state: { assistantDeltas: ["hel", "lo"] } },
+    );
+
+    expect(result.messages.slice(0, 2)).toEqual([
+      {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: "session_1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "msg_1",
+            content: { type: "text", text: "hel" },
+          },
+        },
+      },
+      {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: "session_1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "msg_1",
+            content: { type: "text", text: "lo" },
+          },
+        },
+      },
+    ]);
+    expect(result.messages[2]).toEqual({
       jsonrpc: "2.0",
       id: "prompt",
       result: { stopReason: "end_turn" },

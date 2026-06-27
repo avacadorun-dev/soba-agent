@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSobaRuntime } from "../../src/application/runtime-factory";
-import type { ResponseResource } from "../../src/core/client/types";
+import type { ResponseResource, StreamingEvent } from "../../src/core/client/types";
 import { DEFAULT_COMPACTION_CONFIG } from "../../src/core/compaction/trigger-policy";
 import type { SobaConfig } from "../../src/core/config/types";
 import { SessionManager } from "../../src/core/session/session-manager";
@@ -146,6 +146,71 @@ describe("createSobaRuntime", () => {
     expect(result.response.id).toBe("resp_runtime_factory");
     expect(events).toContain("turn_start");
     expect(events).toContain("turn_end");
+  });
+
+  test("uses provider streaming for non-interactive ACP runtime turns when enabled", async () => {
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: false,
+      stream: true,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+    const finalResponse = makeTextResponse("hello");
+    const finalMessage = finalResponse.output[0];
+    if (!finalMessage || finalMessage.type !== "message") {
+      throw new Error("Expected test response to contain an assistant message.");
+    }
+    const streamEvents: StreamingEvent[] = [
+      { type: "response.created", response: { ...finalResponse, output: [], status: "in_progress" } },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: {
+          type: "message",
+          id: finalMessage.id,
+          status: "in_progress",
+          role: "assistant",
+          content: [],
+        },
+      },
+      { type: "response.output_text.delta", item_id: finalMessage.id, output_index: 0, content_index: 0, delta: "hel" },
+      { type: "response.output_text.delta", item_id: finalMessage.id, output_index: 0, content_index: 0, delta: "lo" },
+      { type: "response.output_item.done", output_index: 0, item: finalMessage },
+      { type: "response.completed", response: finalResponse },
+    ];
+    let createCalled = false;
+    let createStreamCalled = false;
+    composition.client.create = async () => {
+      createCalled = true;
+      return finalResponse;
+    };
+    composition.client.createStream = async function* () {
+      createStreamCalled = true;
+      for (const event of streamEvents) yield event;
+    };
+
+    const textDeltas: string[] = [];
+    composition.runtime.onEvent((event) => {
+      if (event.type === "assistant_text_delta") textDeltas.push(event.delta);
+    });
+    const acpSession = await composition.runtime.createSession({ cwd: projectRoot });
+    await composition.runtime.runTurn({
+      sessionId: acpSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "hello" }],
+    });
+
+    expect(createStreamCalled).toBe(true);
+    expect(createCalled).toBe(false);
+    expect(textDeltas).toEqual(["hel", "lo"]);
   });
 
   test("loads persisted ACP sessions into the active AgentLoop session", async () => {
