@@ -11,36 +11,25 @@ interface BoundaryRule {
 
 const acpBoundaryRules: BoundaryRule[] = [
   {
-    root: "src/protocol-adapters/acp",
-    forbiddenTargets: [
-      "src/apps/",
-      "src/cli/",
-      "src/core/",
-      "src/tui/",
-      "src/widgets/",
-    ],
+    root: "src/adapters/acp",
+    forbiddenTargets: ["src/apps/", "src/core/", "src/ui/"],
   },
   {
-    root: "src/apps/acp-server",
-    forbiddenTargets: [
-      "src/cli/",
-      "src/core/",
-      "src/tui/",
-      "src/widgets/",
-    ],
+    root: "src/apps/acp",
+    forbiddenTargets: ["src/apps/cli/", "src/core/", "src/ui/"],
   },
   {
     root: "src/core",
     forbiddenTargets: [
-      "src/apps/acp-server",
-      "src/protocol-adapters/acp",
+      "src/apps/acp",
+      "src/adapters/acp",
     ],
   },
   {
-    root: "src/widgets",
+    root: "src/ui",
     forbiddenTargets: [
-      "src/apps/acp-server",
-      "src/protocol-adapters/acp",
+      "src/apps/acp",
+      "src/adapters/acp",
     ],
   },
 ];
@@ -106,7 +95,7 @@ describe("post-ACP architecture gate", () => {
   });
 
   test("ACP adapter depends only on runtime contracts and delegation ports", () => {
-    const adapterFiles = walkTypescriptFiles("src/protocol-adapters/acp");
+    const adapterFiles = walkTypescriptFiles("src/adapters/acp");
     const adapterImports = adapterFiles.flatMap((file) =>
       importSpecifiers(readFileSync(file, "utf8")).flatMap((specifier) => {
         const resolved = resolveProjectImport(file, specifier);
@@ -118,13 +107,13 @@ describe("post-ACP architecture gate", () => {
       /src\/(core|cli|tui|widgets|apps)\//.test(entry),
     );
     expect(forbiddenImports).toEqual([]);
-    expect(adapterImports).toContain("src/protocol-adapters/acp/dispatcher.ts -> src/application/types");
-    expect(adapterImports).toContain("src/protocol-adapters/acp/client-delegation.ts -> src/application/tool-delegation");
+    expect(adapterImports).toContain("src/adapters/acp/dispatcher.ts -> src/application/types");
+    expect(adapterImports).toContain("src/adapters/acp/client-delegation.ts -> src/application/tool-delegation");
   });
 
   test("ACP config, mode and permission paths delegate to runtime/application ports", () => {
-    const dispatcher = readProjectFile("src/protocol-adapters/acp/dispatcher.ts");
-    const server = readProjectFile("src/apps/acp-server/server.ts");
+    const dispatcher = readProjectFile("src/adapters/acp/dispatcher.ts");
+    const server = readProjectFile("src/apps/acp/server.ts");
     const runtimeTypes = readProjectFile("src/application/types.ts");
 
     expect(runtimeTypes).toContain("setSessionConfig(input: SetSessionConfigInput)");
@@ -137,9 +126,9 @@ describe("post-ACP architecture gate", () => {
   });
 
   test("print and TUI smoke coverage remains present after ACP wiring", () => {
-    const cli = readProjectFile("src/cli.ts");
+    const cli = readProjectFile("src/apps/cli/main.ts");
     const runtimeFactoryTest = readProjectFile("tests/application/runtime-factory.test.ts");
-    const tuiStoreTest = readProjectFile("tests/widgets/tui/tui-store.test.ts");
+    const tuiStoreTest = readProjectFile("tests/ui/terminal/interactive/tui-store.test.ts");
 
     expect(cli).toContain('source: "print"');
     expect(cli).toContain("const runtimeComposition = await createSobaRuntime");
@@ -151,9 +140,9 @@ describe("post-ACP architecture gate", () => {
   test("post-ACP runtime and protocol regression tests exist", () => {
     const requiredTests = [
       "tests/application/runtime-factory.test.ts",
-      "tests/widgets/tui/tui-store.test.ts",
-      "tests/protocol-adapters/acp/acp-server.test.ts",
-      "tests/protocol-adapters/acp/client-delegation.test.ts",
+      "tests/ui/terminal/interactive/tui-store.test.ts",
+      "tests/adapters/acp/acp-server.test.ts",
+      "tests/adapters/acp/client-delegation.test.ts",
       "tests/core/permissions/permission-broker.test.ts",
       "tests/core/completion/completion-controller.test.ts",
       "tests/core/verification/verification-controller.test.ts",

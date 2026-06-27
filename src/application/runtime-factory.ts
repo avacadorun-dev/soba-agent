@@ -7,6 +7,7 @@ import { AgentLoop } from "../core/loop/agent-loop";
 import type { AgentEvent } from "../core/loop/types";
 import { McpClientManager } from "../core/mcp/client-manager";
 import { loadMcpConfig } from "../core/mcp/config";
+import { McpSecretStore } from "../core/mcp/secret-store";
 import { syncMcpToolsIntoRegistry } from "../core/mcp/tool-registry-sync";
 import { createMemoryTools } from "../core/memory/memory-tools";
 import { ProjectMemory } from "../core/memory/project-memory";
@@ -87,6 +88,7 @@ export interface SobaRuntimeComposition {
   skillCatalog: SkillCatalog;
   trustStore: ProjectTrustStore;
   sessionLifecycle: SessionLifecycleService;
+  mcpSecretStore: McpSecretStore;
   mcpManager?: McpClientManager;
 }
 
@@ -285,9 +287,12 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   const projectMemory = new ProjectMemory({ projectRoot: cwd });
   projectMemory.initialize();
 
+  const sobaDir = join(homedir(), ".soba");
   const trustManager = new TrustManager();
-  const mcpConfig = await loadMcpConfig({ projectRoot: cwd });
-  const mcpManager = mcpConfig ? new McpClientManager({ servers: mcpConfig.servers }) : undefined;
+  const mcpSecretStore = new McpSecretStore({ homeDir: homedir() });
+  const mcpEnv = await mcpSecretStore.env();
+  const mcpConfig = await loadMcpConfig({ projectRoot: cwd, env: mcpEnv, allowMissingEnv: true });
+  const mcpManager = mcpConfig ? new McpClientManager({ servers: mcpConfig.servers, env: mcpEnv }) : undefined;
   if (mcpManager) {
     await syncMcpToolsIntoRegistry(tools, mcpManager, { trustManager });
   }
@@ -320,7 +325,6 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     backgroundTimeoutMs: compactionConfig.backgroundTimeoutMs,
   });
 
-  const sobaDir = join(homedir(), ".soba");
   const trustStore = new ProjectTrustStore({ sobaDir });
   const skillDiscovery = new SkillDiscovery({
     projectPath: cwd,
@@ -377,6 +381,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     skillCatalog,
     trustStore,
     sessionLifecycle,
+    mcpSecretStore,
     mcpManager,
   };
 }

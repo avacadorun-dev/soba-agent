@@ -285,7 +285,12 @@ export const editTool: ToolDefinition<EditArgs> = {
           },
         ],
         isError: false,
-        details: { editCount: args.edits.length },
+        details: {
+          path: absolutePath,
+          editCount: args.edits.length,
+          oldText: originalContent,
+          newText: modifiedContent,
+        },
       };
     } catch (error) {
       const classification = classifyEditError(error);

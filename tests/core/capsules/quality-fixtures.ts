@@ -82,7 +82,7 @@ export function makeConversationCheckpoint(): ContextCapsuleEntry {
     },
     artifacts: {
       readFiles: ["internal-design-notes"],
-      modifiedFiles: ["src/cli/commands.ts", "docs/portable-capsules.md"],
+      modifiedFiles: ["src/apps/cli/commands.ts", "docs/portable-capsules.md"],
       verificationCommands: ["bun test tests/commands.test.ts"],
       verificationStatus: "passed",
     },
@@ -136,7 +136,7 @@ export const conversationExpectation: PortableCapsuleQualityExpectation = {
   blockers: ["baseline failures"],
   artifacts: {
     readFiles: ["internal-design-notes"],
-    modifiedFiles: ["src/cli/commands.ts"],
+    modifiedFiles: ["src/apps/cli/commands.ts"],
     verificationCommands: ["bun test tests/commands.test.ts"],
     verificationStatus: "passed",
   },

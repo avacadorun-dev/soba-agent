@@ -377,6 +377,42 @@ describe("MCP config validation", () => {
     ]);
   });
 
+  test("runtime validation skips servers blocked only by missing environment variables", () => {
+    const result = validateMcpConfig(
+      {
+        version: 1,
+        servers: {
+          "web-search": {
+            name: "Web Search MCP",
+            transport: "streamableHttp",
+            url: "https://mcp.tavily.com/mcp/?tavilyApiKey=${ENV:REMOTE_MCP_API_KEY}",
+            auth: {
+              type: "none",
+            },
+            timeoutMs: 120000,
+            maxOutputBytes: 1048576,
+            trustMode: "normal",
+            enabled: true,
+          },
+          local: {
+            command: "bun",
+          },
+        },
+      },
+      { projectRoot, env: {}, allowMissingEnv: true },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.config?.servers.map((server) => server.id)).toEqual(["local"]);
+    expect(result.issues).toEqual([
+      {
+        code: "missing_env",
+        path: "servers.web-search.url",
+        message: "Required environment variable REMOTE_MCP_API_KEY is not set.",
+      },
+    ]);
+  });
+
   test("non-local HTTP remote config is rejected", () => {
     const result = validateMcpConfig(
       {

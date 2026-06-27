@@ -99,6 +99,7 @@ export interface McpConfigValidationResult {
 export interface McpConfigValidationOptions {
   projectRoot: string;
   env?: Record<string, string | undefined>;
+  allowMissingEnv?: boolean;
 }
 
 export interface McpConfigLoadOptions extends McpConfigValidationOptions {

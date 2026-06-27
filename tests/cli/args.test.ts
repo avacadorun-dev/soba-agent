@@ -15,7 +15,7 @@ import { describe, expect, test } from "bun:test";
 import {
   _resetMaxTokensWarningForTests,
   parseArgs,
-} from "../../src/cli/args";
+} from "../../src/apps/cli/args";
 
 describe("parseArgs — B1e: --max-tokens alias", () => {
   test("parses ACP stdio server subcommand", () => {

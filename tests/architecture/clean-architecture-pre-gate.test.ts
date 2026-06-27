@@ -18,22 +18,15 @@ interface ControllerCoverage {
 const layerRules: LayerRule[] = [
   {
     root: "src/core",
-    forbiddenTargets: [
-      "src/apps/",
-      "src/application/",
-      "src/cli/",
-      "src/protocol-adapters/",
-      "src/tui/",
-      "src/widgets/",
-    ],
+    forbiddenTargets: ["src/apps/", "src/application/", "src/adapters/", "src/ui/"],
   },
   {
     root: "src/application",
-    forbiddenTargets: ["src/apps/", "src/cli/", "src/protocol-adapters/", "src/tui/", "src/widgets/"],
+    forbiddenTargets: ["src/apps/", "src/adapters/", "src/ui/"],
   },
   {
-    root: "src/widgets",
-    forbiddenTargets: ["src/cli/"],
+    root: "src/ui",
+    forbiddenTargets: ["src/apps/cli/"],
   },
 ];
 
@@ -136,9 +129,9 @@ describe("clean architecture pre-gate", () => {
   });
 
   test("print and TUI entrypoints execute user turns through SobaRuntime", () => {
-    const cli = readProjectFile("src/cli.ts");
-    const tuiTypes = readProjectFile("src/widgets/tui/model/types.ts");
-    const tuiStore = readProjectFile("src/widgets/tui/model/tui-store.ts");
+    const cli = readProjectFile("src/apps/cli/main.ts");
+    const tuiTypes = readProjectFile("src/ui/terminal/interactive/model/types.ts");
+    const tuiStore = readProjectFile("src/ui/terminal/interactive/model/tui-store.ts");
 
     expect(cli).toContain("const runtimeComposition = await createSobaRuntime");
     expect(cli).toContain("runtime.onEvent");

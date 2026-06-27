@@ -26,6 +26,11 @@ describe("write tool", () => {
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Successfully wrote");
+    expect(result.details).toMatchObject({
+      path: join(cwd, "new-file.txt"),
+      oldText: null,
+      newText: "Hello, Bun!",
+    });
     expect(existsSync(join(cwd, "new-file.txt"))).toBe(true);
     expect(readFileSync(join(cwd, "new-file.txt"), "utf-8")).toBe("Hello, Bun!");
   });
@@ -36,6 +41,11 @@ describe("write tool", () => {
     const result = await writeTool.execute({ path: "file.txt", content: "updated" }, { cwd });
 
     expect(result.isError).toBe(false);
+    expect(result.details).toMatchObject({
+      path: join(cwd, "file.txt"),
+      oldText: "original",
+      newText: "updated",
+    });
     expect(readFileSync(join(cwd, "file.txt"), "utf-8")).toBe("updated");
   });
 

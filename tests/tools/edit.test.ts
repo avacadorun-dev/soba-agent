@@ -50,6 +50,11 @@ describe("edit tool", () => {
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("Successfully applied");
     expect(result.content[0].text).toContain("1 edit");
+    expect(result.details).toMatchObject({
+      path: join(cwd, "file.ts"),
+      oldText: "const x = 1;\nconst y = 2;",
+      newText: "const x = 10;\nconst y = 2;",
+    });
 
     const updated = readFileSync(join(cwd, "file.ts"), "utf-8");
     expect(updated).toBe("const x = 10;\nconst y = 2;");

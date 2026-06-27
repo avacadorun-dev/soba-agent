@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProviderCliError, parseProviderCliArgs, runProviderCli } from "../../src/cli/provider-cli";
+import { ProviderCliError, parseProviderCliArgs, runProviderCli } from "../../src/apps/cli/provider-cli";
 import { I18n } from "../../src/core/i18n/i18n";
 import type { Locale } from "../../src/core/i18n/types";
 import { ProviderRegistry } from "../../src/core/provider/registry";

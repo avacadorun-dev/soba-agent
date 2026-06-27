@@ -12,12 +12,14 @@ const READ_MAX_BYTES = 50 * 1024;
 
 export interface DelegatedReadTextFileInput {
   cwd: string;
+  sessionId?: string;
   path: string;
   signal?: AbortSignal;
 }
 
 export interface DelegatedWriteTextFileInput {
   cwd: string;
+  sessionId?: string;
   path: string;
   content: string;
   signal?: AbortSignal;
@@ -25,6 +27,7 @@ export interface DelegatedWriteTextFileInput {
 
 export interface DelegatedTerminalInput {
   cwd: string;
+  sessionId?: string;
   command: string;
   timeout?: number;
   signal?: AbortSignal;
@@ -50,7 +53,7 @@ export function createDelegatedReadTool(delegation: RuntimeToolDelegation): Tool
   return {
     ...readTool,
     async execute(args: ReadArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult> {
-      const delegated = await delegation.readTextFile?.({ cwd: context.cwd, path: args.path, signal });
+      const delegated = await delegation.readTextFile?.({ cwd: context.cwd, sessionId: context.sessionId, path: args.path, signal });
       if (!delegated) return readTool.execute(args, context, signal);
 
       const text = typeof delegated === "string" ? delegated : delegated.text;
@@ -75,7 +78,7 @@ export function createDelegatedWriteTool(delegation: RuntimeToolDelegation): Too
         });
       }
 
-      const delegated = await delegation.writeTextFile?.({ cwd: context.cwd, path: args.path, content: args.content, signal });
+      const delegated = await delegation.writeTextFile?.({ cwd: context.cwd, sessionId: context.sessionId, path: args.path, content: args.content, signal });
       if (!delegated) return writeTool.execute(args, context, signal);
 
       const bytes = delegated.bytes ?? Buffer.byteLength(args.content, "utf-8");
@@ -95,6 +98,7 @@ export function createDelegatedBashTool(delegation: RuntimeToolDelegation): Tool
     async execute(args: BashArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult> {
       const delegated = await delegation.runTerminal?.({
         cwd: context.cwd,
+        sessionId: context.sessionId,
         command: args.command,
         timeout: args.timeout,
         signal,

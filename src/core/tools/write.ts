@@ -4,7 +4,7 @@
  * Creates or overwrites a file. Auto-creates parent directories.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { classifyFileSystemError, createToolErrorResult } from "./errors";
 import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "./protected-paths";
@@ -88,6 +88,11 @@ export const writeTool: ToolDefinition<WriteArgs> = {
     }
 
     try {
+      const oldText = await readFile(absolutePath, "utf-8").catch((error: unknown) => {
+        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return null;
+        throw error;
+      });
+
       // Ensure parent directory exists
       const dir = dirname(absolutePath);
       await mkdir(dir, { recursive: true });
@@ -110,6 +115,8 @@ export const writeTool: ToolDefinition<WriteArgs> = {
           path: absolutePath,
           bytes: size,
           lines,
+          oldText,
+          newText: args.content,
         },
       };
     } catch (error) {

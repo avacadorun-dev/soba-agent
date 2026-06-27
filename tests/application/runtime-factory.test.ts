@@ -6,6 +6,7 @@ import { createSobaRuntime } from "../../src/application/runtime-factory";
 import type { ResponseResource, StreamingEvent } from "../../src/core/client/types";
 import { DEFAULT_COMPACTION_CONFIG } from "../../src/core/compaction/trigger-policy";
 import type { SobaConfig } from "../../src/core/config/types";
+import type { ProviderRegistryState } from "../../src/core/provider/types";
 import { SessionManager } from "../../src/core/session/session-manager";
 
 let testHome: string;
@@ -283,7 +284,7 @@ describe("createSobaRuntime", () => {
   });
 
   test("falls back to a configured provider with credentials when the active provider has no key", async () => {
-    const registry = {
+    const registry: ProviderRegistryState = {
       defaultProvider: "missing-key-provider",
       defaultModel: "missing-model",
       providers: {
@@ -363,7 +364,7 @@ describe("createSobaRuntime", () => {
   });
 
   test("does not let stale flat config override an active registry provider", async () => {
-    const registry = {
+    const registry: ProviderRegistryState = {
       defaultProvider: "second-provider",
       defaultModel: "second-model",
       providers: {
@@ -455,7 +456,7 @@ describe("createSobaRuntime", () => {
         { headers: { "Content-Type": "application/json" } },
       )) as unknown as typeof fetch;
     try {
-      const registry = {
+      const registry: ProviderRegistryState = {
         defaultProvider: "openrouter",
         defaultModel: "google/gemini-3.1-flash-image",
         providers: {
@@ -501,7 +502,7 @@ describe("createSobaRuntime", () => {
   });
 
   test("exposes and applies provider/model session config options", async () => {
-    const registry = {
+    const registry: ProviderRegistryState = {
       defaultProvider: "first-provider",
       defaultModel: "first-model",
       providers: {
@@ -591,7 +592,7 @@ describe("createSobaRuntime", () => {
   });
 
   test("ignores provider selection when the provider has no configured credentials", async () => {
-    const registry = {
+    const registry: ProviderRegistryState = {
       defaultProvider: "first-provider",
       defaultModel: "first-model",
       providers: {

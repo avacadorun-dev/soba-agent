@@ -7,9 +7,9 @@ const coreRoot = join(projectRoot, "src", "core");
 const forbiddenCoreTargets = [
   "src/apps/",
   "src/application/",
-  "src/protocol-adapters/",
-  "src/tui/",
-  "src/widgets/",
+  "src/adapters/",
+  "src/ui/terminal/output/",
+  "src/ui/",
 ];
 
 function walkTypescriptFiles(dir: string): string[] {

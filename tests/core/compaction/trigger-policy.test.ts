@@ -323,13 +323,13 @@ describe("validateCompactionConfig", () => {
 
 describe("CLI --no-auto-compact flag", () => {
   test("parseArgs recognises --no-auto-compact", () => {
-    const { parseArgs } = require("../../../src/cli/args");
+    const { parseArgs } = require("../../../src/apps/cli/args");
     const args = parseArgs(["--no-auto-compact"]);
     expect(args.noAutoCompact).toBe(true);
   });
 
   test("noAutoCompact defaults to false", () => {
-    const { parseArgs } = require("../../../src/cli/args");
+    const { parseArgs } = require("../../../src/apps/cli/args");
     const args = parseArgs([]);
     expect(args.noAutoCompact).toBe(false);
   });

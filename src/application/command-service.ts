@@ -108,7 +108,7 @@ export const RUNTIME_COMMANDS = [
     id: "mcp",
     name: "/mcp",
     descriptionKey: "command.description.mcp",
-    usage: "/mcp status|start <server>|stop <server>|restart <server>|auth status|login|logout <server>",
+    usage: "/mcp status|start <server>|stop <server>|restart <server>|auth status|login|logout <server>|secret list|set|unset",
     surfaces: ["print", "tui", "acp"],
   },
   {

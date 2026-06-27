@@ -40,6 +40,7 @@ export function getMcpConfigPath(projectRoot: string): string {
 
 export function validateMcpConfig(raw: unknown, options: McpConfigValidationOptions): McpConfigValidationResult {
   const issues: McpConfigIssue[] = [];
+  const nonFatalIssues: McpConfigIssue[] = [];
   const projectRoot = resolve(options.projectRoot);
   const env = options.env ?? process.env;
 
@@ -60,13 +61,21 @@ export function validateMcpConfig(raw: unknown, options: McpConfigValidationOpti
   const ids = new Set<string>();
 
   for (const rawServer of rawServers) {
+    const serverIssues: McpConfigIssue[] = [];
     const parsed = parseServer(rawServer.value, {
       path: rawServer.path,
       fallbackId: rawServer.fallbackId,
       projectRoot,
       env,
-      issues,
+      issues: serverIssues,
     });
+
+    if (options.allowMissingEnv && serverIssues.length > 0 && serverIssues.every((entry) => entry.code === "missing_env")) {
+      nonFatalIssues.push(...serverIssues);
+      continue;
+    }
+
+    issues.push(...serverIssues);
 
     if (!parsed) {
       continue;
@@ -94,7 +103,7 @@ export function validateMcpConfig(raw: unknown, options: McpConfigValidationOpti
       version: MCP_CONFIG_VERSION,
       servers,
     },
-    issues: [],
+    issues: nonFatalIssues,
   };
 }
 

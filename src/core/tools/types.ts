@@ -83,6 +83,8 @@ export interface ToolResult {
 export interface ToolContext {
   /** Current working directory (project root) */
   cwd: string;
+  /** Current runtime session id, when tool execution is scoped to a session */
+  sessionId?: string;
   /** Session manager reference (for in-memory sessions) */
   session?: unknown;
   /** Maximum timeout any bash tool call may request, in seconds */

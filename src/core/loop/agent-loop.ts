@@ -590,6 +590,30 @@ export class AgentLoop {
     return this.budgetTracker;
   }
 
+  private emitContextUsageUpdate(input: {
+    systemPromptTokens: number;
+    toolSchemaTokens: number;
+    requestFingerprint: string;
+    contextWindow: number;
+  }): void {
+    const effectiveContextTokens = this.contextController.getEffectiveContextTokens({
+      systemPromptTokens: input.systemPromptTokens,
+      toolSchemaTokens: input.toolSchemaTokens,
+      requestFingerprint: input.requestFingerprint,
+    });
+    const used = effectiveContextTokens ?? this.state.totalUsage.total_tokens;
+    const percentage = input.contextWindow > 0 ? Math.round((used / input.contextWindow) * 100) : 0;
+    this.emit({
+      type: "budget_update",
+      timestamp: Date.now(),
+      usedTokens: this.state.totalUsage.total_tokens,
+      totalBudget: this.options.tokenBudget,
+      contextWindow: input.contextWindow,
+      percentage,
+      effectiveContextTokens,
+    });
+  }
+
   /** Get context manager (if available) */
   getContextManager(): ContextManager | undefined {
     return this.contextManager;
@@ -608,6 +632,7 @@ export class AgentLoop {
   private createToolContext(): ToolContext {
     return {
       cwd: this.cwd,
+      sessionId: this.session.getSessionId(),
       session: this.session,
       bashMaxTimeoutSeconds: this.options.bashMaxTimeoutSeconds,
     };
@@ -1116,6 +1141,12 @@ export class AgentLoop {
           systemPromptTokens,
           toolSchemaTokens,
           requestFingerprint: `turn_${this.state.turnCount}`,
+        });
+        this.emitContextUsageUpdate({
+          systemPromptTokens,
+          toolSchemaTokens,
+          requestFingerprint: `turn_${this.state.turnCount}`,
+          contextWindow,
         });
         
         if (!checkResult.canProceed) {

@@ -15,6 +15,7 @@ export interface McpClientManagerOptions {
   createClient?: (server: McpServerConfig) => McpClient;
   maxCrashRestarts?: number;
   authController?: McpRemoteAuthController;
+  env?: Record<string, string | undefined>;
 }
 
 export type McpManagedServerAuthType = McpRemoteAuthConfig["type"] | "not_applicable";
@@ -93,9 +94,11 @@ export class McpClientManager {
   private readonly createClient: (server: McpServerConfig) => McpClient;
   private readonly maxCrashRestarts: number;
   private readonly authController?: McpRemoteAuthController;
+  private readonly env: Record<string, string | undefined>;
 
   constructor(options: McpClientManagerOptions) {
-    this.createClient = options.createClient ?? createDefaultClient;
+    this.env = options.env ?? process.env;
+    this.createClient = options.createClient ?? ((server) => createDefaultClient(server, this.env));
     this.maxCrashRestarts = Math.max(0, Math.floor(options.maxCrashRestarts ?? DEFAULT_MAX_CRASH_RESTARTS));
     this.authController = options.authController;
 
@@ -203,7 +206,7 @@ export class McpClientManager {
     const entry = this.getEntry(serverId);
     if (entry.server.transport !== "streamableHttp") {
       return {
-        status: authStatusForServer(entry.server, null),
+        status: authStatusForServer(entry.server, null, this.env),
         message: `MCP server "${entry.server.id}" uses stdio and does not require remote auth.`,
         details: null,
       };
@@ -220,7 +223,7 @@ export class McpClientManager {
     const entry = this.getEntry(serverId);
     if (entry.server.transport !== "streamableHttp") {
       return {
-        status: authStatusForServer(entry.server, null),
+        status: authStatusForServer(entry.server, null, this.env),
         message: `MCP server "${entry.server.id}" uses stdio and does not require remote auth.`,
         details: null,
       };
@@ -246,7 +249,7 @@ export class McpClientManager {
     const entry = this.getEntry(serverId);
     if (entry.server.transport !== "streamableHttp") {
       return {
-        status: authStatusForServer(entry.server, null),
+        status: authStatusForServer(entry.server, null, this.env),
         message: `MCP server "${entry.server.id}" uses stdio and does not require remote auth.`,
         details: null,
       };
@@ -352,10 +355,10 @@ export class McpClientManager {
 
   private authStatusForEntry(entry: ManagedClientEntry, lastErrorCode: string | null): McpManagedServerAuthStatus {
     if (entry.server.transport === "streamableHttp") {
-      return this.authController?.cachedStatus?.(entry.server) ?? authStatusForServer(entry.server, lastErrorCode);
+      return this.authController?.cachedStatus?.(entry.server) ?? authStatusForServer(entry.server, lastErrorCode, this.env);
     }
 
-    return authStatusForServer(entry.server, lastErrorCode);
+    return authStatusForServer(entry.server, lastErrorCode, this.env);
   }
 
   private remoteAuthStatusForEntry(entry: ManagedClientEntry): McpManagedServerAuthStatus {
@@ -368,7 +371,11 @@ function isRecoverableClientState(state: McpClientState): boolean {
   return state === "crashed" || state === "degraded";
 }
 
-function authStatusForServer(server: McpServerConfig, lastErrorCode: string | null): McpManagedServerAuthStatus {
+function authStatusForServer(
+  server: McpServerConfig,
+  lastErrorCode: string | null,
+  env: Record<string, string | undefined> = process.env,
+): McpManagedServerAuthStatus {
   if (server.transport === "stdio") {
     return {
       type: "not_applicable",
@@ -406,7 +413,7 @@ function authStatusForServer(server: McpServerConfig, lastErrorCode: string | nu
   }
 
   if (server.auth.type === "bearerEnv" || server.auth.type === "apiKeyEnv") {
-    const configured = (process.env[server.auth.env] ?? "").length > 0;
+    const configured = (env[server.auth.env] ?? "").length > 0;
     return {
       type: server.auth.type,
       state: configured ? "configured" : "missing_env",
@@ -423,9 +430,9 @@ function authStatusForServer(server: McpServerConfig, lastErrorCode: string | nu
   };
 }
 
-function createDefaultClient(server: McpServerConfig): McpClient {
+function createDefaultClient(server: McpServerConfig, env: Record<string, string | undefined>): McpClient {
   if (server.transport === "streamableHttp") {
-    return createStreamableHttpClientForServer(server);
+    return createStreamableHttpClientForServer(server, env);
   }
 
   return createStdioClientForServer(server);
@@ -447,7 +454,10 @@ function createStdioClientForServer(server: McpStdioServerConfig): McpClient {
   });
 }
 
-function createStreamableHttpClientForServer(server: McpStreamableHttpServerConfig): McpClient {
+function createStreamableHttpClientForServer(
+  server: McpStreamableHttpServerConfig,
+  env: Record<string, string | undefined>,
+): McpClient {
   return new McpClient({
     server,
     transportFactory: (onEvent: McpTransportEventHandler) =>
@@ -455,6 +465,7 @@ function createStreamableHttpClientForServer(server: McpStreamableHttpServerConf
         url: server.url,
         headers: server.headers,
         auth: server.auth,
+        env,
         timeoutMs: server.timeoutMs,
         onEvent,
       }),

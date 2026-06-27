@@ -177,6 +177,24 @@ describe("MCP client manager", () => {
     });
   });
 
+  test("static remote auth status uses manager env override", () => {
+    const manager = new McpClientManager({
+      servers: [remoteApiKeyServerConfig("remote")],
+      env: {
+        REMOTE_MCP_API_KEY: "stored-secret",
+      },
+    });
+
+    expect(manager.getStatus().servers[0]).toMatchObject({
+      authState: {
+        type: "apiKeyEnv",
+        state: "configured",
+        detail: "REMOTE_MCP_API_KEY",
+        nextAction: null,
+      },
+    });
+  });
+
   test("login command starts remote auth flow through controller", async () => {
     const calls: string[] = [];
     const loginResult: McpRemoteAuthCommandResult = {
