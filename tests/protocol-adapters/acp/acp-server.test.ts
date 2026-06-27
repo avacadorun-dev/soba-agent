@@ -8,6 +8,7 @@ interface MockRuntimeState {
   emitToolEvents?: boolean;
   emitPermission?: boolean;
   permissionDecision?: string;
+  turnErrorType?: "api_error" | "cancelled" | "security_denial";
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -122,6 +123,14 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           delta: `echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`,
         } as RuntimeEvent),
       );
+      const turnError = state.turnErrorType
+        ? {
+          id: "err_1",
+          type: state.turnErrorType,
+          status: "active" as const,
+          message: "mock turn error",
+        }
+        : undefined;
       return {
         items: [],
         response: {} as Awaited<ReturnType<SobaRuntime["runTurn"]>>["response"],
@@ -132,8 +141,8 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           input_tokens_details: { cached_tokens: 0 },
           output_tokens_details: { reasoning_tokens: 0 },
         },
-        errors: [],
-        activeErrors: [],
+        errors: turnError ? [turnError] : [],
+        activeErrors: turnError && turnError.type !== "cancelled" ? [turnError] : [],
       };
     },
     cancelTurn() {},
@@ -306,6 +315,42 @@ describe("ACP stdio server foundation", () => {
       jsonrpc: "2.0",
       id: "prompt",
       result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("maps runtime failures to ACP-valid stop reasons", async () => {
+    const activeError = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      { state: { turnErrorType: "api_error" } },
+    );
+    const cancelled = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      { state: { turnErrorType: "cancelled" } },
+    );
+
+    expect(activeError.messages.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "refusal" },
+    });
+    expect(cancelled.messages.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "cancelled" },
     });
   });
 

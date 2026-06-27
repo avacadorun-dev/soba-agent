@@ -593,7 +593,7 @@ function messageText(content: unknown): string {
 }
 
 function turnToStopReason(turn: TurnResult): string {
-  if (turn.activeErrors.length > 0) return "error";
   if (turn.errors.some((error) => error.type === "cancelled")) return "cancelled";
+  if (turn.activeErrors.length > 0) return "refusal";
   return "end_turn";
 }
