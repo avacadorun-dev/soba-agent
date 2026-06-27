@@ -540,6 +540,24 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
           evidenceIds: event.evidenceIds,
         },
       };
+    case "turn_error":
+      return {
+        type: "agent_message",
+        content: [{ type: "text", text: `SOBA runtime error: ${event.error}` }],
+        error: {
+          status: event.status ?? null,
+        },
+      };
+    case "context_error":
+      return {
+        type: "agent_message",
+        content: [{ type: "text", text: `SOBA context error: ${event.error}` }],
+        error: {
+          effectiveTokens: event.effectiveTokens,
+          hardLimit: event.hardLimit,
+          recoveryAttempted: event.recoveryAttempted,
+        },
+      };
     default:
       return undefined;
   }
@@ -594,6 +612,5 @@ function messageText(content: unknown): string {
 
 function turnToStopReason(turn: TurnResult): string {
   if (turn.errors.some((error) => error.type === "cancelled")) return "cancelled";
-  if (turn.activeErrors.length > 0) return "refusal";
   return "end_turn";
 }

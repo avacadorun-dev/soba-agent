@@ -131,6 +131,16 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           message: "mock turn error",
         }
         : undefined;
+      if (turnError && turnError.type !== "cancelled") {
+        listeners.forEach((listener) =>
+          listener({
+            type: "turn_error",
+            timestamp: Date.now(),
+            error: turnError.message,
+            status: turnError.type,
+          } as RuntimeEvent),
+        );
+      }
       return {
         items: [],
         response: {} as Awaited<ReturnType<SobaRuntime["runTurn"]>>["response"],
@@ -339,10 +349,20 @@ describe("ACP stdio server foundation", () => {
       { state: { turnErrorType: "cancelled" } },
     );
 
+    expect(activeError.messages.at(-2)).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          type: "agent_message",
+          content: [{ type: "text", text: "SOBA runtime error: mock turn error" }],
+          error: { status: "api_error" },
+        },
+      },
+    });
     expect(activeError.messages.at(-1)).toEqual({
       jsonrpc: "2.0",
       id: "prompt",
-      result: { stopReason: "refusal" },
+      result: { stopReason: "end_turn" },
     });
     expect(cancelled.messages.at(-1)).toEqual({
       jsonrpc: "2.0",
