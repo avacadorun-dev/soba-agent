@@ -13,6 +13,10 @@ let projectRoot: string;
 let previousHome: string | undefined;
 let previousBundledSkillsPath: string | undefined;
 
+function registryConfigPath(): string {
+  return join(testHome, ".soba", "config.json");
+}
+
 function makeConfig(): SobaConfig {
   return {
     baseUrl: "https://api.example.test/v1",
@@ -118,6 +122,7 @@ describe("createSobaRuntime", () => {
       stream: false,
       tokenBudget: 0,
       debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
     });
 
     const events: string[] = [];
@@ -153,6 +158,7 @@ describe("createSobaRuntime", () => {
       stream: false,
       tokenBudget: 0,
       debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
     });
 
     expect(composition.client.getConfig().apiKey).toBe("fake-api-key");
@@ -207,7 +213,7 @@ describe("createSobaRuntime", () => {
       },
     };
     mkdirSync(join(testHome, ".soba"), { recursive: true });
-    await Bun.write(join(testHome, ".soba", "config.json"), JSON.stringify({ registry }, null, 2));
+    await Bun.write(registryConfigPath(), JSON.stringify({ registry }, null, 2));
 
     const session = SessionManager.inMemory(projectRoot);
     const composition = await createSobaRuntime({
@@ -227,6 +233,7 @@ describe("createSobaRuntime", () => {
       stream: false,
       tokenBudget: 0,
       debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
     });
 
     expect(composition.client.getActiveProviderId()).toBe("usable-provider");
@@ -304,6 +311,7 @@ describe("createSobaRuntime", () => {
       stream: false,
       tokenBudget: 0,
       debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
     });
     const runtimeSession = await composition.runtime.createSession({ cwd: projectRoot });
 

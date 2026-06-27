@@ -68,6 +68,7 @@ export interface RuntimeFactoryInput {
   tokenBudget: number;
   debug: boolean;
   toolDelegation?: RuntimeToolDelegation;
+  providerRegistryConfigPath?: string;
 }
 
 export interface SobaRuntimeComposition {
@@ -228,10 +229,11 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     tokenBudget,
     debug,
     toolDelegation,
+    providerRegistryConfigPath,
   } = input;
 
-  const persistedRegistry = config.registry ?? await ProviderRegistry.loadFromFile();
-  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined);
+  const persistedRegistry = config.registry ?? await ProviderRegistry.loadFromFile(providerRegistryConfigPath);
+  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined, { configPath: providerRegistryConfigPath });
   const persistedDefaultModel = persistedRegistry?.defaultModel;
   const modelDiffersFromPersisted = config.model && config.model !== persistedDefaultModel;
   let cliProviderId: string | undefined;

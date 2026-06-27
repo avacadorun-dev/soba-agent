@@ -16,7 +16,7 @@ export const ACP_LIFECYCLE_FEATURES: AcpFeatureSet = {
   initialize: true,
   sessionNew: true,
   sessionPrompt: true,
-  loadSession: false,
+  loadSession: true,
   embeddedContext: true,
   image: true,
   audio: false,

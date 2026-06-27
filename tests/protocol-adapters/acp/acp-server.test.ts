@@ -11,6 +11,7 @@ interface MockRuntimeState {
   permissionDecision?: string;
   turnErrorType?: "api_error" | "cancelled" | "security_denial";
   configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
+  missingSessionIds?: Set<string>;
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -31,6 +32,9 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
       return { id: input.sessionId, cwd: input.cwd };
     },
     async loadSession(input) {
+      if (state.missingSessionIds?.has(input.sessionId)) {
+        throw new Error(`Session not found: ${input.sessionId}`);
+      }
       return {
         info: { id: input.sessionId, cwd: "/repo", title: "Loaded session" },
         entries: [
@@ -46,6 +50,9 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
       };
     },
     async resumeSession(input) {
+      if (state.missingSessionIds?.has(input.sessionId)) {
+        throw new Error(`Session not found: ${input.sessionId}`);
+      }
       return { id: input.sessionId, cwd: "/repo", title: "Resumed session" };
     },
     async listSessions(input) {
@@ -246,7 +253,7 @@ describe("ACP stdio server foundation", () => {
         protocolVersion: 1,
         agentInfo: { name: "soba-agent", version: "0.5.0" },
         agentCapabilities: {
-          loadSession: false,
+          loadSession: true,
           promptCapabilities: {
             embeddedContext: true,
             image: true,
@@ -256,6 +263,7 @@ describe("ACP stdio server foundation", () => {
             close: {},
             delete: {},
             list: {},
+            resume: {},
           },
         },
       },
@@ -335,10 +343,9 @@ describe("ACP stdio server foundation", () => {
     const result = await runLines(
       [
         `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`,
-        `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded" } })}\n`,
-        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded" } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded", cwd: "/repo", mcpServers: [] } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded", cwd: "/repo" } })}\n`,
       ],
-      { features: { ...ACP_LIFECYCLE_FEATURES, loadSession: true } },
     );
 
     expect(result.messages[0]).toMatchObject({
@@ -355,15 +362,54 @@ describe("ACP stdio server foundation", () => {
         },
       },
     });
-    expect(result.messages[2]).toMatchObject({ id: "load", result: { sessionId: "session_loaded" } });
-    expect(result.messages[3]).toMatchObject({ id: "resume", result: { sessionId: "session_loaded" } });
+    expect(result.messages[2]).toMatchObject({ id: "load", result: {} });
+    expect(result.messages[3]).toMatchObject({ id: "resume", result: {} });
+  });
+
+  test("aliases stale ACP session ids to a live runtime session", async () => {
+    const state: MockRuntimeState = {
+      missingSessionIds: new Set(["zed_stale_session"]),
+    };
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "load",
+          method: "session/load",
+          params: { sessionId: "zed_stale_session", cwd: "/repo", mcpServers: [] },
+        })}\n`,
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "zed_stale_session", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      { state },
+    );
+
+    expect(result.messages[0]).toMatchObject({ id: "load", result: {} });
+    expect(state.lastTurnInput).toMatchObject({ sessionId: "session_1" });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "zed_stale_session",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "echo:hello" },
+        },
+      },
+    });
   });
 
   test("rejects load and resume when session loading is not advertised", async () => {
-    const result = await runLines([
-      `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "missing" } })}\n`,
-      `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "missing" } })}\n`,
-    ]);
+    const result = await runLines(
+      [
+        `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "missing" } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "missing" } })}\n`,
+      ],
+      { features: { ...ACP_LIFECYCLE_FEATURES, loadSession: false } },
+    );
 
     expect(result.messages[0]).toMatchObject({
       id: "load",

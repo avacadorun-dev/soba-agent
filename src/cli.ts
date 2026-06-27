@@ -219,7 +219,8 @@ async function main() {
     cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<import("./core/config/types").SoundConfig>;
   }
 
-  const config = await loadConfig(cliOverrides, { configPath: process.env.SOBA_CONFIG_PATH });
+  const configPath = process.env.SOBA_CONFIG_PATH;
+  const config = await loadConfig(cliOverrides, { configPath });
 
   // Apply lang from config file, but only if not overridden by CLI --lang or SOBA_LANG env.
   // The config file has lower priority than CLI args and env vars.
@@ -261,6 +262,7 @@ async function main() {
       tokenBudget: cliArgs.budget ?? 0,
       debug: cliArgs.debug,
       toolDelegation: acpToolDelegation,
+      providerRegistryConfigPath: configPath,
     });
     const { runAcpServer } = await import("./apps/acp-server/server");
     await runAcpServer({
@@ -331,6 +333,7 @@ async function main() {
     stream: cliArgs.stream,
     tokenBudget: cliArgs.budget ?? 0,
     debug: cliArgs.debug,
+    providerRegistryConfigPath: configPath,
   });
   const {
     runtime,

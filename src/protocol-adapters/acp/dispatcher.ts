@@ -1,5 +1,12 @@
 import type { z } from "zod";
-import type { RuntimeContentBlock, RuntimeEvent, RuntimeSessionInfo, SobaRuntime, TurnResult } from "../../application/types";
+import type {
+  RuntimeContentBlock,
+  RuntimeEvent,
+  RuntimeSessionConfigOption,
+  RuntimeSessionInfo,
+  SobaRuntime,
+  TurnResult,
+} from "../../application/types";
 import { ACP_LIFECYCLE_FEATURES, ACP_PROTOCOL_VERSION, type AcpFeatureSet, buildAgentCapabilities } from "./capabilities";
 import { type AcpClientCapabilities, EMPTY_ACP_CLIENT_CAPABILITIES, parseAcpClientCapabilities } from "./client-capabilities";
 import {
@@ -57,6 +64,7 @@ export class AcpDispatcher {
   private readonly onClientCapabilities?: (capabilities: AcpClientCapabilities, raw: JsonValue | undefined) => void | Promise<void>;
   private clientCapabilities: AcpClientCapabilities = EMPTY_ACP_CLIENT_CAPABILITIES;
   private readonly requestRegistry = new AcpRequestRegistry();
+  private readonly sessionAliases = new Map<string, string>();
 
   constructor(options: AcpDispatcherOptions) {
     this.runtime = options.runtime;
@@ -158,7 +166,7 @@ export class AcpDispatcher {
     }
 
     const session = await this.runtime.createSession({ cwd: result.data.cwd });
-    await this.emitSessionConfigOptions(session.id);
+    await this.emitSessionConfigOptions(session.id, session.id);
     return {
       sessionId: session.id,
     };
@@ -172,9 +180,24 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
-    const snapshot = await this.runtime.loadSession({ sessionId: result.data.sessionId });
-    await this.replaySessionEntries(snapshot.info.id, snapshot.entries);
-    return { sessionId: snapshot.info.id };
+    const clientSessionId = result.data.sessionId;
+    const cwd = cwdFromParams(params) ?? this.cwd;
+    let runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
+    let configOptions: JsonValue[];
+    try {
+      const snapshot = await this.runtime.loadSession({ sessionId: runtimeSessionId });
+      runtimeSessionId = snapshot.info.id;
+      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+      await this.replaySessionEntries(clientSessionId, runtimeSessionId, snapshot.entries);
+      configOptions = await this.sessionConfigOptions(runtimeSessionId);
+    } catch (error) {
+      if (!isSessionNotFound(error)) throw error;
+      const session = await this.runtime.createSession({ cwd });
+      runtimeSessionId = session.id;
+      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+    }
+    return configOptions.length > 0 ? { configOptions } : {};
   }
 
   private async handleSessionResume(params: JsonValue | undefined): Promise<JsonValue> {
@@ -185,8 +208,23 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
-    const session = await this.runtime.resumeSession({ sessionId: result.data.sessionId });
-    return { sessionId: session.id };
+    const clientSessionId = result.data.sessionId;
+    const cwd = cwdFromParams(params) ?? this.cwd;
+    let runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
+    let configOptions: JsonValue[];
+    try {
+      const session = await this.runtime.resumeSession({ sessionId: runtimeSessionId });
+      runtimeSessionId = session.id;
+      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+    } catch (error) {
+      if (!isSessionNotFound(error)) throw error;
+      const session = await this.runtime.createSession({ cwd });
+      runtimeSessionId = session.id;
+      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+    }
+    return configOptions.length > 0 ? { configOptions } : {};
   }
 
   private async handleSessionPrompt(params: JsonValue | undefined): Promise<JsonValue> {
@@ -196,12 +234,13 @@ export class AcpDispatcher {
     }
 
     const { sessionId } = result.data;
+    const runtimeSessionId = this.resolveRuntimeSessionId(sessionId);
     const unsubscribe = this.runtime.onEvent((event) => {
       void this.handleRuntimeEvent(sessionId, event);
     });
     try {
       const turn = await this.runtime.runTurn({
-        sessionId,
+        sessionId: runtimeSessionId,
         source: "acp",
         content: result.data.prompt.map(acpContentToRuntime),
         command: result.data.command
@@ -227,7 +266,7 @@ export class AcpDispatcher {
 
     const { sessionId } = result.data;
     const cancelledRequests = this.requestRegistry.cancelBySession(sessionId);
-    this.runtime.cancelTurn(sessionId);
+    this.runtime.cancelTurn(this.resolveRuntimeSessionId(sessionId));
 
     return {
       cancelled: true,
@@ -240,7 +279,9 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
-    await this.runtime.closeSession(result.data.sessionId);
+    const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
+    await this.runtime.closeSession(runtimeSessionId);
+    this.sessionAliases.delete(result.data.sessionId);
     return {};
   }
 
@@ -249,8 +290,10 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
-    this.runtime.cancelTurn(result.data.sessionId);
-    await this.runtime.deleteSession(result.data.sessionId);
+    const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
+    this.runtime.cancelTurn(runtimeSessionId);
+    await this.runtime.deleteSession(runtimeSessionId);
+    this.sessionAliases.delete(result.data.sessionId);
     return {};
   }
 
@@ -259,13 +302,16 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
+    const clientSessionId = result.data.sessionId;
+    const runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
     const session = await this.runtime.setSessionConfig({
-      sessionId: result.data.sessionId,
+      sessionId: runtimeSessionId,
       key: result.data.configId ?? result.data.key ?? "",
       value: result.data.value,
     });
-    await this.emitSessionConfigOptions(session.id);
-    return { session: sessionToAcp(session) };
+    this.rememberSessionAlias(clientSessionId, session.id);
+    await this.emitSessionConfigOptions(clientSessionId, session.id);
+    return { session: sessionToAcp({ ...session, id: clientSessionId }) };
   }
 
   private async handleSetSessionMode(params: JsonValue | undefined): Promise<JsonValue> {
@@ -273,41 +319,38 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
+    const clientSessionId = result.data.sessionId;
+    const runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
     const session = await this.runtime.setSessionMode({
-      sessionId: result.data.sessionId,
+      sessionId: runtimeSessionId,
       mode: result.data.mode,
       enabled: result.data.enabled,
     });
-    return { session: sessionToAcp(session) };
+    this.rememberSessionAlias(clientSessionId, session.id);
+    return { session: sessionToAcp({ ...session, id: clientSessionId }) };
   }
 
-  private async replaySessionEntries(sessionId: string, entries: unknown[]): Promise<void> {
+  private async replaySessionEntries(clientSessionId: string, runtimeSessionId: string, entries: unknown[]): Promise<void> {
     for (const entry of entries) {
       const update = sessionEntryToUpdate(entry);
-      if (update) await this.emitSessionUpdate(sessionId, update);
+      if (update) await this.emitSessionUpdate(clientSessionId, update);
     }
-    await this.emitSessionConfigOptions(sessionId);
+    await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
   }
 
-  private async emitSessionConfigOptions(sessionId: string): Promise<void> {
-    const options = await this.runtime.listSessionConfigOptions?.(sessionId);
-    if (!options || options.length === 0) return;
-    await this.emitSessionUpdate(sessionId, {
+  private async emitSessionConfigOptions(clientSessionId: string, runtimeSessionId: string): Promise<JsonValue[]> {
+    const options = await this.sessionConfigOptions(runtimeSessionId);
+    if (options.length === 0) return options;
+    await this.emitSessionUpdate(clientSessionId, {
       sessionUpdate: "config_option_update",
-      configOptions: options.map((option) => ({
-        id: option.id,
-        name: option.name,
-        description: option.description ?? null,
-        category: option.category ?? "model",
-        type: option.type,
-        currentValue: option.currentValue,
-        options: option.options.map((selectOption) => ({
-          value: selectOption.value,
-          name: selectOption.name,
-          description: selectOption.description ?? null,
-        })),
-      })),
+      configOptions: options,
     });
+    return options;
+  }
+
+  private async sessionConfigOptions(runtimeSessionId: string): Promise<JsonValue[]> {
+    const options = await this.runtime.listSessionConfigOptions?.(runtimeSessionId);
+    return (options ?? []).map(configOptionToAcp);
   }
 
   private async handleRuntimeEvent(sessionId: string, event: RuntimeEvent): Promise<void> {
@@ -349,12 +392,50 @@ export class AcpDispatcher {
       update,
     });
   }
+
+  private resolveRuntimeSessionId(clientSessionId: string): string {
+    return this.sessionAliases.get(clientSessionId) ?? clientSessionId;
+  }
+
+  private rememberSessionAlias(clientSessionId: string, runtimeSessionId: string): void {
+    if (clientSessionId === runtimeSessionId) {
+      this.sessionAliases.delete(clientSessionId);
+      return;
+    }
+    this.sessionAliases.set(clientSessionId, runtimeSessionId);
+  }
 }
 
 function extractSessionId(params: JsonValue | undefined): string | undefined {
   if (!params || typeof params !== "object" || Array.isArray(params)) return undefined;
   const value = params.sessionId;
   return typeof value === "string" ? value : undefined;
+}
+
+function cwdFromParams(params: JsonValue | undefined): string | undefined {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return undefined;
+  const value = params.cwd;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function isSessionNotFound(error: unknown): boolean {
+  return error instanceof Error && /session not found/i.test(error.message);
+}
+
+function configOptionToAcp(option: RuntimeSessionConfigOption): JsonValue {
+  return {
+    id: option.id,
+    name: option.name,
+    description: option.description ?? null,
+    category: option.category ?? "model",
+    type: option.type,
+    currentValue: option.currentValue,
+    options: option.options.map((selectOption) => ({
+      value: selectOption.value,
+      name: selectOption.name,
+      description: selectOption.description ?? null,
+    })),
+  };
 }
 
 function invalidParams(issues: Array<{ path: PropertyKey[]; message: string }>): JsonRpcError {
