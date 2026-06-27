@@ -123,14 +123,16 @@ describe("createSobaRuntime", () => {
     const events: string[] = [];
     composition.runtime.onEvent((event) => events.push(event.type));
     composition.client.create = async () => makeTextResponse("runtime ok");
+    const acpSession = await composition.runtime.createSession({ cwd: projectRoot });
 
     const result = await composition.runtime.runTurn({
-      sessionId: session.getSessionId(),
-      source: "print",
+      sessionId: acpSession.id,
+      source: "acp",
       content: [{ type: "text", text: "hello" }],
     });
 
     expect(composition.agentLoop.getSessionManager()).toBe(session);
+    expect(acpSession.id).toBe(session.getSessionId());
     expect(composition.tools.getNames()).toContain("read");
     expect(composition.runtime.listCommands({ surface: "acp" }).map((command) => command.name)).toContain("/session");
     expect(result.response.id).toBe("resp_runtime_factory");

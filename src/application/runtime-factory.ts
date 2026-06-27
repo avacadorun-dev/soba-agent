@@ -96,7 +96,10 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSessionInfo> {
-    return this.sessionLifecycle.createSession(input);
+    if (input.cwd !== this.session.getCwd()) {
+      return this.sessionLifecycle.createSession(input);
+    }
+    return this.activeSessionInfo();
   }
 
   async openSession(input: OpenSessionInput): Promise<RuntimeSessionInfo> {
