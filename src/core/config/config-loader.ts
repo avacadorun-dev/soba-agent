@@ -488,30 +488,28 @@ export async function loadConfig(
   config = mergeConfig(config, envOverrides);
   config = mergeConfig(config, cliOverrides);
 
-  // B1d: if the file has a registry, lift the default provider's
+  // B1d: if the file has a registry, lift the active provider's
   // baseUrl/apiKey/model into the flat config so legacy callers
   // (agent loop, TUI status bar) keep showing the right values.
-  // Env / CLI overrides take precedence — they were merged *after*
-  // the file config above, so we only fill in fields the caller
-  // didn't set.
+  // The registry is the source of truth. Stale flat fields from older
+  // config versions are ignored unless the user explicitly overrides
+  // them through env vars or CLI flags.
+  const hasModelOverride =
+    envOverrides.model !== undefined || cliOverrides.model !== undefined;
+  const hasBaseUrlOverride =
+    envOverrides.baseUrl !== undefined || cliOverrides.baseUrl !== undefined;
+  const hasApiKeyOverride =
+    envOverrides.apiKey !== undefined || cliOverrides.apiKey !== undefined;
   if (fileConfig?.registry?.defaultProvider) {
     const reg = fileConfig.registry;
     const regProviderId = reg.defaultProvider;
-    const override =
-      reg.providers?.[regProviderId] ?? reg.customProviders?.[regProviderId];
-    if (!config.model && reg.defaultModel) config.model = reg.defaultModel;
-    if (!config.baseUrl) {
-      if (override?.baseUrl) {
-        config.baseUrl = override.baseUrl;
-      } else {
-        // Issue #4: when no explicit baseUrl override, fall back to the
-        // built-in provider's canonical baseUrl (fixes built-in providers
-        // like OpenRouter that don't have per-provider overrides in disk).
-        const builtin = BUILTIN_PROVIDERS.find((p) => p.id === regProviderId);
-        if (builtin) config.baseUrl = builtin.baseUrl;
-      }
-    }
-    if (!config.apiKey && override?.apiKey) config.apiKey = override.apiKey;
+    const secret = reg.providers?.[regProviderId];
+    const provider =
+      reg.customProviders?.[regProviderId] ??
+      BUILTIN_PROVIDERS.find((p) => p.id === regProviderId);
+    if (!hasModelOverride) config.model = reg.defaultModel ?? "";
+    if (!hasBaseUrlOverride) config.baseUrl = secret?.baseUrl ?? provider?.baseUrl ?? "";
+    if (!hasApiKeyOverride) config.apiKey = secret?.apiKey ?? "";
   }
   // Backward compat: read old `activeProvider` key.
   if (fileConfig && !fileConfig.registry?.defaultProvider) {
@@ -522,23 +520,13 @@ export async function loadConfig(
     const oldActiveModel = reg?.activeModel as string | undefined;
     if (oldActiveProvider) {
       const regTyped = fileConfig.registry!;
-      const override =
-        regTyped.providers?.[oldActiveProvider] ??
-        regTyped.customProviders?.[oldActiveProvider];
-      if (!config.model && oldActiveModel) config.model = oldActiveModel;
-      if (!config.baseUrl) {
-        if (override?.baseUrl) {
-          config.baseUrl = override.baseUrl;
-        } else {
-          // Issue #4: same fix as defaultProvider path — fall back to the
-          // built-in provider's canonical baseUrl.
-          const builtin = BUILTIN_PROVIDERS.find(
-            (p) => p.id === oldActiveProvider,
-          );
-          if (builtin) config.baseUrl = builtin.baseUrl;
-        }
-      }
-      if (!config.apiKey && override?.apiKey) config.apiKey = override.apiKey;
+      const secret = regTyped.providers?.[oldActiveProvider];
+      const provider =
+        regTyped.customProviders?.[oldActiveProvider] ??
+        BUILTIN_PROVIDERS.find((p) => p.id === oldActiveProvider);
+      if (!hasModelOverride) config.model = oldActiveModel ?? "";
+      if (!hasBaseUrlOverride) config.baseUrl = secret?.baseUrl ?? provider?.baseUrl ?? "";
+      if (!hasApiKeyOverride) config.apiKey = secret?.apiKey ?? "";
     }
   }
 

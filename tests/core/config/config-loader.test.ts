@@ -23,14 +23,23 @@ let tmpDir: string;
 let configPath: string;
 let savedMaxOutputTokens: string | undefined;
 let savedContextWindow: string | undefined;
+let savedApiKey: string | undefined;
+let savedModel: string | undefined;
+let savedBaseUrl: string | undefined;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "soba-config-loader-"));
   configPath = join(tmpDir, "config.json");
   savedMaxOutputTokens = process.env.SOBA_MAX_OUTPUT_TOKENS;
   savedContextWindow = process.env.SOBA_CONTEXT_WINDOW;
+  savedApiKey = process.env.SOBA_API_KEY;
+  savedModel = process.env.SOBA_MODEL;
+  savedBaseUrl = process.env.SOBA_BASE_URL;
   delete process.env.SOBA_MAX_OUTPUT_TOKENS;
   delete process.env.SOBA_CONTEXT_WINDOW;
+  delete process.env.SOBA_API_KEY;
+  delete process.env.SOBA_MODEL;
+  delete process.env.SOBA_BASE_URL;
   _resetDeprecationWarningsForTests();
 });
 
@@ -45,6 +54,21 @@ afterEach(() => {
     process.env.SOBA_CONTEXT_WINDOW = savedContextWindow;
   } else {
     delete process.env.SOBA_CONTEXT_WINDOW;
+  }
+  if (savedApiKey !== undefined) {
+    process.env.SOBA_API_KEY = savedApiKey;
+  } else {
+    delete process.env.SOBA_API_KEY;
+  }
+  if (savedModel !== undefined) {
+    process.env.SOBA_MODEL = savedModel;
+  } else {
+    delete process.env.SOBA_MODEL;
+  }
+  if (savedBaseUrl !== undefined) {
+    process.env.SOBA_BASE_URL = savedBaseUrl;
+  } else {
+    delete process.env.SOBA_BASE_URL;
   }
   _resetDeprecationWarningsForTests();
 });
@@ -144,6 +168,58 @@ describe("loadConfigFromFile — B1e: legacy selectedModels[*][*].apiKey migrati
 });
 
 describe("loadConfig — B1e: derivation from active model", () => {
+  test("registry active provider overrides stale flat provider fields", async () => {
+    writeConfig({
+      baseUrl: "https://api.deepseek.com",
+      apiKey: "{",
+      model: "deepseek-v4-pro",
+      registry: {
+        defaultProvider: "openrouter",
+        defaultModel: "minimax/minimax-m3",
+        providers: {
+          deepseek: { apiKey: "{" },
+          openrouter: { apiKey: "openrouter-key" },
+        },
+        customProviders: {},
+      },
+    });
+
+    const cfg = await loadConfig({}, { configPath });
+
+    expect(cfg.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(cfg.apiKey).toBe("openrouter-key");
+    expect(cfg.model).toBe("minimax/minimax-m3");
+  });
+
+  test("explicit overrides still beat registry active provider fields", async () => {
+    writeConfig({
+      baseUrl: "https://api.deepseek.com",
+      apiKey: "{",
+      model: "deepseek-v4-pro",
+      registry: {
+        defaultProvider: "openrouter",
+        defaultModel: "minimax/minimax-m3",
+        providers: {
+          openrouter: { apiKey: "openrouter-key" },
+        },
+        customProviders: {},
+      },
+    });
+
+    const cfg = await loadConfig(
+      {
+        baseUrl: "https://override.example.test/v1",
+        apiKey: "override-key",
+        model: "override-model",
+      },
+      { configPath },
+    );
+
+    expect(cfg.baseUrl).toBe("https://override.example.test/v1");
+    expect(cfg.apiKey).toBe("override-key");
+    expect(cfg.model).toBe("override-model");
+  });
+
   test("derives contextWindow and maxOutputTokens from active model when registry is present", async () => {
     writeConfig({
       registry: {

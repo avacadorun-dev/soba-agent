@@ -63,6 +63,8 @@ export interface RuntimeFactoryInput {
   interactive: boolean;
   modelExplicitlyPassed: boolean;
   baseUrlOverride?: string;
+  baseUrlExplicitlyPassed?: boolean;
+  apiKeyExplicitlyPassed?: boolean;
   noStream: boolean;
   stream: boolean;
   tokenBudget: number;
@@ -224,6 +226,8 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     interactive,
     modelExplicitlyPassed,
     baseUrlOverride,
+    baseUrlExplicitlyPassed,
+    apiKeyExplicitlyPassed,
     noStream,
     stream,
     tokenBudget,
@@ -234,10 +238,9 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
 
   const persistedRegistry = config.registry ?? await ProviderRegistry.loadFromFile(providerRegistryConfigPath);
   const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined, { configPath: providerRegistryConfigPath });
-  const persistedDefaultModel = persistedRegistry?.defaultModel;
-  const modelDiffersFromPersisted = config.model && config.model !== persistedDefaultModel;
+  const hasRegistry = Boolean(persistedRegistry);
   let cliProviderId: string | undefined;
-  if (modelExplicitlyPassed || modelDiffersFromPersisted) {
+  if (modelExplicitlyPassed || (!hasRegistry && config.model)) {
     for (const provider of providerRegistry.getAllProviders()) {
       if (providerRegistry.getModel(provider.id, config.model)) {
         cliProviderId = provider.id;
@@ -245,20 +248,21 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
       }
     }
   }
-  if (!cliProviderId) {
+  if (!cliProviderId && (!hasRegistry || baseUrlExplicitlyPassed)) {
     cliProviderId = providerRegistry.getAllProviders().find((provider) => provider.baseUrl === config.baseUrl)?.id;
   }
   if (cliProviderId) {
     providerRegistry.setActive(cliProviderId, config.model);
   }
-  if (config.apiKey) {
+  if (config.apiKey && (!hasRegistry || apiKeyExplicitlyPassed)) {
     providerRegistry.setApiKey(providerRegistry.getActiveProvider().id, config.apiKey);
   }
   await selectFallbackProviderWithCredentials(providerRegistry);
 
   const client = new OpenResponsesClientProxy(providerRegistry);
-  if (baseUrlOverride) {
-    providerRegistry.setBaseUrl(client.getActiveProviderId(), baseUrlOverride);
+  const explicitBaseUrlOverride = baseUrlOverride ?? (baseUrlExplicitlyPassed ? config.baseUrl : undefined);
+  if (explicitBaseUrlOverride) {
+    providerRegistry.setBaseUrl(client.getActiveProviderId(), explicitBaseUrlOverride);
   }
 
   const tools = new ToolRegistry();

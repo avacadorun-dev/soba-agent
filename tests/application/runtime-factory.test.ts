@@ -244,6 +244,85 @@ describe("createSobaRuntime", () => {
     });
   });
 
+  test("does not let stale flat config override an active registry provider", async () => {
+    const registry = {
+      defaultProvider: "second-provider",
+      defaultModel: "second-model",
+      providers: {
+        "first-provider": { apiKey: "{" },
+        "second-provider": { apiKey: "second-key" },
+      },
+      customProviders: {
+        "first-provider": {
+          id: "first-provider",
+          name: "First Provider",
+          baseUrl: "https://first.example.test/v1",
+          apiKeyEnv: "FIRST_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "first-model",
+          models: [
+            {
+              id: "first-model",
+              name: "First Model",
+              contextWindow: 64000,
+              maxOutput: 8192,
+              supportsStreaming: true,
+              supportsThinking: false,
+            },
+          ],
+          custom: true,
+        },
+        "second-provider": {
+          id: "second-provider",
+          name: "Second Provider",
+          baseUrl: "https://second.example.test/v1",
+          apiKeyEnv: "SECOND_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "second-model",
+          models: [
+            {
+              id: "second-model",
+              name: "Second Model",
+              contextWindow: 128000,
+              maxOutput: 16000,
+              supportsStreaming: true,
+              supportsThinking: true,
+            },
+          ],
+          custom: true,
+        },
+      },
+    };
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: {
+        ...makeConfig(),
+        apiKey: "{",
+        baseUrl: "https://first.example.test/v1",
+        model: "first-model",
+        registry,
+      },
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: false,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+
+    expect(composition.client.getActiveProviderId()).toBe("second-provider");
+    expect(composition.client.getConfig()).toMatchObject({
+      apiKey: "second-key",
+      baseUrl: "https://second.example.test/v1",
+      model: "second-model",
+      contextWindow: 128000,
+    });
+  });
+
   test("exposes and applies provider/model session config options", async () => {
     const registry = {
       defaultProvider: "first-provider",
