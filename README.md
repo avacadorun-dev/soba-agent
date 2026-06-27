@@ -43,8 +43,8 @@ Tagged GitHub releases build standalone binaries for macOS and Linux. Download t
 release, make it executable, and run it directly:
 
 ```bash
-chmod +x ./soba-linux-x64-v0.4.4
-./soba-linux-x64-v0.4.4 --version
+chmod +x ./soba-linux-x64-v0.5.0
+./soba-linux-x64-v0.5.0 --version
 ```
 
 ## Development
