@@ -129,6 +129,17 @@ function makeMockAdapter(): ProviderAdapter {
   };
 }
 
+function expectSobaAppHeaders(init: RequestInit | undefined): void {
+  const headers = init?.headers as Record<string, string> | undefined;
+  expect(headers).toMatchObject({
+    "Content-Type": "application/json",
+    Authorization: "Bearer fake-api-key-123",
+    "HTTP-Referer": "https://github.com/avacadorun-dev/soba-agent",
+    "X-Title": "soba-agent",
+    "User-Agent": "soba-agent",
+  });
+}
+
 // ─── Tests ───
 
 describe("OpenResponsesClient", () => {
@@ -219,6 +230,7 @@ describe("OpenResponsesClient", () => {
     expect(response.status).toBe("completed");
     expect(adapter.convertRequest).toHaveBeenCalled();
     expect(adapter.convertResponse).toHaveBeenCalled();
+    expectSobaAppHeaders(mockFetch.mock.calls[0]?.[1] as RequestInit | undefined);
 
     mockFetch.mockRestore();
   });
@@ -413,6 +425,7 @@ describe("OpenResponsesClient", () => {
 
     expect(events.length).toBe(1);
     expect(events[0].type).toBe("response.failed");
+    expectSobaAppHeaders(mockFetch.mock.calls[0]?.[1] as RequestInit | undefined);
 
     mockFetch.mockRestore();
   });
