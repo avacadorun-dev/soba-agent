@@ -288,8 +288,8 @@ describe("ACP stdio server foundation", () => {
       params: {
         sessionId: "session_loaded",
         update: {
-          type: "agent_message",
-          content: [{ type: "text", text: "loaded answer" }],
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "loaded answer" },
         },
       },
     });
@@ -312,7 +312,7 @@ describe("ACP stdio server foundation", () => {
       params: {
         sessionId: "session_1",
         update: {
-          type: "agent_message_chunk",
+          sessionUpdate: "agent_message_chunk",
           messageId: "msg_1",
           content: { type: "text", text: "echo:hello" },
         },
@@ -353,9 +353,9 @@ describe("ACP stdio server foundation", () => {
       method: "session/update",
       params: {
         update: {
-          type: "agent_message",
-          content: [{ type: "text", text: "SOBA runtime error: mock turn error" }],
-          error: { status: "api_error" },
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "SOBA runtime error: mock turn error" },
+          _meta: { status: "api_error" },
         },
       },
     });
@@ -424,10 +424,10 @@ describe("ACP stdio server foundation", () => {
       method: "session/update",
       params: {
         update: {
-          type: "tool_call",
+          sessionUpdate: "tool_call",
           toolCallId: "tool_1",
           title: "read",
-          kind: "file",
+          kind: "read",
           status: "pending",
           rawInput: { path: "src/app.ts" },
           locations: [{ type: "file", path: "src/app.ts" }],
@@ -438,7 +438,7 @@ describe("ACP stdio server foundation", () => {
       method: "session/update",
       params: {
         update: {
-          type: "tool_call_update",
+          sessionUpdate: "tool_call_update",
           toolCallId: "tool_1",
           status: "completed",
           content: [{ type: "text", text: "file text" }],
@@ -450,12 +450,14 @@ describe("ACP stdio server foundation", () => {
       method: "session/update",
       params: {
         update: {
-          type: "usage_update",
-          usedTokens: 20,
-          effectiveContextTokens: 20,
-          totalBudget: 100,
-          contextWindow: 100,
-          percentage: 20,
+          sessionUpdate: "usage_update",
+          used: 20,
+          size: 100,
+          _meta: {
+            usedTokens: 10,
+            effectiveContextTokens: 20,
+            percentage: 20,
+          },
         },
       },
     });

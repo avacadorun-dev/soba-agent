@@ -373,9 +373,13 @@ function acpContentToRuntime(content: z.infer<typeof sessionPromptParamsSchema>[
 }
 
 function toolKind(toolName: string): string {
-  if (toolName === "bash" || toolName === "local_shell") return "terminal";
-  if (["edit", "inspect-file", "ls", "read", "search-files", "write"].includes(toolName)) return "file";
-  if (toolName.startsWith("mcp__")) return "mcp";
+  if (toolName === "bash" || toolName === "local_shell") return "execute";
+  if (["read", "inspect-file", "ls"].includes(toolName)) return "read";
+  if (["edit", "write"].includes(toolName)) return "edit";
+  if (["delete", "rm"].includes(toolName)) return "delete";
+  if (["move", "mv"].includes(toolName)) return "move";
+  if (["search", "search-files", "rg", "grep"].includes(toolName)) return "search";
+  if (toolName.startsWith("mcp__")) return "fetch";
   return "other";
 }
 
@@ -414,7 +418,7 @@ function toolLocations(toolName: string, args?: Record<string, unknown>, result?
 
 function fallbackToolLocations(toolName: string, args?: Record<string, unknown>): JsonValue[] {
   if (!args) return [];
-  if (toolKind(toolName) !== "file") return [];
+  if (!["read", "edit", "delete", "move", "search"].includes(toolKind(toolName))) return [];
   return typeof args.path === "string" ? [{ type: "file", path: args.path }] : [];
 }
 
@@ -486,19 +490,19 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
   switch (event.type) {
     case "assistant_text_delta":
       return {
-        type: "agent_message_chunk",
+        sessionUpdate: "agent_message_chunk",
         messageId: event.messageId,
         content: { type: "text", text: event.delta },
       };
     case "assistant_message":
       return {
-        type: "agent_message",
+        sessionUpdate: "agent_message_chunk",
         messageId: event.messageId,
-        content: [{ type: "text", text: event.text }],
+        content: { type: "text", text: event.text },
       };
     case "tool_call_start":
       return {
-        type: "tool_call",
+        sessionUpdate: "tool_call",
         toolCallId: event.toolCallId,
         title: event.toolName,
         kind: toolKind(event.toolName),
@@ -508,7 +512,7 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
       };
     case "tool_call_result":
       return {
-        type: "tool_call_update",
+        sessionUpdate: "tool_call_update",
         toolCallId: event.toolCallId,
         status: event.result.isError ? "failed" : "completed",
         content: toolResultContent(event.result),
@@ -517,42 +521,44 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
       };
     case "tool_call_end":
       return {
-        type: "tool_call_update",
+        sessionUpdate: "tool_call_update",
         toolCallId: event.toolCallId,
         status: "completed",
         durationMs: event.durationMs,
       };
     case "budget_update":
       return {
-        type: "usage_update",
-        usedTokens: event.effectiveContextTokens ?? event.usedTokens,
-        effectiveContextTokens: event.effectiveContextTokens ?? null,
-        totalBudget: event.totalBudget,
-        contextWindow: event.totalBudget,
-        percentage: event.percentage,
+        sessionUpdate: "usage_update",
+        used: event.effectiveContextTokens ?? event.usedTokens,
+        size: event.totalBudget,
+        _meta: {
+          usedTokens: event.usedTokens,
+          effectiveContextTokens: event.effectiveContextTokens ?? null,
+          percentage: event.percentage,
+        },
       };
     case "working_narration":
       return {
-        type: "agent_message_chunk",
+        sessionUpdate: "agent_message_chunk",
         content: { type: "text", text: event.message },
-        narration: {
+        _meta: {
           eventType: event.eventType,
           evidenceIds: event.evidenceIds,
         },
       };
     case "turn_error":
       return {
-        type: "agent_message",
-        content: [{ type: "text", text: `SOBA runtime error: ${event.error}` }],
-        error: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: `SOBA runtime error: ${event.error}` },
+        _meta: {
           status: event.status ?? null,
         },
       };
     case "context_error":
       return {
-        type: "agent_message",
-        content: [{ type: "text", text: `SOBA context error: ${event.error}` }],
-        error: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: `SOBA context error: ${event.error}` },
+        _meta: {
           effectiveTokens: event.effectiveTokens,
           hardLimit: event.hardLimit,
           recoveryAttempted: event.recoveryAttempted,
@@ -572,13 +578,13 @@ function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
     const text = messageText(item.content);
     if (!text) return undefined;
     return {
-      type: "agent_message",
-      content: [{ type: "text", text }],
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text },
     };
   }
   if (item.type === "function_call" && typeof item.call_id === "string") {
     return {
-      type: "tool_call",
+      sessionUpdate: "tool_call",
       toolCallId: item.call_id,
       title: typeof item.name === "string" ? item.name : "tool",
       kind: typeof item.name === "string" ? toolKind(item.name) : "other",
@@ -588,7 +594,7 @@ function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
   }
   if (item.type === "function_call_output" && typeof item.call_id === "string") {
     return {
-      type: "tool_call_update",
+      sessionUpdate: "tool_call_update",
       toolCallId: item.call_id,
       status: "completed",
       rawOutput: item as unknown as JsonValue,
