@@ -5,6 +5,7 @@ import {
   JsonRpcError,
   type JsonRpcResponse,
   makeJsonRpcFailure,
+  makeJsonRpcNotification,
   makeJsonRpcSuccess,
   parseJsonRpcRequest,
   serializeJsonRpc,
@@ -32,6 +33,9 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
       runtime: options.runtime,
       cwd: options.cwd,
       agentInfo: options.agentInfo,
+      notify: async (method, params) => {
+        await options.writeStdout(serializeJsonRpc(makeJsonRpcNotification(method, params)));
+      },
     });
   let linesRead = 0;
   let responsesWritten = 0;

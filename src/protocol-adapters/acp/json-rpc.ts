@@ -10,6 +10,12 @@ export interface JsonRpcRequest {
   params?: JsonValue;
 }
 
+export interface JsonRpcNotification {
+  jsonrpc: "2.0";
+  method: string;
+  params?: JsonValue;
+}
+
 export interface JsonRpcSuccess {
   jsonrpc: "2.0";
   id: JsonRpcId;
@@ -27,7 +33,7 @@ export interface JsonRpcFailure {
 }
 
 export type JsonRpcResponse = JsonRpcSuccess | JsonRpcFailure;
-export type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
+export type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcResponse;
 
 export const JSON_RPC_PARSE_ERROR = -32700;
 export const JSON_RPC_INVALID_REQUEST = -32600;
@@ -109,6 +115,15 @@ export function makeJsonRpcFailure(id: JsonRpcId, error: JsonRpcError): JsonRpcF
   };
   if (error.data !== undefined) response.error.data = error.data;
   return response;
+}
+
+export function makeJsonRpcNotification(method: string, params?: JsonValue): JsonRpcNotification {
+  const notification: JsonRpcNotification = {
+    jsonrpc: "2.0",
+    method,
+  };
+  if (params !== undefined) notification.params = params;
+  return notification;
 }
 
 export function serializeJsonRpc(message: JsonRpcMessage): string {

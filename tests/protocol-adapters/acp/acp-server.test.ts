@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeSessionInfo, SobaRuntime } from "../../../src/application/types";
+import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { runAcpServer } from "../../../src/apps/acp-server/server";
 
 function makeRuntime(): SobaRuntime {
   const sessions: RuntimeSessionInfo[] = [];
+  const listeners: Array<(event: RuntimeEvent) => void> = [];
   return {
     async createSession(input) {
       const session = {
@@ -15,35 +16,72 @@ function makeRuntime(): SobaRuntime {
       sessions.push(session);
       return session;
     },
-    async openSession() {
-      throw new Error("not implemented in foundation test runtime");
+    async openSession(input) {
+      return { id: input.sessionId, cwd: input.cwd };
     },
-    async loadSession() {
-      throw new Error("not implemented in foundation test runtime");
+    async loadSession(input) {
+      return {
+        info: { id: input.sessionId, cwd: "/repo", title: "Loaded session" },
+        entries: [
+          {
+            type: "item",
+            item: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "loaded answer" }],
+            },
+          },
+        ],
+      };
     },
-    async resumeSession() {
-      throw new Error("not implemented in foundation test runtime");
+    async resumeSession(input) {
+      return { id: input.sessionId, cwd: "/repo", title: "Resumed session" };
     },
-    async listSessions() {
-      return sessions;
+    async listSessions(input) {
+      return sessions.length > 0 ? sessions : [{ id: "session_existing", cwd: input.cwd, title: "Existing session" }];
     },
     listCommands() {
       return [];
     },
     async closeSession() {},
     async deleteSession() {},
-    async setSessionConfig() {
-      throw new Error("not implemented in foundation test runtime");
+    async setSessionConfig(input) {
+      return { id: input.sessionId, cwd: "/repo", title: `${input.key}:${String(input.value)}` };
     },
-    async setSessionMode() {
-      throw new Error("not implemented in foundation test runtime");
+    async setSessionMode(input) {
+      return { id: input.sessionId, cwd: "/repo", title: `${input.mode}:${String(input.enabled)}` };
     },
-    async runTurn() {
-      throw new Error("not implemented in foundation test runtime");
+    async runTurn(input: UserTurnInput) {
+      listeners.forEach((listener) =>
+        listener({
+          type: "assistant_text_delta",
+          timestamp: Date.now(),
+          messageId: "msg_1",
+          delta: `echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`,
+        } as RuntimeEvent),
+      );
+      return {
+        items: [],
+        response: {} as Awaited<ReturnType<SobaRuntime["runTurn"]>>["response"],
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          total_tokens: 2,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
+        },
+        errors: [],
+        activeErrors: [],
+      };
     },
     cancelTurn() {},
     onEvent() {
-      return () => {};
+      const listener = arguments[0] as (event: RuntimeEvent) => void;
+      listeners.push(listener);
+      return () => {
+        const index = listeners.indexOf(listener);
+        if (index >= 0) listeners.splice(index, 1);
+      };
     },
   };
 }
@@ -95,7 +133,7 @@ describe("ACP stdio server foundation", () => {
     expect(result.stderr.join("")).toContain("[soba acp] -32700 Parse error");
   });
 
-  test("initializes with foundation capabilities", async () => {
+  test("initializes with lifecycle capabilities", async () => {
     const result = await runLines([
       `${JSON.stringify({
         jsonrpc: "2.0",
@@ -112,14 +150,21 @@ describe("ACP stdio server foundation", () => {
         protocolVersion: 1,
         agentInfo: { name: "soba-agent", version: "0.5.0" },
         agentCapabilities: {
-          loadSession: false,
           promptCapabilities: {
-            embeddedContext: false,
-            image: false,
+            embeddedContext: true,
+            image: true,
             audio: false,
           },
-          sessionConfig: false,
-          sessionModes: false,
+          sessionCapabilities: {
+            cancel: true,
+            close: true,
+            delete: true,
+            list: true,
+            load: true,
+            update: true,
+          },
+          sessionConfig: true,
+          sessionModes: true,
         },
       },
     });
@@ -131,22 +176,95 @@ describe("ACP stdio server foundation", () => {
         jsonrpc: "2.0",
         id: "new",
         method: "session/new",
-        params: { cwd: "/repo/subproject" },
+        params: { cwd: "/repo/subproject", mcpServers: [] },
       })}\n`,
     ]);
 
     expect(result.messages[0]).toEqual({
       jsonrpc: "2.0",
       id: "new",
-      result: {
-        session: {
-          id: "session_1",
-          cwd: "/repo/subproject",
-          title: "ACP test session",
-          updatedAt: "2026-06-27T00:00:00.000Z",
+      result: { sessionId: "session_1" },
+    });
+  });
+
+  test("lists, loads and resumes sessions", async () => {
+    const result = await runLines([
+      `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded" } })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded" } })}\n`,
+    ]);
+
+    expect(result.messages[0]).toMatchObject({
+      id: "list",
+      result: { sessions: [{ sessionId: "session_existing", cwd: "/repo", title: "Existing session" }] },
+    });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "session_loaded",
+        update: {
+          type: "agent_message",
+          content: [{ type: "text", text: "loaded answer" }],
         },
       },
     });
+    expect(result.messages[2]).toMatchObject({ id: "load", result: { sessionId: "session_loaded" } });
+    expect(result.messages[3]).toMatchObject({ id: "resume", result: { sessionId: "session_loaded" } });
+  });
+
+  test("runs prompts and emits session updates", async () => {
+    const result = await runLines([
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: "prompt",
+        method: "session/prompt",
+        params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+      })}\n`,
+    ]);
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "session_1",
+        update: {
+          type: "agent_message_chunk",
+          messageId: "msg_1",
+          content: { type: "text", text: "echo:hello" },
+        },
+      },
+    });
+    expect(result.messages[1]).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("handles lifecycle mutation methods", async () => {
+    const result = await runLines([
+      `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "session/cancel", params: { sessionId: "session_1" } })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "session/close", params: { sessionId: "session_1" } })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "session/delete", params: { sessionId: "session_1" } })}\n`,
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "session/set_config_option",
+        params: { sessionId: "session_1", key: "model", value: "test-model" },
+      })}\n`,
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 5,
+        method: "session/set_mode",
+        params: { sessionId: "session_1", mode: "planning", enabled: true },
+      })}\n`,
+    ]);
+
+    expect(result.messages.map((message) => message.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(result.messages[0]).toMatchObject({ result: { cancelled: true } });
+    expect(result.messages[1]).toMatchObject({ result: {} });
+    expect(result.messages[2]).toMatchObject({ result: {} });
+    expect(result.messages[3]).toMatchObject({ result: { session: { title: "model:test-model" } } });
+    expect(result.messages[4]).toMatchObject({ result: { session: { title: "planning:true" } } });
   });
 
   test("does not respond to valid notifications", async () => {
@@ -164,31 +282,27 @@ describe("ACP stdio server foundation", () => {
 
   test("does not respond to notification handler errors", async () => {
     const result = await runLines([
-      `${JSON.stringify({
-        jsonrpc: "2.0",
-        method: "session/prompt",
-        params: { sessionId: "session_1" },
-      })}\n`,
+      `${JSON.stringify({ jsonrpc: "2.0", method: "unknown/method", params: {} })}\n`,
     ]);
 
     expect(result.stdout).toEqual([]);
-    expect(result.stderr.join("")).toContain("Method not found: session/prompt");
+    expect(result.stderr.join("")).toContain("Method not found: unknown/method");
   });
 
-  test("returns method-not-found for unimplemented ACP methods", async () => {
+  test("returns method-not-found for unknown ACP methods", async () => {
     const result = await runLines([
       `${JSON.stringify({
         jsonrpc: "2.0",
         id: 10,
-        method: "session/prompt",
-        params: { sessionId: "session_1" },
+        method: "unknown/method",
+        params: {},
       })}\n`,
     ]);
 
     expect(result.messages[0]).toMatchObject({
       jsonrpc: "2.0",
       id: 10,
-      error: { code: -32601, message: "Method not found: session/prompt" },
+      error: { code: -32601, message: "Method not found: unknown/method" },
     });
   });
 });
