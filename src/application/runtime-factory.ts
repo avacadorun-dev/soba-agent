@@ -92,7 +92,7 @@ export interface SobaRuntimeComposition {
 
 class AgentLoopRuntimeAdapter implements SobaRuntime {
   private readonly loop: AgentLoop;
-  private readonly session: SessionManager;
+  private session: SessionManager;
   private readonly sessionLifecycle: SessionLifecycleService;
   private readonly providerRegistry: ProviderRegistry;
 
@@ -104,22 +104,30 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSessionInfo> {
-    if (input.cwd !== this.session.getCwd()) {
-      return this.sessionLifecycle.createSession(input);
-    }
+    const session = this.sessionLifecycle.createSessionManager(input);
+    this.activateSession(session);
     return this.activeSessionInfo();
   }
 
   async openSession(input: OpenSessionInput): Promise<RuntimeSessionInfo> {
-    return this.sessionLifecycle.openSession(input);
+    const session = this.sessionLifecycle.openSessionManager(input);
+    this.activateSession(session);
+    return this.activeSessionInfo();
   }
 
   async loadSession(input: LoadSessionInput): Promise<RuntimeSessionSnapshot> {
-    return this.sessionLifecycle.loadSession(input);
+    const session = this.sessionLifecycle.loadSessionManager(input);
+    this.activateSession(session);
+    return {
+      info: this.activeSessionInfo(),
+      entries: session.getEntries(),
+    };
   }
 
   async resumeSession(input: ResumeSessionInput): Promise<RuntimeSessionInfo> {
-    return this.sessionLifecycle.resumeSession(input);
+    const session = this.sessionLifecycle.resumeSessionManager(input);
+    this.activateSession(session);
+    return this.activeSessionInfo();
   }
 
   async listSessions(input: ListSessionsInput): Promise<RuntimeSessionInfo[]> {
@@ -153,7 +161,7 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
       const provider = this.providerRegistry.getProvider(value);
       if (!provider) throw new Error(`Unknown provider "${value}"`);
       if (!providerHasCredentials(this.providerRegistry, provider)) {
-        throw new Error(`Provider "${value}" is missing API key configuration.`);
+        return this.activeSessionInfo();
       }
       const model = await usableModelForProvider(this.providerRegistry, provider);
       if (!model) throw new Error(`Provider "${value}" has no available models.`);
@@ -200,6 +208,11 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
       id: this.session.getSessionId(),
       cwd: this.session.getCwd(),
     };
+  }
+
+  private activateSession(session: SessionManager): void {
+    this.session = session;
+    this.loop.setSessionManager(session);
   }
 }
 

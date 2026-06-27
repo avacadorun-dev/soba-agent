@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSobaRuntime } from "../../src/application/runtime-factory";
@@ -136,13 +136,66 @@ describe("createSobaRuntime", () => {
       content: [{ type: "text", text: "hello" }],
     });
 
-    expect(composition.agentLoop.getSessionManager()).toBe(session);
-    expect(acpSession.id).toBe(session.getSessionId());
+    expect(composition.agentLoop.getSessionManager()).not.toBe(session);
+    expect(acpSession.id).not.toBe(session.getSessionId());
+    expect(composition.agentLoop.getSessionManager().getSessionId()).toBe(acpSession.id);
+    expect(composition.agentLoop.getSessionManager().getSessionFile()).toBeTruthy();
+    expect(existsSync(composition.agentLoop.getSessionManager().getSessionFile() ?? "")).toBe(true);
     expect(composition.tools.getNames()).toContain("read");
     expect(composition.runtime.listCommands({ surface: "acp" }).map((command) => command.name)).toContain("/session");
     expect(result.response.id).toBe("resp_runtime_factory");
     expect(events).toContain("turn_start");
     expect(events).toContain("turn_end");
+  });
+
+  test("loads persisted ACP sessions into the active AgentLoop session", async () => {
+    const firstComposition = await createSobaRuntime({
+      cwd: projectRoot,
+      session: SessionManager.inMemory(projectRoot),
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+    firstComposition.client.create = async () => makeTextResponse("persisted answer");
+    const persistedSession = await firstComposition.runtime.createSession({ cwd: projectRoot });
+    await firstComposition.runtime.runTurn({
+      sessionId: persistedSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "remember me" }],
+    });
+
+    const secondComposition = await createSobaRuntime({
+      cwd: projectRoot,
+      session: SessionManager.inMemory(projectRoot),
+      config: makeConfig(),
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+    secondComposition.client.create = async () => makeTextResponse("loaded answer");
+
+    const snapshot = await secondComposition.runtime.loadSession({ sessionId: persistedSession.id });
+    expect(snapshot.info.id).toBe(persistedSession.id);
+    expect(snapshot.entries.length).toBeGreaterThan(0);
+    expect(secondComposition.agentLoop.getSessionManager().getSessionId()).toBe(persistedSession.id);
+
+    const result = await secondComposition.runtime.runTurn({
+      sessionId: persistedSession.id,
+      source: "acp",
+      content: [{ type: "text", text: "continue" }],
+    });
+    expect(result.response.id).toBe("resp_runtime_factory");
   });
 
   test("passes flat config apiKey into the active provider client", async () => {
@@ -470,5 +523,85 @@ describe("createSobaRuntime", () => {
       model: "second-model",
       contextWindow: 128000,
     });
+  });
+
+  test("ignores provider selection when the provider has no configured credentials", async () => {
+    const registry = {
+      defaultProvider: "first-provider",
+      defaultModel: "first-model",
+      providers: {
+        "first-provider": { apiKey: "first-key" },
+      },
+      customProviders: {
+        "first-provider": {
+          id: "first-provider",
+          name: "First Provider",
+          baseUrl: "https://first.example.test/v1",
+          apiKeyEnv: "FIRST_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "first-model",
+          models: [
+            {
+              id: "first-model",
+              name: "First Model",
+              contextWindow: 64000,
+              maxOutput: 8192,
+              supportsStreaming: true,
+              supportsThinking: false,
+            },
+          ],
+          custom: true,
+        },
+        "missing-provider": {
+          id: "missing-provider",
+          name: "Missing Provider",
+          baseUrl: "https://missing.example.test/v1",
+          apiKeyEnv: "MISSING_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "missing-model",
+          models: [
+            {
+              id: "missing-model",
+              name: "Missing Model",
+              contextWindow: 128000,
+              maxOutput: 16000,
+              supportsStreaming: true,
+              supportsThinking: true,
+            },
+          ],
+          custom: true,
+        },
+      },
+    };
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: {
+        ...makeConfig(),
+        apiKey: "",
+        baseUrl: "https://first.example.test/v1",
+        model: "first-model",
+        registry,
+      },
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: false,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+    const runtimeSession = await composition.runtime.createSession({ cwd: projectRoot });
+
+    await expect(composition.runtime.setSessionConfig({
+      sessionId: runtimeSession.id,
+      key: "provider",
+      value: "missing-provider",
+    })).resolves.toMatchObject({ id: runtimeSession.id });
+
+    expect(composition.client.getActiveProviderId()).toBe("first-provider");
+    expect(composition.client.getConfig().apiKey).toBe("first-key");
   });
 });

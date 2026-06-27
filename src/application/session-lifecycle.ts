@@ -24,15 +24,15 @@ export class SessionLifecycleService {
   }
 
   createSession(input: CreateSessionInput): RuntimeSessionInfo {
-    return this.toRuntimeInfo(SessionManager.create(input.cwd));
+    return this.toRuntimeInfo(this.createSessionManager(input));
   }
 
   openSession(input: OpenSessionInput): RuntimeSessionInfo {
-    return this.toRuntimeInfo(SessionManager.openById(input.cwd, input.sessionId));
+    return this.toRuntimeInfo(this.openSessionManager(input));
   }
 
   loadSession(input: LoadSessionInput): RuntimeSessionSnapshot {
-    const session = this.openByIdAcrossProjects(input.sessionId);
+    const session = this.loadSessionManager(input);
     return {
       info: this.toRuntimeInfo(session),
       entries: session.getEntries(),
@@ -40,8 +40,24 @@ export class SessionLifecycleService {
   }
 
   resumeSession(input: ResumeSessionInput): RuntimeSessionInfo {
-    const session = this.openByIdAcrossProjects(input.sessionId);
+    const session = this.resumeSessionManager(input);
     return this.toRuntimeInfo(session);
+  }
+
+  createSessionManager(input: CreateSessionInput): SessionManager {
+    return SessionManager.create(input.cwd);
+  }
+
+  openSessionManager(input: OpenSessionInput): SessionManager {
+    return SessionManager.openById(input.cwd, input.sessionId);
+  }
+
+  loadSessionManager(input: LoadSessionInput): SessionManager {
+    return this.openByIdAcrossProjects(input.sessionId);
+  }
+
+  resumeSessionManager(input: ResumeSessionInput): SessionManager {
+    return this.openByIdAcrossProjects(input.sessionId);
   }
 
   listSessions(input: ListSessionsInput): RuntimeSessionInfo[] {

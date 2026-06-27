@@ -599,6 +599,12 @@ export class AgentLoop {
     return this.session;
   }
 
+  setSessionManager(session: SessionManager): void {
+    this.session = session;
+    this.cwd = session.getCwd();
+    this.trustManager.setRepoRoot(this.cwd);
+  }
+
   private createToolContext(): ToolContext {
     return {
       cwd: this.cwd,

@@ -245,7 +245,7 @@ async function main() {
     }
 
     const cwd = process.cwd();
-    const session = SessionManager.inMemory(cwd);
+    const session = SessionManager.create(cwd);
     const { AcpClientToolDelegation } = await import("./protocol-adapters/acp/client-delegation");
     let acpRequestClient: AcpClientRequester | undefined;
     const acpToolDelegation = new AcpClientToolDelegation(() => acpRequestClient);
