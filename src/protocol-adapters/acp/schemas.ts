@@ -65,6 +65,10 @@ export const acpContentBlockSchema = z.union([
 export const sessionPromptParamsSchema = z.object({
   sessionId: z.string().min(1),
   prompt: z.array(acpContentBlockSchema).min(1),
+  command: z.object({
+    name: z.string().min(1),
+    args: z.array(z.string()).optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 export const setSessionConfigParamsSchema = z.object({

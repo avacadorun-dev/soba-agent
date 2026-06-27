@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
 import { runAcpServer } from "../../../src/apps/acp-server/server";
+import type { JsonValue } from "../../../src/protocol-adapters/acp/json-rpc";
 
-function makeRuntime(): SobaRuntime {
+interface MockRuntimeState {
+  lastTurnInput?: UserTurnInput;
+  emitToolEvents?: boolean;
+  emitPermission?: boolean;
+  permissionDecision?: string;
+}
+
+function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
   const sessions: RuntimeSessionInfo[] = [];
   const listeners: Array<(event: RuntimeEvent) => void> = [];
   return {
@@ -52,6 +60,60 @@ function makeRuntime(): SobaRuntime {
       return { id: input.sessionId, cwd: "/repo", title: `${input.mode}:${String(input.enabled)}` };
     },
     async runTurn(input: UserTurnInput) {
+      state.lastTurnInput = input;
+      if (state.emitToolEvents) {
+        listeners.forEach((listener) =>
+          listener({
+            type: "tool_call_start",
+            timestamp: Date.now(),
+            toolCallId: "tool_1",
+            toolName: "read",
+            args: { path: "src/app.ts" },
+          } as RuntimeEvent),
+        );
+        listeners.forEach((listener) =>
+          listener({
+            type: "tool_call_result",
+            timestamp: Date.now(),
+            toolCallId: "tool_1",
+            toolName: "read",
+            result: {
+              content: [{ type: "text", text: "file text" }],
+              isError: false,
+              details: { path: "src/app.ts", line: 3 },
+            },
+          } as RuntimeEvent),
+        );
+        listeners.forEach((listener) =>
+          listener({
+            type: "budget_update",
+            timestamp: Date.now(),
+            usedTokens: 10,
+            effectiveContextTokens: 20,
+            totalBudget: 100,
+            percentage: 20,
+          } as RuntimeEvent),
+        );
+      }
+      if (state.emitPermission) {
+        await new Promise<void>((resolve) => {
+          listeners.forEach((listener) =>
+            listener({
+              type: "dangerous_confirmation",
+              timestamp: Date.now(),
+              toolCallId: "tool_danger",
+              toolName: "bash",
+              description: "rm -rf dist",
+              level: "dangerous",
+              reason: "Deletes files",
+              resolve: (decision) => {
+                state.permissionDecision = decision;
+                resolve();
+              },
+            } as RuntimeEvent),
+          );
+        });
+      }
       listeners.forEach((listener) =>
         listener({
           type: "assistant_text_delta",
@@ -86,11 +148,17 @@ function makeRuntime(): SobaRuntime {
   };
 }
 
-async function runLines(lines: string[]) {
+async function runLines(
+  lines: string[],
+  options: {
+    state?: MockRuntimeState;
+    requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
+  } = {},
+) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   await runAcpServer({
-    runtime: makeRuntime(),
+    runtime: makeRuntime(options.state),
     cwd: "/repo",
     input: toAsyncIterable(lines),
     writeStdout: (chunk) => {
@@ -100,6 +168,7 @@ async function runLines(lines: string[]) {
       stderr.push(chunk);
     },
     agentInfo: { name: "soba-agent", version: "0.5.0" },
+    requestClient: options.requestClient,
   });
 
   return {
@@ -234,6 +303,143 @@ describe("ACP stdio server foundation", () => {
       },
     });
     expect(result.messages[1]).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("maps ACP prompt content blocks and command input to runtime turns", async () => {
+    const state: MockRuntimeState = {};
+    await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: {
+            sessionId: "session_1",
+            prompt: [
+              { type: "text", text: "hello" },
+              { type: "resource", resource: { uri: "file:///repo/a.ts", text: "const a = 1;", mimeType: "text/typescript" } },
+              { type: "resource_link", uri: "file:///repo/b.ts", name: "b.ts", mimeType: "text/typescript" },
+              { type: "image", mimeType: "image/png", data: "base64-image" },
+            ],
+            command: { name: "/compact", args: ["now"] },
+          },
+        })}\n`,
+      ],
+      { state },
+    );
+
+    expect(state.lastTurnInput).toMatchObject({
+      sessionId: "session_1",
+      source: "acp",
+      command: { name: "/compact", args: ["now"] },
+      content: [
+        { type: "text", text: "hello" },
+        { type: "resource", uri: "file:///repo/a.ts", text: "const a = 1;", mimeType: "text/typescript" },
+        { type: "resource_link", uri: "file:///repo/b.ts", name: "b.ts", mimeType: "text/typescript" },
+        { type: "image", mimeType: "image/png", data: "base64-image" },
+      ],
+    });
+  });
+
+  test("emits structured ACP tool and usage updates", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      { state: { emitToolEvents: true } },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          type: "tool_call",
+          toolCallId: "tool_1",
+          title: "read",
+          kind: "file",
+          status: "pending",
+          rawInput: { path: "src/app.ts" },
+          locations: [{ type: "file", path: "src/app.ts" }],
+        },
+      },
+    });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          type: "tool_call_update",
+          toolCallId: "tool_1",
+          status: "completed",
+          content: [{ type: "text", text: "file text" }],
+          locations: [{ type: "file", path: "src/app.ts", line: 3 }],
+        },
+      },
+    });
+    expect(result.messages[2]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          type: "usage_update",
+          usedTokens: 20,
+          effectiveContextTokens: 20,
+          totalBudget: 100,
+          contextWindow: 100,
+          percentage: 20,
+        },
+      },
+    });
+  });
+
+  test("maps dangerous confirmations to ACP permission requests", async () => {
+    const state: MockRuntimeState = { emitPermission: true };
+    const requests: Array<{ method: string; params: JsonValue }> = [];
+
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      {
+        state,
+        requestClient: (method, params) => {
+          requests.push({ method, params });
+          return { decision: "repo" };
+        },
+      },
+    );
+
+    expect(state.permissionDecision).toBe("repo");
+    expect(requests[0]).toMatchObject({
+      method: "session/request_permission",
+      params: {
+        sessionId: "session_1",
+        toolCallId: "tool_danger",
+        toolName: "bash",
+        description: "rm -rf dist",
+        reason: "Deletes files",
+      },
+    });
+    expect((requests[0].params as { options: Array<{ id: string }> }).options.map((option) => option.id)).toEqual([
+      "deny",
+      "once",
+      "session",
+      "repo",
+      "full",
+    ]);
+    expect(result.messages.at(-1)).toEqual({
       jsonrpc: "2.0",
       id: "prompt",
       result: { stopReason: "end_turn" },

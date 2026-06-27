@@ -19,6 +19,7 @@ export interface AcpServerOptions {
   writeStderr?: (chunk: string) => void | Promise<void>;
   dispatcher?: AcpDispatcher;
   agentInfo?: AcpDispatcherOptions["agentInfo"];
+  requestClient?: AcpDispatcherOptions["requestClient"];
 }
 
 export interface AcpServerResult {
@@ -36,6 +37,7 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
       notify: async (method, params) => {
         await options.writeStdout(serializeJsonRpc(makeJsonRpcNotification(method, params)));
       },
+      requestClient: options.requestClient,
     });
   let linesRead = 0;
   let responsesWritten = 0;

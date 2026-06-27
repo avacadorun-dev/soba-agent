@@ -21,6 +21,14 @@ import {
   setSessionModeParamsSchema,
 } from "./schemas";
 
+const ACP_PERMISSION_OPTIONS: JsonValue[] = [
+  { id: "deny", label: "Deny", kind: "reject_once" },
+  { id: "once", label: "Allow once", kind: "allow_once" },
+  { id: "session", label: "Allow for session", kind: "allow_always" },
+  { id: "repo", label: "Allow for repository", kind: "allow_repo" },
+  { id: "full", label: "Allow full access", kind: "allow_full" },
+];
+
 export interface AcpDispatcherOptions {
   runtime: SobaRuntime;
   cwd: string;
@@ -30,6 +38,7 @@ export interface AcpDispatcherOptions {
   };
   features?: AcpFeatureSet;
   notify?: (method: string, params: JsonValue) => void | Promise<void>;
+  requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
 }
 
 export interface AcpDispatchContext {
@@ -42,6 +51,7 @@ export class AcpDispatcher {
   private readonly agentInfo: { name: string; version: string };
   private readonly features: AcpFeatureSet;
   private readonly notify?: (method: string, params: JsonValue) => void | Promise<void>;
+  private readonly requestClient?: (method: string, params: JsonValue) => JsonValue | Promise<JsonValue>;
   private readonly requestRegistry = new AcpRequestRegistry();
 
   constructor(options: AcpDispatcherOptions) {
@@ -50,6 +60,7 @@ export class AcpDispatcher {
     this.agentInfo = options.agentInfo ?? { name: "soba-agent", version: "0.0.0" };
     this.features = options.features ?? ACP_LIFECYCLE_FEATURES;
     this.notify = options.notify;
+    this.requestClient = options.requestClient;
   }
 
   async dispatch(request: JsonRpcRequest): Promise<JsonValue | undefined> {
@@ -178,6 +189,12 @@ export class AcpDispatcher {
         sessionId,
         source: "acp",
         content: result.data.prompt.map(acpContentToRuntime),
+        command: result.data.command
+          ? {
+            name: result.data.command.name,
+            args: result.data.command.args ?? [],
+          }
+          : undefined,
       });
       return {
         stopReason: turnToStopReason(turn),
@@ -256,8 +273,36 @@ export class AcpDispatcher {
   }
 
   private async handleRuntimeEvent(sessionId: string, event: RuntimeEvent): Promise<void> {
+    if (event.type === "dangerous_confirmation") {
+      await this.handlePermissionRequest(sessionId, event);
+      return;
+    }
+
     const update = runtimeEventToUpdate(event);
     if (update) await this.emitSessionUpdate(sessionId, update);
+  }
+
+  private async handlePermissionRequest(sessionId: string, event: Extract<RuntimeEvent, { type: "dangerous_confirmation" }>): Promise<void> {
+    if (!this.requestClient) {
+      event.resolve("deny");
+      return;
+    }
+
+    try {
+      const response = await this.requestClient("session/request_permission", {
+        sessionId,
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        title: event.toolName,
+        description: event.description,
+        reason: event.reason,
+        level: event.level,
+        options: ACP_PERMISSION_OPTIONS,
+      });
+      event.resolve(permissionDecisionFromAcp(response));
+    } catch {
+      event.resolve("deny");
+    }
   }
 
   private async emitSessionUpdate(sessionId: string, update: JsonValue): Promise<void> {
@@ -319,6 +364,116 @@ function acpContentToRuntime(content: z.infer<typeof sessionPromptParamsSchema>[
   };
 }
 
+function toolKind(toolName: string): string {
+  if (toolName === "bash" || toolName === "local_shell") return "terminal";
+  if (["edit", "inspect-file", "ls", "read", "search-files", "write"].includes(toolName)) return "file";
+  if (toolName.startsWith("mcp__")) return "mcp";
+  return "other";
+}
+
+function toolResultContent(result: { content?: unknown; details?: Record<string, unknown> }): JsonValue[] {
+  const content: JsonValue[] = [];
+  if (Array.isArray(result.content)) {
+    for (const item of result.content) {
+      if (!isRecord(item)) continue;
+      if (item.type === "text" && typeof item.text === "string") {
+        content.push({ type: "text", text: item.text });
+      }
+    }
+  }
+
+  const image = isRecord(result.details?.image) ? result.details.image : undefined;
+  if (image && typeof image.data === "string" && typeof image.mimeType === "string") {
+    content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  }
+
+  return content;
+}
+
+function toolLocations(toolName: string, args?: Record<string, unknown>, result?: { details?: Record<string, unknown> }): JsonValue[] {
+  const locations: JsonValue[] = [];
+
+  addLocation(locations, args);
+  addLocation(locations, result?.details);
+
+  const matches = result?.details?.matches;
+  if (Array.isArray(matches)) {
+    for (const match of matches) addLocation(locations, match);
+  }
+
+  return dedupeLocations(locations.length > 0 ? locations : fallbackToolLocations(toolName, args));
+}
+
+function fallbackToolLocations(toolName: string, args?: Record<string, unknown>): JsonValue[] {
+  if (!args) return [];
+  if (toolKind(toolName) !== "file") return [];
+  return typeof args.path === "string" ? [{ type: "file", path: args.path }] : [];
+}
+
+function addLocation(locations: JsonValue[], value: unknown): void {
+  if (!isRecord(value)) return;
+
+  const nested = value.location;
+  if (isRecord(nested)) addLocation(locations, nested);
+
+  const path = typeof value.path === "string" ? value.path : typeof value.file === "string" ? value.file : undefined;
+  if (!path) return;
+
+  const location: { [key: string]: JsonValue } = {
+    type: "file",
+    path,
+  };
+  if (typeof value.line === "number") location.line = value.line;
+  if (typeof value.column === "number") location.column = value.column;
+  locations.push(location);
+}
+
+function dedupeLocations(locations: JsonValue[]): JsonValue[] {
+  const seen = new Set<string>();
+  const deduped: JsonValue[] = [];
+  for (const location of locations) {
+    const key = JSON.stringify(location);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(location);
+  }
+  return deduped;
+}
+
+function permissionDecisionFromAcp(value: JsonValue): "deny" | "once" | "session" | "repo" | "full" {
+  const decision = typeof value === "string" ? value : permissionField(value);
+  switch (decision) {
+    case "once":
+    case "allow_once":
+      return "once";
+    case "session":
+    case "allow_session":
+    case "allow_always":
+      return "session";
+    case "repo":
+    case "allow_repo":
+      return "repo";
+    case "full":
+    case "allow_full":
+      return "full";
+    default:
+      return "deny";
+  }
+}
+
+function permissionField(value: JsonValue): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  for (const key of ["decision", "optionId", "outcome", "id"]) {
+    const field = value[key];
+    if (typeof field === "string") return field;
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
   switch (event.type) {
     case "assistant_text_delta":
@@ -338,13 +493,18 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
         type: "tool_call",
         toolCallId: event.toolCallId,
         title: event.toolName,
+        kind: toolKind(event.toolName),
+        status: "pending",
         rawInput: event.args as unknown as JsonValue,
+        locations: toolLocations(event.toolName, event.args),
       };
     case "tool_call_result":
       return {
         type: "tool_call_update",
         toolCallId: event.toolCallId,
         status: event.result.isError ? "failed" : "completed",
+        content: toolResultContent(event.result),
+        locations: toolLocations(event.toolName, undefined, event.result),
         rawOutput: event.result as unknown as JsonValue,
       };
     case "tool_call_end":
@@ -358,7 +518,9 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
       return {
         type: "usage_update",
         usedTokens: event.effectiveContextTokens ?? event.usedTokens,
+        effectiveContextTokens: event.effectiveContextTokens ?? null,
         totalBudget: event.totalBudget,
+        contextWindow: event.totalBudget,
         percentage: event.percentage,
       };
     case "working_narration":
@@ -393,6 +555,8 @@ function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
       type: "tool_call",
       toolCallId: item.call_id,
       title: typeof item.name === "string" ? item.name : "tool",
+      kind: typeof item.name === "string" ? toolKind(item.name) : "other",
+      status: "completed",
       rawInput: item as unknown as JsonValue,
     };
   }
