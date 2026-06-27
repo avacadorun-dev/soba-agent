@@ -158,6 +158,7 @@ export class AcpDispatcher {
     }
 
     const session = await this.runtime.createSession({ cwd: result.data.cwd });
+    await this.emitSessionConfigOptions(session.id);
     return {
       sessionId: session.id,
     };
@@ -260,9 +261,10 @@ export class AcpDispatcher {
     }
     const session = await this.runtime.setSessionConfig({
       sessionId: result.data.sessionId,
-      key: result.data.key,
+      key: result.data.configId ?? result.data.key ?? "",
       value: result.data.value,
     });
+    await this.emitSessionConfigOptions(session.id);
     return { session: sessionToAcp(session) };
   }
 
@@ -284,6 +286,28 @@ export class AcpDispatcher {
       const update = sessionEntryToUpdate(entry);
       if (update) await this.emitSessionUpdate(sessionId, update);
     }
+    await this.emitSessionConfigOptions(sessionId);
+  }
+
+  private async emitSessionConfigOptions(sessionId: string): Promise<void> {
+    const options = await this.runtime.listSessionConfigOptions?.(sessionId);
+    if (!options || options.length === 0) return;
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: "config_option_update",
+      configOptions: options.map((option) => ({
+        id: option.id,
+        name: option.name,
+        description: option.description ?? null,
+        category: option.category ?? "model",
+        type: option.type,
+        currentValue: option.currentValue,
+        options: option.options.map((selectOption) => ({
+          value: selectOption.value,
+          name: selectOption.name,
+          description: selectOption.description ?? null,
+        })),
+      })),
+    });
   }
 
   private async handleRuntimeEvent(sessionId: string, event: RuntimeEvent): Promise<void> {
@@ -536,7 +560,7 @@ function runtimeEventToUpdate(event: RuntimeEvent): JsonValue | undefined {
       return {
         sessionUpdate: "usage_update",
         used: event.effectiveContextTokens ?? event.usedTokens,
-        size: event.totalBudget,
+        size: event.contextWindow ?? event.totalBudget,
         _meta: {
           usedTokens: event.usedTokens,
           effectiveContextTokens: event.effectiveContextTokens ?? null,

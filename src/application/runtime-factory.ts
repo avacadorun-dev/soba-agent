@@ -44,6 +44,7 @@ import type {
   OpenSessionInput,
   ResumeSessionInput,
   RuntimeEventListener,
+  RuntimeSessionConfigOption,
   RuntimeSessionInfo,
   RuntimeSessionSnapshot,
   SetSessionConfigInput,
@@ -90,11 +91,13 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
   private readonly loop: AgentLoop;
   private readonly session: SessionManager;
   private readonly sessionLifecycle: SessionLifecycleService;
+  private readonly providerRegistry: ProviderRegistry;
 
-  constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: SessionLifecycleService) {
+  constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: SessionLifecycleService, providerRegistry: ProviderRegistry) {
     this.loop = loop;
     this.session = session;
     this.sessionLifecycle = sessionLifecycle;
+    this.providerRegistry = providerRegistry;
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSessionInfo> {
@@ -124,6 +127,11 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
     return commandService.listCommands(input);
   }
 
+  async listSessionConfigOptions(sessionId: string): Promise<RuntimeSessionConfigOption[]> {
+    this.assertActiveSession(sessionId);
+    return buildProviderConfigOptions(this.providerRegistry);
+  }
+
   async closeSession(sessionId: string): Promise<void> {
     this.sessionLifecycle.closeSession(sessionId);
   }
@@ -137,6 +145,25 @@ class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   async setSessionConfig(input: SetSessionConfigInput): Promise<RuntimeSessionInfo> {
     this.assertActiveSession(input.sessionId);
+    const value = typeof input.value === "string" ? input.value : "";
+    if (input.key === "provider") {
+      const provider = this.providerRegistry.getProvider(value);
+      if (!provider) throw new Error(`Unknown provider "${value}"`);
+      if (!providerHasCredentials(this.providerRegistry, provider)) {
+        throw new Error(`Provider "${value}" is missing API key configuration.`);
+      }
+      const model = await usableModelForProvider(this.providerRegistry, provider);
+      if (!model) throw new Error(`Provider "${value}" has no available models.`);
+      if (!this.providerRegistry.setActive(provider.id, model.id)) {
+        throw new Error(`Could not switch provider to "${value}".`);
+      }
+      await this.providerRegistry.persistConfig();
+    } else if (input.key === "model") {
+      const provider = this.providerRegistry.getActiveProvider();
+      const client = this.providerRegistry.switchModel(provider.id, value);
+      if (!client) throw new Error(`Could not switch model to "${value}".`);
+      await this.providerRegistry.persistConfig();
+    }
     return this.activeSessionInfo();
   }
 
@@ -317,7 +344,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   const sessionLifecycle = new SessionLifecycleService(cwd);
 
   return {
-    runtime: new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle),
+    runtime: new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry),
     agentLoop,
     providerRegistry,
     client,
@@ -332,6 +359,46 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     sessionLifecycle,
     mcpManager,
   };
+}
+
+function buildProviderConfigOptions(providerRegistry: ProviderRegistry): RuntimeSessionConfigOption[] {
+  const activeProvider = providerRegistry.getActiveProvider();
+  const activeModel = providerRegistry.getActiveModel();
+  const providerOptions = providerRegistry.getAllProviders().map((provider) => ({
+    value: provider.id,
+    name: provider.name,
+    description: providerHasCredentials(providerRegistry, provider)
+      ? provider.baseUrl
+      : `${provider.baseUrl} (missing ${provider.apiKeyEnv ?? "API key"})`,
+  }));
+
+  const models = providerRegistry.getModelsFor(activeProvider.id);
+  const modelOptions = (models.length > 0 ? models : [activeModel]).map((model) => ({
+    value: model.id,
+    name: model.name,
+    description: `${model.contextWindow.toLocaleString()} ctx, ${model.maxOutput.toLocaleString()} max output`,
+  }));
+
+  return [
+    {
+      id: "provider",
+      name: "Provider",
+      description: "Model provider used for new turns.",
+      category: "model",
+      type: "select",
+      currentValue: activeProvider.id,
+      options: providerOptions,
+    },
+    {
+      id: "model",
+      name: "Model",
+      description: "Model used for new turns.",
+      category: "model",
+      type: "select",
+      currentValue: activeModel.id,
+      options: modelOptions,
+    },
+  ];
 }
 
 async function selectFallbackProviderWithCredentials(providerRegistry: ProviderRegistry): Promise<void> {

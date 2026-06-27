@@ -10,6 +10,7 @@ interface MockRuntimeState {
   emitPermission?: boolean;
   permissionDecision?: string;
   turnErrorType?: "api_error" | "cancelled" | "security_denial";
+  configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -53,6 +54,9 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
     listCommands() {
       return [];
     },
+    async listSessionConfigOptions() {
+      return state.configOptions ?? [];
+    },
     async closeSession() {},
     async deleteSession() {},
     async setSessionConfig(input) {
@@ -93,6 +97,7 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
             usedTokens: 10,
             effectiveContextTokens: 20,
             totalBudget: 100,
+            contextWindow: 128000,
             percentage: 20,
           } as RuntimeEvent),
         );
@@ -268,6 +273,58 @@ describe("ACP stdio server foundation", () => {
     ]);
 
     expect(result.messages[0]).toEqual({
+      jsonrpc: "2.0",
+      id: "new",
+      result: { sessionId: "session_1" },
+    });
+  });
+
+  test("emits session config options for model and provider selectors", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "new",
+          method: "session/new",
+          params: { cwd: "/repo/subproject", mcpServers: [] },
+        })}\n`,
+      ],
+      {
+        state: {
+          configOptions: [
+            {
+              id: "provider",
+              name: "Provider",
+              type: "select",
+              currentValue: "openrouter",
+              options: [{ value: "openrouter", name: "OpenRouter" }],
+            },
+            {
+              id: "model",
+              name: "Model",
+              type: "select",
+              currentValue: "openai/gpt-4.1",
+              options: [{ value: "openai/gpt-4.1", name: "GPT-4.1" }],
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "session_1",
+        update: {
+          sessionUpdate: "config_option_update",
+          configOptions: [
+            { id: "provider", type: "select", currentValue: "openrouter" },
+            { id: "model", type: "select", currentValue: "openai/gpt-4.1" },
+          ],
+        },
+      },
+    });
+    expect(result.messages[1]).toEqual({
       jsonrpc: "2.0",
       id: "new",
       result: { sessionId: "session_1" },
@@ -473,7 +530,7 @@ describe("ACP stdio server foundation", () => {
         update: {
           sessionUpdate: "usage_update",
           used: 20,
-          size: 100,
+          size: 128000,
           _meta: {
             usedTokens: 10,
             effectiveContextTokens: 20,
@@ -580,7 +637,7 @@ describe("ACP stdio server foundation", () => {
         jsonrpc: "2.0",
         id: 4,
         method: "session/set_config_option",
-        params: { sessionId: "session_1", key: "model", value: "test-model" },
+        params: { sessionId: "session_1", configId: "model", value: "test-model" },
       })}\n`,
       `${JSON.stringify({
         jsonrpc: "2.0",

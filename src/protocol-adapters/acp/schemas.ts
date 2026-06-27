@@ -73,9 +73,12 @@ export const sessionPromptParamsSchema = z.object({
 
 export const setSessionConfigParamsSchema = z.object({
   sessionId: z.string().min(1),
-  key: z.string().min(1),
+  configId: z.string().min(1).optional(),
+  key: z.string().min(1).optional(),
   value: z.unknown(),
-}).passthrough();
+}).passthrough().refine((value) => value.configId || value.key, {
+  message: "Expected configId",
+});
 
 export const setSessionModeParamsSchema = z.object({
   sessionId: z.string().min(1),

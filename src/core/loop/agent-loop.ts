@@ -870,6 +870,7 @@ export class AgentLoop {
       const model = this.client.getConfig().model;
       const maxOutputTokens = this.client.getConfig().maxOutputTokens;
       const maxCompletionTokens = this.client.getConfig().maxCompletionTokens ?? 0;
+      const contextWindow = this.client.getConfig().contextWindow;
       const temperature = this.client.getConfig().temperature;
       emitNarrationOnce(
         "plan",
@@ -1296,6 +1297,7 @@ export class AgentLoop {
             timestamp: Date.now(),
             usedTokens: this.state.totalUsage.total_tokens,
             totalBudget: this.options.tokenBudget,
+            contextWindow,
             percentage,
             effectiveContextTokens,
           });

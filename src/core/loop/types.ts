@@ -122,6 +122,7 @@ export interface BudgetUpdateEvent extends BaseAgentEvent {
   type: "budget_update";
   usedTokens: number;
   totalBudget: number;
+  contextWindow?: number;
   percentage: number;
   /** Effective context tokens currently in the request (system prompt + conversation + trailing). -1 if not available. */
   effectiveContextTokens?: number;

@@ -236,4 +236,93 @@ describe("createSobaRuntime", () => {
       model: "usable-model",
     });
   });
+
+  test("exposes and applies provider/model session config options", async () => {
+    const registry = {
+      defaultProvider: "first-provider",
+      defaultModel: "first-model",
+      providers: {
+        "first-provider": { apiKey: "first-key" },
+        "second-provider": { apiKey: "second-key" },
+      },
+      customProviders: {
+        "first-provider": {
+          id: "first-provider",
+          name: "First Provider",
+          baseUrl: "https://first.example.test/v1",
+          apiKeyEnv: "FIRST_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "first-model",
+          models: [
+            {
+              id: "first-model",
+              name: "First Model",
+              contextWindow: 64000,
+              maxOutput: 8192,
+              supportsStreaming: true,
+              supportsThinking: false,
+            },
+          ],
+          custom: true,
+        },
+        "second-provider": {
+          id: "second-provider",
+          name: "Second Provider",
+          baseUrl: "https://second.example.test/v1",
+          apiKeyEnv: "SECOND_PROVIDER_KEY",
+          adapter: "openai",
+          defaultModel: "second-model",
+          models: [
+            {
+              id: "second-model",
+              name: "Second Model",
+              contextWindow: 128000,
+              maxOutput: 16000,
+              supportsStreaming: true,
+              supportsThinking: true,
+            },
+          ],
+          custom: true,
+        },
+      },
+    };
+    const session = SessionManager.inMemory(projectRoot);
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: {
+        ...makeConfig(),
+        apiKey: "",
+        baseUrl: "https://first.example.test/v1",
+        model: "first-model",
+        registry,
+      },
+      compactionConfig: { ...DEFAULT_COMPACTION_CONFIG, auto: false },
+      interactive: false,
+      modelExplicitlyPassed: false,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+    });
+    const runtimeSession = await composition.runtime.createSession({ cwd: projectRoot });
+
+    await expect(composition.runtime.listSessionConfigOptions?.(runtimeSession.id)).resolves.toMatchObject([
+      { id: "provider", currentValue: "first-provider" },
+      { id: "model", currentValue: "first-model" },
+    ]);
+
+    await composition.runtime.setSessionConfig({
+      sessionId: runtimeSession.id,
+      key: "provider",
+      value: "second-provider",
+    });
+
+    expect(composition.client.getConfig()).toMatchObject({
+      apiKey: "second-key",
+      baseUrl: "https://second.example.test/v1",
+      model: "second-model",
+      contextWindow: 128000,
+    });
+  });
 });

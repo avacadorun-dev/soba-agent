@@ -61,6 +61,20 @@ export interface SetSessionModeInput {
   enabled: boolean;
 }
 
+export interface RuntimeSessionConfigOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  type: "select";
+  currentValue: string;
+  options: Array<{
+    value: string;
+    name: string;
+    description?: string | null;
+  }>;
+}
+
 export interface RuntimeSessionInfo {
   id: string;
   cwd: string;
@@ -80,6 +94,7 @@ export interface SobaRuntime {
   resumeSession(input: ResumeSessionInput): Promise<RuntimeSessionInfo>;
   listSessions(input: ListSessionsInput): Promise<RuntimeSessionInfo[]>;
   listCommands(input?: ListCommandsInput): RuntimeCommandMetadata[];
+  listSessionConfigOptions?(sessionId: string): Promise<RuntimeSessionConfigOption[]>;
   closeSession(sessionId: string): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   setSessionConfig(input: SetSessionConfigInput): Promise<RuntimeSessionInfo>;
