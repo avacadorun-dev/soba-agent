@@ -140,6 +140,10 @@ function expectSobaAppHeaders(init: RequestInit | undefined): void {
   });
 }
 
+function fetchInitAt(fetchMock: unknown, index: number): RequestInit | undefined {
+  return (fetchMock as { mock: { calls: Array<[RequestInfo | URL, RequestInit?]> } }).mock.calls[index]?.[1];
+}
+
 // ─── Tests ───
 
 describe("OpenResponsesClient", () => {
@@ -230,7 +234,7 @@ describe("OpenResponsesClient", () => {
     expect(response.status).toBe("completed");
     expect(adapter.convertRequest).toHaveBeenCalled();
     expect(adapter.convertResponse).toHaveBeenCalled();
-    expectSobaAppHeaders(mockFetch.mock.calls[0]?.[1] as RequestInit | undefined);
+    expectSobaAppHeaders(fetchInitAt(mockFetch, 0));
 
     mockFetch.mockRestore();
   });
@@ -425,7 +429,7 @@ describe("OpenResponsesClient", () => {
 
     expect(events.length).toBe(1);
     expect(events[0].type).toBe("response.failed");
-    expectSobaAppHeaders(mockFetch.mock.calls[0]?.[1] as RequestInit | undefined);
+    expectSobaAppHeaders(fetchInitAt(mockFetch, 0));
 
     mockFetch.mockRestore();
   });

@@ -129,7 +129,8 @@ describe("EvidenceLedger", () => {
     const failed = ledger.getEntries().find((entry) => entry.kind === "verification" && entry.status === "failure");
 
     expect(failed).toBeDefined();
-    expect(ledger.getSummary().unresolvedVerificationFailureIds).toEqual([failed?.id]);
+    if (!failed) throw new Error("Expected failed verification evidence");
+    expect(ledger.getSummary().unresolvedVerificationFailureIds).toEqual([failed.id]);
 
     ledger.recordToolOutcome({
       toolCallId: "typecheck_pass",
