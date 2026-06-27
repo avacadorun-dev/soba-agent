@@ -3,7 +3,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "../../src/core/tools/bash";
@@ -161,6 +161,22 @@ describe("bash tool", () => {
     expect(result.details?.truncated).toBe(true);
     expect(result.content[0].text).toContain("Output truncated");
     expect(result.content[0].text).toContain("saved to");
+  });
+
+  test("streaming truncation writes redacted full output to temp file", async () => {
+    const cwd = makeCwd();
+    const cmd = `for i in $(seq 1 3000); do echo "line $i api_key=secret-$i"; done`;
+    const result = await bashTool.execute({ command: cmd, timeout: 15 }, { cwd });
+
+    expect(result.details?.truncated).toBe(true);
+    expect(typeof result.details?.tempPath).toBe("string");
+    const tempPath = result.details?.tempPath as string;
+    expect(existsSync(tempPath)).toBe(true);
+    const fullOutput = readFileSync(tempPath, "utf-8");
+    expect(fullOutput).toContain("line 1");
+    expect(fullOutput).toContain("api_key=[REDACTED]");
+    expect(fullOutput).not.toContain("api_key=secret-");
+    expect(result.content[0].text.length).toBeLessThan(70 * 1024);
   });
 
   test("ограничивает слишком большой timeout, чтобы bash не висел часами", async () => {

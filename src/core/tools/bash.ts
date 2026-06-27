@@ -9,11 +9,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { commandErrorInfo, createToolErrorResult, redactSecrets } from "./errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "./types";
-import { truncateOutput } from "./types";
 
 // ─── Types ───
 
@@ -46,6 +45,7 @@ const MIN_TIMEOUT = 1; // seconds
 const DEFAULT_MAX_TIMEOUT = 300; // seconds
 const MAX_LINES = 2000;
 const MAX_BYTES = 50 * 1024; // 50KB
+const REDACTION_CARRY_CHARS = 4096;
 
 // ─── Helpers ───
 
@@ -59,13 +59,13 @@ async function execCommand(
   timeoutSec: number,
   signal?: AbortSignal,
 ): Promise<{
-  stdout: string;
-  stderr: string;
+  output: string;
   exitCode: number | null;
   signalCode: NodeJS.Signals | null;
   timedOut: boolean;
   aborted: boolean;
   truncated: boolean;
+  tempPath?: string;
 }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
@@ -78,8 +78,7 @@ async function execCommand(
       detached: process.platform !== "win32",
     });
 
-    let stdout = "";
-    let stderr = "";
+    const capture = new StreamingOutputCapture(cwd, MAX_LINES, MAX_BYTES);
     let timedOut = false;
     let aborted = false;
     let settled = false;
@@ -116,16 +115,17 @@ async function execCommand(
     signal?.addEventListener("abort", onAbort, { once: true });
 
     child.stdout?.on("data", (data: Buffer) => {
-      stdout += data.toString();
+      capture.append(data);
     });
 
     child.stderr?.on("data", (data: Buffer) => {
-      stderr += data.toString();
+      capture.append(data);
     });
 
     child.on("error", (err) => {
       if (settled) return;
       settled = true;
+      capture.close();
       clearTimeout(timeout);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       signal?.removeEventListener("abort", onAbort);
@@ -135,21 +135,149 @@ async function execCommand(
     child.on("close", (code, signalCode) => {
       if (settled) return;
       settled = true;
+      capture.close();
       clearTimeout(timeout);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       signal?.removeEventListener("abort", onAbort);
 
       resolvePromise({
-        stdout,
-        stderr,
+        output: capture.text(),
         exitCode: code,
         signalCode,
         timedOut,
         aborted,
-        truncated: false,
+        truncated: capture.truncated,
+        tempPath: capture.tempPath,
       });
     });
   });
+}
+
+class StreamingOutputCapture {
+  private preview = "";
+  private redactionCarry = "";
+  private pendingFullOutput: string[] = [];
+  private spoolFd: number | null = null;
+  private _tempPath: string | undefined;
+  private totalBytes = 0;
+  private totalLineBreaks = 0;
+  private _truncated = false;
+
+  constructor(
+    private readonly cwd: string,
+    private readonly maxLines: number,
+    private readonly maxBytes: number,
+  ) {}
+
+  get truncated(): boolean {
+    return this._truncated;
+  }
+
+  get tempPath(): string | undefined {
+    return this._tempPath;
+  }
+
+  append(data: Buffer): void {
+    const raw = data.toString();
+    if (!raw) return;
+
+    const combined = this.redactionCarry + raw;
+    const flushTarget = Math.max(0, combined.length - REDACTION_CARRY_CHARS);
+    const flushLength = safeRedactionFlushLength(combined, flushTarget);
+    if (flushLength > 0) {
+      this.appendRedacted(redactSecrets(combined.slice(0, flushLength)));
+      this.redactionCarry = combined.slice(flushLength);
+    } else {
+      this.redactionCarry = combined;
+    }
+  }
+
+  close(): void {
+    if (this.redactionCarry) {
+      this.appendRedacted(redactSecrets(this.redactionCarry));
+      this.redactionCarry = "";
+    }
+    if (this.spoolFd !== null) {
+      closeSync(this.spoolFd);
+      this.spoolFd = null;
+    }
+  }
+
+  text(): string {
+    return this.preview;
+  }
+
+  private appendRedacted(chunk: string): void {
+    if (!chunk) return;
+
+    this.totalBytes += Buffer.byteLength(chunk, "utf-8");
+    this.totalLineBreaks += countLineBreaks(chunk);
+
+    if (this.spoolFd !== null) {
+      writeSync(this.spoolFd, chunk);
+    } else {
+      this.pendingFullOutput.push(chunk);
+      if (this.totalBytes > this.maxBytes || this.totalLineBreaks >= this.maxLines) {
+        this.ensureSpool();
+      }
+    }
+
+    this.preview += chunk;
+    this.trimPreview();
+  }
+
+  private ensureSpool(): void {
+    if (this._tempPath || this.spoolFd !== null) return;
+    try {
+      mkdirSync(join(this.cwd, ".soba-tmp"), { recursive: true });
+      const tempDir = mkdtempSync(join(join(this.cwd, ".soba-tmp"), "bash-"));
+      this._tempPath = join(tempDir, "output.txt");
+      this.spoolFd = openSync(this._tempPath, "w");
+      for (const chunk of this.pendingFullOutput) {
+        writeSync(this.spoolFd, chunk);
+      }
+      this.pendingFullOutput = [];
+    } catch {
+      this._tempPath = undefined;
+      this.spoolFd = null;
+    }
+  }
+
+  private trimPreview(): void {
+    let trimmed = false;
+    const lines = this.preview.split("\n");
+    if (lines.length > this.maxLines) {
+      this.preview = lines.slice(-this.maxLines).join("\n");
+      trimmed = true;
+    }
+
+    const previewBuffer = Buffer.from(this.preview, "utf-8");
+    if (previewBuffer.length > this.maxBytes) {
+      this.preview = new TextDecoder().decode(previewBuffer.subarray(previewBuffer.length - this.maxBytes));
+      trimmed = true;
+    }
+
+    if (trimmed) {
+      this._truncated = true;
+      this.ensureSpool();
+    }
+  }
+}
+
+function countLineBreaks(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 10) count += 1;
+  }
+  return count;
+}
+
+function safeRedactionFlushLength(value: string, target: number): number {
+  if (target <= 0) return 0;
+  for (let index = Math.min(target, value.length - 1); index >= 0; index -= 1) {
+    if (/\s/.test(value[index])) return index + 1;
+  }
+  return target;
 }
 
 function normalizeMaxTimeout(maxTimeout: number | undefined): number {
@@ -195,7 +323,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
   name: "bash",
   label: "bash",
   description:
-    "Execute a bash command in the current working directory. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
+    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Do not use bash for pwd, routine directory listing, text search, or file reads when ls, search_files, read, or inspect_file fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail are diagnostic only. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
   parameters: {
     type: "object",
     properties: {
@@ -232,11 +360,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
       const result = await execCommand(args.command, context.cwd, timeout.seconds, signal);
 
       let output = timeout.note ? `${timeout.note}\n` : "";
-      if (result.stdout) output += result.stdout;
-      if (result.stderr) {
-        if (output) output += "\n";
-        output += result.stderr;
-      }
+      if (result.output) output += result.output;
 
       if (result.timedOut) {
         output += `\n[Command timed out after ${timeout.seconds}s]`;
@@ -248,26 +372,12 @@ export const bashTool: ToolDefinition<BashArgs> = {
         output += `\n[Command terminated by signal: ${result.signalCode}]`;
       }
 
-      output = redactSecrets(output);
-
-      // Apply truncation
-      const truncated = truncateOutput(output, MAX_LINES, MAX_BYTES);
-
-      // If truncated, save full output to temp file
-      let tempPath: string | undefined;
-      if (truncated.truncated) {
-        try {
-          const tempDir = mkdtempSync(join(join(context.cwd, ".soba-tmp"), "bash-"));
-          tempPath = join(tempDir, "output.txt");
-          writeFileSync(tempPath, output);
-        } catch {
-          // Failed to write temp file — not critical
-        }
+      let outputText = redactSecrets(output);
+      if (result.truncated) {
+        outputText += `\n[Output truncated to last ${MAX_LINES} lines / ${MAX_BYTES / 1024}KB]`;
       }
-
-      let outputText = truncated.text;
-      if (tempPath) {
-        outputText += `\n[Full output saved to ${tempPath}]`;
+      if (result.tempPath) {
+        outputText += `\n[Full output saved to ${result.tempPath}]`;
       }
 
       if (result.exitCode !== null && result.exitCode !== 0) {
@@ -288,10 +398,10 @@ export const bashTool: ToolDefinition<BashArgs> = {
           signalCode: result.signalCode ?? undefined,
           timedOut: result.timedOut,
           aborted: result.aborted,
-          truncated: truncated.truncated,
+          truncated: result.truncated,
           timeoutSeconds: timeout.seconds,
           maxTimeoutSeconds: timeout.maxSeconds,
-          tempPath,
+          tempPath: result.tempPath,
         },
       };
     } catch (error) {

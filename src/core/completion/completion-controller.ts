@@ -88,7 +88,7 @@ export class CompletionController {
           type: "text",
           text:
             `Finish rejected by completion gate:\n- ${evaluation.reasons.join("\n- ")}\n` +
-            "Resolve the issues, continue with tools, use criteria[].evidenceIds when you have matching evidence, or use status blocked with a concrete blocker.",
+            "Resolve the issues and continue with tools. Use criteria[].evidenceIds only when you have matching evidence. Verification evidence must be a real project check; --help/--version/which probes and verification piped through head/tail do not count. Use status blocked only for a concrete external blocker; do not use blocked to bypass missing verification or unfinished work.",
         },
       ],
       isError: true,

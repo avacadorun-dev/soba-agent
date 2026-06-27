@@ -1,8 +1,11 @@
 import { Buffer } from "node:buffer";
 import { type BashArgs, bashTool } from "../core/tools/bash";
 import { createToolErrorResult, redactSecrets } from "../core/tools/errors";
+import { type InspectFileArgs, inspectFileTool } from "../core/tools/inspect-file";
+import { type LsArgs, lsTool } from "../core/tools/ls";
 import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "../core/tools/protected-paths";
 import { type ReadArgs, readTool } from "../core/tools/read";
+import { type SearchFilesArgs, searchFilesTool } from "../core/tools/search-files";
 import type { ToolContext, ToolDefinition, ToolResult } from "../core/tools/types";
 import { truncateOutput } from "../core/tools/types";
 import { type WriteArgs, writeTool } from "../core/tools/write";
@@ -33,6 +36,26 @@ export interface DelegatedTerminalInput {
   signal?: AbortSignal;
 }
 
+export interface DelegatedListDirectoryInput {
+  cwd: string;
+  sessionId?: string;
+  path?: string;
+  limit?: number;
+  signal?: AbortSignal;
+}
+
+export interface DelegatedInspectTextFileInput extends InspectFileArgs {
+  cwd: string;
+  sessionId?: string;
+  signal?: AbortSignal;
+}
+
+export interface DelegatedSearchFilesInput extends SearchFilesArgs {
+  cwd: string;
+  sessionId?: string;
+  signal?: AbortSignal;
+}
+
 export interface DelegatedTerminalResult {
   stdout?: string;
   stderr?: string;
@@ -47,6 +70,9 @@ export interface RuntimeToolDelegation {
   readTextFile?(input: DelegatedReadTextFileInput): Promise<string | { text: string } | undefined>;
   writeTextFile?(input: DelegatedWriteTextFileInput): Promise<{ bytes?: number; lines?: number } | undefined>;
   runTerminal?(input: DelegatedTerminalInput): Promise<DelegatedTerminalResult | undefined>;
+  listDirectory?(input: DelegatedListDirectoryInput): Promise<string | { text?: string; entries?: string[]; entryCount?: number; truncated?: boolean } | undefined>;
+  inspectTextFile?(input: DelegatedInspectTextFileInput): Promise<string | { text: string; totalLines?: number; startLine?: number; endLine?: number; truncated?: boolean } | undefined>;
+  searchFiles?(input: DelegatedSearchFilesInput): Promise<string | { text: string; matchCount?: number; truncated?: boolean } | undefined>;
 }
 
 export function createDelegatedReadTool(delegation: RuntimeToolDelegation): ToolDefinition<ReadArgs> {
@@ -106,6 +132,55 @@ export function createDelegatedBashTool(delegation: RuntimeToolDelegation): Tool
       if (!delegated) return bashTool.execute(args, context, signal);
 
       return formatDelegatedTerminalResult(args, delegated);
+    },
+  };
+}
+
+export function createDelegatedLsTool(delegation: RuntimeToolDelegation): ToolDefinition<LsArgs> {
+  return {
+    ...lsTool,
+    async execute(args: LsArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult> {
+      const delegated = await delegation.listDirectory?.({
+        cwd: context.cwd,
+        sessionId: context.sessionId,
+        path: args.path,
+        limit: args.limit,
+        signal,
+      });
+      if (!delegated) return lsTool.execute(args, context, signal);
+      return formatDelegatedListResult(args, delegated);
+    },
+  };
+}
+
+export function createDelegatedInspectFileTool(delegation: RuntimeToolDelegation): ToolDefinition<InspectFileArgs> {
+  return {
+    ...inspectFileTool,
+    async execute(args: InspectFileArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult> {
+      const delegated = await delegation.inspectTextFile?.({
+        ...args,
+        cwd: context.cwd,
+        sessionId: context.sessionId,
+        signal,
+      });
+      if (!delegated) return inspectFileTool.execute(args, context, signal);
+      return formatDelegatedInspectResult(args, delegated);
+    },
+  };
+}
+
+export function createDelegatedSearchFilesTool(delegation: RuntimeToolDelegation): ToolDefinition<SearchFilesArgs> {
+  return {
+    ...searchFilesTool,
+    async execute(args: SearchFilesArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult> {
+      const delegated = await delegation.searchFiles?.({
+        ...args,
+        cwd: context.cwd,
+        sessionId: context.sessionId,
+        signal,
+      });
+      if (!delegated) return searchFilesTool.execute(args, context, signal);
+      return formatDelegatedSearchResult(args, delegated);
     },
   };
 }
@@ -179,6 +254,60 @@ function formatDelegatedTerminalResult(args: BashArgs, result: DelegatedTerminal
       exitCode,
       signalCode: result.signalCode ?? null,
       timedOut: result.timedOut ?? false,
+      delegated: true,
+    },
+  };
+}
+
+function formatDelegatedListResult(
+  args: LsArgs,
+  result: string | { text?: string; entries?: string[]; entryCount?: number; truncated?: boolean },
+): ToolResult {
+  const text = typeof result === "string" ? result : result.text ?? result.entries?.join("\n") ?? "";
+  return {
+    content: [{ type: "text", text: redactSecrets(text || "(empty directory)") }],
+    isError: false,
+    details: {
+      path: args.path ?? ".",
+      entryCount: typeof result === "string" ? undefined : result.entryCount ?? result.entries?.length,
+      truncated: typeof result === "string" ? undefined : result.truncated,
+      delegated: true,
+    },
+  };
+}
+
+function formatDelegatedInspectResult(
+  args: InspectFileArgs,
+  result: string | { text: string; totalLines?: number; startLine?: number; endLine?: number; truncated?: boolean },
+): ToolResult {
+  const text = typeof result === "string" ? result : result.text;
+  return {
+    content: [{ type: "text", text: redactSecrets(text) }],
+    isError: false,
+    details: {
+      path: args.path,
+      totalLines: typeof result === "string" ? undefined : result.totalLines,
+      startLine: typeof result === "string" ? args.startLine : result.startLine,
+      endLine: typeof result === "string" ? args.endLine : result.endLine,
+      truncated: typeof result === "string" ? undefined : result.truncated,
+      delegated: true,
+    },
+  };
+}
+
+function formatDelegatedSearchResult(
+  args: SearchFilesArgs,
+  result: string | { text: string; matchCount?: number; truncated?: boolean },
+): ToolResult {
+  const text = typeof result === "string" ? result : result.text;
+  return {
+    content: [{ type: "text", text: redactSecrets(text) }],
+    isError: false,
+    details: {
+      path: args.path ?? ".",
+      query: args.query,
+      matchCount: typeof result === "string" ? undefined : result.matchCount,
+      truncated: typeof result === "string" ? undefined : result.truncated,
       delegated: true,
     },
   };

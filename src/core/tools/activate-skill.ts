@@ -35,7 +35,7 @@ export function createActivateSkillTool(options: ActivateSkillToolOptions): Tool
     label: "Activate Skill",
     toolType: "function",
     description:
-      "Activate a skill to get specialized instructions for a task. The full skill content will be available in the next request. Use this when a task matches a skill's description.",
+      "Activate a skill to get specialized instructions for the current task. Use only when the task clearly matches the skill description; do not activate skills for generic exploration. The full skill content will be available in the next request.",
     parameters: {
       type: "object",
       properties: {

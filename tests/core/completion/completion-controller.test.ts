@@ -64,7 +64,13 @@ describe("CompletionController", () => {
     expect(result.kind).toBe("rejected");
     if (result.kind === "rejected") {
       expect(result.reasons.join(" ")).toContain("verification");
-      expect(controller.createRejectionResult(result).content[0]?.text).toContain("Finish rejected by completion gate");
+      const rejectionText = controller.createRejectionResult(result).content[0]?.text ?? "";
+      expect(rejectionText).toContain("Finish rejected by completion gate");
+      expect(rejectionText).toContain("continue with tools");
+      expect(rejectionText).toContain("--help/--version/which probes");
+      expect(rejectionText).toContain("head/tail do not count");
+      expect(rejectionText).toContain("Use status blocked only for a concrete external blocker");
+      expect(rejectionText).toContain("do not use blocked to bypass missing verification");
     }
   });
 

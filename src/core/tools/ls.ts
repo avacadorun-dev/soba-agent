@@ -5,6 +5,7 @@
  * Provides a structured, consistent output that is more efficient than raw bash.
  */
 
+import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { classifyFileSystemError, createToolErrorResult } from "./errors";
@@ -30,7 +31,7 @@ export const lsTool: ToolDefinition<LsArgs> = {
   name: "ls",
   label: "ls",
   description:
-    "List directory contents. Returns entries sorted alphabetically with '/' suffix for directories. Includes dotfiles. Output is truncated to the specified limit (default 200) or 50KB.",
+    "List directory contents for path discovery and directory shape. Not a content search tool; use search_files for text, regex, or symbol matches. Returns entries sorted alphabetically with '/' suffix for directories. Includes dotfiles. Output is truncated to the specified limit (default 200) or 50KB.",
   parameters: {
     type: "object",
     properties: {
@@ -61,9 +62,9 @@ export const lsTool: ToolDefinition<LsArgs> = {
     }
 
     try {
-      let entries: string[];
+      let entries: Dirent[];
       try {
-        entries = await readdir(dirPath);
+        entries = await readdir(dirPath, { withFileTypes: true });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         const classification = classifyFileSystemError(error, "list");
@@ -75,7 +76,7 @@ export const lsTool: ToolDefinition<LsArgs> = {
       }
 
       // Sort alphabetically, case-insensitive
-      entries.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+      entries.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
       // Format with directory indicators
       const results: string[] = [];
@@ -98,12 +99,20 @@ export const lsTool: ToolDefinition<LsArgs> = {
         }
 
         try {
-          const fullPath = resolve(dirPath, entry);
-          const entryStat = await stat(fullPath);
-          results.push(entryStat.isDirectory() ? `${entry}/` : entry);
+          if (entry.isDirectory()) {
+            results.push(`${entry.name}/`);
+            continue;
+          }
+          if (entry.isSymbolicLink()) {
+            const fullPath = resolve(dirPath, entry.name);
+            const entryStat = await stat(fullPath);
+            results.push(entryStat.isDirectory() ? `${entry.name}/` : entry.name);
+            continue;
+          }
+          results.push(entry.name);
         } catch {
           // Skip entries we cannot stat (permission denied, broken symlinks, etc.)
-          results.push(entry);
+          results.push(entry.name);
         }
       }
 

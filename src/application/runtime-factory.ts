@@ -33,7 +33,10 @@ import { McpRuntimeController } from "./mcp-runtime-controller";
 import { SessionLifecycleService } from "./session-lifecycle";
 import {
   createDelegatedBashTool,
+  createDelegatedInspectFileTool,
+  createDelegatedLsTool,
   createDelegatedReadTool,
+  createDelegatedSearchFilesTool,
   createDelegatedWriteTool,
   type RuntimeToolDelegation,
 } from "./tool-delegation";
@@ -316,9 +319,9 @@ function registerBuiltInTools(registry: ToolRegistry, delegation?: RuntimeToolDe
   registry.register(delegation ? createDelegatedWriteTool(delegation) : writeTool);
   registry.register(delegation ? createDelegatedBashTool(delegation) : bashTool);
   registry.register(editTool);
-  registry.register(lsTool);
-  registry.register(searchFilesTool);
-  registry.register(inspectFileTool);
+  registry.register(delegation ? createDelegatedLsTool(delegation) : lsTool);
+  registry.register(delegation ? createDelegatedSearchFilesTool(delegation) : searchFilesTool);
+  registry.register(delegation ? createDelegatedInspectFileTool(delegation) : inspectFileTool);
   registry.register(checkpointTool);
   for (const memoryTool of createMemoryTools()) {
     registry.register(memoryTool);

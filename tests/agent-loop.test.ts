@@ -826,6 +826,57 @@ describe("AgentLoop", () => {
     expect(result.items.length).toBe(6);
   });
 
+  test("read-only tool batches execute concurrently while preserving session output order", async () => {
+    const client = makeClient([
+      {
+        ...makeToolCallResponse("read", '{"path":"a.ts"}', "call_read"),
+        output: [
+          {
+            type: "function_call",
+            id: "fc_read",
+            call_id: "call_read",
+            name: "read",
+            arguments: '{"path":"a.ts"}',
+            status: "completed",
+          },
+          {
+            type: "function_call",
+            id: "fc_inspect",
+            call_id: "call_inspect",
+            name: "inspect_file",
+            arguments: '{"path":"b.ts","startLine":1,"endLine":1}',
+            status: "completed",
+          },
+        ],
+      },
+      makeTextResponse("Read-only tools executed."),
+    ]);
+    const events: string[] = [];
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("read", async () => {
+      events.push("read:start");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      events.push("read:end");
+      return { content: [{ type: "text", text: "read result" }], isError: false };
+    }));
+    tools.register(makeDummyTool("inspect_file", async () => {
+      events.push("inspect:start");
+      events.push("inspect:end");
+      return { content: [{ type: "text", text: "inspect result" }], isError: false };
+    }));
+    const loop = new AgentLoop(client, session, tools, "/test");
+
+    const result = await loop.runTurn("Inspect both files");
+
+    expect(events.indexOf("inspect:start")).toBeLessThan(events.indexOf("read:end"));
+    expect(
+      result.items
+        .filter((item) => item.type === "function_call_output")
+        .map((item) => item.call_id),
+    ).toEqual(["call_read", "call_inspect"]);
+  });
+
   test("сохраняет параллельные DeepSeek tool calls одной группой с reasoning_content", async () => {
     const requests: CreateResponseParams[] = [];
     const responses = [

@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AcpClientToolDelegation } from "../../../src/adapters/acp/client-delegation";
 import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
-import { createDelegatedBashTool, createDelegatedReadTool, createDelegatedWriteTool } from "../../../src/application/tool-delegation";
+import {
+  createDelegatedBashTool,
+  createDelegatedInspectFileTool,
+  createDelegatedLsTool,
+  createDelegatedReadTool,
+  createDelegatedSearchFilesTool,
+  createDelegatedWriteTool,
+} from "../../../src/application/tool-delegation";
 
 describe("ACP client tool delegation", () => {
   test("falls back to local read when the client did not advertise fs support", async () => {
@@ -75,6 +82,37 @@ describe("ACP client tool delegation", () => {
       details: { terminalId: "term_1", exitCode: 0, delegated: true },
     });
     expect(result.content[0]?.text).toBe("start\ndone\n");
+  });
+
+  test("delegates list, inspect, and search through advertised fs capabilities", async () => {
+    const calls: Array<{ method: string; params: JsonValue }> = [];
+    const requester = (method: string, params: JsonValue): JsonValue => {
+      calls.push({ method, params });
+      if (method === "fs/list_directory") return { entries: ["src/", "package.json"], entryCount: 2 };
+      if (method === "fs/inspect_text_file") return { text: "[inspect_file] app.ts lines 2-2 of 3\n2 | ok", totalLines: 3, startLine: 2, endLine: 2 };
+      if (method === "fs/search_files") return { text: "app.ts:2:1: ok", matchCount: 1 };
+      return {};
+    };
+    const delegation = new AcpClientToolDelegation(() => requester);
+    delegation.updateCapabilities({
+      fs: {
+        listDirectory: true,
+        inspectTextFile: true,
+        searchFiles: true,
+      },
+    });
+
+    const lsResult = await createDelegatedLsTool(delegation).execute({ path: ".", limit: 10 }, { cwd: "/repo", sessionId: "session_1" });
+    const inspectResult = await createDelegatedInspectFileTool(delegation).execute({ path: "app.ts", startLine: 2, endLine: 2 }, { cwd: "/repo", sessionId: "session_1" });
+    const searchResult = await createDelegatedSearchFilesTool(delegation).execute({ query: "ok", path: "src", maxMatches: 5 }, { cwd: "/repo", sessionId: "session_1" });
+
+    expect(calls.map((call) => call.method)).toEqual(["fs/list_directory", "fs/inspect_text_file", "fs/search_files"]);
+    expect(calls[0].params).toEqual({ sessionId: "session_1", path: "/repo", limit: 10 });
+    expect(calls[1].params).toEqual({ sessionId: "session_1", path: "/repo/app.ts", startLine: 2, endLine: 2 });
+    expect(calls[2].params).toEqual({ sessionId: "session_1", path: "/repo/src", query: "ok", maxMatches: 5 });
+    expect(lsResult.content[0]?.text).toContain("src/");
+    expect(inspectResult.details).toMatchObject({ delegated: true, totalLines: 3, startLine: 2, endLine: 2 });
+    expect(searchResult.details).toMatchObject({ delegated: true, matchCount: 1 });
   });
 
   test("requires session ids for ACP delegated client requests", async () => {

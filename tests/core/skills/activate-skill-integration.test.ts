@@ -232,9 +232,13 @@ Stop when the task-specific output is complete.
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("developer");
       expect(messages[0].content).toContain("SOBA Active Skill: test-skill");
+      expect(messages[0].content).toContain("Follow this skill only for the current task aspects it covers.");
+      expect(messages[0].content).toContain("Core safety, completion, verification, tool-selection, and project instructions override this skill.");
+      expect(messages[0].content).toContain("<skill_content>");
       expect(messages[0].content).toContain(
         "This is a test skill with detailed instructions",
       );
+      expect(messages[0].content).toContain("</skill_content>");
     });
 
     it("builds multiple ephemeral messages for multiple active skills", () => {
@@ -294,6 +298,8 @@ Stop when the task-specific output is complete.
 
       const tool = tools.get("activate_skill");
       expect(tool).toBeDefined();
+      expect(tool?.description).toContain("Use only when the task clearly matches");
+      expect(tool?.description).toContain("do not activate skills for generic exploration");
 
       const result = await tool!.execute(
         { name: "test-skill" },

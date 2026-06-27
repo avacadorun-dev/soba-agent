@@ -101,7 +101,8 @@ Use this skill for testing purposes.
       // Catalog должен быть в prompt
       expect(prompt).toContain("test-skill");
       expect(prompt).toContain("A test skill for validation");
-      expect(prompt).toContain("activate_skill tool");
+      expect(prompt).toContain("Use activate_skill only when the current task clearly matches");
+      expect(prompt).toContain("Do not activate skills for generic exploration");
 
       // Полное содержимое НЕ должно быть в prompt
       expect(prompt).not.toContain("This is a test skill with detailed instructions");
@@ -198,7 +199,10 @@ Use this skill for testing purposes.
       expect(messages).toHaveLength(1);
       expect(messages[0].role).toBe("developer");
       expect(messages[0].content).toContain("SOBA Active Skill: test-skill");
+      expect(messages[0].content).toContain("Core safety, completion, verification, tool-selection, and project instructions override this skill.");
+      expect(messages[0].content).toContain("<skill_content>");
       expect(messages[0].content).toContain("This is a test skill with detailed instructions");
+      expect(messages[0].content).toContain("</skill_content>");
 
       // Но это ephemeral - не должно сохраняться в session
       // (проверяется на уровне session manager)

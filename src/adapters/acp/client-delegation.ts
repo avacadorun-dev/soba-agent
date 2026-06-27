@@ -46,6 +46,66 @@ export class AcpClientToolDelegation implements RuntimeToolDelegation {
     return writeResultFromResponse(response, input.content);
   }
 
+  async listDirectory(input: { cwd: string; path?: string; limit?: number; sessionId?: string }) {
+    if (!this.capabilities.fsListDirectory) return undefined;
+    const requestClient = this.getRequestClient();
+    if (!requestClient) return undefined;
+    const response = await requestClient("fs/list_directory", jsonObject({
+      sessionId: requiredSessionId(input.sessionId),
+      path: absolutePath(input.cwd, input.path ?? "."),
+      limit: input.limit,
+    }));
+    return listResultFromResponse(response);
+  }
+
+  async inspectTextFile(input: {
+    cwd: string;
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    aroundLine?: number;
+    contextLines?: number;
+    maxLines?: number;
+    sessionId?: string;
+  }) {
+    if (!this.capabilities.fsInspectTextFile) return undefined;
+    const requestClient = this.getRequestClient();
+    if (!requestClient) return undefined;
+    const response = await requestClient("fs/inspect_text_file", jsonObject({
+      sessionId: requiredSessionId(input.sessionId),
+      path: absolutePath(input.cwd, input.path),
+      startLine: input.startLine,
+      endLine: input.endLine,
+      aroundLine: input.aroundLine,
+      contextLines: input.contextLines,
+      maxLines: input.maxLines,
+    }));
+    return inspectResultFromResponse(response);
+  }
+
+  async searchFiles(input: {
+    cwd: string;
+    query: string;
+    path?: string;
+    glob?: string;
+    caseSensitive?: boolean;
+    maxMatches?: number;
+    sessionId?: string;
+  }) {
+    if (!this.capabilities.fsSearchFiles) return undefined;
+    const requestClient = this.getRequestClient();
+    if (!requestClient) return undefined;
+    const response = await requestClient("fs/search_files", jsonObject({
+      sessionId: requiredSessionId(input.sessionId),
+      path: absolutePath(input.cwd, input.path ?? "."),
+      query: input.query,
+      glob: input.glob,
+      caseSensitive: input.caseSensitive,
+      maxMatches: input.maxMatches,
+    }));
+    return searchResultFromResponse(response);
+  }
+
   async runTerminal(input: { cwd: string; command: string; timeout?: number; signal?: AbortSignal; sessionId?: string }) {
     if (!hasTerminalDelegation(this.capabilities)) return undefined;
     const requestClient = this.getRequestClient();
@@ -95,6 +155,14 @@ function requiredSessionId(sessionId: string | undefined): string {
   return sessionId;
 }
 
+function jsonObject(fields: Record<string, JsonValue | undefined>): JsonValue {
+  const result: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
 function textFromResponse(value: JsonValue): string | undefined {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -115,6 +183,44 @@ function writeResultFromResponse(value: JsonValue, content: string): { bytes?: n
   return {
     bytes: typeof value.bytes === "number" ? value.bytes : undefined,
     lines: typeof value.lines === "number" ? value.lines : undefined,
+  };
+}
+
+function listResultFromResponse(value: JsonValue): string | { text?: string; entries?: string[]; entryCount?: number; truncated?: boolean } | undefined {
+  const text = textFromResponse(value);
+  if (text !== undefined) return text;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Array.isArray(value.entries)
+    ? value.entries.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
+  return {
+    entries,
+    entryCount: typeof value.entryCount === "number" ? value.entryCount : entries?.length,
+    truncated: value.truncated === true,
+  };
+}
+
+function inspectResultFromResponse(value: JsonValue): string | { text: string; totalLines?: number; startLine?: number; endLine?: number; truncated?: boolean } | undefined {
+  const text = textFromResponse(value);
+  if (text === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return text;
+  return {
+    text,
+    totalLines: typeof value.totalLines === "number" ? value.totalLines : undefined,
+    startLine: typeof value.startLine === "number" ? value.startLine : undefined,
+    endLine: typeof value.endLine === "number" ? value.endLine : undefined,
+    truncated: value.truncated === true,
+  };
+}
+
+function searchResultFromResponse(value: JsonValue): string | { text: string; matchCount?: number; truncated?: boolean } | undefined {
+  const text = textFromResponse(value);
+  if (text === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return text;
+  return {
+    text,
+    matchCount: typeof value.matchCount === "number" ? value.matchCount : undefined,
+    truncated: value.truncated === true,
   };
 }
 

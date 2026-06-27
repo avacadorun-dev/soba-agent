@@ -29,7 +29,7 @@ export class ToolCallExecutor {
   private readonly permissionBroker: PermissionBroker;
   private readonly toolContext: () => ToolContext;
   private readonly emit: (event: AgentEvent) => void;
-  private activeToolAbortController: AbortController | null = null;
+  private readonly activeToolAbortControllers = new Set<AbortController>();
   private directShellAbortController: AbortController | null = null;
 
   constructor(options: ToolCallExecutorOptions) {
@@ -44,22 +44,25 @@ export class ToolCallExecutor {
       this.directShellAbortController.abort();
       return true;
     }
-    if (!this.activeToolAbortController || this.activeToolAbortController.signal.aborted) {
+    const activeControllers = [...this.activeToolAbortControllers].filter((controller) => !controller.signal.aborted);
+    if (activeControllers.length === 0) {
       return false;
     }
-    this.activeToolAbortController.abort();
+    for (const controller of activeControllers) {
+      controller.abort();
+    }
     return true;
   }
 
   hasActiveTool(): boolean {
     return (
       (this.directShellAbortController !== null && !this.directShellAbortController.signal.aborted) ||
-      (this.activeToolAbortController !== null && !this.activeToolAbortController.signal.aborted)
+      [...this.activeToolAbortControllers].some((controller) => !controller.signal.aborted)
     );
   }
 
   clearActiveTool(): void {
-    this.activeToolAbortController = null;
+    this.activeToolAbortControllers.clear();
   }
 
   async executeToolCall(toolCall: FunctionCallField, turnSignal?: AbortSignal): Promise<ToolExecutionResult> {
@@ -201,7 +204,7 @@ export class ToolCallExecutor {
     turnSignal?: AbortSignal,
   ): Promise<ToolResult> {
     const toolAbortController = new AbortController();
-    this.activeToolAbortController = toolAbortController;
+    this.activeToolAbortControllers.add(toolAbortController);
     const abortToolWithTurn = () => toolAbortController.abort();
     if (turnSignal?.aborted) {
       toolAbortController.abort();
@@ -212,9 +215,7 @@ export class ToolCallExecutor {
       return await tool.execute(args, this.toolContext(), toolAbortController.signal);
     } finally {
       turnSignal?.removeEventListener("abort", abortToolWithTurn);
-      if (this.activeToolAbortController === toolAbortController) {
-        this.activeToolAbortController = null;
-      }
+      this.activeToolAbortControllers.delete(toolAbortController);
     }
   }
 

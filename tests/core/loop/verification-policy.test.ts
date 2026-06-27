@@ -46,6 +46,19 @@ describe("verification policy", () => {
     expect(verificationKindFromCommand("git diff -- docs")).toBe("diff_inspection");
   });
 
+  test("command classifier rejects probes and output-truncated checks as verification evidence", () => {
+    expect(verificationKindFromCommand("bun lint --help 2>&1 | head -20")).toBeNull();
+    expect(verificationKindFromCommand("bun test 2>&1 | tail -80")).toBeNull();
+    expect(verificationKindFromCommand("bun run typecheck --version")).toBeNull();
+    expect(verificationKindFromCommand("which bun")).toBeNull();
+    expect(verificationKindFromCommand("command -v bun")).toBeNull();
+    expect(verificationKindFromCommand("man tsc")).toBeNull();
+    expect(verificationKindFromCommand("cat test.log")).toBeNull();
+    expect(verificationKindFromCommand("tail test.log")).toBeNull();
+    expect(verificationKindFromCommand("grep test src/app.ts")).toBeNull();
+    expect(verificationKindFromCommand("pwd && ls -la")).toBeNull();
+  });
+
   test("prompt inference recognizes common task kinds", () => {
     expect(inferTaskKindFromPrompt("Почини падение тестов")).toBe("test_failure");
     expect(inferTaskKindFromPrompt("Почини lint")).toBe("lint_failure");

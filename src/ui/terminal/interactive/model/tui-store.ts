@@ -21,6 +21,13 @@ import { buildFileTree, readChangeStats } from "../lib/project-info";
 import type { NotificationStore } from "./notification-store";
 import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type QueuedMessage, SIDEBAR_MODES, type SidebarMode, type TuiMessage, type TuiMessageInput } from "./types";
 
+const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "checkpoint", "activate_skill"]);
+const PROJECT_INFO_REFRESH_DELAY_MS = 0;
+
+function shouldRefreshProjectInfoAfterTool(toolName: string): boolean {
+  return !PROJECT_INFO_READ_ONLY_TOOLS.has(toolName);
+}
+
 export class TuiStore {
   readonly options: InteractiveTUIOptions;
   readonly history: CommandHistory;
@@ -90,6 +97,8 @@ export class TuiStore {
   private readonly reasoningTuiIds = new Map<string, number>();
   private finalizedIds = new Set<string>();
   private noodleTimer: ReturnType<typeof setInterval> | null = null;
+  private fileTreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private changesRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private turnActive = false;
   private readonly onExit: () => void;
   private readonly i18n: I18n;
@@ -676,9 +685,11 @@ export class TuiStore {
           }
           return prev;
         });
-        // Defer git diff and file tree refresh to avoid blocking the render loop
-        this.refreshFileTreeDeferred();
-        this.refreshChangesDeferred();
+        // Coalesce project info refreshes for bursts of read-only or parallel tool calls.
+        if (shouldRefreshProjectInfoAfterTool(event.toolName)) {
+          this.refreshFileTreeDeferred();
+          this.refreshChangesDeferred();
+        }
         // Only restart noodle if we are not currently streaming text
         if (!this.streamMessageId) {
           this.startNoodle();
@@ -780,6 +791,10 @@ export class TuiStore {
 
   dispose(): void {
     this.stopNoodle();
+    if (this.fileTreeRefreshTimer) clearTimeout(this.fileTreeRefreshTimer);
+    if (this.changesRefreshTimer) clearTimeout(this.changesRefreshTimer);
+    this.fileTreeRefreshTimer = null;
+    this.changesRefreshTimer = null;
     this.unsubscribeProxy?.();
 
     this.confirmation()?.resolve("deny");
@@ -943,19 +958,23 @@ export class TuiStore {
 
   /** Refresh file tree asynchronously to reflect newly created/deleted files. */
   private refreshFileTreeDeferred(): void {
+    if (this.fileTreeRefreshTimer) return;
     const cwd = this.options.cwd;
-    setTimeout(() => {
+    this.fileTreeRefreshTimer = setTimeout(() => {
+      this.fileTreeRefreshTimer = null;
       this.setFileTree(buildFileTree(cwd));
-    }, 0);
+    }, PROJECT_INFO_REFRESH_DELAY_MS);
   }
 
   /** Refresh git change stats asynchronously to avoid blocking the render loop. */
   private refreshChangesDeferred(): void {
+    if (this.changesRefreshTimer) return;
     const cwd = this.options.cwd;
     // Use setImmediate-like scheduling to defer the blocking git call
-    setTimeout(() => {
+    this.changesRefreshTimer = setTimeout(() => {
+      this.changesRefreshTimer = null;
       this.setChanges(readChangeStats(cwd));
-    }, 0);
+    }, PROJECT_INFO_REFRESH_DELAY_MS);
   }
 
   /**
