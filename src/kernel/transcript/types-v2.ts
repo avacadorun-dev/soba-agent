@@ -162,9 +162,8 @@ export function generateCheckpointId(existing: Set<string>): string {
     const id = `ck_${hex}`;
     if (!existing.has(id)) return id;
   }
-  // Fallback: use crypto for uniqueness
-  const { randomUUID } = require("node:crypto") as { randomUUID: () => string };
-  return `ck_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const fallbackHex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.slice(0, 12).padEnd(12, "0");
+  return `ck_${fallbackHex}`;
 }
 
 /**
