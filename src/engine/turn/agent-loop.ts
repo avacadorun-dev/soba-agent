@@ -97,6 +97,7 @@ import {
   type ProjectContextReader,
   prepareTurnPrompt,
 } from "./turn-prompt-preparation";
+import { evaluateTurnStopGuards } from "./turn-stop-guards";
 import {
   type AgentEvent,
   type AgentLoopOptions,
@@ -641,79 +642,29 @@ export class AgentLoop {
           needsVerification,
           autonomousFollowUps,
         });
-        const limitDecision = loopGuard.checkLimits(iteration);
-        if (limitDecision.action === "stop") {
-          const message = limitDecision.message;
-          emitNarrationOnce("blocked", message);
-          errors.push(createTurnError("timeout", message, iteration));
-          this.emit({
-            type: "loop_guard",
-            timestamp: Date.now(),
-            action: "stop",
-            iteration,
-            message,
-          });
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: message,
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "loop-guard",
-            message,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
-
-        // Force-terminate after too many denials in one turn
-        const MAX_DENIALS_PER_TURN = 3;
-        if (this.state.denialCount >= MAX_DENIALS_PER_TURN) {
-          const message = `Turn terminated: ${this.state.denialCount} operations were denied by security policy in this turn. The user has repeatedly blocked these operations — do not continue.`;
-          emitNarrationOnce("blocked", message);
-          errors.push(createTurnError("security_denial", message, iteration));
-          this.emit({
-            type: "loop_guard",
-            timestamp: Date.now(),
-            action: "stop",
-            iteration,
-            message,
-          });
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: message,
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "security-denial",
-            message,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
-
-        // Check for user cancellation
-        if (this._abortController?.signal.aborted) {
-          const cancelMsg = "Operation cancelled by user";
-          errors.push(createTurnError("cancelled", cancelMsg, iteration));
-          this.emit({
-            type: "turn_stop_reason",
-            timestamp: Date.now(),
-            turn: turnIndex,
-            iteration,
-            reason: "aborted",
-            detail: cancelMsg,
-            hasUsedTools,
-            autonomousFollowUps,
-          });
-          break;
-        }
+        const stopGuardDecision = evaluateTurnStopGuards({
+          loopGuard,
+          errors,
+          turn: turnIndex,
+          iteration,
+          denialCount: this.state.denialCount,
+          signal: this._abortController?.signal,
+          hasUsedTools,
+          autonomousFollowUps,
+          emit: (event) => this.emit(event),
+          emitStopReason: (reason, detail) => {
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              reason,
+              detail,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+          },
+          narrateBlocked: (message) => emitNarrationOnce("blocked", message),
+        });
+        if (stopGuardDecision === "break") break;
 
         // Emit thinking
         this.emit({ type: "thinking", timestamp: Date.now(), active: true });
