@@ -171,12 +171,13 @@ describe("clean architecture pre-gate", () => {
       "../completion/completion-controller",
       "../verification/verification-controller",
       "../context/context-controller",
+      "./model-turn-execution",
       "new ContextController",
       "new PermissionBroker",
       "new ToolCallExecutor",
       "new CompletionController",
       "new VerificationController",
-      "new ModelTurnRunner",
+      "executeModelTurn",
     ];
     const forbiddenOwnershipImports = [
       "../../infrastructure/llm/providers/registry",
