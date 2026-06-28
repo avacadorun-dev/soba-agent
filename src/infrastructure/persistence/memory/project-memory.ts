@@ -1,7 +1,4 @@
 import { join, resolve } from "node:path";
-import { CapsuleStore } from "./capsule-store";
-import { EntityGraphStore } from "./entity-graph";
-import { KnowledgeStore } from "./knowledge-store";
 import type {
   CapsuleRelevanceQuery,
   CapsuleRelevanceResult,
@@ -10,7 +7,10 @@ import type {
   MemoryCapsule,
   MemoryCapsuleInput,
   ProjectMemoryOptions,
-} from "./types";
+} from "../../../engine/memory/types";
+import { CapsuleStore } from "./capsule-store";
+import { EntityGraphStore } from "./entity-graph";
+import { KnowledgeStore } from "./knowledge-store";
 
 export type ProjectMemoryErrorCode = "initialize_failed" | "load_failed" | "save_failed" | "knowledge_store_failed" | "capsule_store_failed" | "graph_store_failed";
 

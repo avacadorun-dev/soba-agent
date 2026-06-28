@@ -31,6 +31,8 @@ const rules: BoundaryRule[] = [
       "src/apps/**",
       "src/adapters/**",
       "src/ui/**",
+      "node:",
+      "bun:",
     ],
   },
   {

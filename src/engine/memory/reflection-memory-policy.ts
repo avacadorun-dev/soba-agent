@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { detectPotentialSecret } from "../../application/capsules/sanitizer";
 import type { DiagnosticReport } from "../recovery";
 import type { ProjectMemorySource } from "./memory-injector";
@@ -141,5 +140,12 @@ function truncateText(text: string, maxLength = MAX_FIELD_LENGTH): string {
 }
 
 function hashLesson(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index));
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString(16).padStart(16, "0").slice(0, 12);
 }

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { KNOWLEDGE_KEYS, type KnowledgeDocument, type KnowledgeKey, type KnowledgeStoreOptions } from "./types";
+import { KNOWLEDGE_KEYS, type KnowledgeDocument, type KnowledgeKey, type KnowledgeStoreOptions } from "../../../engine/memory/types";
 
 interface KnowledgeDefinition {
   key: KnowledgeKey;

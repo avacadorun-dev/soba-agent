@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../../src/engine/memory/memory-injector";
-import { ProjectMemory } from "../../src/engine/memory/project-memory";
 import type { MemoryCapsuleInput } from "../../src/engine/memory/types";
 import { buildSystemPrompt } from "../../src/engine/prompt/system-prompt";
+import { ProjectMemory } from "../../src/infrastructure/persistence/memory/project-memory";
 
 describe("Memory Injector", () => {
   let projectRoot: string;

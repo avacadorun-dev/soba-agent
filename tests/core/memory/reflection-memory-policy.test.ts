@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProjectMemorySource } from "../../../src/engine/memory/memory-injector";
-import { ProjectMemory } from "../../../src/engine/memory/project-memory";
 import {
   addRecoveryReflectionFix,
   createRecoveryReflectionDraft,
@@ -13,6 +12,7 @@ import type { CapsuleRelevanceResult, KnowledgeDocument } from "../../../src/eng
 import { parseVerificationDiagnostics } from "../../../src/engine/recovery";
 import { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { ProjectMemory } from "../../../src/infrastructure/persistence/memory/project-memory";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
 import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
