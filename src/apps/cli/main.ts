@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
-import type { ApprovalDecision, Locale, RuntimeEvent, SobaConfig } from "../../application/cli/public";
+import type { ApprovalDecision, Locale, RuntimeEvent, RuntimeSessionHandle, SobaConfig } from "../../application/cli/public";
 import {APP_VERSION, detectLocale, 
   firstTimeSetup,I18n, isLocale, listSessions, 
   loadConfig,
@@ -324,7 +324,7 @@ async function main() {
           client: context.client,
           session: context.getSession(),
           sessionLifecycle: context.sessionLifecycle,
-          setSession: context.setSession,
+          setSession: (nextSession) => context.setSession(nextSession as SessionManager),
           config: context.config,
           i18n,
           renderer: {
@@ -431,7 +431,7 @@ async function main() {
     trustManager,
     mcpSecretStore,
   } = runtimeComposition;
-  let activeSession = session;
+  let activeSession: RuntimeSessionHandle = session;
 
   // Sound notifications — plays audio on agent events
   const soundNotifier = new SoundNotifier(soundConfig);

@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "../../../src/application/config/types";
-import { SessionLifecycleService } from "../../../src/application/session-lifecycle";
+import type { SessionLifecycleService } from "../../../src/application/session-lifecycle";
 import { type CommandContext, executeCommand } from "../../../src/apps/cli/commands";
+import { PersistentSessionLifecycleService } from "../../../src/infrastructure/persistence/sessions/session-lifecycle-service";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import { I18n } from "../../../src/shared/i18n/i18n";
 
@@ -28,7 +29,7 @@ afterEach(() => {
 
 describe("/sessions command", () => {
   test("list показывает сессии и evidence summary из flight recorder", async () => {
-    const service = new SessionLifecycleService(projectRoot);
+    const service = new PersistentSessionLifecycleService(projectRoot);
     const first = service.createSessionManager({ cwd: projectRoot });
     const second = service.createSessionManager({ cwd: projectRoot });
     second.appendItem({
@@ -54,7 +55,7 @@ describe("/sessions command", () => {
   });
 
   test("resume переключает active SessionManager", async () => {
-    const service = new SessionLifecycleService(projectRoot);
+    const service = new PersistentSessionLifecycleService(projectRoot);
     const first = service.createSessionManager({ cwd: projectRoot });
     const second = service.createSessionManager({ cwd: projectRoot });
     const output: Array<{ type: string; message?: string }> = [];
@@ -71,7 +72,7 @@ describe("/sessions command", () => {
   });
 
   test("delete удаляет неактивную сессию и блокирует активную", async () => {
-    const service = new SessionLifecycleService(projectRoot);
+    const service = new PersistentSessionLifecycleService(projectRoot);
     const first = service.createSessionManager({ cwd: projectRoot });
     const second = service.createSessionManager({ cwd: projectRoot });
     const secondFile = second.getSessionFile();

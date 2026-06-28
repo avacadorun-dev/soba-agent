@@ -4,7 +4,7 @@ import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } f
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import { McpRuntimeController } from "../../application/mcp-runtime-controller";
 import type { ModelDefinition, ProviderDefinition } from "../../application/providers/types";
-import { SessionLifecycleService } from "../../application/session-lifecycle";
+import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import { SkillCatalog } from "../../application/skills/catalog";
 import { SkillDiscovery } from "../../application/skills/discovery";
 import { ProjectTrustStore } from "../../application/skills/project-trust-store";
@@ -41,6 +41,7 @@ import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../i
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
+import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import {
   createDelegatedBashTool,
@@ -86,7 +87,7 @@ export interface RuntimeCommandExecutorFactoryContext {
   skillManager: SkillManager;
   agentLoop: AgentLoop;
   providerRegistry: ProviderRegistry;
-  sessionLifecycle: SessionLifecycleService;
+  sessionLifecycle: PersistentSessionLifecycleService;
   setSession: (session: SessionManager) => void;
   mcpRuntime: McpRuntimeController;
   mcpManager?: McpClientManager;
@@ -118,12 +119,12 @@ export interface SobaRuntimeComposition {
 class AgentLoopRuntimeAdapter implements SobaRuntime {
   private readonly loop: AgentLoop;
   private session: SessionManager;
-  private readonly sessionLifecycle: SessionLifecycleService;
+  private readonly sessionLifecycle: PersistentSessionLifecycleService;
   private readonly providerRegistry: ProviderRegistry;
   private commandExecutor?: RuntimeCommandExecutor;
   private readonly runtimeListeners = new Set<RuntimeEventListener>();
 
-  constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: SessionLifecycleService, providerRegistry: ProviderRegistry) {
+  constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: PersistentSessionLifecycleService, providerRegistry: ProviderRegistry) {
     this.loop = loop;
     this.session = session;
     this.sessionLifecycle = sessionLifecycle;
@@ -464,7 +465,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
     bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
   }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory);
-  const sessionLifecycle = new SessionLifecycleService(cwd);
+  const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
   const commandExecutor = commandExecutorFactory?.({
     client,
