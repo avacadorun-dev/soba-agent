@@ -6,12 +6,12 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
+import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
 import {
-  type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore, 
+  type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
-  type RuntimeCommandMetadata,redactMcpSensitiveText, type SessionManager, syncMcpToolsIntoRegistry, TUI_THEME_NAMES, tryTuiRegistryFallback 
+  type RuntimeCommandMetadata,redactMcpSensitiveText, syncMcpToolsIntoRegistry, TUI_THEME_NAMES, tryTuiRegistryFallback
 } from "../../application/cli/public";
 import type { SlashCommandRegistry } from "../../ui/terminal/interactive/commands/registry";
 import type { SlashCommandContext } from "../../ui/terminal/interactive/commands/types";
@@ -22,9 +22,9 @@ import type { TuiRenderer } from "../../ui/terminal/output/renderer";
 
 export interface CommandContext {
   client: OpenResponsesClient;
-  session: SessionManager;
+  session: RuntimeSessionHandle;
   sessionLifecycle?: SessionLifecycleService;
-  setSession?: (session: SessionManager) => void;
+  setSession?: (session: RuntimeSessionHandle) => void;
   config: SobaConfig;
   i18n: I18n;
   renderer: Pick<TuiRenderer, "emit">;
@@ -357,7 +357,7 @@ function deleteSessionCommand(sessionId: string | undefined, ctx: CommandContext
   });
 }
 
-function activateSession(ctx: CommandContext, session: SessionManager): void {
+function activateSession(ctx: CommandContext, session: RuntimeSessionHandle): void {
   ctx.setSession?.(session);
   ctx.agentLoop?.setSessionManager(session);
 }
