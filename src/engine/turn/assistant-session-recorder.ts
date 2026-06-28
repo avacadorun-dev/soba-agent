@@ -9,16 +9,19 @@ import {
   isInvisibleAssistantMessage,
   outputItemToSessionItem,
 } from "./turn-helpers";
+import type { AgentEvent } from "./types";
 
 export interface AssistantSessionRecorderInput {
   session: SessionPort;
   allItems: ItemParam[];
   assistantMessages: MessageField[];
+  emit: (event: AgentEvent) => void;
 }
 
 export interface AssistantSessionRecorder {
   appendAssistantMessagesToSession: () => void;
   appendToolCallGroupToSession: (toolCalls: FunctionCallField[]) => void;
+  supersedeVisibleAssistantMessages: () => void;
 }
 
 export function createAssistantSessionRecorder(
@@ -48,6 +51,17 @@ export function createAssistantSessionRecorder(
         if (!sessionItem) continue;
         input.session.appendItem(sessionItem as unknown as SessionItemParam);
         input.allItems.push(sessionItem);
+      }
+    },
+    supersedeVisibleAssistantMessages: () => {
+      for (const msg of input.assistantMessages) {
+        if (isInvisibleAssistantMessage(msg)) continue;
+        input.emit({
+          type: "assistant_message_superseded",
+          timestamp: Date.now(),
+          messageId: msg.id,
+          reason: "autonomous_followup",
+        });
       }
     },
   };
