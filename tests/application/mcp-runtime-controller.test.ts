@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { McpRuntimeController } from "../../src/application/mcp-runtime-controller";
 import { TrustManager } from "../../src/application/trust/trust-manager";
 import type { McpClientManager, McpClientManagerStatus } from "../../src/infrastructure/mcp/client-manager";
+import { McpRuntimeController } from "../../src/infrastructure/mcp/runtime-controller";
 import { McpSecretStore } from "../../src/infrastructure/mcp/secret-store";
 import type { McpServerSecurity } from "../../src/infrastructure/mcp/security";
 import type { McpConfig, McpServerConfig } from "../../src/infrastructure/mcp/types";
@@ -20,7 +20,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-describe("McpRuntimeController", () => {
+describe("Infrastructure McpRuntimeController", () => {
   test("reload перечитывает MCP config, останавливает старый manager и пересобирает tools", async () => {
     const registry = new ToolRegistry();
     const managers: FakeReloadManager[] = [];

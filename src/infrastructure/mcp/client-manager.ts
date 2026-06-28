@@ -1,10 +1,23 @@
+import type {
+  McpClientManagerStatus,
+  McpManagedServerAuthStatus,
+  McpManagedServerStatus,
+  McpRemoteAuthCommandResult,
+} from "../../application/mcp-runtime-controller";
 import { McpClient } from "./client";
 import type { McpClientState, McpClientStateSnapshot } from "./client-state";
 import type { McpServerSecurity } from "./security";
 import { McpStdioTransport } from "./stdio-transport";
 import { McpStreamableHttpTransport } from "./streamable-http-transport";
 import type { McpTransportEventHandler } from "./transport";
-import type { McpRemoteAuthConfig, McpServerConfig, McpServerTransport, McpStdioServerConfig, McpStreamableHttpServerConfig } from "./types";
+import type { McpServerConfig, McpStdioServerConfig, McpStreamableHttpServerConfig } from "./types";
+
+export type {
+  McpClientManagerStatus,
+  McpManagedServerAuthStatus,
+  McpManagedServerStatus,
+  McpRemoteAuthCommandResult,
+} from "../../application/mcp-runtime-controller";
 
 const DEFAULT_MAX_CRASH_RESTARTS = 2;
 
@@ -18,55 +31,11 @@ export interface McpClientManagerOptions {
   env?: Record<string, string | undefined>;
 }
 
-export type McpManagedServerAuthType = McpRemoteAuthConfig["type"] | "not_applicable";
-export type McpManagedServerAuthState =
-  | "not_required"
-  | "configured"
-  | "missing_env"
-  | "login_required"
-  | "authenticated"
-  | "auth_required";
-
-export interface McpManagedServerAuthStatus {
-  type: McpManagedServerAuthType;
-  state: McpManagedServerAuthState;
-  detail: string | null;
-  nextAction: string | null;
-}
-
-export interface McpRemoteAuthCommandResult {
-  status: McpManagedServerAuthStatus;
-  message: string;
-  details: string | null;
-}
-
 export interface McpRemoteAuthController {
   cachedStatus?: (server: McpStreamableHttpServerConfig) => McpManagedServerAuthStatus | null;
   status?: (server: McpStreamableHttpServerConfig) => Promise<McpRemoteAuthCommandResult>;
   login?: (server: McpStreamableHttpServerConfig) => Promise<McpRemoteAuthCommandResult>;
   logout?: (server: McpStreamableHttpServerConfig) => Promise<McpRemoteAuthCommandResult>;
-}
-
-export interface McpManagedServerStatus {
-  id: string;
-  name: string;
-  transport?: McpServerTransport;
-  authState?: McpManagedServerAuthStatus;
-  enabled: boolean;
-  started: boolean;
-  state: McpClientState;
-  lifecycle: "modern" | "legacy" | null;
-  protocolVersion: string | null;
-  lastError: string | null;
-  lastErrorCode: string | null;
-  toolsListChanged: boolean;
-  crashRestartCount: number;
-  restartExhausted: boolean;
-}
-
-export interface McpClientManagerStatus {
-  servers: McpManagedServerStatus[];
-  counts: Record<McpClientState, number>;
 }
 
 export class McpClientManagerError extends Error {
