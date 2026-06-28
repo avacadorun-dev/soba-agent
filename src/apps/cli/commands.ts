@@ -6,13 +6,13 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/public";
+import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
 import {
   type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore, 
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
   type RuntimeCommandMetadata,redactMcpSensitiveText, type SessionManager, syncMcpToolsIntoRegistry, TUI_THEME_NAMES, tryTuiRegistryFallback 
-} from "../../application/public";
+} from "../../application/cli/public";
 import type { SlashCommandRegistry } from "../../ui/terminal/interactive/commands/registry";
 import type { SlashCommandContext } from "../../ui/terminal/interactive/commands/types";
 import { notify } from "../../ui/terminal/interactive/lib/notification";
@@ -817,10 +817,10 @@ async function handleSkill(args: string[], ctx: CommandContext): Promise<Command
   }
 
   // Import SkillCommands dynamically to avoid circular dependencies
-  const { SkillCommands } = await import("../../application/public");
-  const { DraftStore } = await import("../../application/public");
-  const { RevisionStore } = await import("../../application/public");
-  const { SkillEvaluator } = await import("../../application/public");
+  const { SkillCommands } = await import("../../application/cli/public");
+  const { DraftStore } = await import("../../application/cli/public");
+  const { RevisionStore } = await import("../../application/cli/public");
+  const { SkillEvaluator } = await import("../../application/cli/public");
 
   const sobaDir = join(homedir(), ".soba");
   const draftStore = new DraftStore({ draftsPath: join(sobaDir, "skill-drafts") });

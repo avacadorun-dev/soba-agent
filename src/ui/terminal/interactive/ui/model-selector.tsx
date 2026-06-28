@@ -10,7 +10,7 @@
 
 import type { MouseEvent, TextareaRenderable } from "@opentui/core";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-import type { TuiThemeName } from "../../../../application/public";
+import type { TuiThemeName } from "../../../../application/ui/public";
 import { formatTokens } from "../lib/format-tool";
 import { getTuiTheme } from "../lib/theme";
 import type { ModelGroup, ModelSelectorEntry, ProviderStore } from "../model/provider-store";

@@ -1,6 +1,6 @@
 import { type Accessor, batch, createSignal, type Setter } from "solid-js";
-import type { AgentEvent, TranslationKey } from "../../../../application/public";
-import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, ProjectTrustStore, TrustManager, type TuiThemeName } from "../../../../application/public";
+import type { AgentEvent, TranslationKey } from "../../../../application/ui/public";
+import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, ProjectTrustStore, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
 import { registerModelCommand } from "../commands/model-command";

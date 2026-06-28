@@ -15,7 +15,7 @@ import {
   parseJsonRpcMessage,
   serializeJsonRpc,
 } from "../../adapters/acp/json-rpc";
-import type { SobaRuntime } from "../../application/public";
+import type { SobaRuntime } from "../../application/acp/public";
 
 export interface AcpServerOptions {
   runtime: SobaRuntime;

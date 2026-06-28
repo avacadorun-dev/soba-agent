@@ -1,4 +1,4 @@
-import type { I18n } from "../../../../application/public";
+import type { I18n } from "../../../../application/ui/public";
 
 function formatArg(value: unknown): string {
   if (typeof value === "string") return value.length > 240 ? `${value.slice(0, 240)}…` : value;

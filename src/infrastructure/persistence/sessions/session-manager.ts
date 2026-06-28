@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { CURRENT_SESSION_VERSION } from "../../../kernel/session/version";
 import type {
   CompactionEntry,
   CompactionSummaryItemParam,
@@ -52,7 +53,7 @@ import { redactFlightRecordData } from "./flight-record";
 
 // ─── Constants ───
 
-export const CURRENT_SESSION_VERSION = 2;
+export { CURRENT_SESSION_VERSION };
 
 /** Characters-per-token estimate for text content */
 const CHARS_PER_TOKEN = 3.5;
