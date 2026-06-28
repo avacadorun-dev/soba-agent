@@ -1,17 +1,8 @@
+export * from "../../composition/cli/public";
 export * from "../../engine/compaction/compaction";
 export * from "../../engine/compaction/context-manager";
 export * from "../../engine/turn/agent-loop";
 export * from "../../engine/turn/types";
-export * from "../../infrastructure/llm/openresponses/openresponses-client";
-export * from "../../infrastructure/llm/providers/client-proxy";
-export * from "../../infrastructure/llm/providers/registry";
-export { McpClientManager, McpClientManagerError } from "../../infrastructure/mcp/client-manager";
-export * from "../../infrastructure/mcp/config";
-export * from "../../infrastructure/mcp/secret-store";
-export * from "../../infrastructure/mcp/security";
-export { syncMcpToolsIntoRegistry } from "../../infrastructure/mcp/tool-registry-sync";
-export * from "../../infrastructure/persistence/sessions/session-manager";
-export * from "../../infrastructure/terminal/sound-notifier";
 export * from "../../kernel/tools/tool-registry";
 export * from "../../kernel/transcript/types";
 export * from "../../kernel/transcript/types-v2";
