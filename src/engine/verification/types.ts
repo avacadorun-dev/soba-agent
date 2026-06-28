@@ -25,8 +25,14 @@ export interface ProjectCommandSet {
   skipped: SkippedProjectCommand[];
 }
 
+export interface ProjectCommandFileReader {
+  readText(relativePath: string): Promise<string | null> | string | null;
+  exists(relativePath: string): Promise<boolean> | boolean;
+}
+
 export interface DetectProjectCommandsOptions {
   cwd: string;
+  projectFiles?: ProjectCommandFileReader;
   projectInstructions?: string[];
   includeFullGate?: boolean;
   includeReleaseGate?: boolean;

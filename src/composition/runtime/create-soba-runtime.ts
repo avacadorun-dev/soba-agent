@@ -467,6 +467,9 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
   }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, {
     read: readProjectContextFiles,
+  }, {
+    readText: (relativePath) => readProjectTextFile(cwd, relativePath),
+    exists: (relativePath) => projectFileExists(cwd, relativePath),
   });
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
@@ -614,6 +617,20 @@ function readProjectContextFiles(cwd: string): Array<{ path: string; content: st
   } catch {
     return [];
   }
+}
+
+function readProjectTextFile(cwd: string, relativePath: string): string | null {
+  const absolutePath = join(cwd, relativePath);
+  if (!existsSync(absolutePath)) return null;
+  try {
+    return readFileSync(absolutePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+function projectFileExists(cwd: string, relativePath: string): boolean {
+  return existsSync(join(cwd, relativePath));
 }
 
 async function usableModelForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<ModelDefinition | null> {
