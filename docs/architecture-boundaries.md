@@ -39,6 +39,7 @@ const rules = [
   {
     from: "src/engine/**",
     deny: [
+      "src/application/**",
       "src/infrastructure/**",
       "src/apps/**",
       "src/adapters/**",

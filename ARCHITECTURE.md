@@ -62,7 +62,8 @@ flowchart TD
 - `src/core` must not exist.
 - `src/kernel` does not import application, engine, infrastructure, apps,
   adapters, UI, `node:`, `bun:`, or OpenTUI.
-- `src/engine` does not import infrastructure, apps, adapters, or UI.
+- `src/engine` does not import application, infrastructure, apps, adapters, or
+  UI.
 - `src/application` does not import apps, adapters, UI, or OpenTUI.
 - `src/infrastructure` does not import apps or UI.
 - `src/apps` and `src/ui` use public application API modules instead of
