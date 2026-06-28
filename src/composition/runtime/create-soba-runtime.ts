@@ -42,24 +42,8 @@ import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
 import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
-import {
-  createDelegatedBashTool,
-  createDelegatedInspectFileTool,
-  createDelegatedLsTool,
-  createDelegatedReadTool,
-  createDelegatedSearchFilesTool,
-  createDelegatedWriteTool,
-} from "../../infrastructure/tools/delegation";
-import { bashTool } from "../../infrastructure/tools/local/bash";
-import { checkpointTool } from "../../infrastructure/tools/local/checkpoint";
-import { editTool } from "../../infrastructure/tools/local/edit";
-import { inspectFileTool } from "../../infrastructure/tools/local/inspect-file";
-import { lsTool } from "../../infrastructure/tools/local/ls";
-import { createMemoryTools } from "../../infrastructure/tools/local/memory-tools";
-import { readTool } from "../../infrastructure/tools/local/read";
-import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
-import { writeTool } from "../../infrastructure/tools/local/write";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
+import { createToolStack } from "./create-tool-stack";
 import { createProjectCommandFileReader, createProjectContextReader } from "./project-files";
 
 export interface RuntimeFactoryInput {
@@ -316,20 +300,6 @@ function emptyCommandTurnResult(): TurnResult {
   };
 }
 
-function registerBuiltInTools(registry: ToolRegistry, delegation?: RuntimeToolDelegation): void {
-  registry.register(delegation ? createDelegatedReadTool(delegation) : readTool);
-  registry.register(delegation ? createDelegatedWriteTool(delegation) : writeTool);
-  registry.register(delegation ? createDelegatedBashTool(delegation) : bashTool);
-  registry.register(editTool);
-  registry.register(delegation ? createDelegatedLsTool(delegation) : lsTool);
-  registry.register(delegation ? createDelegatedSearchFilesTool(delegation) : searchFilesTool);
-  registry.register(delegation ? createDelegatedInspectFileTool(delegation) : inspectFileTool);
-  registry.register(checkpointTool);
-  for (const memoryTool of createMemoryTools()) {
-    registry.register(memoryTool);
-  }
-}
-
 export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<SobaRuntimeComposition> {
   const {
     cwd,
@@ -380,8 +350,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     providerRegistry.setBaseUrl(client.getActiveProviderId(), explicitBaseUrlOverride);
   }
 
-  const tools = new ToolRegistry();
-  registerBuiltInTools(tools, toolDelegation);
+  const tools = createToolStack(toolDelegation);
 
   const projectMemory = new ProjectMemory({ projectRoot: cwd });
   projectMemory.initialize();
