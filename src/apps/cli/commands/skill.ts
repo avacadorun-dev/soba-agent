@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { CommandResult, PermissionMode } from "../../../application/cli/public";
-import { ProjectTrustStore } from "../../../application/cli/public";
+import { executeProjectTrustCommand } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export async function handleSkill(args: string[], ctx: CommandContext): Promise<CommandResult> {
@@ -39,7 +39,7 @@ export async function handleSkill(args: string[], ctx: CommandContext): Promise<
     draftStore,
     revisionStore,
     evaluator,
-    catalog: ctx.skillManager["catalog"],
+    catalog: ctx.skillManager.catalog,
     userSkillsPath: join(sobaDir, "skills"),
     projectSkillsPath: join(process.cwd(), ".soba", "skills"),
   });
@@ -178,7 +178,13 @@ export async function handleSkill(args: string[], ctx: CommandContext): Promise<
 }
 
 export async function handleProjectTrust(args: string[], ctx: CommandContext): Promise<CommandResult> {
-  if (!ctx.skillManager) {
+  const view = executeProjectTrustCommand({
+    args,
+    skillManager: ctx.skillManager,
+    projectPath: ctx.session.getCwd(),
+  });
+
+  if (view.kind === "not_configured") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -187,9 +193,7 @@ export async function handleProjectTrust(args: string[], ctx: CommandContext): P
     return { handled: true };
   }
 
-  const subcommand = args[0]?.toLowerCase();
-
-  if (!subcommand) {
+  if (view.kind === "usage") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -198,99 +202,62 @@ export async function handleProjectTrust(args: string[], ctx: CommandContext): P
     return { handled: true };
   }
 
-  const trustStore = ctx.skillManager["trustStore"];
-  const projectIdentity = ProjectTrustStore.computeProjectIdentity(process.cwd());
+  if (view.kind === "status") {
+    const lines = [
+      ctx.i18n.t("command.projectTrust.status.title"),
+      ctx.i18n.t("command.projectTrust.status.root", { root: view.canonicalRoot }),
+    ];
 
-  switch (subcommand) {
-    case "status": {
-      const isTrusted = trustStore.isTrusted(projectIdentity);
-      const record = trustStore.getRecord(projectIdentity);
-
-      const lines = [
-        ctx.i18n.t("command.projectTrust.status.title"),
-        ctx.i18n.t("command.projectTrust.status.root", { root: projectIdentity.canonicalRoot }),
-      ];
-
-      if (projectIdentity.gitCommonDir) {
-        lines.push(ctx.i18n.t("command.projectTrust.status.gitDir", { gitDir: projectIdentity.gitCommonDir }));
-      }
-
-      lines.push(
-        ctx.i18n.t("command.projectTrust.status.trusted", {
-          trusted: ctx.i18n.t(isTrusted ? "general.yes" : "general.no"),
-        }),
-      );
-
-      if (record) {
-        lines.push(ctx.i18n.t("command.projectTrust.status.trustedAt", { date: record.trustedAt }));
-        lines.push(ctx.i18n.t("command.projectTrust.status.fingerprint", { fp: record.skillsFingerprint.slice(0, 16) }));
-      }
-
-      ctx.renderer.emit({
-        type: "info",
-        timestamp: Date.now(),
-        message: lines.join("\n"),
-      });
-      break;
+    if (view.gitCommonDir) {
+      lines.push(ctx.i18n.t("command.projectTrust.status.gitDir", { gitDir: view.gitCommonDir }));
     }
 
-    case "approve": {
-      const discovery = ctx.skillManager["discovery"];
-      const fingerprint = discovery.computeFingerprint(projectIdentity.canonicalRoot);
+    lines.push(
+      ctx.i18n.t("command.projectTrust.status.trusted", {
+        trusted: ctx.i18n.t(view.trusted ? "general.yes" : "general.no"),
+      }),
+    );
 
-      const isTrusted = trustStore.isTrusted(projectIdentity);
-
-      if (isTrusted) {
-        trustStore.updateFingerprint(projectIdentity, fingerprint);
-        ctx.renderer.emit({
-          type: "info",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.projectTrust.approve.updated"),
-        });
-      } else {
-        trustStore.approve(projectIdentity, fingerprint);
-        ctx.renderer.emit({
-          type: "info",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.projectTrust.approve.approved"),
-        });
-      }
-
-      ctx.skillManager.refresh();
-      ctx.renderer.emit({ type: "trust_changed", trusted: true, timestamp: Date.now() });
-      break;
+    if (view.trustedAt && view.skillsFingerprint) {
+      lines.push(ctx.i18n.t("command.projectTrust.status.trustedAt", { date: view.trustedAt }));
+      lines.push(ctx.i18n.t("command.projectTrust.status.fingerprint", { fp: view.skillsFingerprint.slice(0, 16) }));
     }
 
-    case "revoke": {
-      const revoked = trustStore.revoke(projectIdentity);
-
-      if (revoked) {
-        ctx.renderer.emit({
-          type: "info",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.projectTrust.revoke.revoked"),
-        });
-
-        ctx.skillManager.refresh();
-        ctx.renderer.emit({ type: "trust_changed", trusted: false, timestamp: Date.now() });
-      } else {
-        ctx.renderer.emit({
-          type: "error",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.projectTrust.revoke.notTrusted"),
-        });
-      }
-      break;
-    }
-
-    default:
-      ctx.renderer.emit({
-        type: "error",
-        timestamp: Date.now(),
-        message: ctx.i18n.t("command.projectTrust.unknownSubcommand", { subcommand }),
-      });
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: lines.join("\n"),
+    });
+    return { handled: true };
   }
 
+  if (view.kind === "approved") {
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: ctx.i18n.t(view.updated ? "command.projectTrust.approve.updated" : "command.projectTrust.approve.approved"),
+    });
+    ctx.renderer.emit({ type: "trust_changed", trusted: true, timestamp: Date.now() });
+    return { handled: true };
+  }
+
+  if (view.kind === "revoked") {
+    ctx.renderer.emit({
+      type: view.revoked ? "info" : "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t(view.revoked ? "command.projectTrust.revoke.revoked" : "command.projectTrust.revoke.notTrusted"),
+    });
+    if (view.revoked) {
+      ctx.renderer.emit({ type: "trust_changed", trusted: false, timestamp: Date.now() });
+    }
+    return { handled: true };
+  }
+
+  ctx.renderer.emit({
+    type: "error",
+    timestamp: Date.now(),
+    message: ctx.i18n.t("command.projectTrust.unknownSubcommand", { subcommand: view.subcommand }),
+  });
   return { handled: true };
 }
 
