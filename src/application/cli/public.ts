@@ -12,6 +12,7 @@ export * from "../../shared/version";
 export * from "../capsules";
 export * from "../command-service";
 export * from "../commands/capsule";
+export * from "../commands/compact";
 export * from "../commands/general";
 export * from "../commands/mcp";
 export * from "../commands/permissions";
