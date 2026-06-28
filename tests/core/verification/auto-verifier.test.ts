@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TrustManager } from "../../../src/application/trust/trust-manager";
 import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
 import { runAutoVerifier } from "../../../src/engine/verification/auto-verifier";
+import type { ProjectCommandFileReader } from "../../../src/engine/verification/types";
 import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("auto verifier", () => {
@@ -28,6 +29,7 @@ describe("auto verifier", () => {
         bashTool: makeBashTool(executed),
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
       });
 
       expect(result.executions.map((execution) => execution.call.args.command)).toEqual([
@@ -53,6 +55,7 @@ describe("auto verifier", () => {
         bashTool: makeBashTool([]),
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
       });
 
       expect(result.executions).toEqual([]);
@@ -74,6 +77,7 @@ describe("auto verifier", () => {
         bashTool: makeBashTool([], true),
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
       });
 
       const entries = ledger.getEntries();
@@ -98,6 +102,7 @@ describe("auto verifier", () => {
         bashTool: makeBashTool([]),
         toolContext: { cwd },
         trustManager,
+        projectFiles: testProjectFiles(cwd),
       });
 
       expect(result.executions).toEqual([]);
@@ -124,6 +129,7 @@ describe("auto verifier", () => {
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
         attemptedFingerprints,
+        projectFiles: testProjectFiles(cwd),
       });
       const second = await runAutoVerifier({
         cwd,
@@ -134,6 +140,7 @@ describe("auto verifier", () => {
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
         attemptedFingerprints,
+        projectFiles: testProjectFiles(cwd),
       });
 
       expect(executed).toEqual(["bun test"]);
@@ -170,6 +177,26 @@ function makeBashTool(executed: string[], fail = false): ToolDefinition<Record<s
         content: [{ type: "text", text: fail ? "failed" : "passed" }],
         isError: fail,
       };
+    },
+  };
+}
+
+function testProjectFiles(cwd: string): ProjectCommandFileReader {
+  return {
+    async readText(relativePath) {
+      try {
+        return await readFile(join(cwd, relativePath), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async exists(relativePath) {
+      try {
+        await stat(join(cwd, relativePath));
+        return true;
+      } catch {
+        return false;
+      }
     },
   };
 }

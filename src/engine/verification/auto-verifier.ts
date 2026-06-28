@@ -2,7 +2,7 @@ import type { TrustManager } from "../../application/trust/trust-manager";
 import type { ToolDefinition, ToolResult } from "../../kernel/tools/types";
 import type { EvidenceLedger, EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import { detectProjectCommands } from "./project-command-detector";
-import type { ProjectCommand, ProjectCommandKind, SkippedProjectCommand } from "./types";
+import type { ProjectCommand, ProjectCommandFileReader, ProjectCommandKind, SkippedProjectCommand } from "./types";
 import type { TaskKind, VerificationKind } from "./verification-policy";
 import { verificationKindFromCommand } from "./verification-policy";
 
@@ -34,6 +34,7 @@ export interface AutoVerifierOptions {
   bashTool?: ToolDefinition<Record<string, unknown>>;
   toolContext: Parameters<ToolDefinition<Record<string, unknown>>["execute"]>[1];
   trustManager: TrustManager;
+  projectFiles?: ProjectCommandFileReader;
   projectInstructions?: string[];
   includeFullGate?: boolean;
   includeReleaseGate?: boolean;
@@ -78,6 +79,7 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
 
   const detected = await detectProjectCommands({
     cwd: options.cwd,
+    projectFiles: options.projectFiles,
     projectInstructions: options.projectInstructions,
     includeFullGate: options.includeFullGate || options.taskKind === "release_task",
     includeReleaseGate: options.includeReleaseGate,

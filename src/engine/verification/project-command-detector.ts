@@ -1,5 +1,3 @@
-import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
 import type {
   DetectProjectCommandsOptions,
   ProjectCommand,
@@ -19,7 +17,7 @@ const COMMAND_KINDS: ProjectCommandKind[] = ["test", "lint", "typecheck", "build
 
 export async function detectProjectCommands(options: DetectProjectCommandsOptions): Promise<ProjectCommandSet> {
   const commandSet = emptyCommandSet();
-  const packageJson = await readPackageJson(options.cwd);
+  const packageJson = await readPackageJson(options);
   const scripts = packageJson?.scripts ?? {};
   const instructions = options.projectInstructions ?? [];
   const shouldIncludeDeadCode = Boolean(options.includeFullGate || options.includeReleaseGate);
@@ -28,7 +26,7 @@ export async function detectProjectCommands(options: DetectProjectCommandsOption
 
   addInstructionCommands(commandSet, instructions, shouldIncludeDeadCode);
   addPackageCommands(commandSet, scripts, isSobaProject);
-  await addKnownConfigCommands(commandSet, options.cwd);
+  await addKnownConfigCommands(commandSet, options);
   addSobaDefaults(commandSet, isSobaProject);
   addMissingReasons(commandSet);
 
@@ -111,8 +109,11 @@ function addPackageScriptCommand(
   });
 }
 
-async function addKnownConfigCommands(commandSet: ProjectCommandSet, cwd: string): Promise<void> {
-  if (commandSet.lint.length === 0 && (await exists(join(cwd, "biome.json")))) {
+async function addKnownConfigCommands(
+  commandSet: ProjectCommandSet,
+  options: DetectProjectCommandsOptions,
+): Promise<void> {
+  if (commandSet.lint.length === 0 && (await exists(options, "biome.json"))) {
     addCommand(commandSet, {
       kind: "lint",
       command: "bunx biome check .",
@@ -121,7 +122,7 @@ async function addKnownConfigCommands(commandSet: ProjectCommandSet, cwd: string
     });
   }
 
-  if (commandSet.typecheck.length === 0 && (await exists(join(cwd, "tsconfig.json")))) {
+  if (commandSet.typecheck.length === 0 && (await exists(options, "tsconfig.json"))) {
     addCommand(commandSet, {
       kind: "typecheck",
       command: "bunx tsc --noEmit",
@@ -277,21 +278,16 @@ function commandPreference(command: ProjectCommand): number {
   return 10;
 }
 
-async function readPackageJson(cwd: string): Promise<PackageJson | null> {
-  const path = join(cwd, "package.json");
-  if (!(await exists(path))) return null;
+async function readPackageJson(options: DetectProjectCommandsOptions): Promise<PackageJson | null> {
+  if (!(await exists(options, "package.json"))) return null;
 
-  const raw = await readFile(path, "utf8");
+  const raw = await options.projectFiles?.readText("package.json");
+  if (!raw) return null;
   return JSON.parse(raw) as PackageJson;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
+async function exists(options: DetectProjectCommandsOptions, relativePath: string): Promise<boolean> {
+  return (await options.projectFiles?.exists(relativePath)) ?? false;
 }
 
 function emptyCommandSet(): ProjectCommandSet {

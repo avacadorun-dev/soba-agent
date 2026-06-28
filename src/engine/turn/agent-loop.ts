@@ -66,6 +66,7 @@ import { buildSystemPrompt } from "../prompt/system-prompt";
 import { evaluateToolBatch, isMutationToolName } from "../tool-calls/tool-batch-guard";
 import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { AutoVerifierToolCall } from "../verification/auto-verifier";
+import type { ProjectCommandFileReader } from "../verification/types";
 import { VerificationController } from "../verification/verification-controller";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
@@ -477,6 +478,7 @@ export class AgentLoop {
   private autoCompactOverride: { enabled: boolean } | undefined;
   private projectMemory: ProjectMemorySource | undefined;
   private projectContextReader: ProjectContextReader | undefined;
+  private projectCommandFiles: ProjectCommandFileReader | undefined;
   private _abortController: AbortController | null = null;
   private toolExecutor: ToolCallExecutor;
   private state = {
@@ -512,6 +514,7 @@ export class AgentLoop {
     autoCompactOverride?: { enabled: boolean },
     projectMemory?: ProjectMemorySource,
     projectContextReader?: ProjectContextReader,
+    projectCommandFiles?: ProjectCommandFileReader,
   ) {
     this.client = client;
     this.session = session;
@@ -529,6 +532,7 @@ export class AgentLoop {
     this.autoCompactOverride = autoCompactOverride;
     this.projectMemory = projectMemory;
     this.projectContextReader = projectContextReader;
+    this.projectCommandFiles = projectCommandFiles;
     this.contextController = new ContextController({
       contextManager: this.contextManager,
       backgroundScheduler: this.backgroundScheduler,
@@ -1036,6 +1040,7 @@ export class AgentLoop {
           bashTool,
           toolContext: this.createToolContext(),
           trustManager: this.trustManager,
+          projectFiles: this.projectCommandFiles,
           projectInstructions,
           includeFullGate,
           includeReleaseGate: taskKind === "release_task",
