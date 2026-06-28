@@ -1,12 +1,10 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
-import { SkillCatalog } from "../../application/skills/catalog";
-import { SkillDiscovery } from "../../application/skills/discovery";
-import { ProjectTrustStore } from "../../application/skills/project-trust-store";
-import { SkillManager } from "../../application/skills/skill-manager";
+import type { SkillCatalog } from "../../application/skills/catalog";
+import type { ProjectTrustStore } from "../../application/skills/project-trust-store";
+import type { SkillManager } from "../../application/skills/skill-manager";
 import type { RuntimeToolDelegation } from "../../application/tool-delegation";
 import { TrustManager } from "../../application/trust/trust-manager";
 import type {
@@ -48,6 +46,7 @@ import {
   providerHasCredentials,
   usableModelForProvider,
 } from "./create-provider-stack";
+import { createSkillStack } from "./create-skill-stack";
 import { createToolStack } from "./create-tool-stack";
 import { createProjectCommandFileReader, createProjectContextReader } from "./project-files";
 
@@ -339,11 +338,11 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   const projectMemory = new ProjectMemory({ projectRoot: cwd });
   projectMemory.initialize();
 
-  const sobaDir = join(homedir(), ".soba");
+  const homeDir = homedir();
   const trustManager = new TrustManager();
   const { mcpSecretStore, mcpRuntime, mcpManager } = await createMcpStack({
     projectRoot: cwd,
-    homeDir: homedir(),
+    homeDir,
     toolRegistry: tools,
     trustManager,
   });
@@ -376,34 +375,12 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     backgroundTimeoutMs: compactionConfig.backgroundTimeoutMs,
   });
 
-  const trustStore = new ProjectTrustStore({ sobaDir });
-  const skillDiscovery = new SkillDiscovery({
+  const { skillManager, skillCatalog, trustStore } = await createSkillStack({
     projectPath: cwd,
-    userSkillsPath: join(sobaDir, "skills"),
-    bundledSkillsPath: process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills"),
-    trustStore,
+    homeDir,
+    session,
+    toolRegistry: tools,
   });
-  const skillCatalog = new SkillCatalog({ discovery: skillDiscovery });
-  const skillManager = new SkillManager({
-    catalog: skillCatalog,
-    discovery: skillDiscovery,
-    trustStore,
-  });
-  skillManager.refresh();
-
-  if (skillCatalog.getModelInvocable().length > 0) {
-    const { createActivateSkillTool } = await import("../../infrastructure/tools/local/activate-skill");
-    tools.register(createActivateSkillTool({
-      catalog: skillCatalog,
-      onActivate: (ref) => {
-        skillManager.activate(ref.name);
-        session.appendSkillActivation({ action: "activate", skill: ref });
-      },
-      isActive: (name, revision) => skillManager.getActiveSkills().some(
-        (skill) => skill.name === name && skill.revision === revision,
-      ),
-    }));
-  }
 
   const useStreaming = noStream ? false : stream || interactive;
   const agentLoop = new AgentLoop(client, session, tools, cwd, {
