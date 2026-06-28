@@ -18,6 +18,7 @@ export * from "../commands/mcp";
 export * from "../commands/permissions";
 export * from "../commands/project-trust";
 export * from "../commands/session";
+export * from "../commands/skill";
 export * from "../config/config-loader";
 export * from "../config/types";
 export * from "../mcp-runtime-controller";
