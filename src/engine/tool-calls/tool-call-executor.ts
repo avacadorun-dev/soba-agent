@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import { createToolErrorResult } from "../../kernel/tools/errors";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
@@ -11,6 +10,7 @@ export interface ToolCallExecutorOptions {
   permissionBroker: PermissionBroker;
   toolContext: () => ToolContext;
   emit: (event: AgentEvent) => void;
+  createId?: () => string;
 }
 
 export interface ToolExecutionResult {
@@ -29,6 +29,7 @@ export class ToolCallExecutor {
   private readonly permissionBroker: PermissionBroker;
   private readonly toolContext: () => ToolContext;
   private readonly emit: (event: AgentEvent) => void;
+  private readonly createId: () => string;
   private readonly activeToolAbortControllers = new Set<AbortController>();
   private directShellAbortController: AbortController | null = null;
 
@@ -37,6 +38,7 @@ export class ToolCallExecutor {
     this.permissionBroker = options.permissionBroker;
     this.toolContext = options.toolContext;
     this.emit = options.emit;
+    this.createId = options.createId ?? createRuntimeId;
   }
 
   abortActiveTool(): boolean {
@@ -153,7 +155,7 @@ export class ToolCallExecutor {
       throw new Error('Tool "bash" is not registered');
     }
 
-    const toolCall = { call_id: `user_shell_${randomUUID()}`, name: "bash" };
+    const toolCall = { call_id: `user_shell_${this.createId()}`, name: "bash" };
     const startTime = Date.now();
     const controller = new AbortController();
     this.directShellAbortController = controller;
@@ -249,4 +251,8 @@ function safeParseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function createRuntimeId(): string {
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
