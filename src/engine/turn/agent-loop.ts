@@ -16,14 +16,12 @@ import type { SkillManager } from "../../application/skills/skill-manager";
 import { TrustManager } from "../../application/trust/trust-manager";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import type {
-  FunctionCallItemParam,
   ItemParam,
   ResponseResource,
   Usage,
 } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointEvent, extractCheckpointEvent } from "../../kernel/tools/checkpoint";
-import { createToolErrorResult } from "../../kernel/tools/errors";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
 import { toolResultToOutputItem } from "../../kernel/tools/types";
@@ -62,6 +60,7 @@ import {
   turnStopDebugData,
   turnStopReasonEvent,
 } from "./agent-loop-event-recording";
+import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
@@ -71,6 +70,7 @@ import {
   isNonTrivialPrompt,
   type WorkingNarrationEventType,
 } from "./narration";
+import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import {
   autoVerifierTimeoutSeconds,
@@ -85,7 +85,6 @@ import {
   getAutonomousFollowUpReason,
   hasVisibleAssistantText,
   isInvisibleAssistantMessage,
-  outputItemToSessionItem,
   safeParseArgs,
   summarizeMutationToolCall,
   toCheckpointArgs,
@@ -750,24 +749,14 @@ export class AgentLoop {
           emit: (event) => this.emit(event),
         });
 
-        let assistantMessagesStored = false;
-        const appendAssistantMessagesToSession = () => {
-          if (assistantMessagesStored) return;
-          assistantMessagesStored = true;
-          for (const msg of assistantMessages) {
-            // Do not feed an invisible response back to the model. Some
-            // OpenAI-compatible reasoning models otherwise continue the same
-            // unfinished response instead of following the recovery instruction.
-            if (isInvisibleAssistantMessage(msg)) {
-              continue;
-            }
-            const sessionItem = outputItemToSessionItem(msg);
-            if (sessionItem) {
-              this.session.appendItem(sessionItem as unknown as SessionItemParam);
-              allItems.push(sessionItem);
-            }
-          }
-        };
+        const {
+          appendAssistantMessagesToSession,
+          appendToolCallGroupToSession,
+        } = createAssistantSessionRecorder({
+          session: this.session,
+          allItems,
+          assistantMessages,
+        });
 
         const supersedeVisibleAssistantMessages = () => {
           for (const msg of assistantMessages) {
@@ -1064,103 +1053,40 @@ export class AgentLoop {
 
         // Store the complete assistant tool-call group before any tool outputs.
         // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
-        appendAssistantMessagesToSession();
-        for (const toolCall of toolCalls) {
-          const fcItem: FunctionCallItemParam = {
-            type: "function_call",
-            call_id: toolCall.call_id,
-            name: toolCall.name,
-            arguments: toolCall.arguments,
-            id: toolCall.id,
-            status: "completed",
-          };
-          if (toolCall.reasoning_content)
-            fcItem.reasoning_content = toolCall.reasoning_content;
-          this.session.appendItem(fcItem);
-          allItems.push(fcItem);
-        }
+        appendToolCallGroupToSession(toolCalls);
 
         const batchDecision = evaluateToolBatch(toolCalls);
         if (batchDecision.action === "reject") {
-          emitNarrationOnce("recovery", batchDecision.message);
-          const iterationOutcomes: ToolOutcome[] = [];
-          for (const toolCall of toolCalls) {
-            hasUsedTools = true;
-            const result = createToolErrorResult({
-              code: batchDecision.code,
-              category: "validation",
-              message: batchDecision.message,
-              nextAction: "Run only the mutation now; after observing that result, call the verification tool separately.",
-              fingerprint: `validation:${batchDecision.code}`,
-            });
-            this.emit({
-              type: "tool_call_start",
-              timestamp: Date.now(),
-              toolCallId: toolCall.call_id,
-              toolName: toolCall.name,
-              args: safeParseArgs(toolCall.arguments),
-            });
-            this.emitToolResultAndEnd(toolCall, result, Date.now());
-            recordToolOutcome(
-              errors,
-              successfulToolCallIds,
-              toolCall,
-              true,
-              extractToolResultText(result),
-              iteration,
-            );
-            evidenceLedger.recordToolOutcome({
-              toolCallId: toolCall.call_id,
-              toolName: toolCall.name,
-              arguments: toolCall.arguments,
-              isError: true,
-              output: extractToolResultText(result),
-              iteration,
-            });
-            const outputItem = toolResultToOutputItem(result, toolCall.call_id, toolCall.name);
-            this.session.appendItem(outputItem);
-            allItems.push(outputItem);
-            iterationOutcomes.push({
-              toolName: toolCall.name,
-              arguments: toolCall.arguments,
-              result: extractToolResultText(result),
-              isError: true,
-              error: result.error,
-            });
-          }
-
-          const progressDecision = loopGuard.observeToolIteration(iterationOutcomes);
-          if (progressDecision.action === "recover") {
-            emitNarrationOnce("recovery", progressDecision.message);
-            this.emit({
-              type: "loop_guard",
-              timestamp: Date.now(),
-              action: "recover",
-              iteration,
-              message: progressDecision.message,
-            });
-            const recoveryItem = createUserItem(progressDecision.message);
-            this.session.appendItem(recoveryItem as unknown as SessionItemParam);
-            allItems.push(recoveryItem as unknown as ItemParam);
-            iteration++;
-            continue;
-          }
-          if (progressDecision.action === "stop") {
-            emitNarrationOnce("blocked", progressDecision.message);
-            errors.push(createTurnError("timeout", progressDecision.message, iteration));
-            this.emit({
-              type: "turn_error",
-              timestamp: Date.now(),
-              error: progressDecision.message,
-            });
-            this._emitStopReason(
-              turnIndex,
-              iteration,
-              "loop-guard",
-              progressDecision.message,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
+          hasUsedTools = true;
+          const rejectedBatchResult = handleRejectedToolBatch({
+            batchDecision,
+            toolCalls,
+            session: this.session,
+            allItems,
+            errors,
+            successfulToolCallIds,
+            evidenceLedger,
+            loopGuard,
+            iteration,
+            emit: (event) => this.emit(event),
+            emitToolResultAndEnd: (toolCall, result, startedAt) =>
+              this.emitToolResultAndEnd(toolCall, result, startedAt),
+            emitStopReason: (reason, detail) => {
+              this._emitStopReason(
+                turnIndex,
+                iteration,
+                reason,
+                detail,
+                hasUsedTools,
+                autonomousFollowUps,
+              );
+            },
+            narrate: (eventType, message, evidenceIds = []) => {
+              emitNarrationOnce(eventType, message, evidenceIds);
+            },
+          });
+          hasUsedTools = hasUsedTools || rejectedBatchResult.usedTools;
+          if (rejectedBatchResult.action === "break") {
             break;
           }
 
