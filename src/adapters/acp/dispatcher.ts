@@ -7,8 +7,8 @@ import type {
   RuntimeSessionInfo,
   SobaRuntime,
   TurnResult,
-} from "../../application/public";
-import { type ParsedEvidenceHandoff, splitEvidenceHandoff } from "../../application/public";
+} from "../../application/acp/public";
+import { type ParsedEvidenceHandoff, splitEvidenceHandoff } from "../../application/acp/public";
 import { ACP_LIFECYCLE_FEATURES, ACP_PROTOCOL_VERSION, type AcpFeatureSet, buildAgentCapabilities } from "./capabilities";
 import { type AcpClientCapabilities, EMPTY_ACP_CLIENT_CAPABILITIES, parseAcpClientCapabilities } from "./client-capabilities";
 import {

@@ -12,10 +12,10 @@
  */
 
 import { batch, createSignal } from "solid-js";
-import type { ModelDefinition, OpenResponsesClientProxy, ProviderDefinition, TranslationKey } from "../../../../application/public";
+import type { ModelDefinition, OpenResponsesClientProxy, ProviderDefinition, TranslationKey } from "../../../../application/ui/public";
 import { 
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-  DEFAULT_SYNTHETIC_MAX_OUTPUT,findBuiltinProvider, I18n, ProviderRegistry } from "../../../../application/public";
+  DEFAULT_SYNTHETIC_MAX_OUTPUT,findBuiltinProvider, I18n, ProviderRegistry } from "../../../../application/ui/public";
 import type { NotificationStore } from "./notification-store";
 
 export type ModelSelectorModel = ModelDefinition & {

@@ -6,7 +6,7 @@
  * Clean status bar with token usage.
  */
 
-import type { AgentEvent, I18n } from "../../../application/public";
+import type { AgentEvent, I18n } from "../../../application/ui/public";
 import { formatToolSummary } from "../interactive/lib/format-tool";
 import { bold, wrapText } from "./colors";
 import { Spinner } from "./spinner";

@@ -61,8 +61,6 @@ const rules: BoundaryRule[] = [
 
 const publicApplicationImports = new Set([
   "src/application/public",
-  "src/application/runtime/public",
-  "src/application/commands/public",
 ]);
 
 function walkTypescriptFiles(root: string): string[] {
@@ -122,7 +120,11 @@ function violatesPublicApplicationApi(resolved: string): boolean {
   if (resolved.startsWith("src/engine/")) return true;
   if (resolved.startsWith("src/infrastructure/")) return true;
   if (!resolved.startsWith("src/application/")) return false;
-  return !publicApplicationImports.has(resolved);
+  return !isPublicApplicationApi(resolved);
+}
+
+function isPublicApplicationApi(resolved: string): boolean {
+  return publicApplicationImports.has(resolved) || /^src\/application\/(?:[^/]+\/)*public$/.test(resolved);
 }
 
 const violations: string[] = [];

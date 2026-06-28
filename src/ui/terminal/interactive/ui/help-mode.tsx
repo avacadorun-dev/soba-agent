@@ -8,7 +8,7 @@
  */
 
 import { For } from "solid-js";
-import { RUNTIME_COMMANDS } from "../../../../application/public";
+import { RUNTIME_COMMANDS } from "../../../../application/ui/public";
 import { slashCommandRegistry } from "../commands/registry";
 import { formatKeyBindings } from "../lib/keymap";
 import { getTuiTheme } from "../lib/theme";

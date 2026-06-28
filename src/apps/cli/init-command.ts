@@ -2,8 +2,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import type { I18n } from "../../application/public";
-import { firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, ProjectTrustStore, SkillDiscovery, validateConfig } from "../../application/public";
+import type { I18n } from "../../application/cli/public";
+import { firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, ProjectTrustStore, SkillDiscovery, validateConfig } from "../../application/cli/public";
 
 export interface InitCommandOptions {
   yes: boolean;

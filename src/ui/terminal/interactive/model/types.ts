@@ -1,4 +1,4 @@
-import type { AgentLoop, CommandResult, I18n, OpenResponsesClientProxy, ProjectTrustStore, SobaRuntime, TuiThemeName } from "../../../../application/public";
+import type { AgentLoop, CommandResult, I18n, OpenResponsesClientProxy, ProjectTrustStore, SobaRuntime, TuiThemeName } from "../../../../application/ui/public";
 import type { TuiEvidenceSummary } from "../lib/evidence-summary";
 import type { NotificationStore } from "./notification-store";
 import type { ProviderStore } from "./provider-store";
