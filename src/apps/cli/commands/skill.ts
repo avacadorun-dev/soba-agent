@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { CommandResult, PermissionMode } from "../../../application/cli/public";
-import { executeProjectTrustCommand } from "../../../application/cli/public";
+import type { CommandResult } from "../../../application/cli/public";
+import { executePermissionsCommand, executeProjectTrustCommand } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export async function handleSkill(args: string[], ctx: CommandContext): Promise<CommandResult> {
@@ -263,7 +263,9 @@ export async function handleProjectTrust(args: string[], ctx: CommandContext): P
 
 export function handlePermissions(args: string[], ctx: CommandContext): CommandResult {
   const trustManager = ctx.trustManager ?? ctx.agentLoop?.getTrustManager();
-  if (!trustManager) {
+  const view = executePermissionsCommand({ args, controller: trustManager });
+
+  if (view.kind === "not_configured" || view.kind === "usage") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -272,19 +274,16 @@ export function handlePermissions(args: string[], ctx: CommandContext): CommandR
     return { handled: true };
   }
 
-  const mode = args[0]?.toLowerCase();
-  if (!mode) {
+  if (view.kind === "current") {
     ctx.renderer.emit({
       type: "info",
       timestamp: Date.now(),
-      message: ctx.i18n.t("tui.permissions.current", { mode: trustManager.getPermissionMode() }),
+      message: ctx.i18n.t("tui.permissions.current", { mode: view.mode }),
     });
     return { handled: true };
   }
 
-  if (mode === "clear") {
-    trustManager.clearSessionApprovals();
-    trustManager.setPermissionMode("ask");
+  if (view.kind === "cleared") {
     ctx.renderer.emit({
       type: "info",
       timestamp: Date.now(),
@@ -293,24 +292,10 @@ export function handlePermissions(args: string[], ctx: CommandContext): CommandR
     return { handled: true };
   }
 
-  if (isPermissionMode(mode)) {
-    trustManager.setPermissionMode(mode);
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("tui.permissions.changed", { mode }),
-    });
-    return { handled: true };
-  }
-
   ctx.renderer.emit({
-    type: "error",
+    type: "info",
     timestamp: Date.now(),
-    message: ctx.i18n.t("tui.permissions.usage"),
+    message: ctx.i18n.t("tui.permissions.changed", { mode: view.mode }),
   });
   return { handled: true };
-}
-
-function isPermissionMode(value: string): value is PermissionMode {
-  return value === "ask" || value === "repo" || value === "full";
 }
