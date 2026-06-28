@@ -34,7 +34,7 @@ import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
 import { ContextController } from "../context/context-controller";
-import { EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
+import { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
@@ -56,7 +56,7 @@ import {
 import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { handleFinishCall } from "./finish-call-handler";
-import { LoopGuard, type ToolOutcome } from "./loop-guard";
+import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import {
   createWorkingNarration,
@@ -67,19 +67,15 @@ import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { decideResponseContinuation } from "./response-continuation-decision";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
-import {
-  observeToolExecutionResult,
-  type ToolExecutionObservationState,
-} from "./tool-execution-observer";
+import { executeObservedToolBatch } from "./tool-batch-execution";
+import type { ToolExecutionObservationState } from "./tool-execution-observer";
 import { decideAfterToolIteration } from "./tool-iteration-decision";
 import {
   autoVerifierTimeoutSeconds,
-  canExecuteReadOnlyBatchInParallel,
   checkpointEventToPlanState,
   createLoopErrorResponse,
   createUserItem,
   FINISH_TOOL_NAME,
-  safeParseArgs,
   wantsFullVerification,
 } from "./turn-helpers";
 import {
@@ -915,9 +911,6 @@ export class AgentLoop {
           continue;
         }
 
-        // Execute tool calls
-        const iterationOutcomes: ToolOutcome[] = [];
-        const checkpointEvents: CheckpointEvent[] = [];
         let fixUntilGreenFollowUp: string | null = null;
         let fixUntilGreenStop: string | null = null;
         const toolObservationState: ToolExecutionObservationState = {
@@ -928,76 +921,44 @@ export class AgentLoop {
           fixUntilGreenFollowUp,
           fixUntilGreenStop,
         };
-        const parallelReadOnlyExecutions = canExecuteReadOnlyBatchInParallel(toolCalls)
-          ? await Promise.all(
-              toolCalls.map((toolCall) => {
-                hasUsedTools = true;
-                return this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
-              }),
-            )
-          : null;
-        for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex += 1) {
-          const toolCall = toolCalls[toolCallIndex];
-          if (!toolCall) continue;
-          hasUsedTools = true;
-
-          const narrationArgs = safeParseArgs(toolCall.arguments);
-
-          if (toolCall.name === "edit" || toolCall.name === "write") {
-            emitNarrationOnce(
-              "edit_intent",
-              `Preparing a scoped ${toolCall.name} change before running verification.`,
-            );
-          } else if (toolCall.name === "bash" && typeof narrationArgs.command === "string") {
-            const command = narrationArgs.command.toLowerCase();
-            if (isVerificationCommand(command)) {
-              emitNarrationOnce("verification", "Running a project verification command.", [toolCall.call_id]);
-            }
-          }
-
-          const execution = parallelReadOnlyExecutions
-            ? parallelReadOnlyExecutions[toolCallIndex]
-            : await this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
-          if (!execution) continue;
-          const observation = observeToolExecutionResult({
-            toolCall,
-            execution,
-            session: this.session,
-            allItems,
-            errors,
-            successfulToolCallIds,
-            verificationEvidenceCallIds,
-            evidenceLedger,
-            verificationController,
-            skillManager: this.skillManager,
-            projectMemory: this.projectMemory,
-            taskText: userText,
-            iteration,
-            state: toolObservationState,
-            recordDenial: (description) => {
-              this.state.denialCount++;
-              this.state.lastDeniedOperation = description;
-            },
-            emit: (event) => this.emit(event),
-            narrate: (eventType, message, evidenceIds = []) => {
-              emitNarrationOnce(eventType, message, evidenceIds);
-            },
-          });
-          iterationOutcomes.push(observation.outcome);
-          if (observation.checkpointEvent) {
-            checkpointEvents.push(observation.checkpointEvent);
-            checkpointState = checkpointEventToPlanState(observation.checkpointEvent);
-          }
+        const toolBatchExecution = await executeObservedToolBatch({
+          toolCalls,
+          toolExecutor: this.toolExecutor,
+          signal: this._abortController?.signal,
+          session: this.session,
+          allItems,
+          errors,
+          successfulToolCallIds,
+          verificationEvidenceCallIds,
+          evidenceLedger,
+          verificationController,
+          skillManager: this.skillManager,
+          projectMemory: this.projectMemory,
+          taskText: userText,
+          iteration,
+          state: toolObservationState,
+          recordDenial: (description) => {
+            this.state.denialCount++;
+            this.state.lastDeniedOperation = description;
+          },
+          emit: (event) => this.emit(event),
+          narrate: (eventType, message, evidenceIds = []) => {
+            emitNarrationOnce(eventType, message, evidenceIds);
+          },
+        });
+        hasUsedTools = hasUsedTools || toolBatchExecution.usedTools;
+        for (const checkpointEvent of toolBatchExecution.checkpointEvents) {
+          checkpointState = checkpointEventToPlanState(checkpointEvent);
         }
 
-        needsVerification = toolObservationState.needsVerification;
-        hasMutatedFiles = toolObservationState.hasMutatedFiles;
-        recoveryReflectionDraft = toolObservationState.recoveryReflectionDraft;
-        fixUntilGreenFollowUp = toolObservationState.fixUntilGreenFollowUp;
-        fixUntilGreenStop = toolObservationState.fixUntilGreenStop;
+        needsVerification = toolBatchExecution.state.needsVerification;
+        hasMutatedFiles = toolBatchExecution.state.hasMutatedFiles;
+        recoveryReflectionDraft = toolBatchExecution.state.recoveryReflectionDraft;
+        fixUntilGreenFollowUp = toolBatchExecution.state.fixUntilGreenFollowUp;
+        fixUntilGreenStop = toolBatchExecution.state.fixUntilGreenStop;
 
-        if (checkpointEvents.length > 0) {
-          scheduleCheckpointCompaction(checkpointEvents);
+        if (toolBatchExecution.checkpointEvents.length > 0) {
+          scheduleCheckpointCompaction(toolBatchExecution.checkpointEvents);
         }
 
         iteration++;
@@ -1005,7 +966,7 @@ export class AgentLoop {
           fixUntilGreenStop,
           fixUntilGreenFollowUp,
           loopGuard,
-          iterationOutcomes,
+          iterationOutcomes: toolBatchExecution.iterationOutcomes,
           session: this.session,
           allItems,
           errors,
