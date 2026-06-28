@@ -63,6 +63,12 @@ import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
 import { VerificationController } from "../verification/verification-controller";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
+import {
+  buildDenialEphemeralMessages,
+  runtimeFlightRecords,
+  turnStopDebugData,
+  turnStopReasonEvent,
+} from "./agent-loop-event-recording";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
 import {
   createWorkingNarration,
@@ -323,43 +329,7 @@ export class AgentLoop {
   }
 
   private recordRuntimeFlight(event: AgentEvent): void {
-    const turn = "turnIndex" in event
-      ? event.turnIndex
-      : "turn" in event && typeof event.turn === "number"
-        ? event.turn
-        : undefined;
-    const iteration = "iteration" in event && typeof event.iteration === "number" ? event.iteration : undefined;
-
-    this.flight({
-      kind: "runtime_event",
-      turn,
-      iteration,
-      payload: event,
-    });
-
-    if (event.type === "tool_call_start") {
-      this.flight({
-        kind: "tool_call",
-        turn,
-        iteration,
-        payload: {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-        },
-      });
-    } else if (event.type === "tool_call_result") {
-      this.flight({
-        kind: "tool_result",
-        turn,
-        iteration,
-        payload: {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          result: event.result,
-        },
-      });
-    }
+    for (const record of runtimeFlightRecords(event)) this.flight(record);
   }
 
   /** Emit a turn_stop_reason event and debug entry */
@@ -371,25 +341,16 @@ export class AgentLoop {
     hasUsedTools: boolean,
     autonomousFollowUps: number,
   ): void {
-    this.emit({
-      type: "turn_stop_reason",
-      timestamp: Date.now(),
+    const input = {
       turn,
       iteration,
       reason,
       detail,
       hasUsedTools,
       autonomousFollowUps,
-    });
-    this.debug({
-      event: "loop/stop",
-      turn,
-      iteration,
-      reason,
-      detail,
-      hasUsedTools,
-      autonomousFollowUps,
-    });
+    };
+    this.emit(turnStopReasonEvent(input));
+    this.debug(turnStopDebugData(input));
   }
 
   private emitWorkingNarration(
@@ -468,34 +429,7 @@ export class AgentLoop {
    * model a fresh, high-priority instruction to stop looking for workarounds.
    */
   private buildDenialEphemeralMessages(): Array<{ role: "developer"; content: string }> {
-    if (this.state.denialCount === 0) return [];
-
-    const op = this.state.lastDeniedOperation || "the operation";
-
-    if (this.state.denialCount === 1) {
-      return [
-        {
-          role: "developer",
-          content:
-            `IMPORTANT: Your previous attempt to perform "${op}" was DENIED by the user through the security dialog. ` +
-            "This is a FINAL decision — do NOT attempt to achieve the same result through alternative commands, " +
-            "indirect approaches, or workarounds. The denial means the user does not want this operation executed. " +
-            "Acknowledge the denial and either continue with unrelated parts of the task or ask the user how to proceed.",
-        },
-      ];
-    }
-
-    return [
-      {
-        role: "developer",
-        content:
-          `CRITICAL: You have been denied ${this.state.denialCount} times in this turn (last: "${op}"). ` +
-          "These denials are SECURITY DECISIONS by the user, not transient errors. " +
-          "STOP searching for workarounds. Do NOT try: different commands, script wrappers (bun -e, node -e, python -c), " +
-          "file moves (mv to /tmp), or any indirect method to achieve the denied outcome. " +
-          "Explain what was blocked by security and ask the user how they want to proceed.",
-      },
-    ];
+    return buildDenialEphemeralMessages(this.state.denialCount, this.state.lastDeniedOperation);
   }
 
   /**
