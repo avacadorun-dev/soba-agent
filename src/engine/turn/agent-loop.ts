@@ -16,10 +16,8 @@ import type { SkillManager } from "../../application/skills/skill-manager";
 import { TrustManager } from "../../application/trust/trust-manager";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import type {
-  FunctionCallField,
   FunctionCallItemParam,
   ItemParam,
-  MessageField,
   ResponseResource,
   Usage,
 } from "../../kernel/model/openresponses-types";
@@ -48,7 +46,7 @@ import {
   type RecoveryReflectionDraft,
   writeRecoveryReflectionLesson,
 } from "../memory/reflection-memory-policy";
-import { extractTextFromOutput, ModelTurnRunner } from "../model-turn/model-turn-runner";
+import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import {
   createDangerousConfirmationAdapter,
   PermissionBroker,
@@ -67,6 +65,7 @@ import {
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
+import { executeModelTurn } from "./model-turn-execution";
 import {
   createWorkingNarration,
   isNonTrivialPrompt,
@@ -75,7 +74,6 @@ import {
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import {
   autoVerifierTimeoutSeconds,
-  buildRequest,
   canExecuteReadOnlyBatchInParallel,
   checkpointEventToPlanState,
   createLoopErrorResponse,
@@ -228,30 +226,6 @@ export class AgentLoop {
   /** Get budget tracker */
   getBudgetTracker(): BudgetTracker {
     return this.budgetTracker;
-  }
-
-  private emitContextUsageUpdate(input: {
-    systemPromptTokens: number;
-    toolSchemaTokens: number;
-    requestFingerprint: string;
-    contextWindow: number;
-  }): void {
-    const effectiveContextTokens = this.contextController.getEffectiveContextTokens({
-      systemPromptTokens: input.systemPromptTokens,
-      toolSchemaTokens: input.toolSchemaTokens,
-      requestFingerprint: input.requestFingerprint,
-    });
-    const used = effectiveContextTokens ?? this.state.totalUsage.total_tokens;
-    const percentage = input.contextWindow > 0 ? Math.round((used / input.contextWindow) * 100) : 0;
-    this.emit({
-      type: "budget_update",
-      timestamp: Date.now(),
-      usedTokens: this.state.totalUsage.total_tokens,
-      totalBudget: this.options.tokenBudget,
-      contextWindow: input.contextWindow,
-      percentage,
-      effectiveContextTokens,
-    });
   }
 
   /** Get context manager (if available) */
@@ -666,124 +640,55 @@ export class AgentLoop {
         });
         if (stopGuardDecision === "break") break;
 
-        // Emit thinking
-        this.emit({ type: "thinking", timestamp: Date.now(), active: true });
-
         // Get ephemeral developer messages from active skills + denial warnings
         const ephemeralMessages = [
           ...(this.skillManager?.buildEphemeralMessages() ?? []),
           ...this.buildDenialEphemeralMessages(),
         ];
 
-        // Build request with current input
-        const request = buildRequest(
-          this.session,
+        const modelTurnExecution = await executeModelTurn({
+          client: this.client,
+          session: this.session,
+          tools: this.tools,
+          contextController: this.contextController,
           systemPrompt,
-          this.tools,
           model,
           maxOutputTokens,
           maxCompletionTokens,
           temperature,
+          stream: this.options.stream,
           ephemeralMessages,
-          !needsVerification,
-        );
-
-        // Pre-inference check: ensure we're within hard limit
-        const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
-        const toolSchemaTokens = Math.ceil(JSON.stringify(request.tools).length / 4);
-        
-        const checkResult = await this.contextController.performPreInferenceCheck({
-          systemPromptTokens,
-          toolSchemaTokens,
-          requestFingerprint: `turn_${this.state.turnCount}`,
-        });
-        this.emitContextUsageUpdate({
-          systemPromptTokens,
-          toolSchemaTokens,
-          requestFingerprint: `turn_${this.state.turnCount}`,
+          allowParallelToolCalls: !needsVerification,
+          turn: this.state.turnCount,
+          iteration,
+          totalUsage: this.state.totalUsage,
+          tokenBudget: this.options.tokenBudget,
           contextWindow,
-        });
-        
-        if (!checkResult.canProceed) {
-          this.emit({ type: "thinking", timestamp: Date.now(), active: false });
-          const errorMsg = checkResult.error || "Cannot proceed: context exceeds hard limit even after compaction";
-          emitNarrationOnce("blocked", errorMsg);
-          errors.push(createTurnError("api_error", errorMsg, iteration));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: errorMsg,
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "api-error",
-            errorMsg,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
-
-        // Send to LLM — use streaming if enabled
-        let response: ResponseResource;
-        let toolCalls: Array<FunctionCallField> = [];
-        let assistantMessages: Array<MessageField> = [];
-
-        try {
-          const modelTurn = await new ModelTurnRunner(this.client, {
-            stream: this.options.stream,
-            emit: (event) => this.emit(event),
-          }).run(request);
-          response = modelTurn.response;
-          toolCalls = modelTurn.toolCalls;
-          assistantMessages = modelTurn.assistantMessages;
-        } catch (error) {
-          this.emit({ type: "thinking", timestamp: Date.now(), active: false });
-          
-          // Classify error using provider adapter (safely — not all clients have it)
-          const errorType = typeof this.client.classifyError === "function"
-            ? this.client.classifyError(error)
-            : "unknown";
-          if (errorType === "context_overflow") {
-            const recoveryResult = await this.contextController.recoverContextOverflow({
-              systemPromptTokens,
-              toolSchemaTokens,
-              requestFingerprint: `turn_${this.state.turnCount}_overflow`,
-            });
-            if (recoveryResult.recovered && recoveryResult.shouldRetry) {
-              // Recovery успешен, повторяем запрос
-              this.emit({ type: "thinking", timestamp: Date.now(), active: true });
-              continue;
-            }
-          }
-          
-          errors.push(
-            createTurnError(
-              "api_error",
-              error instanceof Error ? error.message : String(error),
+          errors,
+          emit: (event) => this.emit(event),
+          emitStopReason: (reason, detail) => {
+            this._emitStopReason(
+              turnIndex,
               iteration,
-            ),
-          );
-          emitNarrationOnce("blocked", error instanceof Error ? error.message : String(error));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: error instanceof Error ? error.message : String(error),
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "api-error",
-            error instanceof Error ? error.message : String(error),
-            hasUsedTools,
-            autonomousFollowUps,
-          );
+              reason,
+              detail,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+          },
+          narrateBlocked: (message) => emitNarrationOnce("blocked", message),
+        });
+        if (modelTurnExecution.action !== "response") {
+          if (modelTurnExecution.action === "retry") continue;
           break;
         }
-
-        // Emit thinking done
-        this.emit({ type: "thinking", timestamp: Date.now(), active: false });
+        const {
+          response,
+          toolCalls,
+          assistantMessages,
+          systemPromptTokens,
+          toolSchemaTokens,
+        } = modelTurnExecution;
 
         currentResponse = response;
         
