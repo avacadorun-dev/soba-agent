@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import type { SkillCatalog } from "../../application/skills/catalog";
+import type { SkillCommands } from "../../application/skills/commands";
 import type { ProjectTrustStore } from "../../application/skills/project-trust-store";
 import type { SkillManager } from "../../application/skills/skill-manager";
 import type { RuntimeToolDelegation } from "../../application/tool-delegation";
@@ -53,6 +54,7 @@ export interface RuntimeCommandExecutorFactoryContext {
   config: SobaConfig;
   contextManager: ContextManager;
   skillManager: SkillManager;
+  skillCommands: SkillCommands;
   agentLoop: AgentLoop;
   providerRegistry: ProviderRegistry;
   sessionLifecycle: PersistentSessionLifecycleService;
@@ -76,6 +78,7 @@ export interface SobaRuntimeComposition {
   contextManager: ContextManager;
   backgroundScheduler: BackgroundScheduler;
   skillManager: SkillManager;
+  skillCommands: SkillCommands;
   skillCatalog: SkillCatalog;
   trustStore: ProjectTrustStore;
   sessionLifecycle: SessionLifecycleService;
@@ -155,7 +158,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     backgroundTimeoutMs: compactionConfig.backgroundTimeoutMs,
   });
 
-  const { skillManager, skillCatalog, trustStore } = await createSkillStack({
+  const { skillManager, skillCommands, skillCatalog, trustStore } = await createSkillStack({
     projectPath: cwd,
     homeDir,
     session,
@@ -180,6 +183,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     config,
     contextManager,
     skillManager,
+    skillCommands,
     agentLoop,
     providerRegistry,
     sessionLifecycle,
@@ -204,6 +208,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     contextManager,
     backgroundScheduler,
     skillManager,
+    skillCommands,
     skillCatalog,
     trustStore,
     sessionLifecycle,

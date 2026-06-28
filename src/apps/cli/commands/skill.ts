@@ -1,11 +1,9 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { CommandResult } from "../../../application/cli/public";
 import { executePermissionsCommand, executeProjectTrustCommand } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export async function handleSkill(args: string[], ctx: CommandContext): Promise<CommandResult> {
-  if (!ctx.skillManager) {
+  if (!ctx.skillManager || !ctx.skillCommands) {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -25,24 +23,7 @@ export async function handleSkill(args: string[], ctx: CommandContext): Promise<
     return { handled: true };
   }
 
-  const { SkillCommands } = await import("../../../application/cli/public");
-  const { DraftStore } = await import("../../../application/cli/public");
-  const { RevisionStore } = await import("../../../application/cli/public");
-  const { SkillEvaluator } = await import("../../../application/cli/public");
-
-  const sobaDir = join(homedir(), ".soba");
-  const draftStore = new DraftStore({ draftsPath: join(sobaDir, "skill-drafts") });
-  const revisionStore = new RevisionStore({ revisionsPath: join(sobaDir, "skill-revisions") });
-  const evaluator = new SkillEvaluator({ evalRunsPath: join(sobaDir, "eval-runs") });
-
-  const skillCommands = new SkillCommands({
-    draftStore,
-    revisionStore,
-    evaluator,
-    catalog: ctx.skillManager.catalog,
-    userSkillsPath: join(sobaDir, "skills"),
-    projectSkillsPath: join(process.cwd(), ".soba", "skills"),
-  });
+  const skillCommands = ctx.skillCommands;
 
   let result;
 
