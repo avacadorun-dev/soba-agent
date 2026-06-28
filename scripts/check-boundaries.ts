@@ -138,6 +138,26 @@ if (existsSync(join(projectRoot, "src", "core"))) {
   violations.push("src/core exists (retired namespace)");
 }
 
+const applicationPublicPath = join(projectRoot, "src", "application", "public.ts");
+if (existsSync(applicationPublicPath)) {
+  const source = readFileSync(applicationPublicPath, "utf8");
+  for (const specifier of importSpecifiers(source)) {
+    const resolved = resolveProjectImport(applicationPublicPath, specifier);
+    if (!resolved) continue;
+    if (
+      resolved.startsWith("src/composition/") ||
+      resolved.startsWith("src/engine/") ||
+      resolved.startsWith("src/infrastructure/") ||
+      resolved.startsWith("src/kernel/") ||
+      resolved.startsWith("src/apps/") ||
+      resolved.startsWith("src/adapters/") ||
+      resolved.startsWith("src/ui/")
+    ) {
+      violations.push(`src/application/public.ts -> ${specifier} (root public API must stay application/shared only)`);
+    }
+  }
+}
+
 for (const rule of rules) {
   for (const file of walkTypescriptFiles(rootFromGlob(rule.from))) {
     const source = readFileSync(file, "utf8");
