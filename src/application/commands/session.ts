@@ -45,6 +45,16 @@ export interface BudgetStatusView {
   formattedTokens: string;
 }
 
+export type RewindCommandView =
+  | { kind: "empty" }
+  | { kind: "list"; checkpoints: RewindCheckpointView[] }
+  | { kind: "not_found"; checkpointId: string }
+  | { kind: "complete"; checkpointId: string };
+
+export type RewindCheckpointView =
+  | { kind: "compaction"; id: string; timestamp: string }
+  | { kind: "capsule"; id: string; strategy: string; timestamp: string };
+
 export type SessionsCommandView =
   | { kind: "error"; message: string }
   | { kind: "usage"; message: string }
@@ -89,6 +99,43 @@ export function buildBudgetStatusView(session: RuntimeSessionHandle): BudgetStat
     tokens,
     formattedTokens: `${(tokens / 1000).toFixed(1)}K`,
   };
+}
+
+export function executeRewindCommand(input: {
+  args: string[];
+  session: RuntimeSessionHandle;
+}): RewindCommandView {
+  const checkpointId = input.args[0];
+  const entries = input.session.getEntries();
+  const compactionCheckpoints = entries.filter((entry) => entry.type === "compaction");
+  const capsules = entries.filter((entry) => isContextCapsuleEntry(entry));
+
+  if (!checkpointId) {
+    const checkpoints: RewindCheckpointView[] = [
+      ...compactionCheckpoints.map((entry) => ({
+        kind: "compaction" as const,
+        id: entry.id,
+        timestamp: entry.timestamp,
+      })),
+      ...capsules.map((entry) => ({
+        kind: "capsule" as const,
+        id: entry.checkpointId,
+        strategy: entry.strategy,
+        timestamp: entry.timestamp,
+      })),
+    ];
+    return checkpoints.length > 0 ? { kind: "list", checkpoints } : { kind: "empty" };
+  }
+
+  const checkpoint = compactionCheckpoints.find((entry) => entry.id === checkpointId || entry.id.startsWith(checkpointId));
+  const capsule = capsules.find((entry) => entry.checkpointId === checkpointId || entry.checkpointId.startsWith(checkpointId));
+  const targetEntry = checkpoint ?? capsule;
+  if (!targetEntry) {
+    return { kind: "not_found", checkpointId };
+  }
+
+  input.session.branch(targetEntry.id);
+  return { kind: "complete", checkpointId: targetEntry.id };
 }
 
 export function executeSessionsCommand(input: {
