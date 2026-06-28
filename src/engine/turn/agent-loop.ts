@@ -38,12 +38,8 @@ import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
-import {
-  acknowledgeErrors,
-  recordToolOutcome,
-} from "../completion/completion-gate";
+import { recordToolOutcome } from "../completion/completion-gate";
 import { ContextController } from "../context/context-controller";
-import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../evidence";
 import { EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import {
@@ -69,6 +65,7 @@ import {
   turnStopReasonEvent,
 } from "./agent-loop-event-recording";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
+import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
 import {
   createWorkingNarration,
@@ -86,7 +83,6 @@ import {
   extractCommandArgument,
   extractToolResultText,
   FINISH_TOOL_NAME,
-  finishRequestToMessage,
   getAutonomousFollowUpReason,
   hasVisibleAssistantText,
   isInvisibleAssistantMessage,
@@ -1018,175 +1014,45 @@ export class AgentLoop {
             ? toolCalls[0]
             : null;
         if (finishCall) {
-          let finishEvaluation = completionController.evaluateFinishCall(finishCall, {
-            ...evidenceLedger.toCompletionState(errors),
+          const finishDecision = await handleFinishCall({
+            finishCall,
+            completionController,
+            evidenceLedger,
+            errors,
             taskKind,
             allowUnverifiedCompletion,
-          });
-          if (finishEvaluation.kind === "rejected" && evidenceLedger.getSummary().needsVerification) {
-            const didAutoVerify = await runAutoVerificationAt("finish");
-            if (didAutoVerify) {
-              finishEvaluation = completionController.evaluateFinishCall(finishCall, {
-                ...evidenceLedger.toCompletionState(errors),
-                taskKind,
-                allowUnverifiedCompletion,
-              });
-            }
-          }
-
-          if (finishEvaluation.kind === "rejected" || finishEvaluation.kind === "invalid") {
-            appendAssistantMessagesToSession();
-            evidenceLedger.recordFinishAttempt(
-              "rejected",
-              finishEvaluation.kind === "invalid"
-                ? "Invalid finish arguments"
-                : finishEvaluation.reasons.join("; "),
-            );
-            this.flight({
-              kind: "completion_decision",
-              turn: turnIndex,
-              iteration,
-              payload: {
-                status: "rejected",
-                kind: finishEvaluation.kind,
-                toolCallId: finishCall.call_id,
-                detail: finishEvaluation.kind === "invalid"
-                  ? finishEvaluation.diagnosis.join(" ")
-                  : finishEvaluation.reasons.join("; "),
-              },
-            });
-            const fcItem = outputItemToSessionItem(finishCall);
-            if (fcItem) {
-              this.session.appendItem(fcItem as unknown as SessionItemParam);
-              allItems.push(fcItem);
-            }
-            const rejection = completionController.createRejectionResult(finishEvaluation);
-            const outputItem = toolResultToOutputItem(
-              rejection,
-              finishCall.call_id,
-              finishCall.name,
-            );
-            this.session.appendItem(outputItem);
-            allItems.push(outputItem);
-            this.debug({
-              event: "loop/finish-rejected",
-              turn: turnIndex,
-              iteration,
-              toolCalls: toolCalls.length,
-              hasUsedTools,
-              needsVerification,
-              autonomousFollowUps,
-              activeErrors: errors.filter((error) => error.status === "active")
-                .length,
-              detail: finishEvaluation.kind === "invalid"
-                ? finishEvaluation.diagnosis.join(" ")
-                : finishEvaluation.reasons.join(" "),
-            });
-            const rejectionState = completionController.recordRejection(finishEvaluation);
-            if (rejectionState.limitExceeded) {
-              errors.push(createTurnError("timeout", rejectionState.message, iteration));
-              this.emit({
-                type: "turn_error",
-                timestamp: Date.now(),
-                error: rejectionState.message,
-              });
-              this._emitStopReason(
-                turnIndex,
-                iteration,
-                "loop-guard",
-                rejectionState.message,
-                hasUsedTools,
-                autonomousFollowUps,
-              );
-              break;
-            }
-            iteration++;
-            continue;
-          }
-
-          const finishRequest = finishEvaluation.request;
-          acknowledgeErrors(errors, finishRequest.acknowledgedErrorIds);
-          evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
-          const evidenceBundle = buildEvidenceBundle({
-            sessionId: this.session.getSessionId(),
-            turnId: `turn_${turnIndex}`,
-            completionStatus: finishRequest.status,
-            summary: finishRequest.summary,
-            ledger: evidenceLedger.getSummary(),
-          });
-          if (evidenceBundle.diff) {
-            this.flight({
-              kind: "diff_summary",
-              turn: turnIndex,
-              iteration,
-              payload: evidenceBundle.diff,
-            });
-          }
-          this.flight({
-            kind: "evidence_bundle",
+            runAutoVerification: () => runAutoVerificationAt("finish"),
+            appendAssistantMessagesToSession,
+            session: this.session,
+            allItems,
             turn: turnIndex,
             iteration,
-            payload: evidenceBundle,
-          });
-          this.flight({
-            kind: "completion_decision",
-            turn: turnIndex,
-            iteration,
-            payload: {
-              status: "accepted",
-              completionStatus: finishRequest.status,
-              summary: finishRequest.summary,
-              criteria: finishRequest.criteria,
-              acknowledgedErrorIds: finishRequest.acknowledgedErrorIds,
-            },
-          });
-          const finishMessage = finishRequestToMessage(
-            finishCall,
-            finishRequest.summary,
-            finishRequest.status,
-            formatEvidenceBundleForHandoff(evidenceBundle),
-          );
-          const text = extractTextFromOutput(finishMessage);
-          const sessionItem = outputItemToSessionItem(finishMessage);
-          if (sessionItem) {
-            this.session.appendItem(sessionItem as unknown as SessionItemParam);
-            allItems.push(sessionItem);
-          }
-          this.emit({
-            type: "assistant_message",
-            timestamp: Date.now(),
-            messageId: finishMessage.id,
-            text,
-          });
-          emitNarrationOnce(
-            finishRequest.status === "blocked" ? "blocked" : "completion",
-            finishRequest.status === "blocked"
-              ? "Finishing as blocked with a concrete external blocker."
-              : finishRequest.status === "completed_with_unverified_changes"
-                ? "Finishing with explicitly visible unverified changes."
-              : "Finishing after satisfying the current completion gate.",
-            verificationEvidenceCallIds.size > 0 ? [...verificationEvidenceCallIds] : successfulToolCallIds.size > 0 ? [...successfulToolCallIds] : [],
-          );
-          this.debug({
-            event: "loop/explicit-finish",
-            turn: turnIndex,
-            iteration,
-            toolCalls: toolCalls.length,
             hasUsedTools,
             needsVerification,
             autonomousFollowUps,
-            textPreview: text.slice(0, 100),
-            activeErrors: errors.filter((error) => error.status === "active")
-              .length,
+            verificationEvidenceCallIds,
+            successfulToolCallIds,
+            emit: (event) => this.emit(event),
+            flight: (data) => this.flight(data),
+            debug: (data) => this.debug(data),
+            emitStopReason: (reason, detail) => {
+              this._emitStopReason(
+                turnIndex,
+                iteration,
+                reason,
+                detail,
+                hasUsedTools,
+                autonomousFollowUps,
+              );
+            },
+            narrate: (eventType, message, evidenceIds = []) => {
+              emitNarrationOnce(eventType, message, evidenceIds);
+            },
           });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "completed",
-            "Model used the explicit finish control tool",
-            hasUsedTools,
-            autonomousFollowUps,
-          );
+          if (finishDecision === "continue") {
+            iteration++;
+            continue;
+          }
           break;
         }
 
