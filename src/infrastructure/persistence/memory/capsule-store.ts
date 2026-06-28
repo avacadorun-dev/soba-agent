@@ -12,7 +12,7 @@ import type {
   MemoryCapsule,
   MemoryCapsuleInput,
   MemoryIndex,
-} from "./types";
+} from "../../../engine/memory/types";
 
 const CAPSULE_STORE_VERSION = 1;
 const DEFAULT_MAX_CAPSULES = 50;

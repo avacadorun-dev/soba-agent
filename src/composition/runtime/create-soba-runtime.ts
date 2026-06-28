@@ -32,8 +32,6 @@ import type {
 import { runtimeBlocksToText } from "../../application/types";
 import { ContextManager } from "../../engine/compaction/context-manager";
 import { BackgroundScheduler } from "../../engine/compaction/scheduler";
-import { createMemoryTools } from "../../engine/memory/memory-tools";
-import { ProjectMemory } from "../../engine/memory/project-memory";
 import { AgentLoop } from "../../engine/turn/agent-loop";
 import type { AgentEvent } from "../../engine/turn/types";
 import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
@@ -42,6 +40,7 @@ import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
 import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
+import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import {
@@ -57,6 +56,7 @@ import { checkpointTool } from "../../infrastructure/tools/local/checkpoint";
 import { editTool } from "../../infrastructure/tools/local/edit";
 import { inspectFileTool } from "../../infrastructure/tools/local/inspect-file";
 import { lsTool } from "../../infrastructure/tools/local/ls";
+import { createMemoryTools } from "../../infrastructure/tools/local/memory-tools";
 import { readTool } from "../../infrastructure/tools/local/read";
 import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
 import { writeTool } from "../../infrastructure/tools/local/write";

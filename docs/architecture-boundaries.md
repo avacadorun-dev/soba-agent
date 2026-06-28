@@ -43,6 +43,8 @@ const rules = [
       "src/apps/**",
       "src/adapters/**",
       "src/ui/**",
+      "node:",
+      "bun:",
     ],
   },
   {
@@ -83,16 +85,19 @@ through public application API modules. They must not import `src/core`,
 
 1. Do not add a file to `kernel` if it imports `node:*`, `bun:*`, `fs`, `path`,
    `process`, `fetch`, OpenTUI, MCP, OpenResponses, or JSONL persistence.
-2. Do not add feature code to `composition`. Composition creates objects and
+2. Do not add a file to `engine` if it imports `node:*`, `bun:*`, concrete
+   persistence, local process/filesystem/network clients, OpenTUI, MCP, or
+   provider implementations. Engine receives those capabilities through ports.
+3. Do not add feature code to `composition`. Composition creates objects and
    wires dependencies.
-3. Do not import concrete infrastructure from `application`. Application uses
+4. Do not import concrete infrastructure from `application`. Application uses
    ports, services, and DTOs.
-4. Do not import `engine` from `apps`, `adapters`, or `ui`. Delivery layers work
+5. Do not import `engine` from `apps`, `adapters`, or `ui`. Delivery layers work
    through public application API.
-5. Do not add another broad manager without an explicit owner layer:
+6. Do not add another broad manager without an explicit owner layer:
    `KernelPolicy`, `EngineCoordinator`, `ApplicationService`,
    `InfrastructureStore`, or `CompositionFactory`.
-6. Do not add broad root barrel exports. Use context-level `public.ts` modules
+7. Do not add broad root barrel exports. Use context-level `public.ts` modules
    such as `src/kernel/tools/public.ts` or `src/application/runtime/public.ts`.
 
 ## Migration Order

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { createMemoryTools } from "../../src/engine/memory/memory-tools";
 import { bashTool } from "../../src/infrastructure/tools/local/bash";
 import { checkpointTool } from "../../src/infrastructure/tools/local/checkpoint";
 import { inspectFileTool } from "../../src/infrastructure/tools/local/inspect-file";
 import { lsTool } from "../../src/infrastructure/tools/local/ls";
+import { createMemoryTools } from "../../src/infrastructure/tools/local/memory-tools";
 import { readTool } from "../../src/infrastructure/tools/local/read";
 import { searchFilesTool } from "../../src/infrastructure/tools/local/search-files";
 import { writeTool } from "../../src/infrastructure/tools/local/write";

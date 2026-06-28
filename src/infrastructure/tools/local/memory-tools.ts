@@ -1,7 +1,5 @@
 import { basename, relative, resolve } from "node:path";
-import { detectPotentialSecret, sanitizePortableText } from "../../application/capsules/sanitizer";
-import type { ToolContext, ToolDefinition, ToolResult } from "../../kernel/tools/types";
-import { ProjectMemory } from "./project-memory";
+import { detectPotentialSecret, sanitizePortableText } from "../../../application/capsules/sanitizer";
 import {
   type CapsuleListFilters,
   type CapsulePriority,
@@ -11,7 +9,9 @@ import {
   type KnowledgeKey,
   type MemoryCapsule,
   type MemoryCapsuleInput,
-} from "./types";
+} from "../../../engine/memory/types";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import { ProjectMemory } from "../../persistence/memory/project-memory";
 
 export const READ_PROJECT_MEMORY_TOOL_NAME = "read_project_memory";
 export const WRITE_PROJECT_MEMORY_TOOL_NAME = "write_project_memory";
