@@ -21,7 +21,6 @@ import type {
   Usage,
 } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
-import type { CheckpointEvent } from "../../kernel/tools/checkpoint";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
 import type {
@@ -55,6 +54,7 @@ import {
 } from "./agent-loop-event-recording";
 import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
+import { scheduleCheckpointCompactionForTurn } from "./checkpoint-compaction-scheduler";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
@@ -477,29 +477,6 @@ export class AgentLoop {
       const completionController = new CompletionController();
       const verificationController = new VerificationController();
       let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
-      const scheduleCheckpointCompaction = (checkpointEvents: CheckpointEvent[]): void => {
-        const checkpointFingerprint = `turn_${turnIndex}_checkpoint_${iteration}`;
-        const systemPromptTokens = Math.ceil(systemPrompt.length / 4);
-        const toolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
-        const decision = this.contextController.scheduleLatestMilestone({
-          checkpointEvents,
-          metrics: {
-            systemPromptTokens,
-            toolSchemaTokens,
-            requestFingerprint: checkpointFingerprint,
-          },
-        });
-        if (!decision.evaluated) return;
-
-        this.debug({
-          event: "loop/iteration",
-          turn: turnIndex,
-          iteration,
-          detail: decision.shouldCompact
-            ? `milestone scheduled for capsule candidate: ${decision.reason ?? ""}`
-            : `milestone recorded without compaction: ${decision.reason ?? ""}`,
-        });
-      };
       const runAutoVerificationAt = async (opportunity: string): Promise<boolean> => {
         const autoVerification = await runAutoVerificationOpportunity({
           opportunity,
@@ -902,7 +879,15 @@ export class AgentLoop {
         fixUntilGreenStop = toolBatchExecution.state.fixUntilGreenStop;
 
         if (toolBatchExecution.checkpointEvents.length > 0) {
-          scheduleCheckpointCompaction(toolBatchExecution.checkpointEvents);
+          scheduleCheckpointCompactionForTurn({
+            checkpointEvents: toolBatchExecution.checkpointEvents,
+            contextController: this.contextController,
+            tools: this.tools,
+            turnIndex,
+            iteration,
+            systemPrompt,
+            debug: (data) => this.debug(data),
+          });
         }
 
         iteration++;
