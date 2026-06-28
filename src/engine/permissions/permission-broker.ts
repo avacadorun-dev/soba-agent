@@ -1,6 +1,6 @@
-import type { TrustManager } from "../../application/trust/trust-manager";
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import type { ApprovalDecision, DangerousConfirmationEvent } from "../turn/types";
+import type { TrustController } from "./trust-controller";
 
 export interface PermissionRequest {
   toolName: string;
@@ -15,7 +15,7 @@ export interface PermissionRequest {
 export type PermissionRequestAdapter = (request: PermissionRequest) => Promise<ApprovalDecision>;
 
 export interface PermissionBrokerOptions {
-  trustManager: TrustManager;
+  trustManager: TrustController;
   requestPermission?: PermissionRequestAdapter;
 }
 
@@ -29,7 +29,7 @@ export interface DangerousConfirmationAdapterOptions {
 }
 
 export class PermissionBroker {
-  private readonly trustManager: TrustManager;
+  private readonly trustManager: TrustController;
   private readonly requestPermission?: PermissionRequestAdapter;
 
   constructor(options: PermissionBrokerOptions) {

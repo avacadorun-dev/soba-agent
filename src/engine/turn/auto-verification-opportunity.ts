@@ -1,4 +1,3 @@
-import type { TrustManager } from "../../application/trust/trust-manager";
 import type { ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
@@ -6,6 +5,7 @@ import { type ToolContext, toolResultToOutputItem } from "../../kernel/tools/typ
 import type { DebugEntry } from "../../kernel/transcript/types";
 import { recordToolOutcome } from "../completion/completion-gate";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
+import type { TrustController } from "../permissions/trust-controller";
 import type { ProjectCommandFileReader } from "../verification/types";
 import type { VerificationController } from "../verification/verification-controller";
 import type { TaskKind } from "../verification/verification-policy";
@@ -25,7 +25,7 @@ export interface AutoVerificationOpportunityInput {
   verificationController: VerificationController;
   tools: ToolRegistry;
   createToolContext: () => ToolContext;
-  trustManager: TrustManager;
+  trustManager: TrustController;
   projectFiles?: ProjectCommandFileReader;
   projectInstructions: string[];
   includeFullGate: boolean;

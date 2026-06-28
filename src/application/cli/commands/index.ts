@@ -4,7 +4,8 @@
  * Commands are prefixed with "/" and processed before sending to the LLM.
  */
 
-import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TrustManager, TuiRenderer } from "../public";
+import type { TrustController } from "../../../engine/permissions/trust-controller";
+import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TuiRenderer } from "../public";
 import {
   type CommandResult, handleSkillSlashCommand, isSkillSlashCommand, McpSecretStore, notify,
   parseRuntimeCommandInput,
@@ -45,7 +46,7 @@ export interface CommandContext {
   mcpManager?: McpRuntimeManager;
   mcpSecretStore?: McpSecretStore;
   toolRegistry?: ToolRegistry;
-  trustManager?: TrustManager;
+  trustManager?: TrustController;
   /** TUI slash command registry for dispatching TUI commands (Phase 2.5 A4). */
   tuiRegistry?: SlashCommandRegistry;
 }

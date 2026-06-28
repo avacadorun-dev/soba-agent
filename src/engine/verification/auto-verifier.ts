@@ -1,6 +1,6 @@
-import type { TrustManager } from "../../application/trust/trust-manager";
 import type { ToolDefinition, ToolResult } from "../../kernel/tools/types";
 import type { EvidenceLedger, EvidenceLedgerSummary } from "../evidence/evidence-ledger";
+import type { TrustController } from "../permissions/trust-controller";
 import { detectProjectCommands } from "./project-command-detector";
 import type { ProjectCommand, ProjectCommandFileReader, ProjectCommandKind, SkippedProjectCommand } from "./types";
 import type { TaskKind, VerificationKind } from "./verification-policy";
@@ -33,7 +33,7 @@ export interface AutoVerifierOptions {
   ledger: EvidenceLedger;
   bashTool?: ToolDefinition<Record<string, unknown>>;
   toolContext: Parameters<ToolDefinition<Record<string, unknown>>["execute"]>[1];
-  trustManager: TrustManager;
+  trustManager: TrustController;
   projectFiles?: ProjectCommandFileReader;
   projectInstructions?: string[];
   includeFullGate?: boolean;

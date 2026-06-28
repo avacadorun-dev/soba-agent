@@ -1,4 +1,3 @@
-import type { SkillManager } from "../../application/skills/skill-manager";
 import type { FunctionCallField, ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { CheckpointEvent } from "../../kernel/tools/checkpoint";
@@ -8,6 +7,7 @@ import type { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { VerificationController } from "../verification/verification-controller";
 import type { ToolOutcome } from "./loop-guard";
 import type { WorkingNarrationEventType } from "./narration";
+import type { SkillSource } from "./skill-source";
 import {
   observeToolExecutionResult,
   type ToolExecutionObservationState,
@@ -29,7 +29,7 @@ export interface ToolBatchExecutionInput {
   verificationEvidenceCallIds: Set<string>;
   evidenceLedger: EvidenceLedger;
   verificationController: VerificationController;
-  skillManager: SkillManager | undefined;
+  skillManager: SkillSource | undefined;
   projectMemory: ProjectMemorySource | undefined;
   taskText: string;
   iteration: number;
