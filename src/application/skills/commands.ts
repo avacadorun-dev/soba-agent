@@ -5,18 +5,27 @@
  * Integrates with DraftStore, RevisionStore, and SkillEvaluator.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type { SkillCatalog } from "./catalog";
 import type { DraftStore, EvalCase } from "./drafts";
 import type { EvalOptions, SkillEvaluator } from "./evaluator";
 import type { RevisionStore } from "./revisions";
+
+export interface SkillFileOperations {
+  readSkillMarkdown(skillPath: string): string | null;
+  promoteDraft(input: {
+    draftSkillPath: string;
+    targetRootPath: string;
+    name: string;
+  }): { path: string };
+  removeSkill(skillPath: string): void | Promise<void>;
+}
 
 export interface SkillCommandsOptions {
   draftStore: DraftStore;
   revisionStore: RevisionStore;
   evaluator: SkillEvaluator;
   catalog: SkillCatalog;
+  files: SkillFileOperations;
   userSkillsPath: string;
   projectSkillsPath?: string;
 }
@@ -35,6 +44,7 @@ export class SkillCommands {
   private readonly revisionStore: RevisionStore;
   private readonly evaluator: SkillEvaluator;
   private readonly catalog: SkillCatalog;
+  private readonly files: SkillFileOperations;
   private readonly userSkillsPath: string;
   private readonly projectSkillsPath?: string;
 
@@ -43,6 +53,7 @@ export class SkillCommands {
     this.revisionStore = options.revisionStore;
     this.evaluator = options.evaluator;
     this.catalog = options.catalog;
+    this.files = options.files;
     this.userSkillsPath = options.userSkillsPath;
     this.projectSkillsPath = options.projectSkillsPath;
   }
@@ -108,15 +119,13 @@ Provide examples of how to invoke this skill.
     }
 
     // Read current content
-    const skillMdPath = join(skill.skillPath, "SKILL.md");
-    if (!existsSync(skillMdPath)) {
+    const currentContent = this.files.readSkillMarkdown(skill.skillPath);
+    if (!currentContent) {
       return {
         success: false,
         message: `SKILL.md not found for skill '${name}'`,
       };
     }
-
-    const currentContent = readFileSync(skillMdPath, "utf-8");
 
     // Create draft from current content
     const draftResult = this.draftStore.create(name, currentContent);
@@ -235,24 +244,11 @@ Provide examples of how to invoke this skill.
       };
     }
 
-    // Copy draft to target location
-    const skillTargetPath = join(targetPath, name);
-    mkdirSync(skillTargetPath, { recursive: true });
-
-    const skillMdPath = join(draft.skillPath, "SKILL.md");
-    const targetSkillMdPath = join(skillTargetPath, "SKILL.md");
-    writeFileSync(targetSkillMdPath, readFileSync(skillMdPath, "utf-8"), "utf-8");
-
-    // Copy evals if present
-    const evalsPath = join(draft.skillPath, "evals");
-    if (existsSync(evalsPath)) {
-      const targetEvalsPath = join(skillTargetPath, "evals");
-      mkdirSync(targetEvalsPath, { recursive: true });
-      const casesPath = join(evalsPath, "cases.json");
-      if (existsSync(casesPath)) {
-        writeFileSync(join(targetEvalsPath, "cases.json"), readFileSync(casesPath, "utf-8"), "utf-8");
-      }
-    }
+    const promoted = this.files.promoteDraft({
+      draftSkillPath: draft.skillPath,
+      targetRootPath: targetPath,
+      name,
+    });
 
     // Mark revision as approved and promoted
     this.revisionStore.approve(latestRevision.revisionId, name);
@@ -266,7 +262,7 @@ Provide examples of how to invoke this skill.
 
     return {
       success: true,
-      message: `Promoted skill '${name}' to ${scope} scope at ${skillTargetPath}`,
+      message: `Promoted skill '${name}' to ${scope} scope at ${promoted.path}`,
       data: { revision: latestRevision, scope },
     };
   }
@@ -355,9 +351,7 @@ Provide examples of how to invoke this skill.
       };
     }
 
-    // Remove skill directory
-    const { rmSync } = await import("node:fs");
-    rmSync(skill.skillPath, { recursive: true, force: true });
+    await this.files.removeSkill(skill.skillPath);
 
     // Refresh catalog
     this.catalog.refresh();

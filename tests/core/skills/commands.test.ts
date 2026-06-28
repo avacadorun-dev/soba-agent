@@ -8,6 +8,7 @@ import { DraftStore } from "../../../src/application/skills/drafts";
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { RevisionStore } from "../../../src/application/skills/revisions";
+import { FilesystemSkillFileOperations } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 describe("SkillCommands", () => {
   const testDir = join(process.cwd(), ".test-commands");
@@ -49,6 +50,7 @@ describe("SkillCommands", () => {
       revisionStore,
       evaluator,
       catalog,
+      files: new FilesystemSkillFileOperations(),
       userSkillsPath,
       projectSkillsPath,
     });
@@ -317,6 +319,7 @@ description: Bundled skill
       revisionStore,
       evaluator,
       catalog: bundledCatalog,
+      files: new FilesystemSkillFileOperations(),
       userSkillsPath,
       projectSkillsPath,
     });
