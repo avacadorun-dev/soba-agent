@@ -79,7 +79,6 @@ import {
   createLoopErrorResponse,
   createUserItem,
   FINISH_TOOL_NAME,
-  isInvisibleAssistantMessage,
   safeParseArgs,
   wantsFullVerification,
 } from "./turn-helpers";
@@ -745,23 +744,13 @@ export class AgentLoop {
         const {
           appendAssistantMessagesToSession,
           appendToolCallGroupToSession,
+          supersedeVisibleAssistantMessages,
         } = createAssistantSessionRecorder({
           session: this.session,
           allItems,
           assistantMessages,
+          emit: (event) => this.emit(event),
         });
-
-        const supersedeVisibleAssistantMessages = () => {
-          for (const msg of assistantMessages) {
-            if (isInvisibleAssistantMessage(msg)) continue;
-            this.emit({
-              type: "assistant_message_superseded",
-              timestamp: Date.now(),
-              messageId: msg.id,
-              reason: "autonomous_followup",
-            });
-          }
-        };
 
         const continuationDecision = decideResponseContinuation({
           shouldContinue,
