@@ -1,10 +1,5 @@
-import type {
-  CommandResult,
-  FlightRecordEntry,
-  RuntimeSessionHandle,
-  SessionLifecycleService,
-} from "../../../application/cli/public";
-import { buildBudgetStatusView, buildSessionStatusView } from "../../../application/cli/public";
+import type { CommandResult, RuntimeSessionHandle } from "../../../application/cli/public";
+import { buildBudgetStatusView, buildSessionStatusView, executeSessionsCommand } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export function handleSession(_args: string[], ctx: CommandContext): CommandResult {
@@ -79,52 +74,7 @@ export function handleSession(_args: string[], ctx: CommandContext): CommandResu
 }
 
 export function handleSessions(args: string[], ctx: CommandContext): CommandResult {
-  const action = args[0]?.toLowerCase() ?? "list";
-  const lifecycle = ctx.sessionLifecycle;
-
-  if (!lifecycle) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: "Sessions lifecycle is not configured.",
-    });
-    return { handled: true };
-  }
-
-  try {
-    switch (action) {
-      case "list":
-      case "ls":
-        emitSessionsList(ctx, lifecycle);
-        break;
-      case "resume":
-      case "load":
-      case "open":
-        resumeSessionCommand(args[1], ctx, lifecycle);
-        break;
-      case "close":
-        closeSessionCommand(args[1], ctx, lifecycle);
-        break;
-      case "delete":
-      case "remove":
-      case "rm":
-        deleteSessionCommand(args[1], ctx, lifecycle);
-        break;
-      default:
-        ctx.renderer.emit({
-          type: "error",
-          timestamp: Date.now(),
-          message: "Usage: /sessions list|resume <id>|load <id>|close [id]|delete <id>",
-        });
-    }
-  } catch (error) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: `Sessions error: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
-
+  renderSessionsCommandView(ctx, executeSessionsCommand({ args, session: ctx.session, lifecycle: ctx.sessionLifecycle }));
   return { handled: true };
 }
 
@@ -141,116 +91,46 @@ export function handleBudget(_args: string[], ctx: CommandContext): CommandResul
   return { handled: true };
 }
 
-function emitSessionsList(ctx: CommandContext, lifecycle: SessionLifecycleService): void {
-  const sessions = lifecycle.listSessions({ cwd: ctx.session.getCwd() });
-  if (sessions.length === 0) {
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: "Sessions:\n  none",
-    });
-    return;
-  }
-
-  const activeId = ctx.session.getSessionId();
-  const lines = [
-    "Sessions:",
-    ...sessions.map((session) => {
-      const active = session.id === activeId ? " active" : "";
-      const evidence = sessionEvidenceSummary(lifecycle, session.id);
-      return `  ${session.id.slice(0, 8)}${active} entries=${session.entries ?? 0} updated=${session.updatedAt ?? "unknown"} evidence=${evidence} cwd=${session.cwd}`;
-    }),
-  ];
-  ctx.renderer.emit({
-    type: "info",
-    timestamp: Date.now(),
-    message: lines.join("\n"),
-  });
-}
-
-function resumeSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
-  if (!sessionId) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: "Usage: /sessions resume <id>",
-    });
-    return;
-  }
-
-  const next = lifecycle.resumeSessionManager({ sessionId });
-  activateSession(ctx, next);
-  ctx.renderer.emit({
-    type: "info",
-    timestamp: Date.now(),
-    message: `Session resumed: ${next.getSessionId().slice(0, 8)} (${next.getCwd()})`,
-  });
-}
-
-function closeSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
-  const target = sessionId ?? ctx.session.getSessionId();
-  lifecycle.closeSession(target);
-  ctx.renderer.emit({
-    type: "info",
-    timestamp: Date.now(),
-    message: `Session closed: ${target.slice(0, 8)}`,
-  });
-}
-
-function deleteSessionCommand(sessionId: string | undefined, ctx: CommandContext, lifecycle: SessionLifecycleService): void {
-  if (!sessionId) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: "Usage: /sessions delete <id>",
-    });
-    return;
-  }
-
-  const activeId = ctx.session.getSessionId();
-  if (activeId.startsWith(sessionId) || sessionId === activeId) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: "Cannot delete the active session. Resume another session first.",
-    });
-    return;
-  }
-
-  lifecycle.deleteSession(sessionId);
-  ctx.renderer.emit({
-    type: "info",
-    timestamp: Date.now(),
-    message: `Session deleted: ${sessionId.slice(0, 8)}`,
-  });
-}
-
 function activateSession(ctx: CommandContext, session: RuntimeSessionHandle): void {
   ctx.setSession?.(session);
   ctx.agentLoop?.setSessionManager(session);
 }
 
-function sessionEvidenceSummary(lifecycle: SessionLifecycleService, sessionId: string): string {
-  try {
-    const session = lifecycle.loadSessionManager({ sessionId });
-    const records = session.getFlightRecords();
-    let evidence: FlightRecordEntry | undefined = records[records.length - 1];
-    for (let index = records.length - 1; index >= 0; index--) {
-      if (records[index]?.data.kind === "evidence_bundle") {
-        evidence = records[index];
-        break;
-      }
-      evidence = undefined;
-    }
-    if (!evidence) {
-      return records.length > 0 ? `records:${records.length}` : "none";
-    }
-    const payload = evidence.data.payload;
-    if (payload && typeof payload === "object" && "status" in payload && typeof payload.status === "string") {
-      return payload.status;
-    }
-    return "recorded";
-  } catch {
-    return "unavailable";
+function renderSessionsCommandView(ctx: CommandContext, view: ReturnType<typeof executeSessionsCommand>): void {
+  if (view.kind === "error" || view.kind === "usage") {
+    ctx.renderer.emit({ type: "error", timestamp: Date.now(), message: view.message });
+    return;
   }
+
+  if (view.kind === "list") {
+    const lines =
+      view.sessions.length === 0
+        ? ["Sessions:", "  none"]
+        : [
+            "Sessions:",
+            ...view.sessions.map((session) => {
+              const active = session.active ? " active" : "";
+              return `  ${session.id.slice(0, 8)}${active} entries=${session.entries ?? 0} updated=${session.updatedAt ?? "unknown"} evidence=${session.evidence} cwd=${session.cwd}`;
+            }),
+          ];
+    ctx.renderer.emit({ type: "info", timestamp: Date.now(), message: lines.join("\n") });
+    return;
+  }
+
+  if (view.kind === "resumed") {
+    activateSession(ctx, view.session);
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: `Session resumed: ${view.session.getSessionId().slice(0, 8)} (${view.session.getCwd()})`,
+    });
+    return;
+  }
+
+  const verb = view.kind === "closed" ? "closed" : "deleted";
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: `Session ${verb}: ${view.sessionId.slice(0, 8)}`,
+  });
 }

@@ -1,7 +1,8 @@
 import { estimateTokens } from "../../kernel/session/estimation";
-import type { SessionEntry, SessionItemEntry } from "../../kernel/transcript/types";
+import type { FlightRecordEntry, SessionEntry, SessionItemEntry } from "../../kernel/transcript/types";
 import { isContextCapsuleEntry } from "../../kernel/transcript/types-v2";
-import type { RuntimeSessionHandle } from "../session-lifecycle";
+import type { RuntimeSessionHandle, SessionLifecycleService } from "../session-lifecycle";
+import type { RuntimeSessionInfo } from "../types";
 
 export interface SessionCommandConfig {
   contextWindow: number;
@@ -44,6 +45,19 @@ export interface BudgetStatusView {
   formattedTokens: string;
 }
 
+export type SessionsCommandView =
+  | { kind: "error"; message: string }
+  | { kind: "usage"; message: string }
+  | { kind: "list"; activeSessionId: string; sessions: SessionsListItemView[] }
+  | { kind: "resumed"; session: RuntimeSessionHandle }
+  | { kind: "closed"; sessionId: string }
+  | { kind: "deleted"; sessionId: string };
+
+export interface SessionsListItemView extends RuntimeSessionInfo {
+  active: boolean;
+  evidence: string;
+}
+
 export function buildSessionStatusView(input: {
   session: RuntimeSessionHandle;
   config: SessionCommandConfig;
@@ -77,7 +91,122 @@ export function buildBudgetStatusView(session: RuntimeSessionHandle): BudgetStat
   };
 }
 
+export function executeSessionsCommand(input: {
+  args: string[];
+  session: RuntimeSessionHandle;
+  lifecycle?: SessionLifecycleService;
+}): SessionsCommandView {
+  const { args, session, lifecycle } = input;
+  const action = args[0]?.toLowerCase() ?? "list";
+
+  if (!lifecycle) {
+    return { kind: "error", message: "Sessions lifecycle is not configured." };
+  }
+
+  try {
+    switch (action) {
+      case "list":
+      case "ls":
+        return buildSessionsListView(session, lifecycle);
+      case "resume":
+      case "load":
+      case "open":
+        return resumeSessionCommand(args[1], lifecycle);
+      case "close":
+        return closeSessionCommand(args[1], session, lifecycle);
+      case "delete":
+      case "remove":
+      case "rm":
+        return deleteSessionCommand(args[1], session, lifecycle);
+      default:
+        return { kind: "usage", message: "Usage: /sessions list|resume <id>|load <id>|close [id]|delete <id>" };
+    }
+  } catch (error) {
+    return {
+      kind: "error",
+      message: `Sessions error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 function getHistoricalSessionTokens(entries: SessionEntry[]): number {
   const items = entries.filter((entry): entry is SessionItemEntry => entry.type === "item").map((entry) => entry.item);
   return estimateTokens(items);
+}
+
+function buildSessionsListView(session: RuntimeSessionHandle, lifecycle: SessionLifecycleService): SessionsCommandView {
+  const activeSessionId = session.getSessionId();
+  return {
+    kind: "list",
+    activeSessionId,
+    sessions: lifecycle.listSessions({ cwd: session.getCwd() }).map((listedSession) => ({
+      ...listedSession,
+      active: listedSession.id === activeSessionId,
+      evidence: sessionEvidenceSummary(lifecycle, listedSession.id),
+    })),
+  };
+}
+
+function resumeSessionCommand(sessionId: string | undefined, lifecycle: SessionLifecycleService): SessionsCommandView {
+  if (!sessionId) {
+    return { kind: "usage", message: "Usage: /sessions resume <id>" };
+  }
+
+  return {
+    kind: "resumed",
+    session: lifecycle.resumeSessionManager({ sessionId }),
+  };
+}
+
+function closeSessionCommand(
+  sessionId: string | undefined,
+  session: RuntimeSessionHandle,
+  lifecycle: SessionLifecycleService,
+): SessionsCommandView {
+  const target = sessionId ?? session.getSessionId();
+  lifecycle.closeSession(target);
+  return { kind: "closed", sessionId: target };
+}
+
+function deleteSessionCommand(
+  sessionId: string | undefined,
+  session: RuntimeSessionHandle,
+  lifecycle: SessionLifecycleService,
+): SessionsCommandView {
+  if (!sessionId) {
+    return { kind: "usage", message: "Usage: /sessions delete <id>" };
+  }
+
+  const activeId = session.getSessionId();
+  if (activeId.startsWith(sessionId) || sessionId === activeId) {
+    return { kind: "error", message: "Cannot delete the active session. Resume another session first." };
+  }
+
+  lifecycle.deleteSession(sessionId);
+  return { kind: "deleted", sessionId };
+}
+
+function sessionEvidenceSummary(lifecycle: SessionLifecycleService, sessionId: string): string {
+  try {
+    const session = lifecycle.loadSessionManager({ sessionId });
+    const records = session.getFlightRecords();
+    let evidence: FlightRecordEntry | undefined = records[records.length - 1];
+    for (let index = records.length - 1; index >= 0; index--) {
+      if (records[index]?.data.kind === "evidence_bundle") {
+        evidence = records[index];
+        break;
+      }
+      evidence = undefined;
+    }
+    if (!evidence) {
+      return records.length > 0 ? `records:${records.length}` : "none";
+    }
+    const payload = evidence.data.payload;
+    if (payload && typeof payload === "object" && "status" in payload && typeof payload.status === "string") {
+      return payload.status;
+    }
+    return "recorded";
+  } catch {
+    return "unavailable";
+  }
 }
