@@ -36,6 +36,7 @@ const rules: BoundaryRule[] = [
   {
     from: "src/application/**",
     deny: [
+      "src/infrastructure/**",
       "src/apps/**",
       "src/adapters/**",
       "src/ui/**",
