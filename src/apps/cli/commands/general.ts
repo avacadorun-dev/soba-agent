@@ -2,9 +2,8 @@ import type { CommandResult } from "../../../application/cli/public";
 import {
   buildConfigCommandView,
   buildHelpCommandView,
-  compact,
-  estimateTokens,
   executeAutoCompactCommand,
+  executeCompactCommand,
   executeLangCommand,
   executeRewindCommand,
   executeThemeCommand,
@@ -12,95 +11,17 @@ import {
 import type { CommandContext } from "./index";
 
 export async function handleCompact(args: string[], ctx: CommandContext): Promise<CommandResult> {
-  const instructions = args.join(" ") || undefined;
-  const tokens = estimateTokens(ctx.session.buildInput().items);
-
-  if (tokens <= ctx.config.contextWindow * 0.7) {
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.compact.manualBelowThreshold", { tokens, contextWindow: ctx.config.contextWindow }),
-    });
-  }
-
-  ctx.renderer.emit({
-    type: "compaction_start",
-    timestamp: Date.now(),
-    tokensBefore: tokens,
+  const view = await executeCompactCommand({
+    args,
+    session: ctx.session,
+    client: ctx.client,
+    contextWindow: ctx.config.contextWindow,
+    i18n: ctx.i18n,
+    contextManager: ctx.contextManager,
   });
 
-  try {
-    if (ctx.contextManager) {
-      const systemPromptTokens = 1000;
-      const toolSchemaTokens = 500;
-      const requestFingerprint = `manual_compact_${Date.now()}`;
-
-      const outcome = await ctx.contextManager.manualCompact(
-        instructions,
-        systemPromptTokens,
-        toolSchemaTokens,
-        requestFingerprint,
-      );
-
-      if (outcome.compacted) {
-        ctx.renderer.emit({
-          type: "compaction_done",
-          timestamp: Date.now(),
-          reason: "manual",
-          tokensBefore: outcome.metrics?.effectiveTokensBefore ?? tokens,
-          tokensAfter: outcome.metrics?.estimatedTokensAfter ?? estimateTokens(ctx.session.buildInput().items),
-          tokensSaved: outcome.metrics?.reclaimedTokens ?? 0,
-          strategy: outcome.strategy ?? "unknown",
-        });
-
-        ctx.renderer.emit({
-          type: "info",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.compact.capsuleInfo", {
-            checkpointId: outcome.checkpointId ?? "",
-            strategy: outcome.strategy ?? "",
-            quality: outcome.quality ?? "",
-            savingsRatio: ((outcome.metrics?.savingsRatio ?? 0) * 100).toFixed(1),
-          }),
-        });
-      } else {
-        ctx.renderer.emit({
-          type: "info",
-          timestamp: Date.now(),
-          message: ctx.i18n.t("command.compact.noOp", { reason: outcome.reason }),
-        });
-        ctx.renderer.emit({
-          type: "compaction_skipped",
-          timestamp: Date.now(),
-          reason: outcome.reason ?? "no reclaimable context",
-          tokensBefore: outcome.metrics?.effectiveTokensBefore ?? tokens,
-          tokensAfter: outcome.metrics?.estimatedTokensAfter ?? estimateTokens(ctx.session.buildInput().items),
-        });
-      }
-    } else {
-      const keepRecentTokens = Math.min(8000, Math.floor(tokens * 0.5));
-      const result = await compact(ctx.session, ctx.client, { instructions, keepRecentTokens });
-      ctx.renderer.emit({
-        type: "compaction_done",
-        timestamp: Date.now(),
-        tokensBefore: result.tokensBefore,
-        tokensAfter: estimateTokens(ctx.session.buildInput().items),
-        savedTokens: result.tokensBefore - result.tokensKept,
-      });
-    }
-  } catch (error) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("compact.failed", { error: error instanceof Error ? error.message : String(error) }),
-    });
-    ctx.renderer.emit({
-      type: "compaction_skipped",
-      timestamp: Date.now(),
-      reason: "failed",
-      tokensBefore: tokens,
-      tokensAfter: estimateTokens(ctx.session.buildInput().items),
-    });
+  for (const event of view.events) {
+    ctx.renderer.emit(event);
   }
 
   return { handled: true };
