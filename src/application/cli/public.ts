@@ -11,6 +11,7 @@ export * from "../../shared/i18n/types";
 export * from "../../shared/version";
 export * from "../capsules";
 export * from "../command-service";
+export * from "../commands/capsule";
 export * from "../commands/general";
 export * from "../commands/permissions";
 export * from "../commands/project-trust";
