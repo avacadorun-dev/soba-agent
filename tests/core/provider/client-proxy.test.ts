@@ -23,9 +23,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderRegistryState } from "../../../src/application/providers/types";
 import { OpenResponsesClientProxy } from "../../../src/infrastructure/llm/providers/client-proxy";
 import { ProviderRegistry } from "../../../src/infrastructure/llm/providers/registry";
-import type { ProviderRegistryState } from "../../../src/infrastructure/llm/providers/types";
 
 // ─── Test fixture ───
 

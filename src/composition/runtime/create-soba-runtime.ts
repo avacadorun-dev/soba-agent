@@ -3,20 +3,13 @@ import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import { McpRuntimeController } from "../../application/mcp-runtime-controller";
+import type { ModelDefinition, ProviderDefinition } from "../../application/providers/types";
 import { SessionLifecycleService } from "../../application/session-lifecycle";
 import { SkillCatalog } from "../../application/skills/catalog";
 import { SkillDiscovery } from "../../application/skills/discovery";
 import { ProjectTrustStore } from "../../application/skills/project-trust-store";
 import { SkillManager } from "../../application/skills/skill-manager";
-import {
-  createDelegatedBashTool,
-  createDelegatedInspectFileTool,
-  createDelegatedLsTool,
-  createDelegatedReadTool,
-  createDelegatedSearchFilesTool,
-  createDelegatedWriteTool,
-  type RuntimeToolDelegation,
-} from "../../application/tool-delegation";
+import type { RuntimeToolDelegation } from "../../application/tool-delegation";
 import { TrustManager } from "../../application/trust/trust-manager";
 import type {
   CreateSessionInput,
@@ -46,10 +39,17 @@ import type { AgentEvent } from "../../engine/turn/types";
 import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
 import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
-import type { ModelDefinition, ProviderDefinition } from "../../infrastructure/llm/providers/types";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import {
+  createDelegatedBashTool,
+  createDelegatedInspectFileTool,
+  createDelegatedLsTool,
+  createDelegatedReadTool,
+  createDelegatedSearchFilesTool,
+  createDelegatedWriteTool,
+} from "../../infrastructure/tools/delegation";
 import { bashTool } from "../../infrastructure/tools/local/bash";
 import { checkpointTool } from "../../infrastructure/tools/local/checkpoint";
 import { editTool } from "../../infrastructure/tools/local/edit";

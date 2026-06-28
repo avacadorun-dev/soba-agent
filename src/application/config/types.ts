@@ -9,8 +9,8 @@ import type { CompactionConfig } from "../../engine/compaction/trigger-policy";
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../infrastructure/llm/providers/model-defaults";
-import type { ProviderRegistryState } from "../../infrastructure/llm/providers/types";
+} from "../providers/model-defaults";
+import type { ProviderRegistryState } from "../providers/types";
 
 export type { CompactionConfig } from "../../engine/compaction/trigger-policy";
 

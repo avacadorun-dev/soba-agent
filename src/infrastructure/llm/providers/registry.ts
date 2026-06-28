@@ -25,6 +25,19 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SobaConfig } from "../../../application/config/types";
+import {
+  DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
+  DEFAULT_SYNTHETIC_MAX_OUTPUT,
+} from "../../../application/providers/model-defaults";
+import { BUILTIN_PROVIDERS, findBuiltinProvider } from "../../../application/providers/providers";
+import type {
+  CustomProviderMap,
+  ModelDefinition,
+  ProviderConfigMap,
+  ProviderDefinition,
+  ProviderRegistryState,
+  TestResult,
+} from "../../../application/providers/types";
 import { OpenAIAdapter } from "../openai/openai-adapter";
 import type { ProviderAdapter } from "../openai/types";
 import {
@@ -33,19 +46,6 @@ import {
   type OpenResponsesClientConfig,
 } from "../openresponses/openresponses-client";
 import { discoverModels, getCachedModels } from "./discovery";
-import {
-  DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-  DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "./model-defaults";
-import { BUILTIN_PROVIDERS, findBuiltinProvider } from "./providers";
-import type {
-  CustomProviderMap,
-  ModelDefinition,
-  ProviderConfigMap,
-  ProviderDefinition,
-  ProviderRegistryState,
-  TestResult,
-} from "./types";
 
 /** Default path to the user config file. */
 export function getProviderRegistryConfigPath(): string {

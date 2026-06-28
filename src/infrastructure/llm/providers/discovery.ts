@@ -17,8 +17,8 @@
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "./model-defaults";
-import type { ModelDefinition, ProviderDefinition } from "./types";
+} from "../../../application/providers/model-defaults";
+import type { ModelDefinition, ProviderDefinition } from "../../../application/providers/types";
 
 /** A single entry returned by `GET /v1/models`. */
 export interface DiscoveredModel {

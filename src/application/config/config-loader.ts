@@ -20,14 +20,14 @@ import {
   validateCompactionConfig,
 } from "../../engine/compaction/trigger-policy";
 import { discoverModels, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
+import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
+import type { I18n } from "../../shared/i18n/i18n";
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../infrastructure/llm/providers/model-defaults";
-import { BUILTIN_PROVIDERS } from "../../infrastructure/llm/providers/providers";
-import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
-import type { ModelDefinition, ProviderDefinition } from "../../infrastructure/llm/providers/types";
-import type { I18n } from "../../shared/i18n/i18n";
+} from "../providers/model-defaults";
+import { BUILTIN_PROVIDERS } from "../providers/providers";
+import type { ModelDefinition, ProviderDefinition } from "../providers/types";
 import type { SobaConfig } from "./types";
 import { DEFAULT_CONFIG, DEFAULT_SOUND_CONFIG, isTuiThemeName } from "./types";
 

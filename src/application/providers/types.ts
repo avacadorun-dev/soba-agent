@@ -2,8 +2,8 @@
  * Provider registry types — Phase 2.5 A1.
  *
  * ProviderDefinition declares a vendor (OpenAI, Anthropic, ...) together with
- * the concrete models it exposes. ProviderRegistry stores these definitions
- * and uses them to spin up OpenResponsesClient instances for any given model.
+ * the concrete models it exposes. Infrastructure adapters use these
+ * application-level definitions to spin up clients for any given model.
  *
  * Design notes:
  * - Provider ids are stable, lowercase, kebab-friendly strings used as keys
@@ -11,12 +11,12 @@
  * - `apiKeyEnv` is the canonical env var to read when an API key is missing
  *   from the persisted config. Ollama uses no key.
  * - `adapter` selects the provider adapter. Today only "openai" is implemented
- *   in middleware; "anthropic" is reserved for future work and treated as
+ *   in infrastructure; "anthropic" is reserved for future work and treated as
  *   unsupported at runtime (see ProviderRegistry.testConnection).
  * - Custom providers can be added/removed at runtime via addProvider/removeProvider.
  */
 
-/** Adapter identifier — selects the provider adapter in core/middleware. */
+/** Adapter identifier — selects the provider adapter implementation. */
 export type ProviderAdapterId = "openai" | "anthropic";
 
 /**

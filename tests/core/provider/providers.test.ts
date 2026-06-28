@@ -16,8 +16,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { BUILTIN_PROVIDERS, findBuiltinProvider } from "../../../src/infrastructure/llm/providers/providers";
-import type { ProviderDefinition } from "../../../src/infrastructure/llm/providers/types";
+import { BUILTIN_PROVIDERS, findBuiltinProvider } from "../../../src/application/providers/providers";
+import type { ProviderDefinition } from "../../../src/application/providers/types";
 
 function assertWellFormed(p: ProviderDefinition): void {
   expect(p.id).toBeTruthy();
