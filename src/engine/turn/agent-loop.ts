@@ -65,6 +65,7 @@ import {
 } from "./narration";
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
+import { decideTextOnlyResponse } from "./text-only-response-decision";
 import {
   observeToolExecutionResult,
   type ToolExecutionObservationState,
@@ -78,8 +79,6 @@ import {
   createTurnError,
   createUserItem,
   FINISH_TOOL_NAME,
-  getAutonomousFollowUpReason,
-  hasVisibleAssistantText,
   isInvisibleAssistantMessage,
   safeParseArgs,
   wantsFullVerification,
@@ -888,162 +887,48 @@ export class AgentLoop {
           break;
         }
 
-        if (toolCalls.length === 0 && !shouldContinue && evidenceLedger.getSummary().needsVerification) {
-          await runAutoVerificationAt("text-only-stop");
-        }
-
-        const autonomousReason =
-          toolCalls.length === 0 && !shouldContinue
-            ? getAutonomousFollowUpReason(
-                assistantMessages,
-                needsVerification,
-                errors.filter((error) => error.status === "active"),
-                hasMutatedFiles,
-                hasUsedTools,
-              )
-            : null;
-
-        // After a security denial, the model has already received
-        // "Do NOT attempt alternative approaches". Don't inject a
-        // follow-up message that could be interpreted as "continue".
-        const hadSecurityDenialThisTurn = errors.some(
-          (error) => error.type === "security_denial",
-        );
-        if (hadSecurityDenialThisTurn && autonomousReason) {
-          appendAssistantMessagesToSession();
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "security-denial",
-            "Turn stopped after security denial. The model has been instructed not to continue.",
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
-
-        if (
-          autonomousReason &&
-          autonomousFollowUps < this.options.maxAutonomousFollowUps
-        ) {
-          supersedeVisibleAssistantMessages();
-          autonomousFollowUps++;
-          this.debug({
-            event: "loop/auto-continue",
+        if (toolCalls.length === 0) {
+          const textOnlyDecision = await decideTextOnlyResponse({
+            assistantMessages,
+            session: this.session,
+            allItems,
+            errors,
             turn: turnIndex,
             iteration,
-            toolCalls: toolCalls.length,
-            hasUsedTools,
-            needsVerification,
             autonomousFollowUps,
-            autoContinue: true,
-            textPreview: assistantMessages
-              .map(extractTextFromOutput)
-              .join(" ")
-              .slice(0, 100),
+            maxAutonomousFollowUps: this.options.maxAutonomousFollowUps,
+            ledgerNeedsVerification: () => evidenceLedger.getSummary().needsVerification,
+            getTurnState: () => ({
+              needsVerification,
+              hasMutatedFiles,
+              hasUsedTools,
+            }),
+            runAutoVerification: () => runAutoVerificationAt("text-only-stop"),
+            appendAssistantMessagesToSession,
+            supersedeVisibleAssistantMessages,
+            emit: (event) => this.emit(event),
+            debug: (data) => this.debug(data),
+            emitStopReason: (reason, detail) => {
+              this._emitStopReason(
+                turnIndex,
+                iteration,
+                reason,
+                detail,
+                hasUsedTools,
+                autonomousFollowUps,
+              );
+            },
+            narrate: (eventType, message, evidenceIds = []) => {
+              emitNarrationOnce(eventType, message, evidenceIds);
+            },
           });
-          // Directive injected as a user message — the model must act, not discuss
-          const hasActiveErrors = errors.some(
-            (error) => error.status === "active",
-          );
-          const requiredAction = hasActiveErrors
-            ? "Call a different available tool or command now to resolve or bypass the error. Do not call finish while the error is active."
-            : "Either call a tool to make progress, or call finish with your final response and completion criteria.";
-          const followUpItem = createUserItem(
-            `${autonomousReason} Do not output commentary about the situation. ${requiredAction}`,
-          );
-          this.session.appendItem(followUpItem as unknown as SessionItemParam);
-          allItems.push(followUpItem as unknown as ItemParam);
-          iteration++;
-          continue;
-        }
-
-        if (autonomousReason) {
-          const activeErrors = errors.filter(
-            (error) => error.status === "active",
-          );
-
-          // If there are active unresolved errors, stop with a loop-guard error.
-          if (activeErrors.length > 0) {
-            appendAssistantMessagesToSession();
-            const actualCount = autonomousFollowUps + 1;
-            const message = `No tool calls or finish after ${actualCount} attempts. Active errors remain unresolved.`;
-            emitNarrationOnce("blocked", message);
-            errors.push(createTurnError("timeout", message, iteration));
-            this.emit({
-              type: "turn_error",
-              timestamp: Date.now(),
-              error: message,
-            });
-            this._emitStopReason(
-              turnIndex,
-              iteration,
-              "loop-guard",
-              message,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
-            break;
-          }
-
-          // If visible text is still empty after all follow-up attempts, stop with an error.
-          if (!hasVisibleAssistantText(assistantMessages)) {
-            appendAssistantMessagesToSession();
-            const actualCount = autonomousFollowUps + 1;
-            const message = `No visible response after ${actualCount} attempts. The model kept producing only thinking without substantive output.`;
-            emitNarrationOnce("blocked", message);
-            errors.push(createTurnError("timeout", message, iteration));
-            this.emit({
-              type: "turn_error",
-              timestamp: Date.now(),
-              error: message,
-            });
-            this._emitStopReason(
-              turnIndex,
-              iteration,
-              "loop-guard",
-              message,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
-            break;
-          }
-
-          // No active errors — accept text-only response as final answer.
-          // This covers both non-mutation turns and mutation turns where the model
-          // completed work but didn't call finish (model-dependent compliance).
-          appendAssistantMessagesToSession();
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "completed",
-            "Model returned a text-only response; accepting as final answer",
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          emitNarrationOnce("completion", "Finishing with a visible final response.");
+          iteration = textOnlyDecision.iteration;
+          autonomousFollowUps = textOnlyDecision.autonomousFollowUps;
+          if (textOnlyDecision.action === "continue") continue;
           break;
         }
 
-        // Reset counter when tool calls are present (model is actively working)
-        if (toolCalls.length > 0) {
-          autonomousFollowUps = 0;
-        }
-
-        // A phased final answer is the only text-only completion signal.
-        if (toolCalls.length === 0) {
-          appendAssistantMessagesToSession();
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "completed",
-            "Model returned a final response",
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          emitNarrationOnce("completion", "Finishing with a visible final response.");
-          break;
-        }
+        autonomousFollowUps = 0;
 
         // Store the complete assistant tool-call group before any tool outputs.
         // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
