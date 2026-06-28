@@ -13,11 +13,11 @@ import {
   _resetDeprecationWarningsForTests,
   loadConfig,
   loadConfigFromFile,
-} from "../../../src/core/config/config-loader";
+} from "../../../src/application/config/config-loader";
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../../src/core/provider/model-defaults";
+} from "../../../src/infrastructure/llm/providers/model-defaults";
 
 let tmpDir: string;
 let configPath: string;

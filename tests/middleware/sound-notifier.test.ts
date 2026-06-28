@@ -14,15 +14,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { SoundConfig } from "../../src/core/config/types";
-import { DEFAULT_SOUND_CONFIG } from "../../src/core/config/types";
+import type { SoundConfig } from "../../src/application/config/types";
+import { DEFAULT_SOUND_CONFIG } from "../../src/application/config/types";
 import type {
   AgentEvent,
   DangerousConfirmationEvent,
   TurnErrorEvent,
   TurnStopReasonEvent,
-} from "../../src/core/loop/types";
-import { defaultPlaySound, type PlaySoundFn, SoundNotifier } from "../../src/core/middleware/sound-notifier";
+} from "../../src/engine/turn/types";
+import { defaultPlaySound, type PlaySoundFn, SoundNotifier } from "../../src/infrastructure/terminal/sound-notifier";
 
 function createMockEvent<T extends AgentEvent>(
   type: T["type"],

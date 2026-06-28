@@ -14,16 +14,16 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../src/core/client/openresponses-client";
+import { AgentLoop, createUserItem } from "../src/engine/turn/agent-loop";
+import type { AgentEvent } from "../src/engine/turn/types";
+import type { OpenResponsesClient } from "../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../src/infrastructure/persistence/sessions/session-manager";
 import type {
   CreateResponseParams,
   ResponseResource,
-} from "../src/core/client/types";
-import { AgentLoop, createUserItem } from "../src/core/loop/agent-loop";
-import type { AgentEvent } from "../src/core/loop/types";
-import { SessionManager } from "../src/core/session/session-manager";
-import { ToolRegistry } from "../src/core/tools/tool-registry";
-import type { ToolDefinition } from "../src/core/tools/types";
+} from "../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../src/kernel/tools/tool-registry";
+import type { ToolDefinition } from "../src/kernel/tools/types";
 
 // ─── Helpers ───
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createToolOutcomeFingerprint, LoopGuard, type ToolOutcome } from "../../../src/core/loop/loop-guard";
-import type { ToolErrorInfo } from "../../../src/core/tools/types";
+import { createToolOutcomeFingerprint, LoopGuard, type ToolOutcome } from "../../../src/engine/turn/loop-guard";
+import type { ToolErrorInfo } from "../../../src/kernel/tools/types";
 
 describe("LoopGuard helpful tool failure handling", () => {
   test("repeated exact edit failure triggers recovery prompt with typed next action", () => {

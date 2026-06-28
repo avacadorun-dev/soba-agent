@@ -9,9 +9,9 @@ import { constants, createReadStream } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { classifyFileSystemError, createToolErrorResult, redactSecrets } from "./errors";
-import type { ToolContext, ToolDefinition, ToolResult } from "./types";
-import { truncateOutput } from "./types";
+import { classifyFileSystemError, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import { truncateOutput } from "../../../kernel/tools/types";
 
 // ─── Types ───
 

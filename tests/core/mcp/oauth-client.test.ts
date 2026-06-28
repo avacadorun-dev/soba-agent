@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { McpOAuthClient, redactMcpOAuthDiagnostics } from "../../../src/core/mcp/oauth-client";
-import type { McpOAuthFetch } from "../../../src/core/mcp/oauth-discovery";
-import { McpOAuthTokenStore, recordFromTokenSet } from "../../../src/core/mcp/oauth-token-store";
+import { McpOAuthClient, redactMcpOAuthDiagnostics } from "../../../src/infrastructure/mcp/oauth-client";
+import type { McpOAuthFetch } from "../../../src/infrastructure/mcp/oauth-discovery";
+import { McpOAuthTokenStore, recordFromTokenSet } from "../../../src/infrastructure/mcp/oauth-token-store";
 
 describe("MCP OAuth client", () => {
   let tempDir: string;

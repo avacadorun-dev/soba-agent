@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { AgentLoop } from "../../../../src/core/loop/agent-loop";
+import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions, TuiMessage } from "../../../../src/ui/terminal/interactive/model/types";
 

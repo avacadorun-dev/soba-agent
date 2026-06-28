@@ -20,10 +20,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { computeSkillContentHash, validateSkill } from "../../../src/core/skills/validator";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { computeSkillContentHash, validateSkill } from "../../../src/application/skills/validator";
 
 describe("Skill Discovery, Validation, and Catalog", () => {
   let tempDir: string;

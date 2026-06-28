@@ -10,8 +10,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { classifyOpenAIError, OpenAIAdapter } from "../../../src/core/middleware/openai-adapter";
-import type { ProviderConfig } from "../../../src/core/middleware/types";
+import { classifyOpenAIError, OpenAIAdapter } from "../../../src/infrastructure/llm/openai/openai-adapter";
+import type { ProviderConfig } from "../../../src/infrastructure/llm/openai/types";
 
 const adapter = new OpenAIAdapter();
 

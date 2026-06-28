@@ -19,16 +19,16 @@
  * (a Map lookup) and works for both sync and async callers.
  */
 
-import type { NativeCompactionInput, ProviderErrorKind } from "../../../core/middleware/types";
-import type { NativeContinuation, ProviderCapabilities, ProviderIdentity } from "../../../core/session/types-v2";
-import type { OpenResponsesClient, OpenResponsesClientConfig } from "../openresponses/openresponses-client";
 import type {
   CompactResource,
   CompactResponseParams,
   CreateResponseParams,
   ResponseResource,
   StreamingEvent,
-} from "../openresponses/types";
+} from "../../../kernel/model/openresponses-types";
+import type { NativeContinuation, ProviderCapabilities, ProviderIdentity } from "../../../kernel/transcript/types-v2";
+import type { NativeCompactionInput, ProviderErrorKind } from "../openai/types";
+import type { OpenResponsesClient, OpenResponsesClientConfig } from "../openresponses/openresponses-client";
 import type { ProviderRegistry } from "./registry";
 
 /** Handler for active-model change notifications. */

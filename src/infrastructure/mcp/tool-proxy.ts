@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { JsonSchema, JsonSchemaProperty, ToolDefinition, ToolResult } from "../tools/local/types";
+import type { JsonSchema, JsonSchemaProperty, ToolDefinition, ToolResult } from "../../kernel/tools/types";
 import type { McpClient, McpTool, McpToolCallResult } from "./client";
 import { createDefaultMcpServerSecurity, type McpServerSecurity, redactMcpSensitiveText } from "./security";
 

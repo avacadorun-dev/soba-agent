@@ -15,33 +15,11 @@
  * Spec: internal-design-notes § Checkpoint Control-Tool
  */
 
-import type { ToolContext, ToolDefinition, ToolResult } from "./types";
+import type { CheckpointArgs } from "../../../kernel/tools/checkpoint";
 
-// ─── Types ───
+export { type CheckpointEvent, extractCheckpointEvent } from "../../../kernel/tools/checkpoint";
 
-export interface CheckpointArgs {
-  kind: "milestone" | "plan_pivot";
-  reason: string;
-  /** Required for plan_pivot: concise direction the agent should follow next. */
-  nextDirection?: string;
-  completed?: string[];
-  pending?: string[];
-}
-
-// ─── Events ───
-
-/**
- * Event emitted when a checkpoint tool is called.
- * Collected by the AgentLoop and processed after the tool batch completes.
- */
-export interface CheckpointEvent {
-  kind: "milestone" | "plan_pivot";
-  reason: string;
-  nextDirection?: string;
-  completed: string[];
-  pending: string[];
-  timestamp: string;
-}
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 
 // ─── Tool Definition ───
 
@@ -117,17 +95,3 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
     };
   },
 };
-
-/**
- * Extract a CheckpointEvent from tool execution details.
- */
-export function extractCheckpointEvent(args: CheckpointArgs): CheckpointEvent {
-  return {
-    kind: args.kind,
-    reason: args.reason,
-    nextDirection: args.nextDirection,
-    completed: args.completed ?? [],
-    pending: args.pending ?? [],
-    timestamp: new Date().toISOString(),
-  };
-}

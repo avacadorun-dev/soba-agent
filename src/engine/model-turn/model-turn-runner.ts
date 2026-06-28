@@ -1,12 +1,12 @@
-import type { OpenResponsesClient } from "../../core/client/openresponses-client";
+import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import type {
   CreateResponseParams,
   FunctionCallField,
   MessageField,
   OutputTextContent,
   ResponseResource,
-} from "../../core/client/types";
-import type { AgentEvent } from "../../core/loop/types";
+} from "../../kernel/model/openresponses-types";
+import type { AgentEvent } from "../turn/types";
 
 export interface ModelTurnRunnerOptions {
   stream: boolean;

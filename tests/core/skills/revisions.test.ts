@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RevisionStore } from "../../../src/core/skills/revisions";
+import { RevisionStore } from "../../../src/application/skills/revisions";
 
 describe("RevisionStore", () => {
   const testDir = join(process.cwd(), ".test-revisions");

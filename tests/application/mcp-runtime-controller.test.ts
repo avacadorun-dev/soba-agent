@@ -3,12 +3,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { McpRuntimeController } from "../../src/application/mcp-runtime-controller";
-import type { McpClientManager, McpClientManagerStatus } from "../../src/core/mcp/client-manager";
-import { McpSecretStore } from "../../src/core/mcp/secret-store";
-import type { McpServerSecurity } from "../../src/core/mcp/security";
-import type { McpConfig, McpServerConfig } from "../../src/core/mcp/types";
-import { ToolRegistry } from "../../src/core/tools/tool-registry";
-import { TrustManager } from "../../src/core/trust/trust-manager";
+import { TrustManager } from "../../src/application/trust/trust-manager";
+import type { McpClientManager, McpClientManagerStatus } from "../../src/infrastructure/mcp/client-manager";
+import { McpSecretStore } from "../../src/infrastructure/mcp/secret-store";
+import type { McpServerSecurity } from "../../src/infrastructure/mcp/security";
+import type { McpConfig, McpServerConfig } from "../../src/infrastructure/mcp/types";
+import { ToolRegistry } from "../../src/kernel/tools/tool-registry";
 
 let tempDir: string;
 

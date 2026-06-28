@@ -11,7 +11,7 @@ import {
   McpConfigError,
   parseMcpConfig,
   validateMcpConfig,
-} from "../../../src/core/mcp/config";
+} from "../../../src/infrastructure/mcp/config";
 
 describe("MCP config validation", () => {
   let projectRoot: string;

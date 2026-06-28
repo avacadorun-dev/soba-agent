@@ -10,6 +10,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import {
+  convertItemsToMessages,
+  ensureBashTool,
+  itemToOpenAIMessage,
+  OpenAIAdapter,
+} from "../src/infrastructure/llm/openai/openai-adapter";
 import type {
   AssistantMessageItemParam,
   CompactionSummaryItemParam,
@@ -20,13 +26,7 @@ import type {
   LocalShellCallOutputItemParam,
   SystemMessageItemParam,
   UserMessageItemParam,
-} from "../src/core/client/types";
-import {
-  convertItemsToMessages,
-  ensureBashTool,
-  itemToOpenAIMessage,
-  OpenAIAdapter,
-} from "../src/core/middleware/openai-adapter";
+} from "../src/kernel/model/openresponses-types";
 
 // ─── Helpers ───
 

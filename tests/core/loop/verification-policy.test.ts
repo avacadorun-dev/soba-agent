@@ -6,7 +6,7 @@ import {
   isCodePath,
   isDocumentationPath,
   verificationKindFromCommand,
-} from "../../../src/core/loop/verification-policy";
+} from "../../../src/engine/verification/verification-policy";
 
 describe("verification policy", () => {
   test("feature/refactor/bug fix require command evidence", () => {
@@ -82,7 +82,7 @@ describe("verification policy", () => {
   test("path classification separates docs from code mutations", () => {
     expect(isDocumentationPath("README.md")).toBe(true);
     expect(isDocumentationPath("docs/phase/plan.md")).toBe(true);
-    expect(isCodePath("src/core/loop/agent-loop.ts")).toBe(true);
+    expect(isCodePath("../../../src/engine/turn/agent-loop")).toBe(true);
     expect(isCodePath("tests/core/loop/verification-policy.test.ts")).toBe(true);
     expect(isCodePath("README.md")).toBe(false);
   });

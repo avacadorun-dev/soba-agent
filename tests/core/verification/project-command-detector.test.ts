@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectProjectCommands } from "../../../src/core/verification/project-command-detector";
-import type { ProjectCommandSet } from "../../../src/core/verification/types";
+import { detectProjectCommands } from "../../../src/engine/verification/project-command-detector";
+import type { ProjectCommandSet } from "../../../src/engine/verification/types";
 
 describe("project command detector", () => {
   test("SOBA fixture returns Bun/Biome-first verification commands", async () => {

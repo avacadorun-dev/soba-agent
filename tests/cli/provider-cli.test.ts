@@ -27,10 +27,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProviderCliError, parseProviderCliArgs, runProviderCli } from "../../src/apps/cli/provider-cli";
-import { I18n } from "../../src/core/i18n/i18n";
-import type { Locale } from "../../src/core/i18n/types";
-import { ProviderRegistry } from "../../src/core/provider/registry";
-import type { ProviderDefinition } from "../../src/core/provider/types";
+import { ProviderRegistry } from "../../src/infrastructure/llm/providers/registry";
+import type { ProviderDefinition } from "../../src/infrastructure/llm/providers/types";
+import { I18n } from "../../src/shared/i18n/i18n";
+import type { Locale } from "../../src/shared/i18n/types";
 
 // ─── Fixtures ───
 

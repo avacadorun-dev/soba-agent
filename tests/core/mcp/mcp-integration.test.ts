@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MCP_DRAFT_PROTOCOL_VERSION, MCP_RELEASED_PROTOCOL_VERSION, McpClient, McpClientError } from "../../../src/core/mcp/client";
-import { McpStdioTransport } from "../../../src/core/mcp/stdio-transport";
-import type { McpServerConfig } from "../../../src/core/mcp/types";
+import { MCP_DRAFT_PROTOCOL_VERSION, MCP_RELEASED_PROTOCOL_VERSION, McpClient, McpClientError } from "../../../src/infrastructure/mcp/client";
+import { McpStdioTransport } from "../../../src/infrastructure/mcp/stdio-transport";
+import type { McpServerConfig } from "../../../src/infrastructure/mcp/types";
 
 const FIXTURE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../fixtures/mcp/mock-mcp-server.ts");
 

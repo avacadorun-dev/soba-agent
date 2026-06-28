@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { CreateResponseParams, ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { McpClient, McpTool, McpToolCallResult } from "../../../src/core/mcp/client";
-import type { McpClientManagerStatus, McpManagedServerStatus } from "../../../src/core/mcp/client-manager";
-import { syncMcpToolsIntoRegistry } from "../../../src/core/mcp/tool-registry-sync";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition } from "../../../src/core/tools/types";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import type { McpClient, McpTool, McpToolCallResult } from "../../../src/infrastructure/mcp/client";
+import type { McpClientManagerStatus, McpManagedServerStatus } from "../../../src/infrastructure/mcp/client-manager";
+import { syncMcpToolsIntoRegistry } from "../../../src/infrastructure/mcp/tool-registry-sync";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { CreateResponseParams, ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition } from "../../../src/kernel/tools/types";
 
 describe("ToolRegistry MCP integration", () => {
   test("built-in tool still executes after MCP sync", async () => {

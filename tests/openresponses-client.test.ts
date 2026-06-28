@@ -10,10 +10,10 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createOpenResponsesClient, OpenResponsesClientImpl } from "../src/core/client/openresponses-client";
-import type { CompactResponseParams, CreateResponseParams, ResponseResource, StreamingEvent } from "../src/core/client/types";
-import type { SobaConfig } from "../src/core/config/types";
-import type { ProviderAdapter } from "../src/core/middleware/types";
+import type { SobaConfig } from "../src/application/config/types";
+import type { ProviderAdapter } from "../src/infrastructure/llm/openai/types";
+import { createOpenResponsesClient, OpenResponsesClientImpl } from "../src/infrastructure/llm/openresponses/openresponses-client";
+import type { CompactResponseParams, CreateResponseParams, ResponseResource, StreamingEvent } from "../src/kernel/model/openresponses-types";
 
 // ─── Helpers ───
 

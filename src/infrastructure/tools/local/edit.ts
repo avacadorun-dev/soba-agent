@@ -10,9 +10,9 @@
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { classifyEditError, classifyFileSystemError, createToolErrorResult } from "./errors";
+import { classifyEditError, classifyFileSystemError, createToolErrorResult } from "../../../kernel/tools/errors";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "./protected-paths";
-import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 
 // ─── Types ───
 

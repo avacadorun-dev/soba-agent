@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONFIG, TUI_THEME_NAMES } from "../../../../src/core/config/types";
+import { DEFAULT_CONFIG, TUI_THEME_NAMES } from "../../../../src/application/config/types";
 import { getMarkdownStyle, getTuiTheme, TUI_THEMES } from "../../../../src/ui/terminal/interactive/lib/theme";
 
 describe("OpenTUI themes", () => {

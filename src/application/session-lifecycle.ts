@@ -4,7 +4,7 @@ import {
   getDefaultSessionDir,
   listSessions,
   SessionManager,
-} from "../core/session/session-manager";
+} from "../infrastructure/persistence/sessions/session-manager";
 import type {
   CreateSessionInput,
   ListSessionsInput,

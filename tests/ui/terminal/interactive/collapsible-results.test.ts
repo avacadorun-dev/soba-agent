@@ -11,7 +11,7 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "bun:test";
-import type { AgentEvent } from "../../../../src/core/loop/types";
+import type { AgentEvent } from "../../../../src/engine/turn/types";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import { createToolResultMouseToggle } from "../../../../src/ui/terminal/interactive/ui/tool-result-block";
 

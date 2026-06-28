@@ -7,9 +7,9 @@ import {
   MemoryToolError,
   readProjectMemory,
   writeProjectMemory,
-} from "../../src/core/memory/memory-tools";
-import { ProjectMemory } from "../../src/core/memory/project-memory";
-import type { MemoryCapsuleInput } from "../../src/core/memory/types";
+} from "../../src/engine/memory/memory-tools";
+import { ProjectMemory } from "../../src/engine/memory/project-memory";
+import type { MemoryCapsuleInput } from "../../src/engine/memory/types";
 
 describe("Project memory tools", () => {
   let projectRoot: string;

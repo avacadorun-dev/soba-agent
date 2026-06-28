@@ -1,8 +1,7 @@
 # Current Architecture
 
-This is the real post-ACP architecture after the source tree cleanup. The
-project is organized as Clean Architecture with Ports and Adapters, packaged by
-bounded context where that fits the current code.
+The project uses layered ports-and-adapters boundaries. The retired `src/core`
+namespace is intentionally absent; new code must enter one explicit owner layer.
 
 ## Source Layout
 
@@ -10,18 +9,20 @@ bounded context where that fits the current code.
 src/
   cli.ts                    # compatibility package entrypoint
   apps/
-    cli/                    # CLI composition root and CLI-specific commands
+    cli/                    # CLI host
     acp/                    # ACP stdio JSON-RPC host
   adapters/
     acp/                    # ACP protocol mapping and client delegation
-  application/              # runtime contracts, factory, command/session facades
-  core/                     # agent engine and internal subsystems
+  application/              # public runtime/use-case APIs and command/session facades
+  composition/              # concrete dependency wiring
+  engine/                   # agent turn orchestration, compaction, verification, prompt logic
+  infrastructure/           # provider, MCP, tools, persistence, terminal integrations
+  kernel/                   # pure contracts, transcript/model/tool/session ports
+  shared/                   # shared non-domain support such as i18n
   ui/
     terminal/
       output/               # print/ANSI renderer and terminal primitives
       interactive/          # OpenTUI/Solid terminal application
-      interactive-tui.ts    # interactive TUI facade
-      open-tui-assets.ts    # OpenTUI asset setup
   audio/                    # packaged sound assets
   types/                    # project-wide ambient declarations
 ```
@@ -33,57 +34,63 @@ flowchart TD
   bin["bin/soba.js / dist/cli.js"] --> shim["src/cli.ts"]
   shim --> cli["src/apps/cli/main.ts"]
 
-  cli --> app["src/application<br/>SobaRuntime contracts + factory"]
-  cli --> output["src/ui/terminal/output<br/>print renderer"]
-  cli --> interactive["src/ui/terminal/interactive<br/>OpenTUI app"]
-  cli --> acpHost["src/apps/acp/server.ts<br/>stdio JSON-RPC host"]
+  cli --> appPublic["src/application/public.ts"]
+  cli --> runtimePublic["src/application/runtime/public.ts"]
+  cli --> output["src/ui/terminal/output"]
+  cli --> interactive["src/ui/terminal/interactive"]
+  cli --> acpHost["src/apps/acp/server.ts"]
 
-  acpHost --> acpAdapter["src/adapters/acp<br/>ACP dispatcher, schemas, delegation"]
-  acpAdapter --> app
+  acpHost --> acpAdapter["src/adapters/acp"]
+  acpAdapter --> appPublic
 
-  interactive --> app
-  interactive --> coreTypes["src/core<br/>types, provider/trust/session collaborators"]
-  output --> coreEvents["src/core<br/>event/i18n types"]
+  output --> appPublic
+  interactive --> appPublic
 
-  app --> core["src/core<br/>agent loop, controllers, tools, sessions, providers, MCP, memory"]
+  runtimePublic --> composition["src/composition/runtime"]
+  composition --> app["src/application"]
+  composition --> engine["src/engine"]
+  composition --> infra["src/infrastructure"]
+  composition --> kernel["src/kernel"]
 
-  core --> provider["provider/client"]
-  core --> mcp["MCP clients/transports/secrets"]
-  core --> tools["local + memory tools"]
-  core --> loop["loop/controllers/verification/permissions"]
-  core --> state["sessions/skills/memory/compaction/trust"]
+  app --> kernel
+  engine --> kernel
+  infra --> kernel
 ```
 
-## Boundaries Enforced Today
+## Enforced Boundaries
 
-- `src/core` does not import `src/apps`, `src/application`, `src/adapters`, or `src/ui`.
-- `src/application` does not import `src/apps`, `src/adapters`, or `src/ui`.
-- `src/adapters/acp` depends on `src/application` contracts, not on `src/core`.
-- `src/apps/acp` hosts transport and dispatch only; it does not reach into `src/core`.
-- `src/ui` is allowed to use runtime contracts and selected core collaborators, but it must not depend on app entrypoints or ACP code.
+- `src/core` must not exist.
+- `src/kernel` does not import application, engine, infrastructure, apps,
+  adapters, UI, `node:`, `bun:`, or OpenTUI.
+- `src/engine` does not import infrastructure, apps, adapters, or UI.
+- `src/application` does not import apps, adapters, UI, or OpenTUI.
+- `src/infrastructure` does not import apps or UI.
+- `src/apps` and `src/ui` use public application API modules instead of
+  reaching into kernel, engine, or infrastructure internals.
+- `src/composition` is the only layer allowed to assemble concrete
+  application, engine, infrastructure, and kernel implementations.
+
+The executable gate is:
+
+```bash
+bun run check:boundaries
+```
 
 ## Current Compromises
 
-- `src/core` is still broader than a pure domain layer. It contains the engine,
-  provider client code, MCP transports, local tools, config-facing subsystems,
-  and session persistence.
-- `src/application/runtime-factory.ts` is still the main composition surface. It
-  creates concrete core services directly, so it is a facade plus composition
-  root, not only pure use-case orchestration.
-- Terminal UI still imports selected core collaborators directly for provider,
-  trust, config, session, and event types. That is acceptable for this step, but
-  the cleaner long-term direction is to narrow those through application ports.
-- `src/cli.ts` remains as a tiny compatibility shim so existing package build,
-  project setup tests, and `bun run src/cli.ts` workflows continue to work.
+- `src/application/public.ts` is still a broad migration facade. It keeps
+  delivery layers off internals, but should be narrowed into focused public
+  APIs as command/session/provider/skill/MCP services mature.
+- `src/engine/turn/agent-loop.ts` is still a large legacy orchestrator. The
+  workflow controllers around model turns, tools, permissions, context,
+  completion, and verification have been extracted, but the turn pipeline still
+  needs to be split further.
+- Some tests still live under `tests/core/**` for historical continuity. Those
+  test locations do not imply a production `src/core` namespace.
 
-## Good Next Refactors
+## Next Refactors
 
-1. Split `src/core` into `engine` and `infrastructure` once ports are ready:
-   provider clients, MCP transports, config loading, and filesystem-facing tools
-   are the main candidates.
-2. Move CLI slash-command execution behind an application command port. Today
-   `src/apps/cli/commands.ts` still knows many core services directly.
-3. Narrow TUI dependencies on core by exposing provider, trust, and session
-   operations through `SobaRuntime` or smaller application services.
-4. Make `runtime-factory` thinner by extracting provider/MCP/tool composition
-   into dedicated infrastructure factories.
+1. Replace the broad `application/public.ts` facade with focused public modules.
+2. Move CLI slash-command implementations into `src/application/commands`.
+3. Continue splitting `engine/turn/agent-loop.ts` into prompt, tool-call,
+   verification, evidence, completion, and turn-result coordinators.

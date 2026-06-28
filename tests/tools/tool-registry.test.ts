@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { ToolRegistry } from "../../src/core/tools/tool-registry";
-import type { ToolDefinition } from "../../src/core/tools/types";
+import { ToolRegistry } from "../../src/kernel/tools/tool-registry";
+import type { ToolDefinition } from "../../src/kernel/tools/types";
 
 function makeDummyTool(name: string, toolType: "function" | "local_shell" = "function"): ToolDefinition {
   return {

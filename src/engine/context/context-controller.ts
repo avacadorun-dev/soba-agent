@@ -1,12 +1,12 @@
-import type { ResponseResource } from "../../core/client/types";
+import type { ResponseResource } from "../../kernel/model/openresponses-types";
 import type {
   ContextManager,
   OverflowRecoveryResult,
   PreInferenceCheckResult,
-} from "../../core/compaction/context-manager";
-import type { BackgroundScheduler } from "../../core/compaction/scheduler";
-import type { CapsuleTrigger } from "../../core/compaction/trigger-policy";
-import type { AgentEvent } from "../../core/loop/types";
+} from "../compaction/context-manager";
+import type { BackgroundScheduler } from "../compaction/scheduler";
+import type { CapsuleTrigger } from "../compaction/trigger-policy";
+import type { AgentEvent } from "../turn/types";
 
 export interface ContextControllerOptions {
   contextManager?: ContextManager;

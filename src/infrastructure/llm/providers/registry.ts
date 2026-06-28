@@ -24,9 +24,9 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { SobaConfig } from "../../../core/config/types";
-import { OpenAIAdapter } from "../../../core/middleware/openai-adapter";
-import type { ProviderAdapter } from "../../../core/middleware/types";
+import type { SobaConfig } from "../../../application/config/types";
+import { OpenAIAdapter } from "../openai/openai-adapter";
+import type { ProviderAdapter } from "../openai/types";
 import {
   createOpenResponsesClient,
   type OpenResponsesClient,

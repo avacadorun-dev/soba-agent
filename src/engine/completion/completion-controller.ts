@@ -1,4 +1,5 @@
-import type { FunctionCallField } from "../../core/client/types";
+import type { FunctionCallField } from "../../kernel/model/openresponses-types";
+import type { ToolResult } from "../../kernel/tools/types";
 import {
   type CompletionDecision,
   type CompletionState,
@@ -6,8 +7,7 @@ import {
   evaluateCompletion,
   type FinishRequest,
   parseFinishRequest,
-} from "../../core/loop/completion-gate";
-import type { ToolResult } from "../../core/tools/types";
+} from "./completion-gate";
 
 const DEFAULT_MAX_FINISH_REJECTIONS = 3;
 

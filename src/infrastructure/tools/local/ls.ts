@@ -8,9 +8,9 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { classifyFileSystemError, createToolErrorResult } from "./errors";
-import type { ToolContext, ToolDefinition, ToolResult } from "./types";
-import { truncateOutput } from "./types";
+import { classifyFileSystemError, createToolErrorResult } from "../../../kernel/tools/errors";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import { truncateOutput } from "../../../kernel/tools/types";
 
 // ─── Types ───
 

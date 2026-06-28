@@ -1,19 +1,19 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { CreateResponseParams, ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { McpClient, McpTool, McpToolCallResult } from "../../../src/core/mcp/client";
-import type { McpClientManagerStatus, McpManagedServerStatus } from "../../../src/core/mcp/client-manager";
-import type { McpServerSecurity } from "../../../src/core/mcp/security";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import type { McpClient, McpTool, McpToolCallResult } from "../../../src/infrastructure/mcp/client";
+import type { McpClientManagerStatus, McpManagedServerStatus } from "../../../src/infrastructure/mcp/client-manager";
+import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
 import {
   assertSafeMcpRemoteHeader,
   MCP_REDACTED_QUERY_VALUE,
   redactMcpDiagnosticUrl,
-} from "../../../src/core/mcp/security";
-import { syncMcpToolsIntoRegistry } from "../../../src/core/mcp/tool-registry-sync";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
+} from "../../../src/infrastructure/mcp/security";
+import { syncMcpToolsIntoRegistry } from "../../../src/infrastructure/mcp/tool-registry-sync";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { CreateResponseParams, ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("MCP security boundary", () => {
   test("token-like query params are redacted in remote diagnostics URLs", () => {

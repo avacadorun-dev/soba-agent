@@ -1,6 +1,6 @@
-import type { FunctionCallField } from "../../core/client/types";
-import type { ApprovalDecision, DangerousConfirmationEvent } from "../../core/loop/types";
-import type { TrustManager } from "../../core/trust/trust-manager";
+import type { TrustManager } from "../../application/trust/trust-manager";
+import type { FunctionCallField } from "../../kernel/model/openresponses-types";
+import type { ApprovalDecision, DangerousConfirmationEvent } from "../turn/types";
 
 export interface PermissionRequest {
   toolName: string;

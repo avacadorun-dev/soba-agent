@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createToolOutcomeFingerprint, LoopGuard, type ToolOutcome } from "../src/core/loop/loop-guard";
+import { createToolOutcomeFingerprint, LoopGuard, type ToolOutcome } from "../src/engine/turn/loop-guard";
 
 function outcome(step: string, result = "ok"): ToolOutcome[] {
   return [{ toolName: "read", arguments: JSON.stringify({ path: step }), result, isError: false }];

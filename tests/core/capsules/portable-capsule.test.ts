@@ -9,8 +9,8 @@ import {
   sanitizePortableCapsule,
   sha256Hex,
   validatePortableCapsule,
-} from "../../../src/core/capsules";
-import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
+} from "../../../src/application/capsules";
+import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 
 function makeCapsule(overrides: Partial<PortableCapsule> = {}): PortableCapsule {
   const createdAt = "2026-06-19T00:00:00.000Z";
@@ -33,8 +33,8 @@ function makeCapsule(overrides: Partial<PortableCapsule> = {}): PortableCapsule 
     assumptions: ["Bun is the only runtime"],
     signals: ["Run bun test tests/core/provider/registry.test.ts"],
     artifacts: {
-      readFiles: ["src/core/provider/registry.ts"],
-      modifiedFiles: ["src/core/provider/registry.ts"],
+      readFiles: ["../../../src/infrastructure/llm/providers/registry"],
+      modifiedFiles: ["../../../src/infrastructure/llm/providers/registry"],
       verificationCommands: ["bun test tests/core/provider/registry.test.ts"],
       verificationStatus: "passed",
     },
@@ -72,7 +72,7 @@ function makeCheckpoint(overrides: Partial<ContextCapsuleEntry> = {}): ContextCa
     },
     artifacts: {
       readFiles: ["/tmp/soba-agent/src/core/provider/registry.ts"],
-      modifiedFiles: ["src/core/provider/registry.ts"],
+      modifiedFiles: ["../../../src/infrastructure/llm/providers/registry"],
       verificationCommands: ["bun test tests/core/provider/registry.test.ts"],
       verificationStatus: "passed",
     },
@@ -208,7 +208,7 @@ describe("PortableCapsule sanitization and checkpoint mapping", () => {
     const serialized = JSON.stringify(capsule);
 
     expect(capsule.provenance).toEqual({ source: "session_checkpoint", checkpointId: "ck_abc123def456" });
-    expect(capsule.artifacts.modifiedFiles).toContain("src/core/provider/registry.ts");
+    expect(capsule.artifacts.modifiedFiles).toContain("../../../src/infrastructure/llm/providers/registry");
     expect(capsule.coreContent.some((entry) => entry.includes("Updated provider registry"))).toBe(true);
     expect(serialized).not.toContain("nativeContinuation");
     expect(serialized).not.toContain("fake-super-secret-value");

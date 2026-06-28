@@ -13,16 +13,16 @@ import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { AgentEvent } from "../../../src/core/loop/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { createActivateSkillTool } from "../../../src/core/tools/activate-skill";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { AgentEvent } from "../../../src/engine/turn/types";
+import { createOpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { createActivateSkillTool } from "../../../src/infrastructure/tools/local/activate-skill";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("I.6: Activate Skill Tool Integration", () => {
   let testDir: string;

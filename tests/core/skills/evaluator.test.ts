@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DraftStore, type EvalCase } from "../../../src/core/skills/drafts";
-import { SkillEvaluator } from "../../../src/core/skills/evaluator";
+import { DraftStore, type EvalCase } from "../../../src/application/skills/drafts";
+import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 
 describe("SkillEvaluator", () => {
   const testDir = join(process.cwd(), ".test-evaluator");

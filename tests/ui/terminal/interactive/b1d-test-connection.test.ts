@@ -10,9 +10,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
-import { I18n } from "../../../../src/core/i18n/i18n";
-import type { OpenResponsesClientProxy } from "../../../../src/core/provider/client-proxy";
-import { ProviderRegistry } from "../../../../src/core/provider/registry";
+import type { OpenResponsesClientProxy } from "../../../../src/infrastructure/llm/providers/client-proxy";
+import { ProviderRegistry } from "../../../../src/infrastructure/llm/providers/registry";
+import { I18n } from "../../../../src/shared/i18n/i18n";
 import { NotificationStore } from "../../../../src/ui/terminal/interactive/model/notification-store";
 import { ProviderStore } from "../../../../src/ui/terminal/interactive/model/provider-store";
 

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { FunctionCallField } from "../../../src/core/client/types";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
 import {
   createDangerousConfirmationAdapter,
   PermissionBroker,
   type PermissionRequest,
-} from "../../../src/core/permissions/permission-broker";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
+} from "../../../src/engine/permissions/permission-broker";
+import type { FunctionCallField } from "../../../src/kernel/model/openresponses-types";
 
 function toolCall(name: string, args: string): Pick<FunctionCallField, "call_id" | "name" | "arguments"> {
   return {

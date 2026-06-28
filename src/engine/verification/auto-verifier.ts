@@ -1,10 +1,10 @@
-import type { EvidenceLedger, EvidenceLedgerSummary } from "../../core/loop/evidence-ledger";
-import type { TaskKind, VerificationKind } from "../../core/loop/verification-policy";
-import { verificationKindFromCommand } from "../../core/loop/verification-policy";
-import type { ToolDefinition, ToolResult } from "../../core/tools/types";
-import type { TrustManager } from "../../core/trust/trust-manager";
+import type { TrustManager } from "../../application/trust/trust-manager";
+import type { ToolDefinition, ToolResult } from "../../kernel/tools/types";
+import type { EvidenceLedger, EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import { detectProjectCommands } from "./project-command-detector";
 import type { ProjectCommand, ProjectCommandKind, SkippedProjectCommand } from "./types";
+import type { TaskKind, VerificationKind } from "./verification-policy";
+import { verificationKindFromCommand } from "./verification-policy";
 
 export interface AutoVerifierToolCall {
   callId: string;

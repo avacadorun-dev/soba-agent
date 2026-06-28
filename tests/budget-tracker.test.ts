@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { BudgetTracker } from "../src/core/budget/budget-tracker";
+import { BudgetTracker } from "../src/engine/budget/budget-tracker";
 
 describe("BudgetTracker", () => {
   test("formatTokens форматирует токены", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { maskSensitiveFields } from "../src/core/config/config-loader";
-import { DEFAULT_CONFIG, type SobaConfig } from "../src/core/config/types";
+import { maskSensitiveFields } from "../src/application/config/config-loader";
+import { DEFAULT_CONFIG, type SobaConfig } from "../src/application/config/types";
 
 describe("maskSensitiveFields", () => {
   test("маскирует apiKey показывая только первые 4 и последние 4 символа", () => {

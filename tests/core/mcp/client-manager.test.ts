@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { MCP_DRAFT_PROTOCOL_VERSION, McpClient, type McpClientTransport, type McpClientTransportHandlers } from "../../../src/core/mcp/client";
-import { McpClientManager, McpClientManagerError, type McpRemoteAuthCommandResult } from "../../../src/core/mcp/client-manager";
-import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage, type JsonRpcRequest } from "../../../src/core/mcp/json-rpc";
-import { McpTransportError } from "../../../src/core/mcp/transport";
-import type { McpServerConfig } from "../../../src/core/mcp/types";
+import { MCP_DRAFT_PROTOCOL_VERSION, McpClient, type McpClientTransport, type McpClientTransportHandlers } from "../../../src/infrastructure/mcp/client";
+import { McpClientManager, McpClientManagerError, type McpRemoteAuthCommandResult } from "../../../src/infrastructure/mcp/client-manager";
+import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage, type JsonRpcRequest } from "../../../src/infrastructure/mcp/json-rpc";
+import { McpTransportError } from "../../../src/infrastructure/mcp/transport";
+import type { McpServerConfig } from "../../../src/infrastructure/mcp/types";
 
 describe("MCP client manager", () => {
   test("starts two configured servers", async () => {

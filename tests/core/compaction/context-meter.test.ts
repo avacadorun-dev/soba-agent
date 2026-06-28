@@ -10,8 +10,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { ContextMeter } from "../../../src/core/compaction/context-meter";
-import type { SessionEntry, SessionItemEntry } from "../../../src/core/session/types";
+import { ContextMeter } from "../../../src/engine/compaction/context-meter";
+import type { SessionEntry, SessionItemEntry } from "../../../src/kernel/transcript/types";
 
 // ─── Helpers ───
 

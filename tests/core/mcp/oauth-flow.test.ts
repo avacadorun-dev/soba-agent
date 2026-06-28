@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { McpOAuthCallbackResult, McpOAuthCallbackServer } from "../../../src/core/mcp/oauth-callback-server";
-import type { McpOAuthDiscoveryPlan, McpOAuthFetch } from "../../../src/core/mcp/oauth-discovery";
+import type { McpOAuthCallbackResult, McpOAuthCallbackServer } from "../../../src/infrastructure/mcp/oauth-callback-server";
+import type { McpOAuthDiscoveryPlan, McpOAuthFetch } from "../../../src/infrastructure/mcp/oauth-discovery";
 import {
   buildMcpOAuthAuthorizationRequest,
   redactMcpOAuthValue,
   runMcpOAuthLoginFlow,
   summarizeMcpOAuthCallback,
-} from "../../../src/core/mcp/oauth-flow";
-import type { McpPkcePair } from "../../../src/core/mcp/oauth-pkce";
+} from "../../../src/infrastructure/mcp/oauth-flow";
+import type { McpPkcePair } from "../../../src/infrastructure/mcp/oauth-pkce";
 
 describe("MCP OAuth flow", () => {
   test("builds authorization URL with state, code challenge, redirect URI, and scopes", () => {

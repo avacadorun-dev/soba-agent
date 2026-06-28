@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { ProviderErrorKind } from "../../../src/core/middleware/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { ProviderErrorKind } from "../../../src/infrastructure/llm/openai/types";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("Mutating batch guard", () => {
   test("UC-AL-10 cannot edit and run dependent test in one unobserved response", async () => {

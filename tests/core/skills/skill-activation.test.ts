@@ -17,13 +17,13 @@ import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSystemPrompt } from "../../../src/core/prompt/system-prompt";
-import type { ActivatedSkillRef } from "../../../src/core/session/types-v2";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/core/skills/slash-handler";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/application/skills/slash-handler";
+import { buildSystemPrompt } from "../../../src/engine/prompt/system-prompt";
+import type { ActivatedSkillRef } from "../../../src/kernel/transcript/types-v2";
 
 describe("Task B.2: Progressive disclosure и activation", () => {
   let tempDir: string;

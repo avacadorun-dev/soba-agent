@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { I18n } from "../../../../src/core/i18n/i18n";
+import { I18n } from "../../../../src/shared/i18n/i18n";
 import {
   applyInputSuggestion,
   formatInputSuggestion,

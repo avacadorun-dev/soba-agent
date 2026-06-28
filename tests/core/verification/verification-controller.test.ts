@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EvidenceLedger } from "../../../src/core/loop/evidence-ledger";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
-import { VerificationController } from "../../../src/core/verification/verification-controller";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
+import { VerificationController } from "../../../src/engine/verification/verification-controller";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("VerificationController", () => {
   test("runs auto-verification and keeps attempted fingerprints across calls", async () => {

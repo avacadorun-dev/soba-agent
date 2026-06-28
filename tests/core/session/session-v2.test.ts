@@ -19,18 +19,18 @@ import {
   SessionManager,
   serializeCapsuleContext,
   serializePortableState,
-} from "../../../src/core/session/session-manager";
+} from "../../../src/infrastructure/persistence/sessions/session-manager";
 import type {
   AssistantMessageItemParam,
   CompactionSummaryItemParam,
   UserMessageItemParam,
-} from "../../../src/core/session/types";
+} from "../../../src/kernel/transcript/types";
 import type {
   ActivatedSkillRef,
   ArtifactLedger,
   ContextCapsuleEntry,
   PortableContextState,
-} from "../../../src/core/session/types-v2";
+} from "../../../src/kernel/transcript/types-v2";
 import {
   generateCheckpointId,
   isContextCapsuleEntry,
@@ -38,7 +38,7 @@ import {
   isSessionMigrationEntry,
   isSkillActivationEntry,
   isValidCheckpointId,
-} from "../../../src/core/session/types-v2";
+} from "../../../src/kernel/transcript/types-v2";
 
 // ─── Helpers ───
 

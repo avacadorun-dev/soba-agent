@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { SkillEvaluator } from "../../../src/core/skills/evaluator";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { validateSkill } from "../../../src/core/skills/validator";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { SkillEvaluator } from "../../../src/application/skills/evaluator";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { validateSkill } from "../../../src/application/skills/validator";
 
 const repoSkillsDir = join(process.cwd(), "skills");
 const forbiddenLintToolExamples = ["eslint", "prettier"];

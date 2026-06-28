@@ -14,8 +14,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BudgetTracker } from "../../core/budget/budget-tracker";
-import type { OpenResponsesClient } from "../../core/client/openresponses-client";
+import type { SkillManager } from "../../application/skills/skill-manager";
+import { TrustManager } from "../../application/trust/trust-manager";
+import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import type {
   AssistantMessageItemParam,
   CreateResponseParams,
@@ -27,22 +28,54 @@ import type {
   OutputTextContent,
   ResponseResource,
   Usage,
-} from "../../core/client/types";
-import type { ContextManager } from "../../core/compaction/context-manager";
-import type { BackgroundScheduler } from "../../core/compaction/scheduler";
-import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../../core/evidence";
+} from "../../kernel/model/openresponses-types";
+import type { SessionPort } from "../../kernel/session/session-port";
+import { type CheckpointArgs, type CheckpointEvent, extractCheckpointEvent } from "../../kernel/tools/checkpoint";
+import { createToolErrorResult } from "../../kernel/tools/errors";
+import type { ToolRegistry } from "../../kernel/tools/tool-registry";
+import type { ToolContext, ToolResult } from "../../kernel/tools/types";
+import { toolResultToOutputItem } from "../../kernel/tools/types";
+import type {
+  DebugEntry,
+  FlightRecordData,
+  ItemParam as SessionItemParam,
+  UserMessageItemParam,
+} from "../../kernel/transcript/types";
+import { BudgetTracker } from "../budget/budget-tracker";
+import type { ContextManager } from "../compaction/context-manager";
+import type { BackgroundScheduler } from "../compaction/scheduler";
+import { CompletionController } from "../completion/completion-controller";
 import {
   acknowledgeErrors,
   recordToolOutcome,
-} from "../../core/loop/completion-gate";
-import { EvidenceLedger, isVerificationCommand } from "../../core/loop/evidence-ledger";
-import { LoopGuard, type ToolOutcome } from "../../core/loop/loop-guard";
+} from "../completion/completion-gate";
+import { ContextController } from "../context/context-controller";
+import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../evidence";
+import { EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
+import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
+import {
+  addRecoveryReflectionFix,
+  createRecoveryReflectionDraft,
+  type RecoveryReflectionDraft,
+  writeRecoveryReflectionLesson,
+} from "../memory/reflection-memory-policy";
+import { extractTextFromOutput, ModelTurnRunner } from "../model-turn/model-turn-runner";
+import {
+  createDangerousConfirmationAdapter,
+  PermissionBroker,
+} from "../permissions/permission-broker";
+import { buildSystemPrompt } from "../prompt/system-prompt";
+import { evaluateToolBatch, isMutationToolName } from "../tool-calls/tool-batch-guard";
+import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
+import type { AutoVerifierToolCall } from "../verification/auto-verifier";
+import { VerificationController } from "../verification/verification-controller";
+import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
+import { LoopGuard, type ToolOutcome } from "./loop-guard";
 import {
   createWorkingNarration,
   isNonTrivialPrompt,
   type WorkingNarrationEventType,
-} from "../../core/loop/narration";
-import { evaluateToolBatch, isMutationToolName } from "../../core/loop/tool-batch-guard";
+} from "./narration";
 import {
   type AgentEvent,
   type AgentLoopOptions,
@@ -52,40 +85,7 @@ import {
   type DangerousConfirmationEvent,
   DEFAULT_LOOP_OPTIONS,
   type TurnStopReasonEvent,
-} from "../../core/loop/types";
-import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../../core/loop/verification-policy";
-import { buildProjectMemorySection, type ProjectMemorySource } from "../../core/memory/memory-injector";
-import {
-  addRecoveryReflectionFix,
-  createRecoveryReflectionDraft,
-  type RecoveryReflectionDraft,
-  writeRecoveryReflectionLesson,
-} from "../../core/memory/reflection-memory-policy";
-import { buildSystemPrompt } from "../../core/prompt/system-prompt";
-import type { SessionManager } from "../../core/session/session-manager";
-import type {
-  DebugEntry,
-  FlightRecordData,
-  ItemParam as SessionItemParam,
-  UserMessageItemParam,
-} from "../../core/session/types";
-import type { SkillManager } from "../../core/skills/skill-manager";
-import { type CheckpointArgs, type CheckpointEvent, extractCheckpointEvent } from "../../core/tools/checkpoint";
-import { createToolErrorResult } from "../../core/tools/errors";
-import type { ToolRegistry } from "../../core/tools/tool-registry";
-import type { ToolContext, ToolResult } from "../../core/tools/types";
-import { toolResultToOutputItem } from "../../core/tools/types";
-import { TrustManager } from "../../core/trust/trust-manager";
-import { CompletionController } from "../completion/completion-controller";
-import { ContextController } from "../context/context-controller";
-import { extractTextFromOutput, ModelTurnRunner } from "../model-turn/model-turn-runner";
-import {
-  createDangerousConfirmationAdapter,
-  PermissionBroker,
-} from "../permissions/permission-broker";
-import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
-import type { AutoVerifierToolCall } from "../verification/auto-verifier";
-import { VerificationController } from "../verification/verification-controller";
+} from "./types";
 
 // ─── Helpers ───
 
@@ -441,7 +441,7 @@ function readProjectContext(
  * Build CreateResponseParams from session and system prompt.
  */
 function buildRequest(
-  session: SessionManager,
+  session: SessionPort,
   systemPrompt: string,
   tools: ToolRegistry,
   model: string,
@@ -491,7 +491,7 @@ function buildRequest(
 
 export class AgentLoop {
   private client: OpenResponsesClient;
-  private session: SessionManager;
+  private session: SessionPort;
   private tools: ToolRegistry;
   private options: AgentLoopOptions;
   private cwd: string;
@@ -526,7 +526,7 @@ export class AgentLoop {
 
   constructor(
     client: OpenResponsesClient,
-    session: SessionManager,
+    session: SessionPort,
     tools: ToolRegistry,
     cwd: string,
     options: Partial<AgentLoopOptions> = {},
@@ -628,11 +628,11 @@ export class AgentLoop {
     return this.contextManager;
   }
 
-  getSessionManager(): SessionManager {
+  getSessionManager(): SessionPort {
     return this.session;
   }
 
-  setSessionManager(session: SessionManager): void {
+  setSessionManager(session: SessionPort): void {
     this.session = session;
     this.cwd = session.getCwd();
     this.trustManager.setRepoRoot(this.cwd);

@@ -16,7 +16,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { editTool } from "../../src/core/tools/edit";
+import { editTool } from "../../src/infrastructure/tools/local/edit";
 
 describe("edit tool", () => {
   let tmpDir: string;

@@ -1,6 +1,6 @@
-import { FixUntilGreenController, type FixUntilGreenDecision } from "../../core/fix-until-green";
-import type { EvidenceLedger } from "../../core/loop/evidence-ledger";
-import { isVerificationCommand } from "../../core/loop/evidence-ledger";
+import type { EvidenceLedger } from "../evidence/evidence-ledger";
+import { isVerificationCommand } from "../evidence/evidence-ledger";
+import { FixUntilGreenController, type FixUntilGreenDecision } from "../recovery";
 import { type AutoVerifierOptions, type AutoVerifierResult, runAutoVerifier } from "./auto-verifier";
 
 export interface AutoVerificationOutcome {

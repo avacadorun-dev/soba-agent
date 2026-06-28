@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../../src/application/config/types";
 import { SessionLifecycleService } from "../../../src/application/session-lifecycle";
 import { type CommandContext, executeCommand } from "../../../src/apps/cli/commands";
-import { DEFAULT_CONFIG } from "../../../src/core/config/types";
-import { I18n } from "../../../src/core/i18n/i18n";
-import { SessionManager } from "../../../src/core/session/session-manager";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { I18n } from "../../../src/shared/i18n/i18n";
 
 let tempHome: string;
 let projectRoot: string;

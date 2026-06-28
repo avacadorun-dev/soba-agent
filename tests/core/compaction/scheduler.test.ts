@@ -12,13 +12,13 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { ContextManager, type ContextManagerConfig } from "../../../src/core/compaction/context-manager";
-import { type BackgroundOperation, BackgroundScheduler, type SchedulerConfig } from "../../../src/core/compaction/scheduler";
-import type { ModelInvoker } from "../../../src/core/compaction/strategies/portable-only";
-import { DEFAULT_COMPACTION_CONFIG } from "../../../src/core/compaction/trigger-policy";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import type { ItemParam } from "../../../src/core/session/types";
-import type { ProviderCapabilities, ProviderIdentity } from "../../../src/core/session/types-v2";
+import { ContextManager, type ContextManagerConfig } from "../../../src/engine/compaction/context-manager";
+import { type BackgroundOperation, BackgroundScheduler, type SchedulerConfig } from "../../../src/engine/compaction/scheduler";
+import type { ModelInvoker } from "../../../src/engine/compaction/strategies/portable-only";
+import { DEFAULT_COMPACTION_CONFIG } from "../../../src/engine/compaction/trigger-policy";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ItemParam } from "../../../src/kernel/transcript/types";
+import type { ProviderCapabilities, ProviderIdentity } from "../../../src/kernel/transcript/types-v2";
 
 // ─── Helpers ───
 
