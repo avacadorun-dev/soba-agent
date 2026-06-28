@@ -4,13 +4,13 @@
  * Commands are prefixed with "/" and processed before sending to the LLM.
  */
 
-import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TrustManager, TuiRenderer } from "../../../application/cli/public";
+import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TrustManager, TuiRenderer } from "../public";
 import {
   type CommandResult, handleSkillSlashCommand, isSkillSlashCommand, McpSecretStore, notify,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
   type RuntimeCommandMetadata, tryTuiRegistryFallback
-} from "../../../application/cli/public";
+} from "../public";
 import { handleCapsule } from "./capsule";
 import {
   handleAutoCompact,

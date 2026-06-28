@@ -1,5 +1,5 @@
-import type { CapsuleCommandView, CommandResult } from "../../../application/cli/public";
-import { executeCapsuleCommand } from "../../../application/cli/public";
+import type { CapsuleCommandView, CommandResult } from "../public";
+import { executeCapsuleCommand } from "../public";
 import type { CommandContext } from "./index";
 
 export function handleCapsule(args: string[], ctx: CommandContext): CommandResult {

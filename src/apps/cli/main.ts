@@ -12,6 +12,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { executeCommand } from "../../application/cli/commands/public";
 import type { AcpClientRequester, ApprovalDecision, Locale, RuntimeEvent, RuntimeSessionHandle, SobaConfig } from "../../application/cli/public";
 import {
   APP_VERSION,
@@ -32,7 +33,6 @@ import {
 } from "../../application/cli/public";
 import { createSobaRuntime } from "../../application/runtime/public";
 import { parseArgs, printHelp } from "./args";
-import { executeCommand } from "./commands";
 
 const VERSION = APP_VERSION;
 

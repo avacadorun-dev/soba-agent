@@ -1,4 +1,4 @@
-import type { CommandResult } from "../../../application/cli/public";
+import type { CommandResult } from "../public";
 import {
   buildConfigCommandView,
   buildHelpCommandView,
@@ -7,7 +7,7 @@ import {
   executeLangCommand,
   executeRewindCommand,
   executeThemeCommand,
-} from "../../../application/cli/public";
+} from "../public";
 import type { CommandContext } from "./index";
 
 export async function handleCompact(args: string[], ctx: CommandContext): Promise<CommandResult> {
