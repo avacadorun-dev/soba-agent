@@ -4,6 +4,7 @@ import {
   buildHelpCommandView,
   compact,
   estimateTokens,
+  executeAutoCompactCommand,
   executeLangCommand,
   executeRewindCommand,
   executeThemeCommand,
@@ -224,42 +225,39 @@ export function handleTheme(args: string[], ctx: CommandContext): CommandResult 
 }
 
 export function handleAutoCompact(args: string[], ctx: CommandContext): CommandResult {
-  const action = args[0]?.toLowerCase();
+  const view = executeAutoCompactCommand(args, {
+    agentOverrideEnabled: ctx.agentLoop?.getAutoCompactOverride()?.enabled,
+    contextPolicyEnabled: ctx.contextManager?.getPolicy().getConfig().auto,
+    configEnabled: ctx.config.compaction?.auto,
+  });
 
-  if (!action || (action !== "on" && action !== "off")) {
-    const currentStatus =
-      ctx.agentLoop?.getAutoCompactOverride()?.enabled ??
-      ctx.contextManager?.getPolicy().getConfig().auto ??
-      ctx.config.compaction?.auto ??
-      true;
+  if (view.kind === "status") {
     ctx.renderer.emit({
       type: "info",
       timestamp: Date.now(),
       message: ctx.i18n.t("command.autoCompact.status", {
-        status: ctx.i18n.t(currentStatus ? "command.autoCompact.enabled" : "command.autoCompact.disabled"),
+        status: ctx.i18n.t(view.enabled ? "command.autoCompact.enabled" : "command.autoCompact.disabled"),
       }),
     });
     return { handled: true };
   }
 
-  const enabled = action === "on";
-
   if (!ctx.autoCompactOverride) {
-    ctx.autoCompactOverride = { enabled };
+    ctx.autoCompactOverride = { enabled: view.enabled };
   } else {
-    ctx.autoCompactOverride.enabled = enabled;
+    ctx.autoCompactOverride.enabled = view.enabled;
   }
 
   if (ctx.agentLoop) {
-    ctx.agentLoop.setAutoCompactOverride({ enabled });
+    ctx.agentLoop.setAutoCompactOverride({ enabled: view.enabled });
   }
-  ctx.contextManager?.getPolicy().setAuto(enabled);
+  ctx.contextManager?.getPolicy().setAuto(view.enabled);
 
   ctx.renderer.emit({
     type: "info",
     timestamp: Date.now(),
     message: ctx.i18n.t("command.autoCompact.changed", {
-      status: ctx.i18n.t(enabled ? "command.autoCompact.enabled" : "command.autoCompact.disabled"),
+      status: ctx.i18n.t(view.enabled ? "command.autoCompact.enabled" : "command.autoCompact.disabled"),
     }),
   });
   return { handled: true };
