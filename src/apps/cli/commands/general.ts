@@ -1,8 +1,8 @@
-import type { CommandResult, ContextCapsuleEntry, RuntimeCommandMetadata } from "../../../application/cli/public";
+import type { CommandResult, RuntimeCommandMetadata } from "../../../application/cli/public";
 import {
   compact,
   estimateTokens,
-  isContextCapsuleEntry,
+  executeRewindCommand,
   isTuiThemeName,
   maskSensitiveFields,
   RUNTIME_COMMANDS,
@@ -142,47 +142,39 @@ export function handleConfig(_args: string[], ctx: CommandContext): CommandResul
 }
 
 export function handleRewind(args: string[], ctx: CommandContext): CommandResult {
-  const checkpointId = args[0];
-  const entries = ctx.session.getEntries();
-  const compactionCheckpoints = entries.filter((entry) => entry.type === "compaction");
-  const capsules = entries.filter((entry) => isContextCapsuleEntry(entry)) as ContextCapsuleEntry[];
-  const allCheckpoints = [...compactionCheckpoints, ...capsules];
+  const view = executeRewindCommand({ args, session: ctx.session });
 
-  if (!checkpointId) {
-    const message =
-      allCheckpoints.length > 0
-        ? [
-            ctx.i18n.t("command.rewind.title"),
-            ...compactionCheckpoints.map((entry) => `  [compaction] ${entry.id}  ${entry.timestamp}`),
-            ...capsules.map((entry) => `  [capsule:${entry.strategy}] ${entry.checkpointId}  ${entry.timestamp}`),
-          ].join("\n")
-        : ctx.i18n.t("command.rewind.empty");
+  if (view.kind === "empty") {
+    ctx.renderer.emit({ type: "info", timestamp: Date.now(), message: ctx.i18n.t("command.rewind.empty") });
+    return { handled: true };
+  }
+
+  if (view.kind === "list") {
+    const message = [
+      ctx.i18n.t("command.rewind.title"),
+      ...view.checkpoints.map((checkpoint) =>
+        checkpoint.kind === "compaction"
+          ? `  [compaction] ${checkpoint.id}  ${checkpoint.timestamp}`
+          : `  [capsule:${checkpoint.strategy}] ${checkpoint.id}  ${checkpoint.timestamp}`,
+      ),
+    ].join("\n");
     ctx.renderer.emit({ type: "info", timestamp: Date.now(), message });
     return { handled: true };
   }
 
-  const checkpoint = compactionCheckpoints.find(
-    (entry) => entry.id === checkpointId || entry.id.startsWith(checkpointId)
-  );
-  const capsule = capsules.find(
-    (entry) => entry.checkpointId === checkpointId || entry.checkpointId.startsWith(checkpointId)
-  );
-
-  const targetEntry = checkpoint ?? capsule;
-  if (!targetEntry) {
+  if (view.kind === "not_found") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
-      message: ctx.i18n.t("command.rewind.notFound", { id: checkpointId }),
+      message: ctx.i18n.t("command.rewind.notFound", { id: view.checkpointId }),
     });
     return { handled: true };
   }
 
-  ctx.session.branch(targetEntry.id);
   ctx.renderer.emit({
     type: "info",
     timestamp: Date.now(),
-    message: ctx.i18n.t("command.rewind.complete", { id: targetEntry.id }),
+    message: ctx.i18n.t("command.rewind.complete", { id: view.checkpointId }),
   });
   return { handled: true };
 }
