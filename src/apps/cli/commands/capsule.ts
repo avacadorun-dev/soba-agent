@@ -1,54 +1,79 @@
-import type { CommandResult, ContextCapsuleEntry } from "../../../application/cli/public";
-import {
-  isContextCapsuleEntry,
-  PortableCapsuleService,
-  PortableCapsuleServiceError,
-} from "../../../application/cli/public";
+import type { CapsuleCommandView, CommandResult } from "../../../application/cli/public";
+import { executeCapsuleCommand } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export function handleCapsule(args: string[], ctx: CommandContext): CommandResult {
-  const subcommand = args[0]?.toLowerCase();
-  if (subcommand === "create") {
-    return handleCapsuleCreate(args.slice(1), ctx);
-  }
-  if (subcommand === "export") {
-    return handleCapsuleExport(args.slice(1), ctx);
-  }
-  if (subcommand === "load") {
-    return handleCapsuleLoad(args.slice(1), ctx);
+  const view = executeCapsuleCommand({ args, session: ctx.session });
+  renderCapsuleCommandView(ctx, view);
+  return view.kind === "loaded" ? { handled: false, prompt: view.prompt } : { handled: true };
+}
+
+function renderCapsuleCommandView(ctx: CommandContext, view: CapsuleCommandView): void {
+  if (view.kind === "empty") {
+    ctx.renderer.emit({ type: "info", timestamp: Date.now(), message: ctx.i18n.t("command.capsule.empty") });
+    return;
   }
 
-  const checkpointId = args[0];
-  const entries = ctx.session.getEntries();
-  const capsules = entries.filter((entry) => isContextCapsuleEntry(entry)) as ContextCapsuleEntry[];
-
-  if (!checkpointId) {
-    const message =
-      capsules.length > 0
-        ? [
-            ctx.i18n.t("command.capsule.title"),
-            ...capsules.map((entry) =>
-              `  ${entry.checkpointId}  ${entry.strategy}  ${entry.quality}  ${entry.timestamp}`
-            ),
-          ].join("\n")
-        : ctx.i18n.t("command.capsule.empty");
+  if (view.kind === "list") {
+    const message = [
+      ctx.i18n.t("command.capsule.title"),
+      ...view.capsules.map((capsule) => `  ${capsule.checkpointId}  ${capsule.strategy}  ${capsule.quality}  ${capsule.timestamp}`),
+    ].join("\n");
     ctx.renderer.emit({ type: "info", timestamp: Date.now(), message });
-    return { handled: true };
+    return;
   }
 
-  const capsule = capsules.find(
-    (entry) => entry.checkpointId === checkpointId || entry.checkpointId.startsWith(checkpointId)
-  );
-
-  if (!capsule) {
+  if (view.kind === "not_found") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.notFound", { id: checkpointId }),
+      message: ctx.i18n.t("command.capsule.notFound", { id: view.checkpointId }),
     });
-    return { handled: true };
+    return;
   }
 
+  if (view.kind === "details") {
+    emitCapsuleDetails(ctx, view);
+    return;
+  }
+
+  if (view.kind === "usage") {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t(`command.capsule.${view.command}.usage`),
+    });
+    return;
+  }
+
+  if (view.kind === "error") {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("command.capsule.error", { error: view.message }),
+    });
+    return;
+  }
+
+  const successKey =
+    view.kind === "created"
+      ? "command.capsule.create.success"
+      : view.kind === "exported"
+        ? "command.capsule.export.success"
+        : "command.capsule.load.success";
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: ctx.i18n.t(successKey, {
+      id: view.id,
+      checkpointId: view.kind === "loaded" ? "" : view.checkpointId,
+      path: view.path,
+    }),
+  });
+}
+
+function emitCapsuleDetails(ctx: CommandContext, view: Extract<CapsuleCommandView, { kind: "details" }>): void {
+  const { capsule } = view;
   const lines = [
     ctx.i18n.t("command.capsule.details.title", { id: capsule.checkpointId }),
     ctx.i18n.t("command.capsule.details.strategy", { strategy: capsule.strategy }),
@@ -74,129 +99,9 @@ export function handleCapsule(args: string[], ctx: CommandContext): CommandResul
       ctx.i18n.t("command.capsule.details.nativeContinuation", {
         provider: capsule.nativeContinuation.provider.adapterId,
         compatKey: capsule.nativeContinuation.compatibilityKey.slice(0, 20),
-      })
+      }),
     );
   }
 
-  ctx.renderer.emit({
-    type: "info",
-    timestamp: Date.now(),
-    message: lines.join("\n"),
-  });
-  return { handled: true };
-}
-
-function handleCapsuleCreate(args: string[], ctx: CommandContext): CommandResult {
-  const objective = stripWrappingQuotes(args.join(" ").trim());
-  if (!objective) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.create.usage"),
-    });
-    return { handled: true };
-  }
-
-  const service = new PortableCapsuleService({ cwd: ctx.session.getCwd() });
-  try {
-    const result = service.createFromSession(ctx.session, { objective });
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.create.success", {
-        id: result.capsule.id,
-        checkpointId: result.capsule.provenance.checkpointId ?? "",
-        path: result.path,
-      }),
-    });
-  } catch (error) {
-    emitCapsuleError(error, ctx);
-  }
-
-  return { handled: true };
-}
-
-function handleCapsuleExport(args: string[], ctx: CommandContext): CommandResult {
-  const checkpointId = args[0];
-  const destinationPath = args[1];
-  if (!checkpointId || !destinationPath) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.export.usage"),
-    });
-    return { handled: true };
-  }
-
-  const service = new PortableCapsuleService({ cwd: ctx.session.getCwd() });
-  try {
-    const result = service.exportCheckpoint(ctx.session, checkpointId, { destinationPath });
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.export.success", {
-        id: result.capsule.id,
-        checkpointId: result.capsule.provenance.checkpointId ?? "",
-        path: result.path,
-      }),
-    });
-  } catch (error) {
-    emitCapsuleError(error, ctx);
-  }
-
-  return { handled: true };
-}
-
-function handleCapsuleLoad(args: string[], ctx: CommandContext): CommandResult {
-  const capsulePath = args[0];
-  if (!capsulePath) {
-    ctx.renderer.emit({
-      type: "error",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.load.usage"),
-    });
-    return { handled: true };
-  }
-
-  const service = new PortableCapsuleService({ cwd: ctx.session.getCwd() });
-  try {
-    const result = service.loadCapsule(capsulePath);
-    ctx.renderer.emit({
-      type: "info",
-      timestamp: Date.now(),
-      message: ctx.i18n.t("command.capsule.load.success", {
-        id: result.capsule.id,
-        path: result.path,
-      }),
-    });
-    return { handled: false, prompt: result.prompt };
-  } catch (error) {
-    emitCapsuleError(error, ctx);
-    return { handled: true };
-  }
-}
-
-function emitCapsuleError(error: unknown, ctx: CommandContext): void {
-  const message =
-    error instanceof PortableCapsuleServiceError
-      ? `${error.message}${error.issues.length > 0 ? `: ${error.issues.map((issue) => issue.code).join(", ")}` : ""}`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-
-  ctx.renderer.emit({
-    type: "error",
-    timestamp: Date.now(),
-    message: ctx.i18n.t("command.capsule.error", { error: message }),
-  });
-}
-
-function stripWrappingQuotes(value: string): string {
-  if (
-    (value.startsWith("\"") && value.endsWith("\"")) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1).trim();
-  }
-  return value;
+  ctx.renderer.emit({ type: "info", timestamp: Date.now(), message: lines.join("\n") });
 }
