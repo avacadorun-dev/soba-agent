@@ -69,6 +69,7 @@ import {
   observeToolExecutionResult,
   type ToolExecutionObservationState,
 } from "./tool-execution-observer";
+import { decideAfterToolIteration } from "./tool-iteration-decision";
 import {
   autoVerifierTimeoutSeconds,
   canExecuteReadOnlyBatchInParallel,
@@ -1173,74 +1174,34 @@ export class AgentLoop {
         }
 
         iteration++;
-        if (fixUntilGreenStop) {
-          emitNarrationOnce("blocked", fixUntilGreenStop);
-          errors.push(createTurnError("timeout", fixUntilGreenStop, iteration));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: fixUntilGreenStop,
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "loop-guard",
-            fixUntilGreenStop,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
+        const afterToolDecision = decideAfterToolIteration({
+          fixUntilGreenStop,
+          fixUntilGreenFollowUp,
+          loopGuard,
+          iterationOutcomes,
+          session: this.session,
+          allItems,
+          errors,
+          iteration,
+          emit: (event) => this.emit(event),
+          emitStopReason: (reason, detail) => {
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              reason,
+              detail,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+          },
+          narrate: (eventType, message, evidenceIds = []) => {
+            emitNarrationOnce(eventType, message, evidenceIds);
+          },
+        });
+        if (afterToolDecision === "break") {
           break;
         }
-        if (fixUntilGreenFollowUp) {
-          emitNarrationOnce("recovery", fixUntilGreenFollowUp);
-          const recoveryItem = createUserItem(fixUntilGreenFollowUp);
-          this.session.appendItem(recoveryItem as unknown as SessionItemParam);
-          allItems.push(recoveryItem as unknown as ItemParam);
-          continue;
-        }
-        const progressDecision =
-          loopGuard.observeToolIteration(iterationOutcomes);
-        if (progressDecision.action === "recover") {
-          emitNarrationOnce("recovery", progressDecision.message);
-          this.emit({
-            type: "loop_guard",
-            timestamp: Date.now(),
-            action: "recover",
-            iteration,
-            message: progressDecision.message,
-          });
-          const recoveryItem = createUserItem(progressDecision.message);
-          this.session.appendItem(recoveryItem as unknown as SessionItemParam);
-          allItems.push(recoveryItem as unknown as ItemParam);
-          continue;
-        }
-        if (progressDecision.action === "stop") {
-          emitNarrationOnce("blocked", progressDecision.message);
-          errors.push(
-            createTurnError("timeout", progressDecision.message, iteration),
-          );
-          this.emit({
-            type: "loop_guard",
-            timestamp: Date.now(),
-            action: "stop",
-            iteration,
-            message: progressDecision.message,
-          });
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: progressDecision.message,
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "loop-guard",
-            progressDecision.message,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
+        if (afterToolDecision === "continue") continue;
       } while (true);
 
       const finalResponse = currentResponse ?? createLoopErrorResponse();
