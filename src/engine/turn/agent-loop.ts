@@ -45,7 +45,7 @@ import {
 import { ContextController } from "../context/context-controller";
 import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../evidence";
 import { EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
-import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
+import type { ProjectMemorySource } from "../memory/memory-injector";
 import {
   addRecoveryReflectionFix,
   createRecoveryReflectionDraft,
@@ -57,7 +57,6 @@ import {
   createDangerousConfirmationAdapter,
   PermissionBroker,
 } from "../permissions/permission-broker";
-import { buildSystemPrompt } from "../prompt/system-prompt";
 import { evaluateToolBatch, isMutationToolName } from "../tool-calls/tool-batch-guard";
 import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
@@ -81,6 +80,7 @@ import {
   buildRequest,
   canExecuteReadOnlyBatchInParallel,
   checkpointEventToPlanState,
+  createLoopErrorResponse,
   createTurnError,
   createUserItem,
   extractCommandArgument,
@@ -97,6 +97,10 @@ import {
   wantsFullVerification,
 } from "./turn-helpers";
 import {
+  type ProjectContextReader,
+  prepareTurnPrompt,
+} from "./turn-prompt-preparation";
+import {
   type AgentEvent,
   type AgentLoopOptions,
   type AgentTurnError,
@@ -108,10 +112,7 @@ import {
 } from "./types";
 
 export { createUserItem } from "./turn-helpers";
-
-export interface ProjectContextReader {
-  read(cwd: string): Array<{ path: string; content: string }> | Promise<Array<{ path: string; content: string }>>;
-}
+export type { ProjectContextReader } from "./turn-prompt-preparation";
 
 // ─── AgentLoop ───
 
@@ -229,10 +230,6 @@ export class AgentLoop {
   /** Get budget tracker */
   getBudgetTracker(): BudgetTracker {
     return this.budgetTracker;
-  }
-
-  private async readProjectContext(): Promise<Array<{ path: string; content: string }>> {
-    return (await this.projectContextReader?.read(this.cwd)) ?? [];
   }
 
   private emitContextUsageUpdate(input: {
@@ -518,38 +515,31 @@ export class AgentLoop {
         "context_scan",
         "Checking project instructions, available skills, and memory before choosing the next action.",
       );
-      const contextFiles = await this.readProjectContext();
-      const projectInstructions = contextFiles.map((file) => file.content);
+      const preparedPrompt = await prepareTurnPrompt({
+        cwd: this.cwd,
+        userText,
+        selectedTools: this.tools.getNames(),
+        contextReader: this.projectContextReader,
+        skillManager: this.skillManager,
+        projectMemory: this.projectMemory,
+        modelConfig: this.client.getConfig(),
+      });
+      const {
+        contextFiles,
+        projectInstructions,
+        systemPrompt,
+        model,
+        maxOutputTokens,
+        maxCompletionTokens,
+        contextWindow,
+        temperature,
+      } = preparedPrompt;
       emitNarrationOnce(
         "observation",
         contextFiles.length > 0
           ? `Loaded project instructions from ${contextFiles.map((file) => file.path).join(", ")}.`
           : "No project instruction file was found; using repository structure and targeted reads.",
       );
-      
-      // Get skill catalog for system prompt
-      const skills = this.skillManager?.getCatalogForPrompt() ?? [];
-      const projectMemorySection = this.projectMemory
-        ? buildProjectMemorySection(this.projectMemory, {
-            maxTokens: 2_000,
-            query: userText,
-          })
-        : "";
-      
-      const systemPrompt = buildSystemPrompt({
-        cwd: this.cwd,
-        selectedTools: this.tools.getNames(),
-        contextFiles,
-        skills,
-        projectMemorySection,
-      });
-
-      // Get current model from client config
-      const model = this.client.getConfig().model;
-      const maxOutputTokens = this.client.getConfig().maxOutputTokens;
-      const maxCompletionTokens = this.client.getConfig().maxCompletionTokens ?? 0;
-      const contextWindow = this.client.getConfig().contextWindow;
-      const temperature = this.client.getConfig().temperature;
       this.flight({
         kind: "prompt_snapshot",
         turn: turnIndex,
@@ -1805,44 +1795,14 @@ export class AgentLoop {
         }
       } while (true);
 
+      const finalResponse = currentResponse ?? createLoopErrorResponse();
+
       // Emit turn end
       this.emit({
         type: "turn_end",
         timestamp: Date.now(),
         turnIndex,
-        response: currentResponse ?? {
-          id: "",
-          object: "response",
-          created_at: 0,
-          completed_at: 0,
-          status: "failed",
-          incomplete_details: null,
-          model: "",
-          previous_response_id: null,
-          instructions: null,
-          output: [],
-          error: { code: "loop_error", message: "No response received" },
-          tools: [],
-          tool_choice: "auto",
-          truncation: "disabled",
-          parallel_tool_calls: true,
-          text: {},
-          top_p: 1,
-          presence_penalty: 0,
-          frequency_penalty: 0,
-          top_logprobs: 0,
-          temperature: 1,
-          reasoning: null,
-          usage: null,
-          max_output_tokens: null,
-          max_tool_calls: null,
-          store: false,
-          background: false,
-          service_tier: "default",
-          metadata: {},
-          safety_identifier: null,
-          prompt_cache_key: null,
-        },
+        response: finalResponse,
         totalUsage: { ...this.state.totalUsage },
       });
       this.debug({
@@ -1873,39 +1833,7 @@ export class AgentLoop {
 
       return {
         items: allItems,
-        response: currentResponse ?? {
-          id: "",
-          object: "response",
-          created_at: 0,
-          completed_at: 0,
-          status: "failed",
-          incomplete_details: null,
-          model: "",
-          previous_response_id: null,
-          instructions: null,
-          output: [],
-          error: { code: "loop_error", message: "No response received" },
-          tools: [],
-          tool_choice: "auto",
-          truncation: "disabled",
-          parallel_tool_calls: true,
-          text: {},
-          top_p: 1,
-          presence_penalty: 0,
-          frequency_penalty: 0,
-          top_logprobs: 0,
-          temperature: 1,
-          reasoning: null,
-          usage: null,
-          max_output_tokens: null,
-          max_tool_calls: null,
-          store: false,
-          background: false,
-          service_tier: "default",
-          metadata: {},
-          safety_identifier: null,
-          prompt_cache_key: null,
-        },
+        response: finalResponse,
         usage: { ...this.state.totalUsage },
         errors,
         activeErrors: errors.filter((error) => error.status === "active"),
