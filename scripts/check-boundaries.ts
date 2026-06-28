@@ -88,8 +88,10 @@ function importSpecifiers(source: string): string[] {
   const specifiers: string[] = [];
   const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?["']([^"']+)["']/g;
   const dynamicImportRe = /import\(\s*["']([^"']+)["']\s*\)/g;
+  const requireRe = /require\(\s*["']([^"']+)["']\s*\)/g;
   for (const match of source.matchAll(importRe)) specifiers.push(match[1]);
   for (const match of source.matchAll(dynamicImportRe)) specifiers.push(match[1]);
+  for (const match of source.matchAll(requireRe)) specifiers.push(match[1]);
   return specifiers;
 }
 
