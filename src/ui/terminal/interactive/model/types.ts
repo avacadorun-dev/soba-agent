@@ -1,10 +1,4 @@
-import type { CommandResult } from "../../../../application/command-service";
-import type { SobaRuntime } from "../../../../application/types";
-import type { TuiThemeName } from "../../../../core/config/types";
-import type { I18n } from "../../../../core/i18n/i18n";
-import type { AgentLoop } from "../../../../core/loop/agent-loop";
-import type { OpenResponsesClientProxy } from "../../../../core/provider/client-proxy";
-import type { ProjectTrustStore } from "../../../../core/skills/project-trust-store";
+import type { AgentLoop, CommandResult, I18n, OpenResponsesClientProxy, ProjectTrustStore, SobaRuntime, TuiThemeName } from "../../../../application/public";
 import type { TuiEvidenceSummary } from "../lib/evidence-summary";
 import type { NotificationStore } from "./notification-store";
 import type { ProviderStore } from "./provider-store";

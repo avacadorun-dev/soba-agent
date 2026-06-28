@@ -107,7 +107,7 @@ describe("post-ACP architecture gate", () => {
       /src\/(core|cli|tui|widgets|apps)\//.test(entry),
     );
     expect(forbiddenImports).toEqual([]);
-    expect(adapterImports).toContain("src/adapters/acp/dispatcher.ts -> src/application/types");
+    expect(adapterImports).toContain("src/adapters/acp/dispatcher.ts -> src/application/public");
     expect(adapterImports).toContain("src/adapters/acp/client-delegation.ts -> src/application/tool-delegation");
   });
 

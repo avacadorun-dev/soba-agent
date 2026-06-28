@@ -5,7 +5,7 @@
  * through the unified command routing.
  */
 
-import type { TranslationKey } from "../../../../core/i18n/types";
+import type { TranslationKey } from "../../../../application/public";
 import type { NotificationStore } from "../model/notification-store";
 import type { TuiMessageInput } from "../model/types";
 import { notificationIcon } from "../ui/notification-item";

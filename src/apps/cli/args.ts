@@ -5,9 +5,8 @@
  * Priority: CLI args > env vars > config file > defaults
  */
 
-import { isTuiThemeName, TUI_THEME_NAMES, type TuiThemeName } from "../../core/config/types";
-import { I18n } from "../../core/i18n/i18n";
-import type { Locale } from "../../core/i18n/types";
+import type { Locale } from "../../application/public";
+import { I18n, isTuiThemeName, TUI_THEME_NAMES, type TuiThemeName } from "../../application/public";
 
 // ─── Types ───
 

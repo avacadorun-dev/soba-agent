@@ -13,22 +13,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
-import { createSobaRuntime } from "../../application/runtime-factory";
-import type { RuntimeEvent } from "../../application/types";
-import {
-  firstTimeSetup,
+import type { ApprovalDecision, Locale, RuntimeEvent, SobaConfig } from "../../application/public";
+import {APP_VERSION, detectLocale, 
+  firstTimeSetup,I18n, isLocale, listSessions, 
   loadConfig,
   resolveCompactionConfig,
-  resolveSoundConfig,
-  validateConfig,
-} from "../../core/config/config-loader";
-import type { SobaConfig } from "../../core/config/types";
-import { detectLocale, I18n, isLocale } from "../../core/i18n/i18n";
-import type { Locale } from "../../core/i18n/types";
-import type { ApprovalDecision } from "../../core/loop/types";
-import { SoundNotifier } from "../../core/middleware/sound-notifier";
-import { listSessions, SessionManager } from "../../core/session/session-manager";
-import { APP_VERSION } from "../../core/version";
+  resolveSoundConfig,SessionManager, SoundNotifier, 
+  validateConfig
+} from "../../application/public";
+import { createSobaRuntime } from "../../application/runtime/public";
 import { setColorDisabled } from "../../ui/terminal/output/colors";
 import { createRenderer } from "../../ui/terminal/output/renderer";
 import { initTheme } from "../../ui/terminal/output/theme";
@@ -208,7 +201,7 @@ async function main() {
   // or the session manager — it only needs the ProviderRegistry.
   if (cliArgs.providerSubcommand !== undefined) {
     const { parseProviderCliArgs, runProviderCli } = await import("./provider-cli");
-    const { ProviderRegistry } = await import("../../core/provider/registry");
+    const { ProviderRegistry } = await import("../../application/public");
     const persistedRegistryForProvider = await ProviderRegistry.loadFromFile();
     const providerRegistryForCli = new ProviderRegistry(persistedRegistryForProvider ?? undefined);
     const options = parseProviderCliArgs(cliArgs.providerSubArgs);
@@ -277,7 +270,7 @@ async function main() {
   if (cliArgs.soundVolume !== undefined) soundCli.volume = cliArgs.soundVolume;
   if (cliArgs.soundRepeat) soundCli.repeatMode = "repeat";
   if (Object.keys(soundCli).length > 0) {
-    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<import("../../core/config/types").SoundConfig>;
+    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<import("../../application/public").SoundConfig>;
   }
 
   const configPath = process.env.SOBA_CONFIG_PATH;

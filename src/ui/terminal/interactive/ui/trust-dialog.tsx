@@ -22,7 +22,7 @@
  */
 
 import { Show, createEffect, createMemo } from "solid-js";
-import type { TuiThemeName } from "../../../../core/config/types";
+import type { TuiThemeName } from "../../../../application/public";
 import { getTuiTheme } from "../lib/theme";
 import type { TrustDecision } from "../lib/trust-dialog-manager";
 import type { TuiStore } from "../model/tui-store";
