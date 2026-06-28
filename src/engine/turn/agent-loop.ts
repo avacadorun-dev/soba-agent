@@ -64,6 +64,7 @@ import {
   type WorkingNarrationEventType,
 } from "./narration";
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
+import { decideResponseContinuation } from "./response-continuation-decision";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
 import {
@@ -76,7 +77,6 @@ import {
   canExecuteReadOnlyBatchInParallel,
   checkpointEventToPlanState,
   createLoopErrorResponse,
-  createTurnError,
   createUserItem,
   FINISH_TOOL_NAME,
   isInvisibleAssistantMessage,
@@ -763,40 +763,35 @@ export class AgentLoop {
           }
         };
 
-        if (shouldContinue && toolCalls.length > 0) {
-          if (continuationAttempts < this.options.maxContinuationAttempts) {
-            appendAssistantMessagesToSession();
-            continuationAttempts++;
-            const continuationItem = createUserItem(
-              "Your previous response was cut off while generating a tool call. " +
-                "Discard the incomplete tool call and re-issue the intended tool call from scratch with complete valid JSON arguments.",
+        const continuationDecision = decideResponseContinuation({
+          shouldContinue,
+          toolCallsLength: toolCalls.length,
+          continuationAttempts,
+          maxContinuationAttempts: this.options.maxContinuationAttempts,
+          session: this.session,
+          allItems,
+          errors,
+          iteration,
+          appendAssistantMessagesToSession,
+          emit: (event) => this.emit(event),
+          emitStopReason: (reason, detail) => {
+            this._emitStopReason(
+              turnIndex,
+              iteration,
+              reason,
+              detail,
+              hasUsedTools,
+              autonomousFollowUps,
             );
-            this.session.appendItem(continuationItem as unknown as SessionItemParam);
-            allItems.push(continuationItem as unknown as ItemParam);
-            iteration++;
-            continue;
-          }
-
-          const message =
-            `Response remained incomplete while generating tool calls after ${this.options.maxContinuationAttempts} automatic continuations`;
-          emitNarrationOnce("blocked", message);
-          errors.push(createTurnError("api_error", message, iteration));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: message,
-            status: "incomplete",
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "continuation-exhausted",
-            message,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
+          },
+          narrate: (eventType, message, evidenceIds = []) => {
+            emitNarrationOnce(eventType, message, evidenceIds);
+          },
+        });
+        continuationAttempts = continuationDecision.continuationAttempts;
+        iteration = continuationDecision.iteration;
+        if (continuationDecision.action === "continue") continue;
+        if (continuationDecision.action === "break") break;
 
         const finishCall =
           toolCalls.length === 1 && toolCalls[0].name === FINISH_TOOL_NAME
@@ -842,48 +837,6 @@ export class AgentLoop {
             iteration++;
             continue;
           }
-          break;
-        }
-
-        if (
-          shouldContinue &&
-          toolCalls.length === 0 &&
-          continuationAttempts < this.options.maxContinuationAttempts
-        ) {
-          appendAssistantMessagesToSession();
-          continuationAttempts++;
-          const continuationItem = createUserItem(
-            "Continue exactly where you stopped. Do not repeat completed text. Keep working until the task is complete.",
-          );
-          this.session.appendItem(
-            continuationItem as unknown as SessionItemParam,
-          );
-          allItems.push(continuationItem as unknown as ItemParam);
-          iteration++;
-          continue;
-        }
-
-        if (
-          shouldContinue &&
-          continuationAttempts >= this.options.maxContinuationAttempts
-        ) {
-          const message = `Response remained incomplete after ${this.options.maxContinuationAttempts} automatic continuations`;
-          emitNarrationOnce("blocked", message);
-          errors.push(createTurnError("api_error", message, iteration));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: message,
-            status: "incomplete",
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "continuation-exhausted",
-            message,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
           break;
         }
 
