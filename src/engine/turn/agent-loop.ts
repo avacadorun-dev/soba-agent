@@ -70,10 +70,10 @@ import { decideTextOnlyResponse } from "./text-only-response-decision";
 import { executeObservedToolBatch } from "./tool-batch-execution";
 import type { ToolExecutionObservationState } from "./tool-execution-observer";
 import { decideAfterToolIteration } from "./tool-iteration-decision";
+import { completeAgentTurn } from "./turn-completion";
 import {
   autoVerifierTimeoutSeconds,
   checkpointEventToPlanState,
-  createLoopErrorResponse,
   createUserItem,
   FINISH_TOOL_NAME,
   wantsFullVerification,
@@ -936,51 +936,24 @@ export class AgentLoop {
         if (afterToolDecision === "continue") continue;
       } while (true);
 
-      const finalResponse = currentResponse ?? createLoopErrorResponse();
-
-      // Emit turn end
-      this.emit({
-        type: "turn_end",
-        timestamp: Date.now(),
+      return completeAgentTurn({
+        currentResponse,
         turnIndex,
-        response: finalResponse,
-        totalUsage: { ...this.state.totalUsage },
-      });
-      this.debug({
-        event: "loop/turn-end",
-        turn: turnIndex,
         iteration,
-        responseId: currentResponse?.id,
-        responseStatus: currentResponse?.status ?? "failed",
+        allItems,
+        totalUsage: this.state.totalUsage,
+        errors,
         hasUsedTools,
         needsVerification,
         autonomousFollowUps,
-        errors: errors.length,
-        activeErrors: errors.filter((error) => error.status === "active")
-          .length,
-      });
-
-      const turnCompleteSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
-      const turnCompleteToolSchemaTokens = Math.ceil(JSON.stringify(this.tools.getOpenAITools()).length / 4);
-      this.contextController.scheduleTurnComplete({
-        responseStatus: currentResponse?.status,
-        errorCount: errors.length,
-        metrics: {
-          systemPromptTokens: turnCompleteSystemPromptTokens,
-          toolSchemaTokens: turnCompleteToolSchemaTokens,
-          requestFingerprint: `turn_${turnIndex}_complete`,
-        },
-      });
-
-      return {
-        items: allItems,
-        response: finalResponse,
-        usage: { ...this.state.totalUsage },
-        errors,
-        activeErrors: errors.filter((error) => error.status === "active"),
         evidenceSummary: evidenceLedger.getSummary(),
         checkpointState,
-      };
+        systemPrompt,
+        tools: this.tools,
+        contextController: this.contextController,
+        emit: (event) => this.emit(event),
+        debug: (data) => this.debug(data),
+      });
     } finally {
       this.toolExecutor.clearActiveTool();
       this._abortController = null;
