@@ -69,6 +69,7 @@ import {
   turnStopDebugData,
   turnStopReasonEvent,
 } from "./agent-loop-event-recording";
+import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { LoopGuard, type ToolOutcome } from "./loop-guard";
 import {
   createWorkingNarration,
@@ -76,7 +77,6 @@ import {
   type WorkingNarrationEventType,
 } from "./narration";
 import {
-  autoVerifierCallToSessionItem,
   autoVerifierTimeoutSeconds,
   buildRequest,
   canExecuteReadOnlyBatchInParallel,
@@ -607,85 +607,41 @@ export class AgentLoop {
             : `milestone recorded without compaction: ${decision.reason ?? ""}`,
         });
       };
-      const runAutoVerificationOpportunity = async (opportunity: string): Promise<boolean> => {
-        const summaryBefore = evidenceLedger.getSummary();
-        if (!summaryBefore.needsVerification) return false;
-
-        const bashTool = this.tools.get("bash");
-        const autoVerification = await verificationController.runAutoVerification({
+      const runAutoVerificationAt = async (opportunity: string): Promise<boolean> => {
+        const autoVerification = await runAutoVerificationOpportunity({
+          opportunity,
           cwd: this.cwd,
+          turn: turnIndex,
+          iteration,
           taskKind,
-          evidenceSummary: summaryBefore,
           ledger: evidenceLedger,
-          bashTool,
-          toolContext: this.createToolContext(),
+          verificationController,
+          tools: this.tools,
+          createToolContext: () => this.createToolContext(),
           trustManager: this.trustManager,
-          projectFiles: this.projectCommandFiles,
           projectInstructions,
+          projectFiles: this.projectCommandFiles,
           includeFullGate,
           includeReleaseGate: taskKind === "release_task",
           timeoutSeconds: autoVerifierTimeoutSeconds(this.options.bashMaxTimeoutSeconds),
-          iteration,
           signal: this._abortController?.signal,
-          onToolCallStart: (call) => {
-            const fcItem = autoVerifierCallToSessionItem(call);
-            this.session.appendItem(fcItem);
-            allItems.push(fcItem);
-            this.emit({
-              type: "tool_call_start",
-              timestamp: Date.now(),
-              toolCallId: call.callId,
-              toolName: call.toolName,
-              args: call.args,
-            });
-          },
-          onToolCallResult: (call, toolResult, durationMs) => {
-            this.emitToolResultAndEnd(
-              {
-                call_id: call.callId,
-                name: call.toolName,
-              },
-              toolResult,
-              Date.now() - durationMs,
-            );
-            recordToolOutcome(
-              errors,
-              successfulToolCallIds,
-              { call_id: call.callId, name: call.toolName, arguments: call.arguments },
-              toolResult.isError,
-              extractToolResultText(toolResult),
-              iteration,
-            );
-            const outputItem = toolResultToOutputItem(toolResult, call.callId, call.toolName);
-            this.session.appendItem(outputItem);
-            allItems.push(outputItem);
+          session: this.session,
+          allItems,
+          errors,
+          successfulToolCallIds,
+          verificationEvidenceCallIds,
+          emit: (event) => this.emit(event),
+          debug: (data) => this.debug(data),
+          narrate: (message, evidenceIds = []) => {
+            emitNarrationOnce("verification", message, evidenceIds);
           },
         });
-        const { result } = autoVerification;
-
-        if (autoVerification.activityCount > 0) {
-          this.debug({
-            event: "loop/iteration",
-            turn: turnIndex,
-            iteration,
-            detail: `auto-verifier ${opportunity}: ${result.executions.length} executed, ${result.skipped.length} skipped`,
-          });
-        }
 
         if (!autoVerification.didExecute) return false;
 
         hasUsedTools = true;
-        const summaryAfter = evidenceLedger.getSummary();
-        needsVerification = summaryAfter.needsVerification;
-        hasMutatedFiles = summaryAfter.hasMutatedFiles;
-        for (const execution of result.executions) {
-          if (!execution.result.isError) verificationEvidenceCallIds.add(execution.call.callId);
-        }
-        emitNarrationOnce(
-          "verification",
-          `Auto-verifier ran ${result.executions.length} project verification command(s).`,
-          result.executions.map((execution) => execution.call.callId),
-        );
+        needsVerification = autoVerification.needsVerification;
+        hasMutatedFiles = autoVerification.hasMutatedFiles;
         return true;
       };
 
@@ -1078,7 +1034,7 @@ export class AgentLoop {
             allowUnverifiedCompletion,
           });
           if (finishEvaluation.kind === "rejected" && evidenceLedger.getSummary().needsVerification) {
-            const didAutoVerify = await runAutoVerificationOpportunity("finish");
+            const didAutoVerify = await runAutoVerificationAt("finish");
             if (didAutoVerify) {
               finishEvaluation = completionController.evaluateFinishCall(finishCall, {
                 ...evidenceLedger.toCompletionState(errors),
@@ -1287,7 +1243,7 @@ export class AgentLoop {
         }
 
         if (toolCalls.length === 0 && !shouldContinue && evidenceLedger.getSummary().needsVerification) {
-          await runAutoVerificationOpportunity("text-only-stop");
+          await runAutoVerificationAt("text-only-stop");
         }
 
         const autonomousReason =
