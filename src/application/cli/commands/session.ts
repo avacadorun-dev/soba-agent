@@ -1,5 +1,5 @@
-import type { CommandResult, RuntimeSessionHandle } from "../../../application/cli/public";
-import { buildBudgetStatusView, buildSessionStatusView, executeSessionsCommand } from "../../../application/cli/public";
+import type { CommandResult, RuntimeSessionHandle } from "../public";
+import { buildBudgetStatusView, buildSessionStatusView, executeSessionsCommand } from "../public";
 import type { CommandContext } from "./index";
 
 export function handleSession(_args: string[], ctx: CommandContext): CommandResult {

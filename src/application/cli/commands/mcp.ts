@@ -1,9 +1,9 @@
-import type { CommandResult, McpRuntimeManager } from "../../../application/cli/public";
+import type { CommandResult, McpRuntimeManager } from "../public";
 import {
   executeMcpCommand,
   redactMcpSensitiveText,
   syncMcpToolsIntoRegistry,
-} from "../../../application/cli/public";
+} from "../public";
 import type { CommandContext } from "./index";
 
 export async function handleMcp(args: string[], ctx: CommandContext): Promise<CommandResult> {

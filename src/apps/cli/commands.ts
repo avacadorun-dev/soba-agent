@@ -1,1 +1,1 @@
-export * from "./commands/index";
+export * from "../../application/cli/commands/public";
