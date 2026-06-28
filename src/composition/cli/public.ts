@@ -1,3 +1,4 @@
+export * from "../../adapters/acp/client-delegation";
 export * from "../../infrastructure/llm/openresponses/openresponses-client";
 export * from "../../infrastructure/llm/providers/client-proxy";
 export * from "../../infrastructure/llm/providers/registry";
@@ -8,3 +9,12 @@ export * from "../../infrastructure/mcp/security";
 export { syncMcpToolsIntoRegistry } from "../../infrastructure/mcp/tool-registry-sync";
 export * from "../../infrastructure/persistence/sessions/session-manager";
 export * from "../../infrastructure/terminal/sound-notifier";
+export * from "../../ui/terminal/interactive/commands/registry";
+export * from "../../ui/terminal/interactive/commands/types";
+export * from "../../ui/terminal/interactive/lib/notification";
+export * from "../../ui/terminal/interactive/model/provider-store";
+export * from "../../ui/terminal/interactive-tui";
+export * from "../../ui/terminal/open-tui-assets";
+export * from "../../ui/terminal/output/colors";
+export * from "../../ui/terminal/output/renderer";
+export * from "../../ui/terminal/output/theme";

@@ -12,19 +12,25 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
-import type { ApprovalDecision, Locale, RuntimeEvent, RuntimeSessionHandle, SobaConfig } from "../../application/cli/public";
-import {APP_VERSION, detectLocale, 
-  firstTimeSetup,I18n, isLocale, listSessions, 
+import type { AcpClientRequester, ApprovalDecision, Locale, RuntimeEvent, RuntimeSessionHandle, SobaConfig } from "../../application/cli/public";
+import {
+  APP_VERSION,
+  createRenderer,
+  detectLocale,
+  firstTimeSetup,
+  I18n,
+  initTheme,
+  isLocale,
+  listSessions,
   loadConfig,
   resolveCompactionConfig,
-  resolveSoundConfig,SessionManager, SoundNotifier, 
-  validateConfig
+  resolveSoundConfig,
+  SessionManager,
+  SoundNotifier,
+  setColorDisabled,
+  validateConfig,
 } from "../../application/cli/public";
 import { createSobaRuntime } from "../../application/runtime/public";
-import { setColorDisabled } from "../../ui/terminal/output/colors";
-import { createRenderer } from "../../ui/terminal/output/renderer";
-import { initTheme } from "../../ui/terminal/output/theme";
 import { parseArgs, printHelp } from "./args";
 import { executeCommand } from "./commands";
 
@@ -300,7 +306,7 @@ async function main() {
 
     const cwd = process.cwd();
     const session = SessionManager.create(cwd);
-    const { AcpClientToolDelegation } = await import("../../adapters/acp/client-delegation");
+    const { AcpClientToolDelegation } = await import("../../application/cli/public");
     let acpRequestClient: AcpClientRequester | undefined;
     const acpToolDelegation = new AcpClientToolDelegation(() => acpRequestClient);
     const runtimeComposition = await createSobaRuntime({
@@ -343,7 +349,7 @@ async function main() {
       },
       providerRegistryConfigPath: configPath,
     });
-    const { runAcpServer } = await import("../acp/server");
+    const { runAcpServer } = await import("../../application/acp/public");
     await runAcpServer({
       runtime: runtimeComposition.runtime,
       cwd,
@@ -448,11 +454,9 @@ async function main() {
 
   // Interactive REPL mode — full-screen TUI (pi-agent style)
   if (interactive) {
-    const { configureOpenTuiAssets } = await import("../../ui/terminal/open-tui-assets");
+    const { configureOpenTuiAssets } = await import("../../application/cli/public");
     configureOpenTuiAssets();
-    const { InteractiveTUI } = await import("../../ui/terminal/interactive-tui");
-    const { ProviderStore } = await import("../../ui/terminal/interactive/model/provider-store");
-    const { slashCommandRegistry } = await import("../../ui/terminal/interactive/commands/registry");
+    const { InteractiveTUI, ProviderStore, slashCommandRegistry } = await import("../../application/cli/public");
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
     const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({

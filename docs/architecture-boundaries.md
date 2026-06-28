@@ -74,9 +74,10 @@ const rules = [
 ```
 
 For `allowOnlyPublicApplicationApi`, delivery layers may import their own
-delivery concerns, but any application-layer dependency must go through public
-application API modules. They must not import `src/core`, `src/kernel`,
-`src/engine`, or `src/infrastructure` directly.
+delivery concerns and `src/shared/**`, but every cross-layer dependency must go
+through public application API modules. They must not import `src/core`,
+`src/kernel`, `src/engine`, `src/infrastructure`, `src/adapters`,
+`src/apps`, `src/ui`, or `src/composition` directly.
 
 ## Laws
 

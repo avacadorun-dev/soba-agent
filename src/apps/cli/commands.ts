@@ -6,17 +6,13 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeManager, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
+import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeManager, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TrustManager, TuiRenderer } from "../../application/cli/public";
 import {
-  type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore,
+  type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, notify, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
   type RuntimeCommandMetadata,redactMcpSensitiveText, syncMcpToolsIntoRegistry, TUI_THEME_NAMES, tryTuiRegistryFallback
 } from "../../application/cli/public";
-import type { SlashCommandRegistry } from "../../ui/terminal/interactive/commands/registry";
-import type { SlashCommandContext } from "../../ui/terminal/interactive/commands/types";
-import { notify } from "../../ui/terminal/interactive/lib/notification";
-import type { TuiRenderer } from "../../ui/terminal/output/renderer";
 
 // ─── Types ───
 

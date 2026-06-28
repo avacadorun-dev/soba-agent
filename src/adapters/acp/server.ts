@@ -1,4 +1,5 @@
-import { AcpDispatcher, type AcpDispatcherOptions } from "../../adapters/acp/dispatcher";
+import type { SobaRuntime } from "../../application/acp/public";
+import { AcpDispatcher, type AcpDispatcherOptions } from "./dispatcher";
 import {
   isJsonRpcResponse,
   JSON_RPC_INTERNAL_ERROR,
@@ -14,8 +15,7 @@ import {
   makeJsonRpcSuccess,
   parseJsonRpcMessage,
   serializeJsonRpc,
-} from "../../adapters/acp/json-rpc";
-import type { SobaRuntime } from "../../application/acp/public";
+} from "./json-rpc";
 
 export interface AcpServerOptions {
   runtime: SobaRuntime;
