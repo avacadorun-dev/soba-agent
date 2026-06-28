@@ -15,10 +15,6 @@ const acpBoundaryRules: BoundaryRule[] = [
     forbiddenTargets: ["src/apps/", "src/engine/", "src/infrastructure/", "src/kernel/", "src/ui/"],
   },
   {
-    root: "src/apps/acp",
-    forbiddenTargets: ["src/apps/cli/", "src/engine/", "src/infrastructure/", "src/kernel/", "src/ui/"],
-  },
-  {
     root: "src/ui",
     forbiddenTargets: [
       "src/apps/acp",
@@ -33,6 +29,7 @@ function readProjectFile(path: string): string {
 
 function walkTypescriptFiles(root: string): string[] {
   const absoluteRoot = join(projectRoot, root);
+  if (!existsSync(absoluteRoot)) return [];
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory)) {
@@ -106,7 +103,7 @@ describe("post-ACP architecture gate", () => {
 
   test("ACP config, mode and permission paths delegate to runtime/application ports", () => {
     const dispatcher = readProjectFile("src/adapters/acp/dispatcher.ts");
-    const server = readProjectFile("src/apps/acp/server.ts");
+    const server = readProjectFile("src/adapters/acp/server.ts");
     const runtimeTypes = readProjectFile("src/application/types.ts");
 
     expect(runtimeTypes).toContain("setSessionConfig(input: SetSessionConfigInput)");

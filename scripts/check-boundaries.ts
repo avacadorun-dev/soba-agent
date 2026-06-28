@@ -115,12 +115,11 @@ function matchesPattern(resolved: string, pattern: string): boolean {
   return resolved === pattern || resolved.startsWith(pattern);
 }
 
-function violatesPublicApplicationApi(resolved: string): boolean {
-  if (resolved.startsWith("src/core/")) return true;
-  if (resolved.startsWith("src/kernel/")) return true;
-  if (resolved.startsWith("src/engine/")) return true;
-  if (resolved.startsWith("src/infrastructure/")) return true;
-  if (!resolved.startsWith("src/application/")) return false;
+function violatesPublicApplicationApi(resolved: string, allowedLocalRoot: string): boolean {
+  if (!resolved.startsWith("src/")) return false;
+  if (resolved.startsWith(`${allowedLocalRoot}/`)) return false;
+  if (resolved.startsWith("src/shared/")) return false;
+  if (!resolved.startsWith("src/application/")) return true;
   return !isPublicApplicationApi(resolved);
 }
 
@@ -152,7 +151,7 @@ for (const rule of rules) {
         continue;
       }
 
-      if (rule.allowOnlyPublicApplicationApi && violatesPublicApplicationApi(resolved)) {
+      if (rule.allowOnlyPublicApplicationApi && violatesPublicApplicationApi(resolved, rootFromGlob(rule.from))) {
         violations.push(`${relative(projectRoot, file)} -> ${specifier} (public application API only)`);
       }
     }
