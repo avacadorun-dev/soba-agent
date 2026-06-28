@@ -11,6 +11,16 @@ export type LangCommandView = { kind: "usage" } | { kind: "changed"; locale: "en
 
 export type ThemeCommandView = { kind: "usage"; themes: readonly TuiThemeName[] } | { kind: "changed"; theme: TuiThemeName };
 
+export type AutoCompactCommandView =
+  | { kind: "status"; enabled: boolean }
+  | { kind: "changed"; enabled: boolean };
+
+export interface AutoCompactState {
+  agentOverrideEnabled?: boolean;
+  contextPolicyEnabled?: boolean;
+  configEnabled?: boolean;
+}
+
 export interface HelpCommandView {
   commands: Array<{
     command: string;
@@ -36,6 +46,22 @@ export function executeThemeCommand(args: string[]): ThemeCommandView {
     return { kind: "usage", themes: TUI_THEME_NAMES };
   }
   return { kind: "changed", theme };
+}
+
+export function executeAutoCompactCommand(args: string[], state: AutoCompactState): AutoCompactCommandView {
+  const action = args[0]?.toLowerCase();
+
+  if (action !== "on" && action !== "off") {
+    return {
+      kind: "status",
+      enabled: state.agentOverrideEnabled ?? state.contextPolicyEnabled ?? state.configEnabled ?? true,
+    };
+  }
+
+  return {
+    kind: "changed",
+    enabled: action === "on",
+  };
 }
 
 export function buildHelpCommandView(commands: readonly RuntimeCommandMetadata[] = RUNTIME_COMMANDS): HelpCommandView {
