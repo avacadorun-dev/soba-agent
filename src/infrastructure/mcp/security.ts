@@ -1,4 +1,4 @@
-import type { TrustLevel, TrustManager } from "../../application/trust/trust-manager";
+import type { TrustController, TrustLevel } from "../../engine/permissions/trust-controller";
 import { assertValidHeaderName, McpAuthConfigError } from "./auth";
 import { MCP_SESSION_ID_HEADER } from "./http-session";
 import type { McpTrustMode } from "./types";
@@ -61,7 +61,7 @@ export function trustLevelForMcpServer(security: Pick<McpServerSecurity, "trustM
   return security.trustMode;
 }
 
-export function applyMcpToolTrustRules(trustManager: TrustManager, rules: McpToolTrustRule[]): void {
+export function applyMcpToolTrustRules(trustManager: TrustController, rules: McpToolTrustRule[]): void {
   trustManager.removeToolRulesByPrefix(MCP_TOOL_TRUST_RULE_PREFIX);
   for (const rule of rules) {
     trustManager.addToolRule(rule.proxyName, trustLevelForMcpServer(rule));

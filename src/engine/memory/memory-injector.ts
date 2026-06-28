@@ -1,4 +1,4 @@
-import { sanitizePortableText } from "../../application/capsules/sanitizer";
+import { sanitizePortableText } from "../../shared/sanitization/portable-text";
 import type { CapsuleRelevanceResult, KnowledgeDocument, MemoryCapsule } from "./types";
 
 const DEFAULT_MEMORY_TOKEN_BUDGET = 2_000;

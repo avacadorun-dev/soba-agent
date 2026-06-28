@@ -1,7 +1,7 @@
-import type { SkillManager } from "../../application/skills/skill-manager";
 import type { OpenResponsesClientConfig } from "../../kernel/model/model-gateway";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import { buildSystemPrompt } from "../prompt/system-prompt";
+import type { SkillSource } from "./skill-source";
 
 export interface ProjectContextReader {
   read(cwd: string): Array<{ path: string; content: string }> | Promise<Array<{ path: string; content: string }>>;
@@ -23,7 +23,7 @@ export async function prepareTurnPrompt(input: {
   userText: string;
   selectedTools: string[];
   contextReader?: ProjectContextReader;
-  skillManager?: SkillManager;
+  skillManager?: SkillSource;
   projectMemory?: ProjectMemorySource;
   modelConfig: OpenResponsesClientConfig;
 }): Promise<PreparedTurnPrompt> {

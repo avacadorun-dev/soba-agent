@@ -1,4 +1,4 @@
-import { detectPotentialSecret } from "../../application/capsules/sanitizer";
+import { detectPotentialSecret } from "../../shared/sanitization/portable-text";
 import type { DiagnosticReport } from "../recovery";
 import type { ProjectMemorySource } from "./memory-injector";
 import type { MemoryCapsule, MemoryCapsuleInput } from "./types";

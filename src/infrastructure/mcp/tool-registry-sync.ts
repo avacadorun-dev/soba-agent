@@ -1,4 +1,4 @@
-import type { TrustManager } from "../../application/trust/trust-manager";
+import type { TrustController } from "../../engine/permissions/trust-controller";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { McpManagedServerStatus } from "./client-manager";
 import { applyMcpToolTrustRules, createDefaultMcpServerSecurity, type McpToolTrustRule } from "./security";
@@ -21,7 +21,7 @@ export interface McpToolRegistrySyncResult {
 }
 
 export interface McpToolRegistrySyncOptions extends McpToolProxyOptions {
-  trustManager?: TrustManager;
+  trustManager?: TrustController;
 }
 
 export async function syncMcpToolsIntoRegistry(

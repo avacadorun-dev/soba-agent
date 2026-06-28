@@ -12,8 +12,6 @@
  *   5. Handle errors, stop states, budget updates
  */
 
-import type { SkillManager } from "../../application/skills/skill-manager";
-import { TrustManager } from "../../application/trust/trust-manager";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import type {
   ItemParam,
@@ -41,6 +39,7 @@ import {
   createDangerousConfirmationAdapter,
   PermissionBroker,
 } from "../permissions/permission-broker";
+import { DefaultTrustController, type TrustController } from "../permissions/trust-controller";
 import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
 import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
@@ -67,6 +66,7 @@ import {
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { decideResponseContinuation } from "./response-continuation-decision";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
+import type { SkillSource } from "./skill-source";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
 import { executeObservedToolBatch } from "./tool-batch-execution";
 import type { ToolExecutionObservationState } from "./tool-execution-observer";
@@ -105,12 +105,12 @@ export class AgentLoop {
   private tools: ToolRegistry;
   private options: AgentLoopOptions;
   private cwd: string;
-  private trustManager: TrustManager;
+  private trustManager: TrustController;
   private budgetTracker: BudgetTracker;
   private contextManager: ContextManager | undefined;
   private backgroundScheduler: BackgroundScheduler | undefined;
   private contextController: ContextController;
-  private skillManager: SkillManager | undefined;
+  private skillManager: SkillSource | undefined;
   private autoCompactOverride: { enabled: boolean } | undefined;
   private projectMemory: ProjectMemorySource | undefined;
   private projectContextReader: ProjectContextReader | undefined;
@@ -140,11 +140,11 @@ export class AgentLoop {
     tools: ToolRegistry,
     cwd: string,
     options: Partial<AgentLoopOptions> = {},
-    trustManager?: TrustManager,
+    trustManager?: TrustController,
     budgetTracker?: BudgetTracker,
     contextManager?: ContextManager,
     backgroundScheduler?: BackgroundScheduler,
-    skillManager?: SkillManager,
+    skillManager?: SkillSource,
     autoCompactOverride?: { enabled: boolean },
     projectMemory?: ProjectMemorySource,
     projectContextReader?: ProjectContextReader,
@@ -155,7 +155,7 @@ export class AgentLoop {
     this.tools = tools;
     this.cwd = cwd;
     this.options = { ...DEFAULT_LOOP_OPTIONS, ...options };
-    this.trustManager = trustManager ?? new TrustManager({ repoRoot: cwd });
+    this.trustManager = trustManager ?? new DefaultTrustController({ repoRoot: cwd });
     this.trustManager.setRepoRoot(cwd);
     this.budgetTracker =
       budgetTracker ??
@@ -207,8 +207,8 @@ export class AgentLoop {
     return this.client.getConfig().model;
   }
 
-  /** Get trust manager (for adding custom rules) */
-  getTrustManager(): TrustManager {
+  /** Get trust controller (legacy method name kept for host compatibility). */
+  getTrustManager(): TrustController {
     return this.trustManager;
   }
 
@@ -246,8 +246,8 @@ export class AgentLoop {
     return this.backgroundScheduler;
   }
 
-  /** Get skill manager (if available) */
-  getSkillManager(): SkillManager | undefined {
+  /** Get skill source (legacy method name kept for host compatibility). */
+  getSkillManager(): SkillSource | undefined {
     return this.skillManager;
   }
 

@@ -19,6 +19,12 @@ import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type Queu
 const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "checkpoint", "activate_skill"]);
 const PROJECT_INFO_REFRESH_DELAY_MS = 0;
 
+interface TuiTrustController {
+  getPermissionMode(): PermissionMode;
+  setPermissionMode(mode: PermissionMode): void;
+  clearSessionApprovals(): void;
+}
+
 function shouldRefreshProjectInfoAfterTool(toolName: string): boolean {
   return !PROJECT_INFO_READ_ONLY_TOOLS.has(toolName);
 }
@@ -99,7 +105,7 @@ export class TuiStore {
   private turnActive = false;
   private readonly onExit: () => void;
   private readonly i18n: I18n;
-  private readonly trustManager: TrustManager;
+  private readonly trustManager: TuiTrustController;
   private readonly _notificationStore: NotificationStore | undefined;
   private unsubscribeProxy: (() => void) | undefined;
   constructor(options: InteractiveTUIOptions, onExit: () => void = () => {}) {
