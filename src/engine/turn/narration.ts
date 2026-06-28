@@ -24,6 +24,12 @@ export interface WorkingNarrationInput {
   evidenceIds?: string[];
 }
 
+export type WorkingNarrationEmitter = (
+  eventType: WorkingNarrationEventType,
+  message: string,
+  evidenceIds?: string[],
+) => void;
+
 const MAX_NARRATION_MESSAGE_LENGTH = 280;
 
 const UNSAFE_NARRATION_PATTERNS = [
@@ -65,6 +71,19 @@ export function isNonTrivialPrompt(prompt: string): boolean {
     /\b(add|build|change|fix|implement|update|write|edit|test|lint|debug|review|refactor)\b/i.test(text) ||
     /(создай|добавь|измени|исправь|обнови|напиши|почини|проверь|сделай|ревью)/i.test(text)
   );
+}
+
+export function createWorkingNarrationGate(input: {
+  enabled: boolean;
+  emit: WorkingNarrationEmitter;
+}): WorkingNarrationEmitter {
+  const emittedTypes = new Set<WorkingNarrationEventType>();
+
+  return (eventType, message, evidenceIds = []) => {
+    if (!input.enabled || emittedTypes.has(eventType)) return;
+    emittedTypes.add(eventType);
+    input.emit(eventType, message, evidenceIds);
+  };
 }
 
 function sanitizeEvidenceIds(evidenceIds: string[]): string[] {

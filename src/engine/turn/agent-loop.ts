@@ -60,6 +60,7 @@ import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import {
   createWorkingNarration,
+  createWorkingNarrationGate,
   isNonTrivialPrompt,
   type WorkingNarrationEventType,
 } from "./narration";
@@ -382,17 +383,11 @@ export class AgentLoop {
     const evidenceLedger = new EvidenceLedger();
     const taskKind = inferTaskKindFromPrompt(userText);
     const allowUnverifiedCompletion = allowsUnverifiedCompletion(userText);
-    const shouldNarrate = isNonTrivialPrompt(userText);
-    const emittedNarrationTypes = new Set<WorkingNarrationEventType>();
-    const emitNarrationOnce = (
-      eventType: WorkingNarrationEventType,
-      message: string,
-      evidenceIds: string[] = [],
-    ) => {
-      if (!shouldNarrate || emittedNarrationTypes.has(eventType)) return;
-      emittedNarrationTypes.add(eventType);
-      this.emitWorkingNarration(eventType, message, evidenceIds);
-    };
+    const emitNarrationOnce = createWorkingNarrationGate({
+      enabled: isNonTrivialPrompt(userText),
+      emit: (eventType, message, evidenceIds = []) =>
+        this.emitWorkingNarration(eventType, message, evidenceIds),
+    });
 
     // Emit turn start
     this.emit({
