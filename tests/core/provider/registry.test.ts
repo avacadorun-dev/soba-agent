@@ -22,10 +22,10 @@ import { join } from "node:path";
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../../src/infrastructure/llm/providers/model-defaults";
-import { BUILTIN_PROVIDERS } from "../../../src/infrastructure/llm/providers/providers";
+} from "../../../src/application/providers/model-defaults";
+import { BUILTIN_PROVIDERS } from "../../../src/application/providers/providers";
+import type { ProviderDefinition, ProviderRegistryState } from "../../../src/application/providers/types";
 import { ProviderRegistry, parseRegistryState } from "../../../src/infrastructure/llm/providers/registry";
-import type { ProviderDefinition, ProviderRegistryState } from "../../../src/infrastructure/llm/providers/types";
 
 // ─── Helpers ───
 

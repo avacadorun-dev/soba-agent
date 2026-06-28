@@ -11,7 +11,7 @@ import {
   createDelegatedReadTool,
   createDelegatedSearchFilesTool,
   createDelegatedWriteTool,
-} from "../../../src/application/tool-delegation";
+} from "../../../src/infrastructure/tools/delegation";
 
 describe("ACP client tool delegation", () => {
   test("falls back to local read when the client did not advertise fs support", async () => {

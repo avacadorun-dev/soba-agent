@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SobaConfig } from "../../src/application/config/types";
+import type { ProviderRegistryState } from "../../src/application/providers/types";
 import { createSobaRuntime } from "../../src/application/runtime/public";
 import { DEFAULT_COMPACTION_CONFIG } from "../../src/engine/compaction/trigger-policy";
-import type { ProviderRegistryState } from "../../src/infrastructure/llm/providers/types";
 import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
 import type { ResponseResource, StreamingEvent } from "../../src/kernel/model/openresponses-types";
 

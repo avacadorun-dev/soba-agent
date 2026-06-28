@@ -5,29 +5,35 @@
  * Coordinates between SkillCatalog, SkillDiscovery, and ProjectTrustStore.
  */
 
-import { readSkillContent } from "../../infrastructure/tools/local/activate-skill";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ActivatedSkillRef } from "../../kernel/transcript/types-v2";
 import type { SkillCatalog } from "./catalog";
 import type { SkillDiscovery } from "./discovery";
 import type { ProjectTrustStore } from "./project-trust-store";
 import type { SkillCatalogEntry } from "./types";
 
+export type SkillContentReader = (skillPath: string) => string | null;
+
 export interface SkillManagerOptions {
   catalog: SkillCatalog;
   discovery: SkillDiscovery;
   trustStore: ProjectTrustStore;
+  readSkillContent?: SkillContentReader;
 }
 
 export class SkillManager {
   readonly catalog: SkillCatalog;
   readonly discovery: SkillDiscovery;
   readonly trustStore: ProjectTrustStore;
+  private readonly readSkillContent: SkillContentReader;
   private activeSkills: Map<string, ActivatedSkillRef> = new Map();
 
   constructor(options: SkillManagerOptions) {
     this.catalog = options.catalog;
     this.discovery = options.discovery;
     this.trustStore = options.trustStore;
+    this.readSkillContent = options.readSkillContent ?? readSkillContentFromDisk;
   }
 
   /**
@@ -122,7 +128,7 @@ export class SkillManager {
         continue; // Trust revoked
       }
 
-      const content = readSkillContent(skill.skillPath);
+      const content = this.readSkillContent(skill.skillPath);
       if (!content) {
         continue; // Could not read skill content
       }
@@ -167,5 +173,18 @@ export class SkillManager {
         this.activeSkills.delete(entry.skill.name);
       }
     }
+  }
+}
+
+function readSkillContentFromDisk(skillPath: string): string | null {
+  const skillMdPath = join(skillPath, "SKILL.md");
+  if (!existsSync(skillMdPath)) {
+    return null;
+  }
+
+  try {
+    return readFileSync(skillMdPath, "utf-8");
+  } catch {
+    return null;
   }
 }

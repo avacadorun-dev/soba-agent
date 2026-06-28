@@ -30,9 +30,9 @@ import {
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../src/infrastructure/llm/providers/model-defaults";
+} from "../src/application/providers/model-defaults";
+import type { ModelDefinition } from "../src/application/providers/types";
 import { ProviderRegistry } from "../src/infrastructure/llm/providers/registry";
-import type { ModelDefinition } from "../src/infrastructure/llm/providers/types";
 
 let tmpDir: string;
 let configPath: string;

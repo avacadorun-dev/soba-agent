@@ -17,7 +17,7 @@ import {
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../../src/infrastructure/llm/providers/model-defaults";
+} from "../../../src/application/providers/model-defaults";
 
 let tmpDir: string;
 let configPath: string;
