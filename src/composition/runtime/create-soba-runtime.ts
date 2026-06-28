@@ -35,12 +35,13 @@ import type { AgentEvent } from "../../engine/turn/types";
 import type { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
 import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
-import { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
-import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
+import type { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
+import type { McpSecretStore } from "../../infrastructure/mcp/secret-store";
 import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
+import { createMcpStack } from "./create-mcp-stack";
 import {
   buildProviderConfigOptions,
   createProviderStack,
@@ -340,15 +341,12 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
 
   const sobaDir = join(homedir(), ".soba");
   const trustManager = new TrustManager();
-  const mcpSecretStore = new McpSecretStore({ homeDir: homedir() });
-  const mcpRuntime = new McpRuntimeController({
+  const { mcpSecretStore, mcpRuntime, mcpManager } = await createMcpStack({
     projectRoot: cwd,
-    secretStore: mcpSecretStore,
+    homeDir: homedir(),
     toolRegistry: tools,
     trustManager,
   });
-  await mcpRuntime.initialize();
-  const mcpManager = mcpRuntime.getManager();
 
   const providerIdentity = client.getProviderIdentity();
   const providerCapabilities = client.getProviderCapabilities();
