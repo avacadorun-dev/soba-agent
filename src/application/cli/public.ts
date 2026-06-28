@@ -12,6 +12,7 @@ export * from "../../shared/version";
 export * from "../capsules";
 export * from "../command-service";
 export * from "../commands/general";
+export * from "../commands/permissions";
 export * from "../commands/project-trust";
 export * from "../commands/session";
 export * from "../config/config-loader";
