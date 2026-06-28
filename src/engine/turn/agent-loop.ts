@@ -72,6 +72,7 @@ import {
   isNonTrivialPrompt,
   type WorkingNarrationEventType,
 } from "./narration";
+import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import {
   autoVerifierTimeoutSeconds,
   buildRequest,
@@ -860,88 +861,38 @@ export class AgentLoop {
           ).length,
         });
 
-        // Check response status
-        if (response.status === "failed") {
-          const errorMsg = response.error?.message ?? "Unknown error";
-          emitNarrationOnce("blocked", errorMsg);
-          errors.push(createTurnError("api_error", errorMsg, iteration));
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: errorMsg,
-            status: "failed",
-          });
-          this._emitStopReason(
-            turnIndex,
-            iteration,
-            "api-error",
-            errorMsg,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-          break;
-        }
-
-        const shouldContinue =
-          response.status === "incomplete" &&
-          response.incomplete_details?.reason === "max_output_tokens";
-
-        if (response.status === "incomplete" && !shouldContinue) {
-          const reason = response.incomplete_details?.reason ?? "unknown";
-          errors.push(
-            createTurnError(
-              "api_error",
-              `Response incomplete: ${reason}`,
+        const responseStatus = handleResponseStatus({
+          response,
+          errors,
+          iteration,
+          emit: (event) => this.emit(event),
+          emitStopReason: (reason, detail) => {
+            this._emitStopReason(
+              turnIndex,
               iteration,
-            ),
-          );
-          emitNarrationOnce("blocked", `Response incomplete: ${reason}`);
-          this.emit({
-            type: "turn_error",
-            timestamp: Date.now(),
-            error: `Response incomplete: ${reason}`,
-            status: "incomplete",
-          });
-        }
+              reason,
+              detail,
+              hasUsedTools,
+              autonomousFollowUps,
+            );
+          },
+          narrateBlocked: (message) => emitNarrationOnce("blocked", message),
+        });
+        if (responseStatus.action === "break") break;
+        const { shouldContinue } = responseStatus;
 
-        // Accumulate usage
-        if (response.usage) {
-          this.state.totalUsage.input_tokens += response.usage.input_tokens;
-          this.state.totalUsage.output_tokens += response.usage.output_tokens;
-          this.state.totalUsage.total_tokens += response.usage.total_tokens;
-          this.budgetTracker.addUsage(
-            response.usage.input_tokens,
-            response.usage.output_tokens,
-          );
-
-          // Emit budget update (always — sidebar needs token count even with unlimited budget)
-          const percentage =
-            this.options.tokenBudget > 0
-              ? Math.round(
-                  (this.state.totalUsage.total_tokens /
-                    this.options.tokenBudget) *
-                    100,
-                )
-              : 0;
-
-          // Compute effective context tokens for the sidebar context counter.
-          // Uses the context meter to estimate how full the context window is.
-          const effectiveContextTokens = this.contextController.getEffectiveContextTokens({
-            systemPromptTokens,
-            toolSchemaTokens,
-            requestFingerprint: `turn_${turnIndex}_ctx`,
-          });
-
-          this.emit({
-            type: "budget_update",
-            timestamp: Date.now(),
-            usedTokens: this.state.totalUsage.total_tokens,
-            totalBudget: this.options.tokenBudget,
-            contextWindow,
-            percentage,
-            effectiveContextTokens,
-          });
-        }
+        recordResponseUsage({
+          response,
+          totalUsage: this.state.totalUsage,
+          budgetTracker: this.budgetTracker,
+          contextController: this.contextController,
+          tokenBudget: this.options.tokenBudget,
+          contextWindow,
+          systemPromptTokens,
+          toolSchemaTokens,
+          turn: turnIndex,
+          emit: (event) => this.emit(event),
+        });
 
         let assistantMessagesStored = false;
         const appendAssistantMessagesToSession = () => {
