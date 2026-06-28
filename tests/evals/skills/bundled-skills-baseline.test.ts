@@ -8,6 +8,7 @@ import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { validateSkill } from "../../../src/application/skills/validator";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 const repoSkillsDir = join(process.cwd(), "skills");
 const forbiddenLintToolExamples = ["eslint", "prettier"];
@@ -82,7 +83,7 @@ describe("Bundled skill eval baseline", () => {
       trustStore,
     });
     const catalog = new SkillCatalog({ discovery });
-    const skillManager = new SkillManager({ catalog, discovery, trustStore });
+    const skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
 
     skillManager.refresh();
     const activation = skillManager.activate("code-review");

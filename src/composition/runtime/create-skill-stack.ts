@@ -8,7 +8,10 @@ import { ProjectTrustStore } from "../../application/skills/project-trust-store"
 import { RevisionStore } from "../../application/skills/revisions";
 import { SkillManager } from "../../application/skills/skill-manager";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
-import { FilesystemSkillFileOperations } from "../../infrastructure/persistence/skills/skill-file-operations";
+import {
+  FilesystemSkillFileOperations,
+  readSkillContentFromDisk,
+} from "../../infrastructure/persistence/skills/skill-file-operations";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 
 export interface SkillStackInput {
@@ -39,6 +42,7 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
     catalog: skillCatalog,
     discovery: skillDiscovery,
     trustStore,
+    readSkillContent: readSkillContentFromDisk,
   });
   const skillCommands = new SkillCommands({
     draftStore: new DraftStore({ draftsPath: join(sobaDir, "skill-drafts") }),

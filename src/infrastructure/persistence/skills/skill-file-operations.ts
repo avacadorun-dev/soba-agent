@@ -1,6 +1,18 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SkillFileOperations } from "../../../application/skills/commands";
+import type { SkillContentReader } from "../../../application/skills/skill-manager";
+
+export const readSkillContentFromDisk: SkillContentReader = (skillPath) => {
+  const skillMdPath = join(skillPath, "SKILL.md");
+  if (!existsSync(skillMdPath)) return null;
+
+  try {
+    return readFileSync(skillMdPath, "utf-8");
+  } catch {
+    return null;
+  }
+};
 
 export class FilesystemSkillFileOperations implements SkillFileOperations {
   readSkillMarkdown(skillPath: string): string | null {

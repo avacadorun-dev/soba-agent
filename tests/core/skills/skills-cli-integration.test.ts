@@ -13,6 +13,7 @@ import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 describe("Skills CLI Integration", () => {
   let testDir: string;
@@ -113,6 +114,7 @@ Stop when the requested output is complete.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     // Initial scan should not throw
@@ -139,6 +141,7 @@ Stop when the requested output is complete.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     skillManager.refresh();
@@ -179,6 +182,7 @@ This is a project skill.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     skillManager.refresh();
@@ -209,6 +213,7 @@ This is a project skill.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     // Initial scan - no skills
@@ -279,6 +284,7 @@ This is a project skill.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     skillManager.refresh();
@@ -309,6 +315,7 @@ This is a project skill.
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     skillManager.refresh();
@@ -380,6 +387,7 @@ description: Project version
       catalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     skillManager.refresh();
