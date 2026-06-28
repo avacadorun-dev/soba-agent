@@ -21,6 +21,7 @@ import { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import type { AgentEvent } from "../../../src/engine/turn/types";
 import { createOpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 import { createActivateSkillTool } from "../../../src/infrastructure/tools/local/activate-skill";
 import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
@@ -135,6 +136,7 @@ Stop when the task-specific output is complete.
       catalog: skillCatalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     // Initial scan
@@ -211,6 +213,7 @@ Stop when the task-specific output is complete.
         catalog: emptyCatalog,
         discovery: emptyDiscovery,
         trustStore,
+        readSkillContent: readSkillContentFromDisk,
       });
 
       mkdirSync(join(testDir, "empty-user"), { recursive: true });

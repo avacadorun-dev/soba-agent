@@ -23,6 +23,7 @@ import { ProjectTrustStore } from "../../../src/application/skills/project-trust
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/application/skills/slash-handler";
 import { buildSystemPrompt } from "../../../src/engine/prompt/system-prompt";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 import type { ActivatedSkillRef } from "../../../src/kernel/transcript/types-v2";
 
 describe("Task B.2: Progressive disclosure и activation", () => {
@@ -79,7 +80,7 @@ Use this skill for testing purposes.
     });
 
     const catalog = new SkillCatalog({ discovery });
-    skillManager = new SkillManager({ catalog, discovery, trustStore });
+    skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
     
     // Refresh catalog to discover skills
     skillManager.refresh();

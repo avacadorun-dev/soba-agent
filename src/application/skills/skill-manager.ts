@@ -5,8 +5,6 @@
  * Coordinates between SkillCatalog, SkillDiscovery, and ProjectTrustStore.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { ActivatedSkillRef } from "../../kernel/transcript/types-v2";
 import type { SkillCatalog } from "./catalog";
 import type { SkillDiscovery } from "./discovery";
@@ -19,7 +17,7 @@ export interface SkillManagerOptions {
   catalog: SkillCatalog;
   discovery: SkillDiscovery;
   trustStore: ProjectTrustStore;
-  readSkillContent?: SkillContentReader;
+  readSkillContent: SkillContentReader;
 }
 
 export class SkillManager {
@@ -33,7 +31,7 @@ export class SkillManager {
     this.catalog = options.catalog;
     this.discovery = options.discovery;
     this.trustStore = options.trustStore;
-    this.readSkillContent = options.readSkillContent ?? readSkillContentFromDisk;
+    this.readSkillContent = options.readSkillContent;
   }
 
   /**
@@ -173,18 +171,5 @@ export class SkillManager {
         this.activeSkills.delete(entry.skill.name);
       }
     }
-  }
-}
-
-function readSkillContentFromDisk(skillPath: string): string | null {
-  const skillMdPath = join(skillPath, "SKILL.md");
-  if (!existsSync(skillMdPath)) {
-    return null;
-  }
-
-  try {
-    return readFileSync(skillMdPath, "utf-8");
-  } catch {
-    return null;
   }
 }

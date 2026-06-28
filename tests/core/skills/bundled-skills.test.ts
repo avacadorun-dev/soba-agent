@@ -7,6 +7,7 @@ import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { validateSkill } from "../../../src/application/skills/validator";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 const CORE_BUNDLED_SKILLS = [
   "bug-fix",
@@ -119,7 +120,7 @@ Stop when the requested result is complete.
     });
 
     const catalog = new SkillCatalog({ discovery });
-    skillManager = new SkillManager({ catalog, discovery, trustStore });
+    skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
   });
 
   afterEach(() => {
