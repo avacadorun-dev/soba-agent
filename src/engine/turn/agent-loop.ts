@@ -47,9 +47,9 @@ import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
 import { VerificationController } from "../verification/verification-controller";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
+import { AgentLoopEventBus } from "./agent-loop-event-bus";
 import {
   buildDenialEphemeralMessages,
-  runtimeFlightRecords,
   turnStopDebugData,
   turnStopReasonEvent,
 } from "./agent-loop-event-recording";
@@ -89,7 +89,6 @@ import {
   type AgentTurnError,
   type AgentTurnResult,
   type CheckpointWorkPlanState,
-  type DangerousConfirmationEvent,
   DEFAULT_LOOP_OPTIONS,
   type TurnStopReasonEvent,
 } from "./types";
@@ -116,6 +115,7 @@ export class AgentLoop {
   private projectContextReader: ProjectContextReader | undefined;
   private projectCommandFiles: ProjectCommandFileReader | undefined;
   private _abortController: AbortController | null = null;
+  private eventBus: AgentLoopEventBus;
   private toolExecutor: ToolCallExecutor;
   private state = {
     totalUsage: {
@@ -132,9 +132,6 @@ export class AgentLoop {
     /** Description of the most recently denied operation */
     lastDeniedOperation: "",
   };
-
-  // Event listeners
-  private listeners: Array<(event: AgentEvent) => void> = [];
 
   constructor(
     client: OpenResponsesClient,
@@ -169,6 +166,10 @@ export class AgentLoop {
     this.projectMemory = projectMemory;
     this.projectContextReader = projectContextReader;
     this.projectCommandFiles = projectCommandFiles;
+    this.eventBus = new AgentLoopEventBus({
+      shouldEmit: () => this.options.emitEvents,
+      flight: (data) => this.flight(data),
+    });
     this.contextController = new ContextController({
       contextManager: this.contextManager,
       backgroundScheduler: this.backgroundScheduler,
@@ -178,8 +179,8 @@ export class AgentLoop {
     const permissionBroker = new PermissionBroker({
       trustManager: this.trustManager,
       requestPermission: createDangerousConfirmationAdapter({
-        hasListeners: () => this.listeners.length > 0,
-        dispatch: (event) => this.dispatchDangerousConfirmationEvent(event),
+        hasListeners: () => this.eventBus.hasListeners(),
+        dispatch: (event) => this.eventBus.dispatchDangerousConfirmationEvent(event),
       }),
     });
     this.toolExecutor = new ToolCallExecutor({
@@ -266,10 +267,7 @@ export class AgentLoop {
 
   /** Subscribe to agent events */
   onEvent(listener: (event: AgentEvent) => void): () => void {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== listener);
-    };
+    return this.eventBus.onEvent(listener);
   }
 
   /**
@@ -282,10 +280,6 @@ export class AgentLoop {
 
   private flight(data: Omit<FlightRecordData, "version">): void {
     this.session.appendFlightRecord({ version: 1, ...data });
-  }
-
-  private recordRuntimeFlight(event: AgentEvent): void {
-    for (const record of runtimeFlightRecords(event)) this.flight(record);
   }
 
   /** Emit a turn_stop_reason event and debug entry */
@@ -326,57 +320,7 @@ export class AgentLoop {
 
   /** Emit an event to all listeners */
   private emit(event: AgentEvent): void {
-    this.recordRuntimeFlight(event);
-    if (!this.options.emitEvents) return;
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch {
-        // Don't let listener errors crash the loop
-      }
-    }
-  }
-
-  private dispatchDangerousConfirmationEvent(event: DangerousConfirmationEvent): void {
-    this.flight({
-      kind: "approval",
-      payload: {
-        status: "requested",
-        toolName: event.toolName,
-        toolCallId: event.toolCallId,
-        description: event.description,
-        level: event.level,
-        reason: event.reason,
-      },
-    });
-    const recordingEvent: DangerousConfirmationEvent = {
-      ...event,
-      resolve: (decision) => {
-        this.flight({
-          kind: "approval",
-          payload: {
-            status: "decided",
-            decision,
-            toolName: event.toolName,
-            toolCallId: event.toolCallId,
-            description: event.description,
-            level: event.level,
-            reason: event.reason,
-          },
-        });
-        event.resolve(decision);
-      },
-    };
-    // Emit directly to listeners without going through the normal emit path
-    // to bypass the emitEvents flag. Permission prompts must remain available
-    // even when ordinary event emission is disabled.
-    for (const listener of this.listeners) {
-      try {
-        listener(recordingEvent);
-      } catch {
-        // Don't let listener errors crash the loop.
-      }
-    }
+    this.eventBus.emit(event);
   }
 
   /**
