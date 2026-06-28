@@ -1,12 +1,12 @@
-import type { CommandResult, RuntimeCommandMetadata } from "../../../application/cli/public";
+import type { CommandResult } from "../../../application/cli/public";
 import {
+  buildConfigCommandView,
+  buildHelpCommandView,
   compact,
   estimateTokens,
+  executeLangCommand,
   executeRewindCommand,
-  isTuiThemeName,
-  maskSensitiveFields,
-  RUNTIME_COMMANDS,
-  TUI_THEME_NAMES,
+  executeThemeCommand,
 } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
@@ -106,7 +106,7 @@ export async function handleCompact(args: string[], ctx: CommandContext): Promis
 }
 
 export function handleConfig(_args: string[], ctx: CommandContext): CommandResult {
-  const maskedConfig = maskSensitiveFields(ctx.config);
+  const { config: maskedConfig } = buildConfigCommandView(ctx.config);
 
   const lines = [
     ctx.i18n.t("command.config.title"),
@@ -180,8 +180,8 @@ export function handleRewind(args: string[], ctx: CommandContext): CommandResult
 }
 
 export function handleLang(args: string[], ctx: CommandContext): CommandResult {
-  const lang = args[0];
-  if (lang !== "en" && lang !== "ru" && lang !== "zh") {
+  const view = executeLangCommand(args);
+  if (view.kind === "usage") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
@@ -190,35 +190,35 @@ export function handleLang(args: string[], ctx: CommandContext): CommandResult {
     return { handled: true };
   }
 
-  ctx.i18n.setLocale(lang);
-  ctx.config.lang = lang;
+  ctx.i18n.setLocale(view.locale);
+  ctx.config.lang = view.locale;
   ctx.renderer.emit({
     type: "language_changed",
     timestamp: Date.now(),
-    locale: lang,
-    message: ctx.i18n.t("command.lang.changed", { locale: lang }),
+    locale: view.locale,
+    message: ctx.i18n.t("command.lang.changed", { locale: view.locale }),
   });
 
   return { handled: true };
 }
 
 export function handleTheme(args: string[], ctx: CommandContext): CommandResult {
-  const theme = args[0];
-  if (!isTuiThemeName(theme)) {
+  const view = executeThemeCommand(args);
+  if (view.kind === "usage") {
     ctx.renderer.emit({
       type: "error",
       timestamp: Date.now(),
-      message: ctx.i18n.t("command.theme.usage", { themes: TUI_THEME_NAMES.join("|") }),
+      message: ctx.i18n.t("command.theme.usage", { themes: view.themes.join("|") }),
     });
     return { handled: true };
   }
 
-  ctx.config.theme = theme;
+  ctx.config.theme = view.theme;
   ctx.renderer.emit({
     type: "theme_changed",
     timestamp: Date.now(),
-    theme,
-    message: ctx.i18n.t("command.theme.changed", { theme }),
+    theme: view.theme,
+    message: ctx.i18n.t("command.theme.changed", { theme: view.theme }),
   });
   return { handled: true };
 }
@@ -266,16 +266,12 @@ export function handleAutoCompact(args: string[], ctx: CommandContext): CommandR
 }
 
 export function handleHelp(_args: string[], ctx: CommandContext): CommandResult {
-  const usages: Partial<Record<string, string>> = {
-    "/theme": `/theme <${TUI_THEME_NAMES.join("|")}>`,
-    "/queue": "/queue [edit <id> <message> | cancel <id|all>]",
-  };
-  const commands: readonly RuntimeCommandMetadata[] = RUNTIME_COMMANDS;
+  const view = buildHelpCommandView();
   const helpText = [
     ctx.i18n.t("command.help.title"),
-    ...commands.map((command) =>
+    ...view.commands.map((command) =>
       ctx.i18n.t("command.help.line", {
-        command: command.usage ?? usages[command.name] ?? command.name,
+        command: command.command,
         description: ctx.i18n.t(command.descriptionKey),
       }),
     ),
