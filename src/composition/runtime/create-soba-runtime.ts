@@ -2,7 +2,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
-import { McpRuntimeController } from "../../application/mcp-runtime-controller";
 import type { ModelDefinition, ProviderDefinition } from "../../application/providers/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import { SkillCatalog } from "../../application/skills/catalog";
@@ -40,6 +39,7 @@ import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/cli
 import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
+import { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
 import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";

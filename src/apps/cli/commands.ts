@@ -6,7 +6,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
+import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeManager, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/cli/public";
 import {
   type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore,
   parseRuntimeCommandInput,
@@ -34,7 +34,7 @@ export interface CommandContext {
   agentLoop?: AgentLoop;
   registry?: ProviderRegistry;
   mcpRuntime?: McpRuntimeControllerLike;
-  mcpManager?: McpClientManager;
+  mcpManager?: McpRuntimeManager;
   mcpSecretStore?: McpSecretStore;
   toolRegistry?: ToolRegistry;
   trustManager?: TrustManager;
@@ -1422,7 +1422,7 @@ async function handleMcpAuth(args: string[], ctx: CommandContext): Promise<Comma
 }
 
 async function runMcpAuthAction(
-  manager: McpClientManager,
+  manager: McpRuntimeManager,
   action: "status" | "login" | "logout",
   serverId: string,
 ): Promise<McpRemoteAuthCommandResult> {
@@ -1541,11 +1541,11 @@ function formatList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "-";
 }
 
-function getMcpManager(ctx: CommandContext): McpClientManager | undefined {
+function getMcpManager(ctx: CommandContext): McpRuntimeManager | undefined {
   return ctx.mcpRuntime?.getManager() ?? ctx.mcpManager;
 }
 
-function redactMcpManagerError(serverId: string, message: string, manager: McpClientManager): string {
+function redactMcpManagerError(serverId: string, message: string, manager: McpRuntimeManager): string {
   try {
     return redactMcpSensitiveText(message, manager.getServerSecurity(serverId));
   } catch {
