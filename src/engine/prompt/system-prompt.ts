@@ -8,9 +8,6 @@
  * See SYSTEM.md for the canonical prompt text.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 export interface SystemPromptOptions {
   /** Working directory */
   cwd: string;
@@ -157,18 +154,7 @@ function buildSkillsSection(skills: Array<{ name: string; description: string; l
   return lines.join("\n");
 }
 
-function readSobaReadme(): string | null {
-  try {
-    return readFileSync(join(import.meta.dirname, "..", "..", "..", "README.md"), "utf-8");
-  } catch {
-    return null;
-  }
-}
-
 function buildSobaDocsSection(tools: string[]): string {
-  const readme = readSobaReadme();
-  if (!readme) return "";
-
   const availableTools = tools.filter((name) => TOOL_SNIPPETS[name]).join(", ");
 
   // Extract key sections from README for the prompt
