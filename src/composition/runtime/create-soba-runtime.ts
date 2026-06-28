@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
@@ -61,6 +60,7 @@ import { readTool } from "../../infrastructure/tools/local/read";
 import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
 import { writeTool } from "../../infrastructure/tools/local/write";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
+import { createProjectCommandFileReader, createProjectContextReader } from "./project-files";
 
 export interface RuntimeFactoryInput {
   cwd: string;
@@ -465,12 +465,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     maxStalledIterations: config.maxStalledIterations,
     maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
     bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
-  }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, {
-    read: readProjectContextFiles,
-  }, {
-    readText: (relativePath) => readProjectTextFile(cwd, relativePath),
-    exists: (relativePath) => projectFileExists(cwd, relativePath),
-  });
+  }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, createProjectContextReader(), createProjectCommandFileReader(cwd));
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
   const commandExecutor = commandExecutorFactory?.({
@@ -598,39 +593,6 @@ function fallbackProviderIds(providerRegistry: ProviderRegistry, activeProviderI
 
 function providerHasCredentials(providerRegistry: ProviderRegistry, provider: ProviderDefinition): boolean {
   return !provider.apiKeyEnv || Boolean(providerRegistry.resolveApiKey(provider.id));
-}
-
-function readProjectContextFiles(cwd: string): Array<{ path: string; content: string }> {
-  const agentsPath = join(cwd, "AGENTS.md");
-  if (existsSync(agentsPath)) {
-    try {
-      return [{ path: "AGENTS.md", content: readFileSync(agentsPath, "utf-8") }];
-    } catch {
-      // Fall through to README.md.
-    }
-  }
-
-  const readmePath = join(cwd, "README.md");
-  if (!existsSync(readmePath)) return [];
-  try {
-    return [{ path: "README.md", content: readFileSync(readmePath, "utf-8") }];
-  } catch {
-    return [];
-  }
-}
-
-function readProjectTextFile(cwd: string, relativePath: string): string | null {
-  const absolutePath = join(cwd, relativePath);
-  if (!existsSync(absolutePath)) return null;
-  try {
-    return readFileSync(absolutePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-function projectFileExists(cwd: string, relativePath: string): boolean {
-  return existsSync(join(cwd, relativePath));
 }
 
 async function usableModelForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<ModelDefinition | null> {
