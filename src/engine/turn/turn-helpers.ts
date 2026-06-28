@@ -7,6 +7,7 @@ import type {
   ItemParam,
   MessageField,
   OutputTextContent,
+  ResponseResource,
 } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointArgs, type CheckpointEvent } from "../../kernel/tools/checkpoint";
@@ -74,6 +75,42 @@ export function createUserItem(text: string): UserMessageItemParam {
     type: "message",
     role: "user",
     content: [{ type: "input_text", text }],
+  };
+}
+
+export function createLoopErrorResponse(): ResponseResource {
+  return {
+    id: "",
+    object: "response",
+    created_at: 0,
+    completed_at: 0,
+    status: "failed",
+    incomplete_details: null,
+    model: "",
+    previous_response_id: null,
+    instructions: null,
+    output: [],
+    error: { code: "loop_error", message: "No response received" },
+    tools: [],
+    tool_choice: "auto",
+    truncation: "disabled",
+    parallel_tool_calls: true,
+    text: {},
+    top_p: 1,
+    presence_penalty: 0,
+    frequency_penalty: 0,
+    top_logprobs: 0,
+    temperature: 1,
+    reasoning: null,
+    usage: null,
+    max_output_tokens: null,
+    max_tool_calls: null,
+    store: false,
+    background: false,
+    service_tier: "default",
+    metadata: {},
+    safety_identifier: null,
+    prompt_cache_key: null,
   };
 }
 
