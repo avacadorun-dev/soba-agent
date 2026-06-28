@@ -2,7 +2,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
-import type { ModelDefinition, ProviderDefinition } from "../../application/providers/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import { SkillCatalog } from "../../application/skills/catalog";
 import { SkillDiscovery } from "../../application/skills/discovery";
@@ -33,9 +32,8 @@ import { ContextManager } from "../../engine/compaction/context-manager";
 import { BackgroundScheduler } from "../../engine/compaction/scheduler";
 import { AgentLoop } from "../../engine/turn/agent-loop";
 import type { AgentEvent } from "../../engine/turn/types";
-import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
-import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
-import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
+import type { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
+import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
 import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
@@ -43,6 +41,12 @@ import { ProjectMemory } from "../../infrastructure/persistence/memory/project-m
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
+import {
+  buildProviderConfigOptions,
+  createProviderStack,
+  providerHasCredentials,
+  usableModelForProvider,
+} from "./create-provider-stack";
 import { createToolStack } from "./create-tool-stack";
 import { createProjectCommandFileReader, createProjectContextReader } from "./project-files";
 
@@ -320,35 +324,14 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     providerRegistryConfigPath,
   } = input;
 
-  const persistedRegistry = config.registry ?? await ProviderRegistry.loadFromFile(providerRegistryConfigPath);
-  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined, { configPath: providerRegistryConfigPath });
-  const hasRegistry = Boolean(persistedRegistry);
-  let cliProviderId: string | undefined;
-  if (modelExplicitlyPassed || (!hasRegistry && config.model)) {
-    for (const provider of providerRegistry.getAllProviders()) {
-      if (providerRegistry.getModel(provider.id, config.model)) {
-        cliProviderId = provider.id;
-        break;
-      }
-    }
-  }
-  if (!cliProviderId && (!hasRegistry || baseUrlExplicitlyPassed)) {
-    cliProviderId = providerRegistry.getAllProviders().find((provider) => provider.baseUrl === config.baseUrl)?.id;
-  }
-  if (cliProviderId) {
-    providerRegistry.setActive(cliProviderId, config.model);
-  }
-  if (config.apiKey && (!hasRegistry || apiKeyExplicitlyPassed)) {
-    providerRegistry.setApiKey(providerRegistry.getActiveProvider().id, config.apiKey);
-  }
-  await selectFallbackProviderWithCredentials(providerRegistry);
-  await selectChatModelForActiveProvider(providerRegistry);
-
-  const client = new OpenResponsesClientProxy(providerRegistry);
-  const explicitBaseUrlOverride = baseUrlOverride ?? (baseUrlExplicitlyPassed ? config.baseUrl : undefined);
-  if (explicitBaseUrlOverride) {
-    providerRegistry.setBaseUrl(client.getActiveProviderId(), explicitBaseUrlOverride);
-  }
+  const { providerRegistry, client } = await createProviderStack({
+    config,
+    modelExplicitlyPassed,
+    baseUrlOverride,
+    baseUrlExplicitlyPassed,
+    apiKeyExplicitlyPassed,
+    providerRegistryConfigPath,
+  });
 
   const tools = createToolStack(toolDelegation);
 
@@ -473,119 +456,4 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     mcpRuntime,
     mcpManager,
   };
-}
-
-async function buildProviderConfigOptions(providerRegistry: ProviderRegistry): Promise<RuntimeSessionConfigOption[]> {
-  const activeProvider = providerRegistry.getActiveProvider();
-  await refreshModelsForProvider(providerRegistry, activeProvider);
-  const activeModel = providerRegistry.getActiveModel();
-  const providerOptions = providerRegistry.getAllProviders().map((provider) => ({
-    value: provider.id,
-    name: provider.name,
-    description: providerHasCredentials(providerRegistry, provider)
-      ? provider.baseUrl
-      : `${provider.baseUrl} (missing ${provider.apiKeyEnv ?? "API key"})`,
-  }));
-
-  const models = providerRegistry.getModelsFor(activeProvider.id);
-  const modelOptions = (models.length > 0 ? models : [activeModel]).map((model) => ({
-    value: model.id,
-    name: model.name,
-    description: `${model.contextWindow.toLocaleString()} ctx, ${model.maxOutput.toLocaleString()} max output`,
-  }));
-
-  return [
-    {
-      id: "provider",
-      name: "Provider",
-      description: "Model provider used for new turns.",
-      category: "model",
-      type: "select",
-      currentValue: activeProvider.id,
-      options: providerOptions,
-    },
-    {
-      id: "model",
-      name: "Model",
-      description: "Model used for new turns.",
-      category: "model",
-      type: "select",
-      currentValue: activeModel.id,
-      options: modelOptions,
-    },
-  ];
-}
-
-async function selectFallbackProviderWithCredentials(providerRegistry: ProviderRegistry): Promise<void> {
-  const activeProvider = providerRegistry.getActiveProvider();
-  if (providerHasCredentials(providerRegistry, activeProvider)) return;
-
-  const fallback = await findFallbackProviderSelection(providerRegistry, activeProvider.id);
-  if (fallback) {
-    providerRegistry.setActive(fallback.providerId, fallback.modelId);
-  }
-}
-
-async function selectChatModelForActiveProvider(providerRegistry: ProviderRegistry): Promise<void> {
-  const activeProvider = providerRegistry.getActiveProvider();
-  const activeModel = providerRegistry.getActiveModel();
-  if (activeModel.id && isLikelyChatModelId(activeModel.id)) return;
-  const model = await usableModelForProvider(providerRegistry, activeProvider);
-  if (model && model.id !== activeModel.id) {
-    providerRegistry.setActive(activeProvider.id, model.id);
-  }
-}
-
-async function findFallbackProviderSelection(
-  providerRegistry: ProviderRegistry,
-  activeProviderId: string,
-): Promise<{ providerId: string; modelId: string } | null> {
-  for (const providerId of fallbackProviderIds(providerRegistry, activeProviderId)) {
-    const provider = providerRegistry.getProvider(providerId);
-    if (!provider || !providerHasCredentials(providerRegistry, provider)) continue;
-    const model = await usableModelForProvider(providerRegistry, provider);
-    if (model) return { providerId, modelId: model.id };
-  }
-  return null;
-}
-
-function fallbackProviderIds(providerRegistry: ProviderRegistry, activeProviderId: string): string[] {
-  const savedProviderIds = Object.entries(providerRegistry.snapshotState().providers)
-    .filter(([providerId, secret]) => providerId !== activeProviderId && Boolean(secret.apiKey))
-    .map(([providerId]) => providerId);
-  const remainingProviderIds = providerRegistry
-    .getAllProviders()
-    .map((provider) => provider.id)
-    .filter((providerId) => providerId !== activeProviderId && !savedProviderIds.includes(providerId));
-  return [...savedProviderIds, ...remainingProviderIds];
-}
-
-function providerHasCredentials(providerRegistry: ProviderRegistry, provider: ProviderDefinition): boolean {
-  return !provider.apiKeyEnv || Boolean(providerRegistry.resolveApiKey(provider.id));
-}
-
-async function usableModelForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<ModelDefinition | null> {
-  await refreshModelsForProvider(providerRegistry, provider);
-  const existingModels = providerRegistry.getModelsFor(provider.id);
-  const chatModels = existingModels.filter((model) => isLikelyChatModelId(model.id));
-  const candidateModels = chatModels.length > 0 ? chatModels : existingModels;
-  const existingModel =
-    candidateModels.find((model) => model.id === provider.defaultModel) ??
-    candidateModels.find((model) => model.id.toLowerCase().includes("chat")) ??
-    candidateModels.find((model) => model.id.toLowerCase().includes("code")) ??
-    candidateModels[0];
-  if (existingModel) return existingModel;
-
-  const discovery = await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
-  if (!discovery.ok) return null;
-  const discoveredModels = toModelDefinitions(discovery, provider);
-  const discoveredChatModels = discoveredModels.filter((model) => isLikelyChatModelId(model.id));
-  const discoveredCandidates = discoveredChatModels.length > 0 ? discoveredChatModels : discoveredModels;
-  return discoveredCandidates.find((model) => model.id === discovery.suggestedDefault) ?? discoveredCandidates[0] ?? null;
-}
-
-async function refreshModelsForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<void> {
-  if (provider.models && provider.models.length > 0) return;
-  if (!providerHasCredentials(providerRegistry, provider)) return;
-  await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
 }
