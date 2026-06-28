@@ -11,6 +11,7 @@ export * from "../../shared/i18n/types";
 export * from "../../shared/version";
 export * from "../capsules";
 export * from "../command-service";
+export * from "../commands/session";
 export * from "../config/config-loader";
 export * from "../config/types";
 export * from "../mcp-runtime-controller";

@@ -4,61 +4,59 @@ import type {
   RuntimeSessionHandle,
   SessionLifecycleService,
 } from "../../../application/cli/public";
-import { estimateTokens, getCurrentTokens, isContextCapsuleEntry } from "../../../application/cli/public";
+import { buildBudgetStatusView, buildSessionStatusView } from "../../../application/cli/public";
 import type { CommandContext } from "./index";
 
 export function handleSession(_args: string[], ctx: CommandContext): CommandResult {
-  const entries = ctx.session.getEntries();
-  const tokens = estimateTokens(ctx.session.buildInput().items);
-  const historicalTokens = getCurrentTokens(entries);
-  const branch = ctx.session.getBranch();
-  const compactionCount = entries.filter((e) => e.type === "compaction").length;
-  const capsuleCount = entries.filter((e) => isContextCapsuleEntry(e)).length;
+  const contextSnapshot = ctx.contextManager ? ctx.contextManager.getSnapshot(1000, 500, "session_view") : undefined;
+  const view = buildSessionStatusView({
+    session: ctx.session,
+    config: {
+      contextWindow: ctx.config.contextWindow,
+      maxOutputTokens: ctx.config.maxOutputTokens,
+    },
+    contextSnapshot,
+  });
 
   const lines = [
-    ctx.i18n.t("command.session.id", { id: ctx.session.getSessionId().slice(0, 8) }),
-    ctx.i18n.t("command.session.version", { version: ctx.session.isV2() ? "v2" : "v1" }),
-    ctx.i18n.t("command.session.entries", { entries: entries.length, checkpoints: compactionCount, capsules: capsuleCount }),
-    ctx.i18n.t("command.session.branch", { entries: branch.length }),
-    ctx.i18n.t("command.session.effectiveTokens", { tokens }),
-    ctx.i18n.t("command.session.historicalTokens", { tokens: historicalTokens }),
-    ctx.i18n.t("command.session.contextWindow", { tokens: ctx.config.contextWindow }),
-    ctx.i18n.t("command.session.maxOutputTokens", { tokens: ctx.config.maxOutputTokens }),
+    ctx.i18n.t("command.session.id", { id: view.sessionId.slice(0, 8) }),
+    ctx.i18n.t("command.session.version", { version: view.version }),
+    ctx.i18n.t("command.session.entries", {
+      entries: view.entryCount,
+      checkpoints: view.compactionCount,
+      capsules: view.capsuleCount,
+    }),
+    ctx.i18n.t("command.session.branch", { entries: view.branchEntryCount }),
+    ctx.i18n.t("command.session.effectiveTokens", { tokens: view.effectiveTokens }),
+    ctx.i18n.t("command.session.historicalTokens", { tokens: view.historicalTokens }),
+    ctx.i18n.t("command.session.contextWindow", { tokens: view.contextWindow }),
+    ctx.i18n.t("command.session.maxOutputTokens", { tokens: view.maxOutputTokens }),
   ];
 
-  if (ctx.contextManager) {
-    const systemPromptTokens = 1000;
-    const toolSchemaTokens = 500;
-    const requestFingerprint = "session_view";
-    const snapshot = ctx.contextManager.getSnapshot(
-      systemPromptTokens,
-      toolSchemaTokens,
-      requestFingerprint,
-    );
-
+  if (view.contextSnapshot) {
     lines.push(
       ctx.i18n.t("command.session.contextMetrics", {
-        effective: snapshot.effectiveTokens,
-        historical: snapshot.historicalTokens,
-        hardLimit: snapshot.hardLimit,
-        source: snapshot.source,
+        effective: view.contextSnapshot.effectiveTokens,
+        historical: view.contextSnapshot.historicalTokens,
+        hardLimit: view.contextSnapshot.hardLimit,
+        source: view.contextSnapshot.source,
       }),
     );
 
     lines.push(
       ctx.i18n.t("command.session.contextDetails", {
-        systemPrompt: snapshot.systemPromptTokens,
-        toolSchemas: snapshot.toolSchemaTokens,
-        safetyReserve: snapshot.safetyReserveTokens,
-        maxOutput: snapshot.maxOutputTokens,
+        systemPrompt: view.contextSnapshot.systemPromptTokens,
+        toolSchemas: view.contextSnapshot.toolSchemaTokens,
+        safetyReserve: view.contextSnapshot.safetyReserveTokens,
+        maxOutput: view.contextSnapshot.maxOutputTokens,
       }),
     );
 
-    if (snapshot.watermark) {
+    if (view.contextSnapshot.watermark) {
       lines.push(
         ctx.i18n.t("command.session.watermark", {
-          entryId: snapshot.watermark.measuredThroughEntryId?.slice(0, 8) ?? "none",
-          fingerprint: snapshot.watermark.requestFingerprint.slice(0, 16),
+          entryId: view.contextSnapshot.watermark.measuredThroughEntryId?.slice(0, 8) ?? "none",
+          fingerprint: view.contextSnapshot.watermark.requestFingerprint.slice(0, 16),
         }),
       );
     }
@@ -66,9 +64,9 @@ export function handleSession(_args: string[], ctx: CommandContext): CommandResu
 
   lines.push(
     ctx.i18n.t("command.session.persisted", {
-      value: ctx.i18n.t(ctx.session.isPersisted() ? "command.session.yes" : "command.session.noMemory"),
+      value: ctx.i18n.t(view.persisted ? "command.session.yes" : "command.session.noMemory"),
     }),
-    ctx.i18n.t("command.session.cwd", { cwd: ctx.session.getCwd() }),
+    ctx.i18n.t("command.session.cwd", { cwd: view.cwd }),
   );
 
   ctx.renderer.emit({
@@ -131,10 +129,8 @@ export function handleSessions(args: string[], ctx: CommandContext): CommandResu
 }
 
 export function handleBudget(_args: string[], ctx: CommandContext): CommandResult {
-  const tokens = estimateTokens(ctx.session.buildInput().items);
-
-  const usedK = (tokens / 1000).toFixed(1);
-  const lines = [ctx.i18n.t("command.budget.used", { tokens, formatted: `${usedK}K` })];
+  const view = buildBudgetStatusView(ctx.session);
+  const lines = [ctx.i18n.t("command.budget.used", { tokens: view.tokens, formatted: view.formattedTokens })];
 
   ctx.renderer.emit({
     type: "info",
