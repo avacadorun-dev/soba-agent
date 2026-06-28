@@ -21,10 +21,9 @@ import type {
   Usage,
 } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
-import { type CheckpointEvent, extractCheckpointEvent } from "../../kernel/tools/checkpoint";
+import type { CheckpointEvent } from "../../kernel/tools/checkpoint";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
-import { toolResultToOutputItem } from "../../kernel/tools/types";
 import type {
   DebugEntry,
   FlightRecordData,
@@ -34,22 +33,16 @@ import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
-import { recordToolOutcome } from "../completion/completion-gate";
 import { ContextController } from "../context/context-controller";
 import { EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
-import {
-  addRecoveryReflectionFix,
-  createRecoveryReflectionDraft,
-  type RecoveryReflectionDraft,
-  writeRecoveryReflectionLesson,
-} from "../memory/reflection-memory-policy";
+import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import {
   createDangerousConfirmationAdapter,
   PermissionBroker,
 } from "../permissions/permission-broker";
-import { evaluateToolBatch, isMutationToolName } from "../tool-calls/tool-batch-guard";
+import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
 import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
 import { VerificationController } from "../verification/verification-controller";
@@ -73,21 +66,21 @@ import {
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { handleResponseStatus, recordResponseUsage } from "./response-lifecycle";
 import {
+  observeToolExecutionResult,
+  type ToolExecutionObservationState,
+} from "./tool-execution-observer";
+import {
   autoVerifierTimeoutSeconds,
   canExecuteReadOnlyBatchInParallel,
   checkpointEventToPlanState,
   createLoopErrorResponse,
   createTurnError,
   createUserItem,
-  extractCommandArgument,
-  extractToolResultText,
   FINISH_TOOL_NAME,
   getAutonomousFollowUpReason,
   hasVisibleAssistantText,
   isInvisibleAssistantMessage,
   safeParseArgs,
-  summarizeMutationToolCall,
-  toCheckpointArgs,
   wantsFullVerification,
 } from "./turn-helpers";
 import {
@@ -1099,7 +1092,14 @@ export class AgentLoop {
         const checkpointEvents: CheckpointEvent[] = [];
         let fixUntilGreenFollowUp: string | null = null;
         let fixUntilGreenStop: string | null = null;
-        let mutationSucceededInCurrentBatch = false;
+        const toolObservationState: ToolExecutionObservationState = {
+          needsVerification,
+          hasMutatedFiles,
+          mutationSucceededInCurrentBatch: false,
+          recoveryReflectionDraft,
+          fixUntilGreenFollowUp,
+          fixUntilGreenStop,
+        };
         const parallelReadOnlyExecutions = canExecuteReadOnlyBatchInParallel(toolCalls)
           ? await Promise.all(
               toolCalls.map((toolCall) => {
@@ -1131,193 +1131,42 @@ export class AgentLoop {
             ? parallelReadOnlyExecutions[toolCallIndex]
             : await this.toolExecutor.executeToolCall(toolCall, this._abortController?.signal);
           if (!execution) continue;
-          const { parsedArgs, result } = execution;
-          if (execution.denied) {
-            this.state.denialCount++;
-            this.state.lastDeniedOperation = execution.denied.description;
-            recordToolOutcome(
-              errors,
-              successfulToolCallIds,
-              toolCall,
-              true,
-              extractToolResultText(result),
-              iteration,
-              "security_denial",
-            );
-            evidenceLedger.recordToolOutcome({
-              toolCallId: toolCall.call_id,
-              toolName: toolCall.name,
-              arguments: toolCall.arguments,
-              isError: true,
-              output: extractToolResultText(result),
-              iteration,
-            });
-            const outputItem = toolResultToOutputItem(
-              result,
-              toolCall.call_id,
-              toolCall.name,
-            );
-            this.session.appendItem(outputItem);
-            allItems.push(outputItem);
-            iterationOutcomes.push({
-              toolName: toolCall.name,
-              arguments: toolCall.arguments,
-              result: extractToolResultText(result),
-              isError: result.isError,
-              error: result.error,
-            });
-            continue;
-          }
-
-          recordToolOutcome(
+          const observation = observeToolExecutionResult({
+            toolCall,
+            execution,
+            session: this.session,
+            allItems,
             errors,
             successfulToolCallIds,
-            toolCall,
-            result.isError,
-            extractToolResultText(result),
+            verificationEvidenceCallIds,
+            evidenceLedger,
+            verificationController,
+            skillManager: this.skillManager,
+            projectMemory: this.projectMemory,
+            taskText: userText,
             iteration,
-          );
-          evidenceLedger.recordToolOutcome({
-            toolCallId: toolCall.call_id,
-            toolName: toolCall.name,
-            arguments: toolCall.arguments,
-            isError: result.isError,
-            output: extractToolResultText(result),
-            iteration,
+            state: toolObservationState,
+            recordDenial: (description) => {
+              this.state.denialCount++;
+              this.state.lastDeniedOperation = description;
+            },
+            emit: (event) => this.emit(event),
+            narrate: (eventType, message, evidenceIds = []) => {
+              emitNarrationOnce(eventType, message, evidenceIds);
+            },
           });
-
-          if (!result.isError && toolCall.name === "checkpoint") {
-            const checkpointArgs = toCheckpointArgs(parsedArgs);
-            if (checkpointArgs) {
-              const checkpointEvent = extractCheckpointEvent(checkpointArgs);
-              checkpointEvents.push(checkpointEvent);
-              checkpointState = checkpointEventToPlanState(checkpointEvent);
-              evidenceLedger.recordCheckpoint({
-                kind: checkpointEvent.kind,
-                reason: checkpointEvent.reason,
-                nextDirection: checkpointEvent.nextDirection,
-                completed: checkpointEvent.completed,
-                pending: checkpointEvent.pending,
-                toolCallId: toolCall.call_id,
-                iteration,
-              });
-            }
+          iterationOutcomes.push(observation.outcome);
+          if (observation.checkpointEvent) {
+            checkpointEvents.push(observation.checkpointEvent);
+            checkpointState = checkpointEventToPlanState(observation.checkpointEvent);
           }
-
-          // Handle activate_skill tool: emit skill_activated event
-          if (!result.isError && toolCall.name === "activate_skill") {
-            let skillName: string | null = null;
-            try {
-              const parsed = JSON.parse(toolCall.arguments);
-              skillName = typeof parsed?.name === "string" ? parsed.name : null;
-            } catch {
-              // Ignore parse errors
-            }
-            if (skillName) {
-              const skill = this.skillManager?.getSkill(skillName);
-              if (skill) {
-                this.emit({
-                  type: "skill_activated",
-                  timestamp: Date.now(),
-                  skillName: skill.name,
-                  skillRevision: skill.revision ?? "unknown",
-                  skillScope: skill.scope,
-                });
-              }
-            }
-          }
-
-          const producedVerificationEvidence = !result.isError &&
-            !mutationSucceededInCurrentBatch &&
-            (toolCall.name === "read" ||
-              (toolCall.name === "bash" && isVerificationCommand(extractCommandArgument(parsedArgs))));
-
-          if (
-            !result.isError &&
-            isMutationToolName(toolCall.name)
-          ) {
-            hasMutatedFiles = true;
-            needsVerification = true;
-            mutationSucceededInCurrentBatch = true;
-            verificationEvidenceCallIds.clear();
-            verificationController.recordMutationProgress(toolCall.call_id);
-            if (recoveryReflectionDraft) {
-              recoveryReflectionDraft = addRecoveryReflectionFix(
-                recoveryReflectionDraft,
-                summarizeMutationToolCall(toolCall.name, parsedArgs),
-              );
-            }
-          } else if (
-            needsVerification &&
-            producedVerificationEvidence
-          ) {
-            needsVerification = false;
-            verificationEvidenceCallIds.add(toolCall.call_id);
-            emitNarrationOnce(
-              "verification",
-              `Recorded ${toolCall.name} as accepted verification evidence after mutation.`,
-              [toolCall.call_id],
-            );
-          } else if (
-            hasMutatedFiles &&
-            producedVerificationEvidence
-          ) {
-            verificationEvidenceCallIds.add(toolCall.call_id);
-            emitNarrationOnce(
-              "verification",
-              `Recorded ${toolCall.name} as accepted verification evidence after mutation.`,
-              [toolCall.call_id],
-            );
-          }
-
-          if (toolCall.name === "bash") {
-            const command = extractCommandArgument(parsedArgs);
-            const verificationOutcome = verificationController.observeVerificationToolResult({
-              toolName: toolCall.name,
-              command,
-              isError: result.isError,
-              output: extractToolResultText(result),
-              ledger: evidenceLedger,
-            });
-            if (verificationOutcome.kind === "recover") {
-              recoveryReflectionDraft = createRecoveryReflectionDraft(verificationOutcome.decision.diagnostic);
-              fixUntilGreenFollowUp = verificationOutcome.message;
-            } else if (verificationOutcome.kind === "stop") {
-              recoveryReflectionDraft = null;
-              fixUntilGreenStop = verificationOutcome.message;
-            } else if (verificationOutcome.kind === "passed" && recoveryReflectionDraft) {
-              const reflectionResult = writeRecoveryReflectionLesson(this.projectMemory, {
-                task: userText,
-                sessionId: this.session.getSessionId(),
-                draft: recoveryReflectionDraft,
-                verification: verificationOutcome.decision.message,
-                observableSuccess: true,
-              });
-              if (reflectionResult.status === "written") {
-                evidenceLedger.recordReflection(`Stored recovery lesson: ${reflectionResult.capsule.summary}`);
-              } else if (reflectionResult.reason !== "no_memory") {
-                evidenceLedger.recordReflection(`Skipped recovery lesson: ${reflectionResult.reason}`);
-              }
-              recoveryReflectionDraft = null;
-            }
-          }
-
-          // Store output in session
-          const outputItem = toolResultToOutputItem(
-            result,
-            toolCall.call_id,
-            toolCall.name,
-          );
-          this.session.appendItem(outputItem);
-          allItems.push(outputItem);
-          iterationOutcomes.push({
-            toolName: toolCall.name,
-            arguments: toolCall.arguments,
-            result: extractToolResultText(result),
-            isError: result.isError,
-            error: result.error,
-          });
         }
+
+        needsVerification = toolObservationState.needsVerification;
+        hasMutatedFiles = toolObservationState.hasMutatedFiles;
+        recoveryReflectionDraft = toolObservationState.recoveryReflectionDraft;
+        fixUntilGreenFollowUp = toolObservationState.fixUntilGreenFollowUp;
+        fixUntilGreenStop = toolObservationState.fixUntilGreenStop;
 
         if (checkpointEvents.length > 0) {
           scheduleCheckpointCompaction(checkpointEvents);
