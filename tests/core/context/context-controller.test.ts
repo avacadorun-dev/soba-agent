@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ResponseResource } from "../../../src/core/client/types";
-import type { ContextManager, PreInferenceCheckResult } from "../../../src/core/compaction/context-manager";
-import type { ContextSnapshot } from "../../../src/core/compaction/context-meter";
-import type { BackgroundScheduler } from "../../../src/core/compaction/scheduler";
-import { ContextController } from "../../../src/core/context/context-controller";
-import type { AgentEvent } from "../../../src/core/loop/types";
+import type { ContextManager, PreInferenceCheckResult } from "../../../src/engine/compaction/context-manager";
+import type { ContextSnapshot } from "../../../src/engine/compaction/context-meter";
+import type { BackgroundScheduler } from "../../../src/engine/compaction/scheduler";
+import { ContextController } from "../../../src/engine/context/context-controller";
+import type { AgentEvent } from "../../../src/engine/turn/types";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
 
 describe("ContextController", () => {
   test("pre-inference check emits compaction events and returns manager result", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { EvidenceLedger } from "../../../src/core/loop/evidence-ledger";
+import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
 
 function recordArgs(command: string): string {
   return JSON.stringify({ command });
@@ -41,7 +41,7 @@ describe("EvidenceLedger", () => {
       toolName: "bash",
       arguments: recordArgs("rg AgentLoop src tests"),
       isError: false,
-      output: "src/core/loop/agent-loop.ts",
+      output: "../../../src/engine/turn/agent-loop",
       iteration: 1,
     });
 

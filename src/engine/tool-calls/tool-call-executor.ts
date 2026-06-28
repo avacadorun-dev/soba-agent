@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { FunctionCallField } from "../../core/client/types";
-import type { AgentEvent } from "../../core/loop/types";
-import { createToolErrorResult } from "../../core/tools/errors";
-import type { ToolRegistry } from "../../core/tools/tool-registry";
-import type { ToolContext, ToolResult } from "../../core/tools/types";
+import type { FunctionCallField } from "../../kernel/model/openresponses-types";
+import { createToolErrorResult } from "../../kernel/tools/errors";
+import type { ToolRegistry } from "../../kernel/tools/tool-registry";
+import type { ToolContext, ToolResult } from "../../kernel/tools/types";
 import type { PermissionBroker } from "../permissions/permission-broker";
+import type { AgentEvent } from "../turn/types";
 
 export interface ToolCallExecutorOptions {
   registry: ToolRegistry;

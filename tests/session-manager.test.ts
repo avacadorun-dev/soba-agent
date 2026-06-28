@@ -20,7 +20,7 @@ import {
   parseSessionEntries,
   SessionManager,
   serializeItem,
-} from "../src/core/session/session-manager";
+} from "../src/infrastructure/persistence/sessions/session-manager";
 import type {
   AssistantMessageItemParam,
   CompactionSummaryItemParam,
@@ -29,7 +29,7 @@ import type {
   ItemParam,
   SessionItemEntry,
   UserMessageItemParam,
-} from "../src/core/session/types";
+} from "../src/kernel/transcript/types";
 
 // ─── Helpers ───
 

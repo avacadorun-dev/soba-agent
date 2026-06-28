@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DraftFilesystemFacade, DraftStore, type EvalCase } from "../../../src/core/skills/drafts";
+import { DraftFilesystemFacade, DraftStore, type EvalCase } from "../../../src/application/skills/drafts";
 
 describe("DraftStore", () => {
   const testDir = join(process.cwd(), ".test-drafts");

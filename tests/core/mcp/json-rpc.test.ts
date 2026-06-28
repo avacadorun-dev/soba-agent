@@ -8,7 +8,7 @@ import {
   type JsonRpcNotification,
   type JsonRpcOutgoingMessage,
   JsonRpcProtocolError,
-} from "../../../src/core/mcp/json-rpc";
+} from "../../../src/infrastructure/mcp/json-rpc";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

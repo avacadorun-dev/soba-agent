@@ -2,18 +2,18 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../../src/application/config/types";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import type { SkillManager } from "../../../src/application/skills/skill-manager";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
 import { type CommandContext, executeCommand } from "../../../src/apps/cli/commands";
-import { DEFAULT_CONFIG } from "../../../src/core/config/types";
-import { I18n } from "../../../src/core/i18n/i18n";
-import type { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { McpClientManagerStatus, McpManagedServerStatus, McpRemoteAuthCommandResult } from "../../../src/core/mcp/client-manager";
-import { McpSecretStore } from "../../../src/core/mcp/secret-store";
-import type { McpServerSecurity } from "../../../src/core/mcp/security";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import type { SkillManager } from "../../../src/core/skills/skill-manager";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
+import type { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { McpClientManagerStatus, McpManagedServerStatus, McpRemoteAuthCommandResult } from "../../../src/infrastructure/mcp/client-manager";
+import { McpSecretStore } from "../../../src/infrastructure/mcp/secret-store";
+import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
+import { I18n } from "../../../src/shared/i18n/i18n";
 
 describe("slash commands", () => {
   function appendCapsuleCheckpoint(session: SessionManager, checkpointId = "ck_111111111111"): void {

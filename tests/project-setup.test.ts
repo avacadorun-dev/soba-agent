@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import packageJson from "../package.json";
-import { APP_VERSION } from "../src/core/version";
+import { APP_VERSION } from "../src/shared/version";
 
 const expectedVersion = `v${packageJson.version}`;
 
@@ -34,17 +34,17 @@ describe("CLI", () => {
 });
 
 describe("Project structure", () => {
-  test("директории ядра созданы (design.md 2.2)", async () => {
+  test("architecture layer directories exist", async () => {
     const dirs = [
-      "src/core/session",
-      "src/core/tools",
-      "src/core/compaction",
-      "src/core/trust",
-      "src/core/loop",
-      "src/core/i18n",
-      "src/core/prompt",
-      "src/core/client",
-      "src/core/middleware",
+      "src/kernel/transcript",
+      "src/kernel/tools",
+      "src/engine/turn",
+      "src/engine/compaction",
+      "src/application/trust",
+      "src/shared/i18n",
+      "src/engine/prompt",
+      "src/infrastructure/llm/openresponses",
+      "src/infrastructure/llm/openai",
     ];
     for (const dir of dirs) {
       await Bun.file(`${dir}/.gitkeep`).exists();

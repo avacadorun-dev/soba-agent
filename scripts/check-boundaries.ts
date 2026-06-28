@@ -127,12 +127,21 @@ function violatesPublicApplicationApi(resolved: string): boolean {
 
 const violations: string[] = [];
 
+if (existsSync(join(projectRoot, "src", "core"))) {
+  violations.push("src/core exists (retired namespace)");
+}
+
 for (const rule of rules) {
   for (const file of walkTypescriptFiles(rootFromGlob(rule.from))) {
     const source = readFileSync(file, "utf8");
     for (const specifier of importSpecifiers(source)) {
       const resolved = resolveProjectImport(file, specifier);
       if (!resolved) continue;
+
+      if (resolved.startsWith("src/core/") || resolved === "src/core") {
+        violations.push(`${relative(projectRoot, file)} -> ${specifier} (src/core is retired)`);
+        continue;
+      }
 
       const denied = rule.deny?.find((pattern) => matchesPattern(resolved, pattern));
       if (denied) {

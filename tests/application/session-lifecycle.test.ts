@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionLifecycleService } from "../../src/application/session-lifecycle";
-import { SessionManager } from "../../src/core/session/session-manager";
+import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
 
 let testHome: string;
 let projectRoot: string;

@@ -1,4 +1,4 @@
-import type { TrustLevel, TrustManager } from "../../core/trust/trust-manager";
+import type { TrustLevel, TrustManager } from "../../application/trust/trust-manager";
 import { assertValidHeaderName, McpAuthConfigError } from "./auth";
 import { MCP_SESSION_ID_HEADER } from "./http-session";
 import type { McpTrustMode } from "./types";

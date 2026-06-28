@@ -1,12 +1,12 @@
-import type { McpClientManager } from "../core/mcp/client-manager";
-import { McpClientManager as DefaultMcpClientManager } from "../core/mcp/client-manager";
-import { loadMcpConfig } from "../core/mcp/config";
-import type { McpSecretStore } from "../core/mcp/secret-store";
-import { MCP_TOOL_PROXY_PREFIX } from "../core/mcp/tool-proxy";
-import { type McpToolRegistrySyncResult, syncMcpToolsIntoRegistry } from "../core/mcp/tool-registry-sync";
-import type { McpConfig, McpConfigLoadOptions, McpServerConfig } from "../core/mcp/types";
-import type { ToolRegistry } from "../core/tools/tool-registry";
-import type { TrustManager } from "../core/trust/trust-manager";
+import type { McpClientManager } from "../infrastructure/mcp/client-manager";
+import { McpClientManager as DefaultMcpClientManager } from "../infrastructure/mcp/client-manager";
+import { loadMcpConfig } from "../infrastructure/mcp/config";
+import type { McpSecretStore } from "../infrastructure/mcp/secret-store";
+import { MCP_TOOL_PROXY_PREFIX } from "../infrastructure/mcp/tool-proxy";
+import { type McpToolRegistrySyncResult, syncMcpToolsIntoRegistry } from "../infrastructure/mcp/tool-registry-sync";
+import type { McpConfig, McpConfigLoadOptions, McpServerConfig } from "../infrastructure/mcp/types";
+import type { ToolRegistry } from "../kernel/tools/tool-registry";
+import type { TrustManager } from "./trust/trust-manager";
 
 const MCP_TOOL_NAME_PREFIX = `${MCP_TOOL_PROXY_PREFIX}_`;
 

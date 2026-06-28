@@ -9,25 +9,25 @@
  * Phase 1: only OpenAI adapter via middleware.
  */
 
-import type { SobaConfig } from "../../../core/config/types";
-import { OpenAIAdapter } from "../../../core/middleware/openai-adapter";
-import type {
-  NativeCompactionInput,
-  ProviderAdapter,
-  ProviderErrorKind,
-} from "../../../core/middleware/types";
-import type {
-  NativeContinuation,
-  ProviderCapabilities,
-  ProviderIdentity,
-} from "../../../core/session/types-v2";
+import type { SobaConfig } from "../../../application/config/types";
 import type {
   CompactResource,
   CompactResponseParams,
   CreateResponseParams,
   ResponseResource,
   StreamingEvent,
-} from "./types";
+} from "../../../kernel/model/openresponses-types";
+import type {
+  NativeContinuation,
+  ProviderCapabilities,
+  ProviderIdentity,
+} from "../../../kernel/transcript/types-v2";
+import { OpenAIAdapter } from "../openai/openai-adapter";
+import type {
+  NativeCompactionInput,
+  ProviderAdapter,
+  ProviderErrorKind,
+} from "../openai/types";
 
 const SOBA_APP_NAME = "soba-agent";
 const SOBA_APP_URL = "https://github.com/avacadorun-dev/soba-agent";

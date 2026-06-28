@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionManager } from "../../../src/core/session/session-manager";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 
 describe("Session flight records", () => {
   test("persists redacted sidecar artifacts outside the conversation tree", () => {

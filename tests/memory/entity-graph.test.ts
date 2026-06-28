@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EntityGraphError, EntityGraphStore } from "../../src/core/memory/entity-graph";
-import type { EntityNode } from "../../src/core/memory/types";
+import { EntityGraphError, EntityGraphStore } from "../../src/engine/memory/entity-graph";
+import type { EntityNode } from "../../src/engine/memory/types";
 
 describe("EntityGraphStore", () => {
   let projectRoot: string;

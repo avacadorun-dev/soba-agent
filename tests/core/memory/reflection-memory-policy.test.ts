@@ -2,21 +2,21 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { parseVerificationDiagnostics } from "../../../src/core/fix-until-green";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { ProjectMemorySource } from "../../../src/core/memory/memory-injector";
-import { ProjectMemory } from "../../../src/core/memory/project-memory";
+import type { ProjectMemorySource } from "../../../src/engine/memory/memory-injector";
+import { ProjectMemory } from "../../../src/engine/memory/project-memory";
 import {
   addRecoveryReflectionFix,
   createRecoveryReflectionDraft,
   writeRecoveryReflectionLesson,
-} from "../../../src/core/memory/reflection-memory-policy";
-import type { CapsuleRelevanceResult, KnowledgeDocument } from "../../../src/core/memory/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
+} from "../../../src/engine/memory/reflection-memory-policy";
+import type { CapsuleRelevanceResult, KnowledgeDocument } from "../../../src/engine/memory/types";
+import { parseVerificationDiagnostics } from "../../../src/engine/recovery";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("Reflection memory policy", () => {
   let projectRoot: string;

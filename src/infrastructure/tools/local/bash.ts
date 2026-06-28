@@ -11,8 +11,8 @@
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, mkdtempSync, openSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import { commandErrorInfo, createToolErrorResult, redactSecrets } from "./errors";
-import type { ToolContext, ToolDefinition, ToolResult } from "./types";
+import { commandErrorInfo, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 
 // ─── Types ───
 

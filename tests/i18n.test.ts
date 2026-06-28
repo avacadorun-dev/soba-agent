@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { detectLocale, I18n, isLocale, resetI18n } from "../src/core/i18n/i18n";
-import { SUPPORTED_LOCALES } from "../src/core/i18n/types";
+import { detectLocale, I18n, isLocale, resetI18n } from "../src/shared/i18n/i18n";
+import { SUPPORTED_LOCALES } from "../src/shared/i18n/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ describe("isLocale()", () => {
 describe("I18n translation", () => {
   test("UC-9: переводы загружаются независимо от текущей рабочей директории", () => {
     const tempDir = createTempLocalesDir("cwd-independent");
-    const modulePath = join(import.meta.dir, "..", "src", "core", "i18n", "i18n.ts");
+    const modulePath = join(import.meta.dir, "..", "src", "shared", "i18n", "i18n.ts");
     const script = `import { I18n } from ${JSON.stringify(modulePath)}; console.log(new I18n("ru").t("cli.help.title"));`;
     const result = Bun.spawnSync(["bun", "-e", script], { cwd: tempDir });
 

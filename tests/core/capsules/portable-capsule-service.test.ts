@@ -6,9 +6,9 @@ import {
   decodePortableCapsuleMarkdown,
   PortableCapsuleService,
   PortableCapsuleServiceError,
-} from "../../../src/core/capsules";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
+} from "../../../src/application/capsules";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 
 let tmpDir: string;
 let sessionDir: string;
@@ -49,8 +49,8 @@ function makeCheckpointPayload(
       nextSteps: ["Run capsule service tests"],
     },
     artifacts: {
-      readFiles: ["src/core/capsules/service.ts"],
-      modifiedFiles: ["src/core/capsules/service.ts"],
+      readFiles: ["../../../src/application/capsules/service"],
+      modifiedFiles: ["../../../src/application/capsules/service"],
       verificationCommands: ["bun test tests/core/capsules/portable-capsule-service.test.ts"],
       verificationStatus: "passed",
     },

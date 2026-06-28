@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EvidenceLedger } from "../../../src/core/loop/evidence-ledger";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
-import { runAutoVerifier } from "../../../src/core/verification/auto-verifier";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
+import { runAutoVerifier } from "../../../src/engine/verification/auto-verifier";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("auto verifier", () => {
   test("code mutation triggers targeted verification commands", async () => {

@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
+import { ModelTurnRunner } from "../../../src/engine/model-turn/model-turn-runner";
+import type { AgentEvent } from "../../../src/engine/turn/types";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
 import type {
   CreateResponseParams,
   FunctionCallField,
   MessageField,
   ResponseResource,
   StreamingEvent,
-} from "../../../src/core/client/types";
-import type { AgentEvent } from "../../../src/core/loop/types";
-import { ModelTurnRunner } from "../../../src/core/model-turn/model-turn-runner";
+} from "../../../src/kernel/model/openresponses-types";
 
 function message(id: string, text: string): MessageField {
   return {

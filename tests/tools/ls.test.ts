@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lsTool } from "../../src/core/tools/ls";
+import { lsTool } from "../../src/infrastructure/tools/local/ls";
 
 describe("ls tool", () => {
   let tmpDir = "";

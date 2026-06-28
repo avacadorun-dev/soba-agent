@@ -1,17 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import { evaluateCompletion } from "../../../src/core/loop/completion-gate";
+import { evaluateCompletion } from "../../../src/engine/completion/completion-gate";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import {
   createWorkingNarration,
   sanitizeWorkingNarrationMessage,
-} from "../../../src/core/loop/narration";
-import type { AgentEvent } from "../../../src/core/loop/types";
-import type { ProviderErrorKind } from "../../../src/core/middleware/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
+} from "../../../src/engine/turn/narration";
+import type { AgentEvent } from "../../../src/engine/turn/types";
+import type { ProviderErrorKind } from "../../../src/infrastructure/llm/openai/types";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 function makeResponse(output: ResponseResource["output"], id: string): ResponseResource {
   return {

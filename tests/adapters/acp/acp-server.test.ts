@@ -3,7 +3,7 @@ import { ACP_LIFECYCLE_FEATURES, type AcpFeatureSet } from "../../../src/adapter
 import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
 import { listRuntimeCommands, type RuntimeEvent, type RuntimeSessionInfo, type SobaRuntime, type UserTurnInput } from "../../../src/application/public";
 import { runAcpServer } from "../../../src/apps/acp/server";
-import { APP_VERSION } from "../../../src/core/version";
+import { APP_VERSION } from "../../../src/shared/version";
 
 interface MockRuntimeState {
   lastTurnInput?: UserTurnInput;

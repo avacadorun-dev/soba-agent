@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentLoop } from "../../../../src/core/loop/agent-loop";
-import { ProjectTrustStore } from "../../../../src/core/skills/project-trust-store";
+import { ProjectTrustStore } from "../../../../src/application/skills/project-trust-store";
+import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../../src/ui/terminal/interactive/model/types";
 

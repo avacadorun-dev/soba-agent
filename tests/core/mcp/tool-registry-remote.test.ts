@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { MCP_DRAFT_PROTOCOL_VERSION, type McpClient, type McpTool, type McpToolCallResult } from "../../../src/core/mcp/client";
-import { McpClientManager, type McpClientManagerStatus, type McpManagedServerStatus } from "../../../src/core/mcp/client-manager";
-import { MCP_SESSION_ID_HEADER } from "../../../src/core/mcp/http-session";
-import { JSON_RPC_VERSION, type JsonRpcRequest } from "../../../src/core/mcp/json-rpc";
-import type { McpServerSecurity } from "../../../src/core/mcp/security";
-import { syncMcpToolsIntoRegistry } from "../../../src/core/mcp/tool-registry-sync";
-import type { McpStreamableHttpServerConfig } from "../../../src/core/mcp/types";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
+import { MCP_DRAFT_PROTOCOL_VERSION, type McpClient, type McpTool, type McpToolCallResult } from "../../../src/infrastructure/mcp/client";
+import { McpClientManager, type McpClientManagerStatus, type McpManagedServerStatus } from "../../../src/infrastructure/mcp/client-manager";
+import { MCP_SESSION_ID_HEADER } from "../../../src/infrastructure/mcp/http-session";
+import { JSON_RPC_VERSION, type JsonRpcRequest } from "../../../src/infrastructure/mcp/json-rpc";
+import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
+import { syncMcpToolsIntoRegistry } from "../../../src/infrastructure/mcp/tool-registry-sync";
+import type { McpStreamableHttpServerConfig } from "../../../src/infrastructure/mcp/types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("Remote MCP ToolRegistry regression", () => {
   test("remote tool appears in registry with safe function name and readable label", async () => {

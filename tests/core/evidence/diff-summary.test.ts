@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildEvidenceDiffSummary } from "../../../src/core/evidence";
+import { buildEvidenceDiffSummary } from "../../../src/engine/evidence";
 
 describe("Evidence diff summary builder", () => {
   test("summarizes created files", () => {

@@ -1,8 +1,8 @@
 import type {
   PortableCapsuleIntegrationStep,
   PortableCapsuleQualityExpectation,
-} from "../../../src/core/capsules";
-import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
+} from "../../../src/application/capsules";
+import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 
 export function makeStructuredCheckpoint(): ContextCapsuleEntry {
   return {
@@ -34,8 +34,8 @@ export function makeStructuredCheckpoint(): ContextCapsuleEntry {
       nextSteps: ["Run bun test tests/core/provider/registry.test.ts"],
     },
     artifacts: {
-      readFiles: ["src/core/provider/registry.ts"],
-      modifiedFiles: ["src/core/provider/registry.ts", "tests/core/provider/registry.test.ts"],
+      readFiles: ["../../../src/infrastructure/llm/providers/registry"],
+      modifiedFiles: ["../../../src/infrastructure/llm/providers/registry", "tests/core/provider/registry.test.ts"],
       verificationCommands: ["bun test tests/core/provider/registry.test.ts"],
       verificationStatus: "passed",
     },
@@ -122,8 +122,8 @@ export const structuredExpectation: PortableCapsuleQualityExpectation = {
   ],
   blockers: ["external provider credentials"],
   artifacts: {
-    readFiles: ["src/core/provider/registry.ts"],
-    modifiedFiles: ["src/core/provider/registry.ts", "tests/core/provider/registry.test.ts"],
+    readFiles: ["../../../src/infrastructure/llm/providers/registry"],
+    modifiedFiles: ["../../../src/infrastructure/llm/providers/registry", "tests/core/provider/registry.test.ts"],
     verificationCommands: ["bun test tests/core/provider/registry.test.ts"],
     verificationStatus: "passed",
   },

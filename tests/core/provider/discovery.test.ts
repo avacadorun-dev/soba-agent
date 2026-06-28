@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isLikelyChatModelId, pickSuggestedDefault } from "../../../src/core/provider/discovery";
+import { isLikelyChatModelId, pickSuggestedDefault } from "../../../src/infrastructure/llm/providers/discovery";
 
 describe("provider discovery model selection", () => {
   test("suggests a chat-like model instead of an image model when the image model is first", () => {

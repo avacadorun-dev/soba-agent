@@ -7,10 +7,10 @@ import {
   McpClientError,
   type McpClientTransport,
   type McpClientTransportHandlers,
-} from "../../../src/core/mcp/client";
-import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage, type JsonRpcRequest } from "../../../src/core/mcp/json-rpc";
-import { McpTransportError } from "../../../src/core/mcp/transport";
-import type { McpServerConfig } from "../../../src/core/mcp/types";
+} from "../../../src/infrastructure/mcp/client";
+import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage, type JsonRpcRequest } from "../../../src/infrastructure/mcp/json-rpc";
+import { McpTransportError } from "../../../src/infrastructure/mcp/transport";
+import type { McpServerConfig } from "../../../src/infrastructure/mcp/types";
 
 describe("MCP client lifecycle", () => {
   test("modern discover success chooses protocol and sends per-request meta", async () => {

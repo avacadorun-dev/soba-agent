@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bashTool } from "../../../src/core/tools/bash";
-import { editTool } from "../../../src/core/tools/edit";
-import { readTool } from "../../../src/core/tools/read";
-import type { ToolContext, ToolResult } from "../../../src/core/tools/types";
+import { bashTool } from "../../../src/infrastructure/tools/local/bash";
+import { editTool } from "../../../src/infrastructure/tools/local/edit";
+import { readTool } from "../../../src/infrastructure/tools/local/read";
+import type { ToolContext, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("helpful tool errors", () => {
   test("read missing file returns stable code and path correction hint", async () => {

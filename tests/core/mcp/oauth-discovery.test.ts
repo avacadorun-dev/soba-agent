@@ -4,7 +4,7 @@ import {
   McpOAuthDiscoveryError,
   type McpOAuthFetch,
   parseBearerWwwAuthenticate,
-} from "../../../src/core/mcp/oauth-discovery";
+} from "../../../src/infrastructure/mcp/oauth-discovery";
 
 describe("MCP OAuth discovery", () => {
   test("parses WWW-Authenticate with resource metadata", () => {

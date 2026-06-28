@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assertValidHeaderName, buildMcpAuthHeaders, McpAuthConfigError } from "../../../src/core/mcp/auth";
+import { assertValidHeaderName, buildMcpAuthHeaders, McpAuthConfigError } from "../../../src/infrastructure/mcp/auth";
 
 describe("MCP static auth", () => {
   test("bearer env sends Authorization header", () => {

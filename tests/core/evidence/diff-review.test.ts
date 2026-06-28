@@ -5,8 +5,8 @@ import {
   buildEvidenceDiffSummary,
   createDiffReviewState,
   formatEvidenceBundleForHandoff,
-} from "../../../src/core/evidence";
-import type { EvidenceLedgerSummary } from "../../../src/core/loop/evidence-ledger";
+} from "../../../src/engine/evidence";
+import type { EvidenceLedgerSummary } from "../../../src/engine/evidence/evidence-ledger";
 
 const NOW = new Date("2026-06-27T00:00:00.000Z");
 const LATER = new Date("2026-06-27T00:01:00.000Z");

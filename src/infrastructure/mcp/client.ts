@@ -1,4 +1,4 @@
-import { APP_VERSION } from "../../core/version";
+import { APP_VERSION } from "../../shared/version";
 import type { McpClientState, McpClientStateSnapshot } from "./client-state";
 import { JsonRpcEndpoint, JsonRpcError, type JsonRpcNotification, type JsonRpcParams } from "./json-rpc";
 import { type McpTransport, McpTransportError, type McpTransportEvent, type McpTransportEventHandler } from "./transport";

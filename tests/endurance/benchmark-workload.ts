@@ -12,8 +12,8 @@
  * Spec: internal-design-notes § Endurance Acceptance
  */
 
-import type { SessionManager } from "../../src/core/session/session-manager";
-import type { ItemParam } from "../../src/core/session/types";
+import type { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
+import type { ItemParam } from "../../src/kernel/transcript/types";
 
 // ─── Types ───
 
@@ -138,9 +138,9 @@ const FEATURES = [
 
 const FILES = [
   "src/core/auth.ts",
-  "src/core/config.ts",
+  "../../src/application/config",
   "src/core/session.ts",
-  "src/core/client.ts",
+  "../../src/infrastructure/llm/openresponses",
   "src/core/loop.ts",
   "src/utils/helpers.ts",
   "src/utils/validation.ts",

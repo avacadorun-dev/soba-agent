@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createMcpPkcePair, createPkceChallenge, createPkceVerifier } from "../../../src/core/mcp/oauth-pkce";
+import { createMcpPkcePair, createPkceChallenge, createPkceVerifier } from "../../../src/infrastructure/mcp/oauth-pkce";
 
 describe("MCP OAuth PKCE", () => {
   test("PKCE challenge is deterministic for fixed verifier", async () => {

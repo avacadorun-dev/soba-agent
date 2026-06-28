@@ -17,8 +17,12 @@ interface ControllerCoverage {
 
 const layerRules: LayerRule[] = [
   {
-    root: "src/core",
-    forbiddenTargets: ["src/apps/", "src/application/", "src/adapters/", "src/ui/"],
+    root: "src/kernel",
+    forbiddenTargets: ["src/application/", "src/engine/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
+  },
+  {
+    root: "src/engine",
+    forbiddenTargets: ["src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
   },
   {
     root: "src/application",
@@ -175,18 +179,18 @@ describe("clean architecture pre-gate", () => {
       "new ModelTurnRunner",
     ];
     const forbiddenOwnershipImports = [
-      "../../core/provider/registry",
-      "../../core/provider/client-proxy",
-      "../../core/mcp/config",
-      "../../core/mcp/tool-registry-sync",
-      "../../core/memory/memory-tools",
-      "../../core/tools/bash",
-      "../../core/tools/edit",
-      "../../core/tools/inspect-file",
-      "../../core/tools/ls",
-      "../../core/tools/read",
-      "../../core/tools/search-files",
-      "../../core/tools/write",
+      "../../infrastructure/llm/providers/registry",
+      "../../infrastructure/llm/providers/client-proxy",
+      "../../infrastructure/mcp/config",
+      "../../infrastructure/mcp/tool-registry-sync",
+      "../memory/memory-tools",
+      "../../infrastructure/tools/local/bash",
+      "../../infrastructure/tools/local/edit",
+      "../../infrastructure/tools/local/inspect-file",
+      "../../infrastructure/tools/local/ls",
+      "../../infrastructure/tools/local/read",
+      "../../infrastructure/tools/local/search-files",
+      "../../infrastructure/tools/local/write",
     ];
 
     const missingSignals = requiredControllerSignals.filter((signal) => !source.includes(signal));

@@ -2,19 +2,19 @@ import { describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { CreateResponseParams, ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import { MCP_DRAFT_PROTOCOL_VERSION, McpClient, type McpTool, type McpToolCallResult } from "../../../src/core/mcp/client";
-import { McpClientManager } from "../../../src/core/mcp/client-manager";
-import { MCP_SESSION_ID_HEADER } from "../../../src/core/mcp/http-session";
-import { JSON_RPC_VERSION, type JsonRpcRequest } from "../../../src/core/mcp/json-rpc";
-import { McpStreamableHttpTransport } from "../../../src/core/mcp/streamable-http-transport";
-import { syncMcpToolsIntoRegistry } from "../../../src/core/mcp/tool-registry-sync";
-import type { McpStreamableHttpServerConfig } from "../../../src/core/mcp/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { MCP_DRAFT_PROTOCOL_VERSION, McpClient, type McpTool, type McpToolCallResult } from "../../../src/infrastructure/mcp/client";
+import { McpClientManager } from "../../../src/infrastructure/mcp/client-manager";
+import { MCP_SESSION_ID_HEADER } from "../../../src/infrastructure/mcp/http-session";
+import { JSON_RPC_VERSION, type JsonRpcRequest } from "../../../src/infrastructure/mcp/json-rpc";
+import { McpStreamableHttpTransport } from "../../../src/infrastructure/mcp/streamable-http-transport";
+import { syncMcpToolsIntoRegistry } from "../../../src/infrastructure/mcp/tool-registry-sync";
+import type { McpStreamableHttpServerConfig } from "../../../src/infrastructure/mcp/types";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { CreateResponseParams, ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("Remote MCP tools through AgentLoop", () => {
   test("remote tool records the same function_call_output session shape without auth or session leaks", async () => {

@@ -14,7 +14,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { I18n } from "../../../../src/core/i18n/i18n";
+import { I18n } from "../../../../src/shared/i18n/i18n";
 import { handleNotificationsCommand } from "../../../../src/ui/terminal/interactive/commands/notification-command";
 import {
   dismiss,

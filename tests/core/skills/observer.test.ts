@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { type ToolSequence, WorkflowObserver } from "../../../src/core/skills/observer";
+import { type ToolSequence, WorkflowObserver } from "../../../src/application/skills/observer";
 
 describe("WorkflowObserver", () => {
   const testDir = join(process.cwd(), ".test-observer");

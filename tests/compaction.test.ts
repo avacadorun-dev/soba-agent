@@ -12,16 +12,16 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../src/core/client/openresponses-client";
 import {
   compact,
   estimateCompactionSavings,
   findCutPoint,
   getCurrentTokens,
   shouldCompact,
-} from "../src/core/compaction/compaction";
-import { serializeItemForCompaction, serializeItemsForCompaction } from "../src/core/compaction/serializer";
-import { estimateTokens, SessionManager } from "../src/core/session/session-manager";
+} from "../src/engine/compaction/compaction";
+import { serializeItemForCompaction, serializeItemsForCompaction } from "../src/engine/compaction/serializer";
+import type { OpenResponsesClient } from "../src/infrastructure/llm/openresponses/openresponses-client";
+import { estimateTokens, SessionManager } from "../src/infrastructure/persistence/sessions/session-manager";
 import type {
   AssistantMessageItemParam,
   CompactionSummaryItemParam,
@@ -30,7 +30,7 @@ import type {
   ItemParam,
   SessionItemEntry,
   UserMessageItemParam,
-} from "../src/core/session/types";
+} from "../src/kernel/transcript/types";
 
 // ─── Helpers ───
 

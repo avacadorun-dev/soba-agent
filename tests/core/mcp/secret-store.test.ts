@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { McpSecretStore, mergeMcpSecretEnv } from "../../../src/core/mcp/secret-store";
+import { McpSecretStore, mergeMcpSecretEnv } from "../../../src/infrastructure/mcp/secret-store";
 
 describe("MCP secret store", () => {
   test("stores secrets in a private user-local file", async () => {

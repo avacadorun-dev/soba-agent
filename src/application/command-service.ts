@@ -1,4 +1,4 @@
-import type { TranslationKey } from "../core/i18n/types";
+import type { TranslationKey } from "../shared/i18n/types";
 
 export type RuntimeCommandSurface = "print" | "tui" | "acp";
 

@@ -9,9 +9,9 @@ import {
   resolveCompactionConfig,
   saveConfigToFile,
   validateConfig,
-} from "../src/core/config/config-loader";
-import type { SobaConfig } from "../src/core/config/types";
-import { DEFAULT_CONFIG } from "../src/core/config/types";
+} from "../src/application/config/config-loader";
+import type { SobaConfig } from "../src/application/config/types";
+import { DEFAULT_CONFIG } from "../src/application/config/types";
 
 function uniqueConfigPath(label: string): string {
   const dir = join(tmpdir(), `soba-test-${label}`, ".soba");
@@ -114,7 +114,7 @@ describe("Config loader", () => {
     try {
       process.env.SOBA_BASH_MAX_TIMEOUT_SECONDS = "45";
 
-      const { loadConfig } = await import("../src/core/config/config-loader");
+      const { loadConfig } = await import("../src/application/config/config-loader");
       const envWins = await loadConfig({}, { configPath: path });
       const cliWins = await loadConfig({ bashMaxTimeoutSeconds: 15 }, { configPath: path });
 
@@ -358,7 +358,7 @@ describe("DotEnv loading", () => {
     delete process.env.SOBA_BASE_URL;
     process.chdir(envDir);
 
-    const { loadConfig } = await import("../src/core/config/config-loader");
+    const { loadConfig } = await import("../src/application/config/config-loader");
     const config = await loadConfig();
 
     expect(config.apiKey).toBe("dotenv-key");

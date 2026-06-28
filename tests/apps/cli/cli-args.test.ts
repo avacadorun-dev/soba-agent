@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseArgs, printHelp } from "../../../src/apps/cli/args";
-import { I18n } from "../../../src/core/i18n/i18n";
+import { I18n } from "../../../src/shared/i18n/i18n";
 
 describe("CLI adaptive loop options", () => {
   test("парсит adaptive loop policy, включая unlimited=0", () => {

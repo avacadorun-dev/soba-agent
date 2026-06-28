@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { McpClient, McpTool, McpToolCallResult } from "../../../src/core/mcp/client";
+import type { McpClient, McpTool, McpToolCallResult } from "../../../src/infrastructure/mcp/client";
 import {
   buildMcpToolDefinitions,
   mapMcpInputSchema,
   normalizeMcpToolResult,
   proxyToolName,
-} from "../../../src/core/mcp/tool-proxy";
-import type { ToolDefinition } from "../../../src/core/tools/types";
+} from "../../../src/infrastructure/mcp/tool-proxy";
+import type { ToolDefinition } from "../../../src/kernel/tools/types";
 
 describe("MCP tool proxy", () => {
   test("proxy exposes expected names", async () => {

@@ -1,5 +1,5 @@
-import type { AgentEvent, AgentTurnResult } from "../core/loop/types";
-import type { SessionInfo } from "../core/session/types";
+import type { AgentEvent, AgentTurnResult } from "../engine/turn/types";
+import type { SessionInfo } from "../kernel/transcript/types";
 import type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
 
 export type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";

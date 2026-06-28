@@ -7,7 +7,7 @@ import {
   getDefaultMcpOAuthTokenStorePath,
   McpOAuthTokenStore,
   recordFromTokenSet,
-} from "../../../src/core/mcp/oauth-token-store";
+} from "../../../src/infrastructure/mcp/oauth-token-store";
 
 describe("MCP OAuth token store", () => {
   let tempDir: string;

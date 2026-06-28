@@ -1,5 +1,5 @@
-import type { TrustManager } from "../../core/trust/trust-manager";
-import type { ToolRegistry } from "../tools/local/tool-registry";
+import type { TrustManager } from "../../application/trust/trust-manager";
+import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { McpManagedServerStatus } from "./client-manager";
 import { applyMcpToolTrustRules, createDefaultMcpServerSecurity, type McpToolTrustRule } from "./security";
 import { buildMcpToolDefinitionsForServers, MCP_TOOL_PROXY_PREFIX, type McpToolProxyOptions, type McpToolProxySource } from "./tool-proxy";

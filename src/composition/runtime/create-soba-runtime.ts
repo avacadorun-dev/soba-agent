@@ -1,8 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
+import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import { McpRuntimeController } from "../../application/mcp-runtime-controller";
 import { SessionLifecycleService } from "../../application/session-lifecycle";
+import { SkillCatalog } from "../../application/skills/catalog";
+import { SkillDiscovery } from "../../application/skills/discovery";
+import { ProjectTrustStore } from "../../application/skills/project-trust-store";
+import { SkillManager } from "../../application/skills/skill-manager";
 import {
   createDelegatedBashTool,
   createDelegatedInspectFileTool,
@@ -12,6 +17,7 @@ import {
   createDelegatedWriteTool,
   type RuntimeToolDelegation,
 } from "../../application/tool-delegation";
+import { TrustManager } from "../../application/trust/trust-manager";
 import type {
   CreateSessionInput,
   ListSessionsInput,
@@ -31,34 +37,28 @@ import type {
   UserTurnInput,
 } from "../../application/types";
 import { runtimeBlocksToText } from "../../application/types";
-import { ContextManager } from "../../core/compaction/context-manager";
-import { BackgroundScheduler } from "../../core/compaction/scheduler";
-import type { CompactionConfig, SobaConfig } from "../../core/config/types";
-import { AgentLoop } from "../../core/loop/agent-loop";
-import type { AgentEvent } from "../../core/loop/types";
-import type { McpClientManager } from "../../core/mcp/client-manager";
-import { McpSecretStore } from "../../core/mcp/secret-store";
-import { createMemoryTools } from "../../core/memory/memory-tools";
-import { ProjectMemory } from "../../core/memory/project-memory";
-import { OpenResponsesClientProxy } from "../../core/provider/client-proxy";
-import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../core/provider/discovery";
-import { ProviderRegistry } from "../../core/provider/registry";
-import type { ModelDefinition, ProviderDefinition } from "../../core/provider/types";
-import type { SessionManager } from "../../core/session/session-manager";
-import { SkillCatalog } from "../../core/skills/catalog";
-import { SkillDiscovery } from "../../core/skills/discovery";
-import { ProjectTrustStore } from "../../core/skills/project-trust-store";
-import { SkillManager } from "../../core/skills/skill-manager";
-import { bashTool } from "../../core/tools/bash";
-import { checkpointTool } from "../../core/tools/checkpoint";
-import { editTool } from "../../core/tools/edit";
-import { inspectFileTool } from "../../core/tools/inspect-file";
-import { lsTool } from "../../core/tools/ls";
-import { readTool } from "../../core/tools/read";
-import { searchFilesTool } from "../../core/tools/search-files";
-import { ToolRegistry } from "../../core/tools/tool-registry";
-import { writeTool } from "../../core/tools/write";
-import { TrustManager } from "../../core/trust/trust-manager";
+import { ContextManager } from "../../engine/compaction/context-manager";
+import { BackgroundScheduler } from "../../engine/compaction/scheduler";
+import { createMemoryTools } from "../../engine/memory/memory-tools";
+import { ProjectMemory } from "../../engine/memory/project-memory";
+import { AgentLoop } from "../../engine/turn/agent-loop";
+import type { AgentEvent } from "../../engine/turn/types";
+import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
+import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
+import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
+import type { ModelDefinition, ProviderDefinition } from "../../infrastructure/llm/providers/types";
+import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
+import { McpSecretStore } from "../../infrastructure/mcp/secret-store";
+import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import { bashTool } from "../../infrastructure/tools/local/bash";
+import { checkpointTool } from "../../infrastructure/tools/local/checkpoint";
+import { editTool } from "../../infrastructure/tools/local/edit";
+import { inspectFileTool } from "../../infrastructure/tools/local/inspect-file";
+import { lsTool } from "../../infrastructure/tools/local/ls";
+import { readTool } from "../../infrastructure/tools/local/read";
+import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
+import { writeTool } from "../../infrastructure/tools/local/write";
+import { ToolRegistry } from "../../kernel/tools/tool-registry";
 
 export interface RuntimeFactoryInput {
   cwd: string;
@@ -440,7 +440,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   skillManager.refresh();
 
   if (skillCatalog.getModelInvocable().length > 0) {
-    const { createActivateSkillTool } = await import("../../core/tools/activate-skill");
+    const { createActivateSkillTool } = await import("../../infrastructure/tools/local/activate-skill");
     tools.register(createActivateSkillTool({
       catalog: skillCatalog,
       onActivate: (ref) => {

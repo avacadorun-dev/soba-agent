@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { get } from "node:http";
-import { startMcpOAuthCallbackServer } from "../../../src/core/mcp/oauth-callback-server";
+import { startMcpOAuthCallbackServer } from "../../../src/infrastructure/mcp/oauth-callback-server";
 
 describe("MCP OAuth callback server", () => {
   test("callback with valid state exchanges code", async () => {

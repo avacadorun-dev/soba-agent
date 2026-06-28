@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillCommands } from "../../../src/core/skills/commands";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { DraftStore } from "../../../src/core/skills/drafts";
-import { SkillEvaluator } from "../../../src/core/skills/evaluator";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { RevisionStore } from "../../../src/core/skills/revisions";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillCommands } from "../../../src/application/skills/commands";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { DraftStore } from "../../../src/application/skills/drafts";
+import { SkillEvaluator } from "../../../src/application/skills/evaluator";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { RevisionStore } from "../../../src/application/skills/revisions";
 
 describe("SkillCommands", () => {
   const testDir = join(process.cwd(), ".test-commands");

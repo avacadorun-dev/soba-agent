@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bashTool } from "../../src/core/tools/bash";
+import { bashTool } from "../../src/infrastructure/tools/local/bash";
 
 describe("bash tool", () => {
   let tmpDir: string;

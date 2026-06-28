@@ -9,17 +9,16 @@
  */
 
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { ContextManager } from "../../../src/core/compaction/context-manager";
-import type { CompactionConfig } from "../../../src/core/compaction/trigger-policy";
-import { DEFAULT_COMPACTION_CONFIG } from "../../../src/core/compaction/trigger-policy";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-
-import { SessionManager } from "../../../src/core/session/session-manager";
-import type { ProviderCapabilities, ProviderIdentity } from "../../../src/core/session/types-v2";
-import { readTool } from "../../../src/core/tools/read";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
+import { ContextManager } from "../../../src/engine/compaction/context-manager";
+import type { CompactionConfig } from "../../../src/engine/compaction/trigger-policy";
+import { DEFAULT_COMPACTION_CONFIG } from "../../../src/engine/compaction/trigger-policy";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { readTool } from "../../../src/infrastructure/tools/local/read";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ProviderCapabilities, ProviderIdentity } from "../../../src/kernel/transcript/types-v2";
 
 // ─── Mock Client ───
 

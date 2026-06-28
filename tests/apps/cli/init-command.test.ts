@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { parseInitCommandArgs, runInitCommand } from "../../../src/apps/cli/init-command";
-import { I18n } from "../../../src/core/i18n/i18n";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
+import { I18n } from "../../../src/shared/i18n/i18n";
 
 let tempDir: string;
 let projectRoot: string;

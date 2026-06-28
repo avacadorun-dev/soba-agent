@@ -10,9 +10,9 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ActivatedSkillRef } from "../../../core/session/types-v2";
-import type { SkillCatalog } from "../../../core/skills/catalog";
-import type { ToolDefinition, ToolResult } from "./types";
+import type { SkillCatalog } from "../../../application/skills/catalog";
+import type { ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import type { ActivatedSkillRef } from "../../../kernel/transcript/types-v2";
 
 export interface ActivateSkillToolOptions {
   catalog: SkillCatalog;

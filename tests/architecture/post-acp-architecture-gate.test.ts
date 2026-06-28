@@ -12,18 +12,11 @@ interface BoundaryRule {
 const acpBoundaryRules: BoundaryRule[] = [
   {
     root: "src/adapters/acp",
-    forbiddenTargets: ["src/apps/", "src/core/", "src/ui/"],
+    forbiddenTargets: ["src/apps/", "src/engine/", "src/infrastructure/", "src/kernel/", "src/ui/"],
   },
   {
     root: "src/apps/acp",
-    forbiddenTargets: ["src/apps/cli/", "src/core/", "src/ui/"],
-  },
-  {
-    root: "src/core",
-    forbiddenTargets: [
-      "src/apps/acp",
-      "src/adapters/acp",
-    ],
+    forbiddenTargets: ["src/apps/cli/", "src/engine/", "src/infrastructure/", "src/kernel/", "src/ui/"],
   },
   {
     root: "src/ui",

@@ -1,14 +1,14 @@
 import { Buffer } from "node:buffer";
-import { type BashArgs, bashTool } from "../core/tools/bash";
-import { createToolErrorResult, redactSecrets } from "../core/tools/errors";
-import { type InspectFileArgs, inspectFileTool } from "../core/tools/inspect-file";
-import { type LsArgs, lsTool } from "../core/tools/ls";
-import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "../core/tools/protected-paths";
-import { type ReadArgs, readTool } from "../core/tools/read";
-import { type SearchFilesArgs, searchFilesTool } from "../core/tools/search-files";
-import type { ToolContext, ToolDefinition, ToolResult } from "../core/tools/types";
-import { truncateOutput } from "../core/tools/types";
-import { type WriteArgs, writeTool } from "../core/tools/write";
+import { type BashArgs, bashTool } from "../infrastructure/tools/local/bash";
+import { type InspectFileArgs, inspectFileTool } from "../infrastructure/tools/local/inspect-file";
+import { type LsArgs, lsTool } from "../infrastructure/tools/local/ls";
+import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "../infrastructure/tools/local/protected-paths";
+import { type ReadArgs, readTool } from "../infrastructure/tools/local/read";
+import { type SearchFilesArgs, searchFilesTool } from "../infrastructure/tools/local/search-files";
+import { type WriteArgs, writeTool } from "../infrastructure/tools/local/write";
+import { createToolErrorResult, redactSecrets } from "../kernel/tools/errors";
+import type { ToolContext, ToolDefinition, ToolResult } from "../kernel/tools/types";
+import { truncateOutput } from "../kernel/tools/types";
 
 const READ_MAX_LINES = 2000;
 const READ_MAX_BYTES = 50 * 1024;

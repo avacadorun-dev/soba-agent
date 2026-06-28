@@ -15,14 +15,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfigFromEnv, loadConfigFromFile, resolveSoundConfig } from "../src/core/config/config-loader";
+import { loadConfigFromEnv, loadConfigFromFile, resolveSoundConfig } from "../src/application/config/config-loader";
 import {
   DEFAULT_CONFIG,
   DEFAULT_SOUND_CONFIG,
   isSoundConfig,
   isSoundRepeatMode,
   type SoundConfig,
-} from "../src/core/config/types";
+} from "../src/application/config/types";
 
 describe("SoundConfig defaults", () => {
   test("DEFAULT_SOUND_CONFIG имеет ожидаемые значения", () => {
