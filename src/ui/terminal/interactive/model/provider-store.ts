@@ -12,16 +12,10 @@
  */
 
 import { batch, createSignal } from "solid-js";
-import { I18n } from "../../../../core/i18n/i18n";
-import type { TranslationKey } from "../../../../core/i18n/types";
-import type { OpenResponsesClientProxy } from "../../../../core/provider/client-proxy";
-import {
+import type { ModelDefinition, OpenResponsesClientProxy, ProviderDefinition, TranslationKey } from "../../../../application/public";
+import { 
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-  DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../../../core/provider/model-defaults";
-import { findBuiltinProvider } from "../../../../core/provider/providers";
-import { ProviderRegistry } from "../../../../core/provider/registry";
-import type { ModelDefinition, ProviderDefinition } from "../../../../core/provider/types";
+  DEFAULT_SYNTHETIC_MAX_OUTPUT,findBuiltinProvider, I18n, ProviderRegistry } from "../../../../application/public";
 import type { NotificationStore } from "./notification-store";
 
 export type ModelSelectorModel = ModelDefinition & {

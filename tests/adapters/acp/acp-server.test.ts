@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ACP_LIFECYCLE_FEATURES, type AcpFeatureSet } from "../../../src/adapters/acp/capabilities";
 import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
-import { listRuntimeCommands } from "../../../src/application/command-service";
-import type { RuntimeEvent, RuntimeSessionInfo, SobaRuntime, UserTurnInput } from "../../../src/application/types";
+import { listRuntimeCommands, type RuntimeEvent, type RuntimeSessionInfo, type SobaRuntime, type UserTurnInput } from "../../../src/application/public";
 import { runAcpServer } from "../../../src/apps/acp/server";
 import { APP_VERSION } from "../../../src/core/version";
 

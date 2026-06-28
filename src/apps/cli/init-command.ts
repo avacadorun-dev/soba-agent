@@ -2,12 +2,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import { firstTimeSetup, loadConfig, validateConfig } from "../../core/config/config-loader";
-import type { I18n } from "../../core/i18n/i18n";
-import { getMcpConfigPath, loadMcpConfig } from "../../core/mcp/config";
-import { McpSecretStore } from "../../core/mcp/secret-store";
-import { SkillDiscovery } from "../../core/skills/discovery";
-import { ProjectTrustStore } from "../../core/skills/project-trust-store";
+import type { I18n } from "../../application/public";
+import { firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, ProjectTrustStore, SkillDiscovery, validateConfig } from "../../application/public";
 
 export interface InitCommandOptions {
   yes: boolean;

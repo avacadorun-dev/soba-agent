@@ -19,8 +19,8 @@
  */
 
 import { batch, createSignal } from "solid-js";
-import { I18n } from "../../../../core/i18n/i18n";
-import type { TranslationKey } from "../../../../core/i18n/types";
+import type { TranslationKey } from "../../../../application/public";
+import { I18n } from "../../../../application/public";
 
 export type NotificationType = "success" | "warning" | "error" | "info";
 

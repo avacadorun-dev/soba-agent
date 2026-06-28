@@ -32,37 +32,37 @@ const layerRules: LayerRule[] = [
 
 const controllerCoverage: ControllerCoverage[] = [
   {
-    implementation: "src/core/loop/agent-loop.ts",
+    implementation: "src/engine/turn/agent-loop.ts",
     testFile: "tests/agent-loop.test.ts",
     symbol: "AgentLoop",
   },
   {
-    implementation: "src/core/model-turn/model-turn-runner.ts",
+    implementation: "src/engine/model-turn/model-turn-runner.ts",
     testFile: "tests/core/model-turn/model-turn-runner.test.ts",
     symbol: "ModelTurnRunner",
   },
   {
-    implementation: "src/core/tool-execution/tool-call-executor.ts",
+    implementation: "src/engine/tool-calls/tool-call-executor.ts",
     testFile: "tests/core/tool-execution/tool-call-executor.test.ts",
     symbol: "ToolCallExecutor",
   },
   {
-    implementation: "src/core/permissions/permission-broker.ts",
+    implementation: "src/engine/permissions/permission-broker.ts",
     testFile: "tests/core/permissions/permission-broker.test.ts",
     symbol: "PermissionBroker",
   },
   {
-    implementation: "src/core/completion/completion-controller.ts",
+    implementation: "src/engine/completion/completion-controller.ts",
     testFile: "tests/core/completion/completion-controller.test.ts",
     symbol: "CompletionController",
   },
   {
-    implementation: "src/core/verification/verification-controller.ts",
+    implementation: "src/engine/verification/verification-controller.ts",
     testFile: "tests/core/verification/verification-controller.test.ts",
     symbol: "VerificationController",
   },
   {
-    implementation: "src/core/context/context-controller.ts",
+    implementation: "src/engine/context/context-controller.ts",
     testFile: "tests/core/context/context-controller.test.ts",
     symbol: "ContextController",
   },
@@ -159,10 +159,10 @@ describe("clean architecture pre-gate", () => {
   });
 
   test("legacy AgentLoop remains a transition shell over extracted services", () => {
-    const source = readProjectFile("src/core/loop/agent-loop.ts");
+    const source = readProjectFile("src/engine/turn/agent-loop.ts");
     const requiredControllerSignals = [
       "../model-turn/model-turn-runner",
-      "../tool-execution/tool-call-executor",
+      "../tool-calls/tool-call-executor",
       "../permissions/permission-broker",
       "../completion/completion-controller",
       "../verification/verification-controller",
@@ -175,18 +175,18 @@ describe("clean architecture pre-gate", () => {
       "new ModelTurnRunner",
     ];
     const forbiddenOwnershipImports = [
-      "../provider/registry",
-      "../provider/client-proxy",
-      "../mcp/config",
-      "../mcp/tool-registry-sync",
-      "../memory/memory-tools",
-      "../tools/bash",
-      "../tools/edit",
-      "../tools/inspect-file",
-      "../tools/ls",
-      "../tools/read",
-      "../tools/search-files",
-      "../tools/write",
+      "../../core/provider/registry",
+      "../../core/provider/client-proxy",
+      "../../core/mcp/config",
+      "../../core/mcp/tool-registry-sync",
+      "../../core/memory/memory-tools",
+      "../../core/tools/bash",
+      "../../core/tools/edit",
+      "../../core/tools/inspect-file",
+      "../../core/tools/ls",
+      "../../core/tools/read",
+      "../../core/tools/search-files",
+      "../../core/tools/write",
     ];
 
     const missingSignals = requiredControllerSignals.filter((signal) => !source.includes(signal));

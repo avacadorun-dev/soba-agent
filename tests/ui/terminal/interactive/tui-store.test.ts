@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SobaRuntime, UserTurnInput } from "../../../../src/application/types";
+import type { SobaRuntime, UserTurnInput } from "../../../../src/application/public";
 import { I18n } from "../../../../src/core/i18n/i18n";
 import type { AgentLoop } from "../../../../src/core/loop/agent-loop";
 import type { AgentEvent } from "../../../../src/core/loop/types";

@@ -1,5 +1,5 @@
 import { RGBA, SyntaxStyle } from "@opentui/core";
-import type { TuiThemeName } from "../../../../core/config/types";
+import type { TuiThemeName } from "../../../../application/public";
 
 export interface TuiTheme {
   background: string;

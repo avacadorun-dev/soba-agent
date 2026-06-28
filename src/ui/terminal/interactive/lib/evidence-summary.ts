@@ -3,7 +3,7 @@ import {
   type ParsedEvidenceHandoff,
   type SplitEvidenceHandoffResult,
   splitEvidenceHandoff,
-} from "../../../../application/evidence-handoff";
+} from "../../../../application/public";
 
 export type TuiEvidenceSummary = ParsedEvidenceHandoff;
 export type SplitAssistantEvidenceResult = SplitEvidenceHandoffResult;

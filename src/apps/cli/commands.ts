@@ -6,37 +6,13 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { AgentLoop, ContextCapsuleEntry, ContextManager, FlightRecordEntry, I18n, McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult, McpRuntimeControllerLike, McpRuntimeReloadResult, OpenResponsesClient, PermissionMode, ProviderRegistry, SessionLifecycleService, SkillManager, SobaConfig, ToolRegistry, TrustManager } from "../../application/public";
 import {
-  type CommandResult,
+  type CommandResult,compact, estimateTokens, getCurrentTokens, handleSkillSlashCommand, isContextCapsuleEntry, isSkillSlashCommand, isTuiThemeName, McpSecretStore, McpSecretStoreError, maskSensitiveFields, PortableCapsuleService, PortableCapsuleServiceError, ProjectTrustStore, 
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
-  type RuntimeCommandMetadata,
-} from "../../application/command-service";
-import type { McpRuntimeControllerLike, McpRuntimeReloadResult } from "../../application/mcp-runtime-controller";
-import type { SessionLifecycleService } from "../../application/session-lifecycle";
-import { PortableCapsuleService, PortableCapsuleServiceError } from "../../core/capsules";
-import type { OpenResponsesClient } from "../../core/client/openresponses-client";
-import { compact, getCurrentTokens } from "../../core/compaction/compaction";
-import type { ContextManager } from "../../core/compaction/context-manager";
-import { maskSensitiveFields } from "../../core/config/config-loader";
-import type { SobaConfig } from "../../core/config/types";
-import { isTuiThemeName, TUI_THEME_NAMES } from "../../core/config/types";
-import type { I18n } from "../../core/i18n/i18n";
-import type { AgentLoop } from "../../core/loop/agent-loop";
-import type { McpClientManager, McpManagedServerAuthStatus, McpRemoteAuthCommandResult } from "../../core/mcp/client-manager";
-import { McpSecretStore, McpSecretStoreError } from "../../core/mcp/secret-store";
-import { redactMcpSensitiveText } from "../../core/mcp/security";
-import { syncMcpToolsIntoRegistry } from "../../core/mcp/tool-registry-sync";
-import type { ProviderRegistry } from "../../core/provider/registry";
-import { estimateTokens, type SessionManager } from "../../core/session/session-manager";
-import type { FlightRecordEntry } from "../../core/session/types";
-import type { ContextCapsuleEntry } from "../../core/session/types-v2";
-import { isContextCapsuleEntry } from "../../core/session/types-v2";
-import { ProjectTrustStore } from "../../core/skills/project-trust-store";
-import type { SkillManager } from "../../core/skills/skill-manager";
-import { handleSkillSlashCommand, isSkillSlashCommand, tryTuiRegistryFallback } from "../../core/skills/slash-handler";
-import type { ToolRegistry } from "../../core/tools/tool-registry";
-import type { PermissionMode, TrustManager } from "../../core/trust/trust-manager";
+  type RuntimeCommandMetadata,redactMcpSensitiveText, type SessionManager, syncMcpToolsIntoRegistry, TUI_THEME_NAMES, tryTuiRegistryFallback 
+} from "../../application/public";
 import type { SlashCommandRegistry } from "../../ui/terminal/interactive/commands/registry";
 import type { SlashCommandContext } from "../../ui/terminal/interactive/commands/types";
 import { notify } from "../../ui/terminal/interactive/lib/notification";
@@ -841,10 +817,10 @@ async function handleSkill(args: string[], ctx: CommandContext): Promise<Command
   }
 
   // Import SkillCommands dynamically to avoid circular dependencies
-  const { SkillCommands } = await import("../../core/skills/commands");
-  const { DraftStore } = await import("../../core/skills/drafts");
-  const { RevisionStore } = await import("../../core/skills/revisions");
-  const { SkillEvaluator } = await import("../../core/skills/evaluator");
+  const { SkillCommands } = await import("../../application/public");
+  const { DraftStore } = await import("../../application/public");
+  const { RevisionStore } = await import("../../application/public");
+  const { SkillEvaluator } = await import("../../application/public");
 
   const sobaDir = join(homedir(), ".soba");
   const draftStore = new DraftStore({ draftsPath: join(sobaDir, "skill-drafts") });
