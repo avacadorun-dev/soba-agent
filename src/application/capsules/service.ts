@@ -7,7 +7,6 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import type { ContextCapsuleEntry } from "../../kernel/transcript/types-v2";
 import { buildPortableCapsuleFromCheckpoint } from "./mapper";
 import { decodePortableCapsuleMarkdown, encodePortableCapsuleMarkdown } from "./markdown-codec";
@@ -76,6 +75,10 @@ export interface PortableCapsuleCreateOptions extends PortableCapsuleCreationOpt
   destinationPath?: string;
 }
 
+export interface PortableCapsuleSession {
+  getCapsuleEntries(): ContextCapsuleEntry[];
+}
+
 export interface PortableCapsuleExportOptions extends PortableCapsuleCreationOptions {
   destinationPath: string;
 }
@@ -95,14 +98,14 @@ export class PortableCapsuleService {
     return this.capsulesDir;
   }
 
-  createFromSession(session: SessionManager, options: PortableCapsuleCreateOptions = {}): PortableCapsuleWriteResult {
+  createFromSession(session: PortableCapsuleSession, options: PortableCapsuleCreateOptions = {}): PortableCapsuleWriteResult {
     const checkpoint = resolveCheckpoint(session, options.checkpointIdOrPrefix);
     const capsule = buildPortableCapsuleFromCheckpoint(checkpoint, options);
     return this.writeCapsule(capsule, options.destinationPath);
   }
 
   exportCheckpoint(
-    session: SessionManager,
+    session: PortableCapsuleSession,
     checkpointIdOrPrefix: string,
     options: PortableCapsuleExportOptions,
   ): PortableCapsuleWriteResult {
@@ -231,7 +234,7 @@ export function buildUntrustedCapsulePrompt(capsule: PortableCapsule, briefing: 
   ].join("\n");
 }
 
-function resolveCheckpoint(session: SessionManager, checkpointIdOrPrefix?: string): ContextCapsuleEntry {
+function resolveCheckpoint(session: PortableCapsuleSession, checkpointIdOrPrefix?: string): ContextCapsuleEntry {
   const capsules = session.getCapsuleEntries();
   if (!checkpointIdOrPrefix) {
     const latest = capsules[capsules.length - 1];
