@@ -12,8 +12,6 @@
  *   5. Handle errors, stop states, budget updates
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { SkillManager } from "../../application/skills/skill-manager";
 import { TrustManager } from "../../application/trust/trust-manager";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
@@ -98,6 +96,10 @@ export function createUserItem(text: string): UserMessageItemParam {
     role: "user",
     content: [{ type: "input_text", text }],
   };
+}
+
+export interface ProjectContextReader {
+  read(cwd: string): Array<{ path: string; content: string }> | Promise<Array<{ path: string; content: string }>>;
 }
 
 function extractToolResultText(result: ToolResult): string {
@@ -409,35 +411,6 @@ function autoVerifierCallToSessionItem(call: AutoVerifierToolCall): FunctionCall
 }
 
 /**
- * Read AGENTS.md from cwd if it exists, otherwise README.md.
- */
-function readProjectContext(
-  cwd: string,
-): Array<{ path: string; content: string }> {
-  const agentsPath = join(cwd, "AGENTS.md");
-  if (existsSync(agentsPath)) {
-    try {
-      const content = readFileSync(agentsPath, "utf-8");
-      return [{ path: "AGENTS.md", content }];
-    } catch {
-      // fall through to README.md
-    }
-  }
-
-  const readmePath = join(cwd, "README.md");
-  if (existsSync(readmePath)) {
-    try {
-      const content = readFileSync(readmePath, "utf-8");
-      return [{ path: "README.md", content }];
-    } catch {
-      return [];
-    }
-  }
-
-  return [];
-}
-
-/**
  * Build CreateResponseParams from session and system prompt.
  */
 function buildRequest(
@@ -503,6 +476,7 @@ export class AgentLoop {
   private skillManager: SkillManager | undefined;
   private autoCompactOverride: { enabled: boolean } | undefined;
   private projectMemory: ProjectMemorySource | undefined;
+  private projectContextReader: ProjectContextReader | undefined;
   private _abortController: AbortController | null = null;
   private toolExecutor: ToolCallExecutor;
   private state = {
@@ -537,6 +511,7 @@ export class AgentLoop {
     skillManager?: SkillManager,
     autoCompactOverride?: { enabled: boolean },
     projectMemory?: ProjectMemorySource,
+    projectContextReader?: ProjectContextReader,
   ) {
     this.client = client;
     this.session = session;
@@ -553,6 +528,7 @@ export class AgentLoop {
     this.skillManager = skillManager;
     this.autoCompactOverride = autoCompactOverride;
     this.projectMemory = projectMemory;
+    this.projectContextReader = projectContextReader;
     this.contextController = new ContextController({
       contextManager: this.contextManager,
       backgroundScheduler: this.backgroundScheduler,
@@ -597,6 +573,10 @@ export class AgentLoop {
   /** Get budget tracker */
   getBudgetTracker(): BudgetTracker {
     return this.budgetTracker;
+  }
+
+  private async readProjectContext(): Promise<Array<{ path: string; content: string }>> {
+    return (await this.projectContextReader?.read(this.cwd)) ?? [];
   }
 
   private emitContextUsageUpdate(input: {
@@ -954,7 +934,7 @@ export class AgentLoop {
         "context_scan",
         "Checking project instructions, available skills, and memory before choosing the next action.",
       );
-      const contextFiles = readProjectContext(this.cwd);
+      const contextFiles = await this.readProjectContext();
       const projectInstructions = contextFiles.map((file) => file.content);
       emitNarrationOnce(
         "observation",
