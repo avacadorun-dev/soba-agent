@@ -45,6 +45,8 @@
     "smoke:terminal-bench": "bun run scripts/smoke-diagnostics.ts --profile terminal-bench",
     "test": "bun test",
     "check:boundaries": "bun run scripts/check-boundaries.ts",
+    "docs:deps": "bun run scripts/generate-dependency-graph.ts",
+    "docs:deps:check": "bun run scripts/generate-dependency-graph.ts --check",
     "prepack": "bun run build"
   },
   "devDependencies": {
