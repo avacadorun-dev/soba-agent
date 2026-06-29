@@ -3,7 +3,11 @@ import { executeCapsuleCommand } from "../public";
 import type { CommandContext } from "./index";
 
 export function handleCapsule(args: string[], ctx: CommandContext): CommandResult {
-  const view = executeCapsuleCommand({ args, session: ctx.session });
+  const view = executeCapsuleCommand({
+    args,
+    session: ctx.session,
+    createPortableCapsuleService: ctx.portableCapsuleServiceFactory,
+  });
   renderCapsuleCommandView(ctx, view);
   return view.kind === "loaded" ? { handled: false, prompt: view.prompt } : { handled: true };
 }

@@ -16,7 +16,9 @@ export type {
   PortableCapsuleExportOptions,
   PortableCapsuleLoadResult,
   PortableCapsuleServiceErrorCode,
+  PortableCapsuleServiceFactory,
   PortableCapsuleServiceOptions,
+  PortableCapsuleStorage,
   PortableCapsuleStoredSummary,
   PortableCapsuleWriteResult,
 } from "./service";

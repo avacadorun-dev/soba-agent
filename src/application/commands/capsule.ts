@@ -1,6 +1,6 @@
 import type { ContextCapsuleEntry } from "../../kernel/transcript/types-v2";
 import { isContextCapsuleEntry } from "../../kernel/transcript/types-v2";
-import { PortableCapsuleService, PortableCapsuleServiceError } from "../capsules/service";
+import { PortableCapsuleServiceError, type PortableCapsuleServiceFactory } from "../capsules/service";
 import type { RuntimeSessionHandle } from "../session-lifecycle";
 
 export type CapsuleCommandView =
@@ -24,18 +24,19 @@ export interface CapsuleListItemView {
 export function executeCapsuleCommand(input: {
   args: string[];
   session: RuntimeSessionHandle;
+  createPortableCapsuleService?: PortableCapsuleServiceFactory;
 }): CapsuleCommandView {
-  const { args, session } = input;
+  const { args, session, createPortableCapsuleService } = input;
   const subcommand = args[0]?.toLowerCase();
 
   if (subcommand === "create") {
-    return createCapsule(args.slice(1), session);
+    return createCapsule(args.slice(1), session, createPortableCapsuleService);
   }
   if (subcommand === "export") {
-    return exportCapsule(args.slice(1), session);
+    return exportCapsule(args.slice(1), session, createPortableCapsuleService);
   }
   if (subcommand === "load") {
-    return loadCapsule(args.slice(1), session);
+    return loadCapsule(args.slice(1), session, createPortableCapsuleService);
   }
 
   const checkpointId = args[0];
@@ -59,10 +60,17 @@ export function executeCapsuleCommand(input: {
   return capsule ? { kind: "details", capsule } : { kind: "not_found", checkpointId };
 }
 
-function createCapsule(args: string[], session: RuntimeSessionHandle): CapsuleCommandView {
+function createCapsule(
+  args: string[],
+  session: RuntimeSessionHandle,
+  createPortableCapsuleService?: PortableCapsuleServiceFactory,
+): CapsuleCommandView {
   const objective = stripWrappingQuotes(args.join(" ").trim());
   if (!objective) {
     return { kind: "usage", command: "create" };
+  }
+  if (!createPortableCapsuleService) {
+    return { kind: "error", message: "Portable capsule service is not configured" };
   }
 
   try {
@@ -78,11 +86,18 @@ function createCapsule(args: string[], session: RuntimeSessionHandle): CapsuleCo
   }
 }
 
-function exportCapsule(args: string[], session: RuntimeSessionHandle): CapsuleCommandView {
+function exportCapsule(
+  args: string[],
+  session: RuntimeSessionHandle,
+  createPortableCapsuleService?: PortableCapsuleServiceFactory,
+): CapsuleCommandView {
   const checkpointId = args[0];
   const destinationPath = args[1];
   if (!checkpointId || !destinationPath) {
     return { kind: "usage", command: "export" };
+  }
+  if (!createPortableCapsuleService) {
+    return { kind: "error", message: "Portable capsule service is not configured" };
   }
 
   try {
@@ -98,10 +113,17 @@ function exportCapsule(args: string[], session: RuntimeSessionHandle): CapsuleCo
   }
 }
 
-function loadCapsule(args: string[], session: RuntimeSessionHandle): CapsuleCommandView {
+function loadCapsule(
+  args: string[],
+  session: RuntimeSessionHandle,
+  createPortableCapsuleService?: PortableCapsuleServiceFactory,
+): CapsuleCommandView {
   const capsulePath = args[0];
   if (!capsulePath) {
     return { kind: "usage", command: "load" };
+  }
+  if (!createPortableCapsuleService) {
+    return { kind: "error", message: "Portable capsule service is not configured" };
   }
 
   try {
@@ -119,10 +141,6 @@ function loadCapsule(args: string[], session: RuntimeSessionHandle): CapsuleComm
 
 function getCapsuleEntries(session: RuntimeSessionHandle): ContextCapsuleEntry[] {
   return session.getEntries().filter((entry) => isContextCapsuleEntry(entry));
-}
-
-function createPortableCapsuleService(session: RuntimeSessionHandle): PortableCapsuleService {
-  return new PortableCapsuleService({ cwd: session.getCwd() });
 }
 
 function capsuleErrorView(error: unknown): CapsuleCommandView {

@@ -346,6 +346,7 @@ async function main() {
           mcpSecretStore: context.mcpSecretStore,
           toolRegistry: context.toolRegistry,
           trustManager: context.trustManager,
+          portableCapsuleServiceFactory: context.portableCapsuleServiceFactory,
         });
       },
       providerRegistryConfigPath: configPath,
@@ -438,6 +439,7 @@ async function main() {
     mcpManager,
     trustManager,
     mcpSecretStore,
+    portableCapsuleServiceFactory,
   } = runtimeComposition;
   let activeSession: RuntimeSessionHandle = session;
 
@@ -501,6 +503,7 @@ async function main() {
           mcpSecretStore,
           toolRegistry: tools,
           trustManager,
+          portableCapsuleServiceFactory,
           tuiRegistry: slashCommandRegistry,
         }),
     });

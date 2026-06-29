@@ -5,8 +5,6 @@
  * not register slash commands and does not mutate the session tree.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ContextCapsuleEntry } from "../../kernel/transcript/types-v2";
 import { buildPortableCapsuleFromCheckpoint } from "./mapper";
 import { decodePortableCapsuleMarkdown, encodePortableCapsuleMarkdown } from "./markdown-codec";
@@ -43,9 +41,7 @@ export class PortableCapsuleServiceError extends Error {
 }
 
 export interface PortableCapsuleServiceOptions {
-  cwd: string;
-  capsulesDir?: string;
-  allowOutsideCwd?: boolean;
+  storage: PortableCapsuleStorage;
 }
 
 export interface PortableCapsuleWriteResult {
@@ -83,19 +79,28 @@ export interface PortableCapsuleExportOptions extends PortableCapsuleCreationOpt
   destinationPath: string;
 }
 
+export interface PortableCapsuleStorage {
+  getCapsulesDir(): string;
+  getDefaultCapsulePath(fileName: string): string;
+  resolveOutputFilePath(path: string): string;
+  resolveInputFilePath(path: string): string;
+  exists(path: string): boolean;
+  writeExclusive(path: string, content: string): void;
+  read(path: string): { content: string; sizeBytes: number };
+  listStoredCapsulePaths(): string[];
+}
+
+export type PortableCapsuleServiceFactory = (session: PortableCapsuleSession & { getCwd(): string }) => PortableCapsuleService;
+
 export class PortableCapsuleService {
-  private readonly cwd: string;
-  private readonly capsulesDir: string;
-  private readonly allowOutsideCwd: boolean;
+  private readonly storage: PortableCapsuleStorage;
 
   constructor(options: PortableCapsuleServiceOptions) {
-    this.cwd = resolve(options.cwd);
-    this.capsulesDir = resolve(options.capsulesDir ?? join(this.cwd, ".soba", "capsules"));
-    this.allowOutsideCwd = options.allowOutsideCwd ?? false;
+    this.storage = options.storage;
   }
 
   getCapsulesDir(): string {
-    return this.capsulesDir;
+    return this.storage.getCapsulesDir();
   }
 
   createFromSession(session: PortableCapsuleSession, options: PortableCapsuleCreateOptions = {}): PortableCapsuleWriteResult {
@@ -122,14 +127,13 @@ export class PortableCapsuleService {
 
     const outputPath = destinationPath
       ? this.resolveOutputFilePath(destinationPath)
-      : join(this.capsulesDir, portableCapsuleFileName(capsule));
+      : this.storage.getDefaultCapsulePath(portableCapsuleFileName(capsule));
 
-    if (existsSync(outputPath)) {
+    if (this.storage.exists(outputPath)) {
       throw new PortableCapsuleServiceError("destination_exists", `Capsule destination already exists: ${outputPath}`);
     }
 
-    mkdirSync(dirname(outputPath), { recursive: true });
-    writeFileSync(outputPath, encodePortableCapsuleMarkdown(capsule), { encoding: "utf-8", flag: "wx" });
+    this.storage.writeExclusive(outputPath, encodePortableCapsuleMarkdown(capsule));
 
     return {
       capsule,
@@ -140,13 +144,13 @@ export class PortableCapsuleService {
 
   loadCapsule(path: string): PortableCapsuleLoadResult {
     const inputPath = this.resolveInputFilePath(path);
-    const stats = statSync(inputPath);
-    if (stats.size > MAX_CAPSULE_FILE_BYTES) {
+    const loadedFile = this.storage.read(inputPath);
+    if (loadedFile.sizeBytes > MAX_CAPSULE_FILE_BYTES) {
       throw new PortableCapsuleServiceError("capsule_too_large", `Capsule file exceeds ${MAX_CAPSULE_FILE_BYTES} bytes`);
     }
 
     try {
-      const decoded = decodePortableCapsuleMarkdown(readFileSync(inputPath, "utf-8"));
+      const decoded = decodePortableCapsuleMarkdown(loadedFile.content);
       const validation = validatePortableCapsule(decoded.capsule);
       if (!validation.valid) {
         throw new PortableCapsuleServiceError(
@@ -171,12 +175,8 @@ export class PortableCapsuleService {
   }
 
   listStoredCapsules(): PortableCapsuleStoredSummary[] {
-    if (!existsSync(this.capsulesDir)) return [];
-
-    return readdirSync(this.capsulesDir)
-      .filter((fileName) => fileName.endsWith(CAPSULE_FILE_EXTENSION))
-      .flatMap((fileName) => {
-        const path = join(this.capsulesDir, fileName);
+    return this.storage.listStoredCapsulePaths()
+      .flatMap((path) => {
         try {
           const loaded = this.loadCapsule(path);
           return [
@@ -196,28 +196,17 @@ export class PortableCapsuleService {
   }
 
   private resolveOutputFilePath(path: string): string {
-    const resolved = resolveRelativeToCwd(this.cwd, path);
-    if (!resolved.endsWith(CAPSULE_FILE_EXTENSION)) {
+    if (!path.endsWith(CAPSULE_FILE_EXTENSION)) {
       throw new PortableCapsuleServiceError(
         "invalid_destination",
         `Capsule destination must end with ${CAPSULE_FILE_EXTENSION}`,
       );
     }
-    this.assertAllowedPath(resolved);
-    return resolved;
+    return this.storage.resolveOutputFilePath(path);
   }
 
   private resolveInputFilePath(path: string): string {
-    const resolved = resolveRelativeToCwd(this.cwd, path);
-    this.assertAllowedPath(resolved);
-    return resolved;
-  }
-
-  private assertAllowedPath(path: string): void {
-    if (this.allowOutsideCwd) return;
-    if (!isPathInside(this.cwd, path)) {
-      throw new PortableCapsuleServiceError("invalid_destination", `Path is outside project cwd: ${path}`);
-    }
+    return this.storage.resolveInputFilePath(path);
   }
 }
 
@@ -269,13 +258,4 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return slug || "capsule";
-}
-
-function resolveRelativeToCwd(cwd: string, path: string): string {
-  return isAbsolute(path) ? resolve(path) : resolve(cwd, path);
-}
-
-function isPathInside(base: string, path: string): boolean {
-  const rel = relative(base, path);
-  return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`) && !isAbsolute(rel));
 }
