@@ -177,6 +177,14 @@ describe("clean architecture pre-gate", () => {
   test("legacy AgentLoop remains a transition shell over extracted services", () => {
     const source = readProjectFile("src/engine/turn/agent-loop.ts");
     const turnRunnerSource = readProjectFile("src/engine/turn/agent-turn-runner.ts");
+    const turnStageSource = [
+      "src/engine/turn/agent-turn-begin.ts",
+      "src/engine/turn/agent-turn-prompt-context.ts",
+      "src/engine/turn/agent-turn-response-stage.ts",
+      "src/engine/turn/agent-turn-runner-events.ts",
+    ]
+      .map(readProjectFile)
+      .join("\n");
     const runtimeSource = readProjectFile("src/engine/turn/agent-loop-runtime.ts");
     const requiredShellSignals = [
       "./agent-turn-runner",
@@ -219,18 +227,20 @@ describe("clean architecture pre-gate", () => {
     const ownershipLeaks = [
       ...importSpecifiers(source),
       ...importSpecifiers(turnRunnerSource),
+      ...importSpecifiers(turnStageSource),
       ...importSpecifiers(runtimeSource),
     ].filter((specifier) => forbiddenOwnershipImports.includes(specifier));
 
     const missingShellSignals = requiredShellSignals.filter((signal) => !source.includes(signal));
-    const missingTurnRunnerSignals = requiredTurnRunnerSignals.filter((signal) => !turnRunnerSource.includes(signal));
+    const turnPipelineSource = `${turnRunnerSource}\n${turnStageSource}`;
+    const missingTurnRunnerSignals = requiredTurnRunnerSignals.filter((signal) => !turnPipelineSource.includes(signal));
 
     expect(missingShellSignals).toEqual([]);
     expect(missingTurnRunnerSignals).toEqual([]);
     expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
     expect(source.split("\n").length).toBeLessThanOrEqual(300);
-    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(600);
+    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(550);
     expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
     expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });
