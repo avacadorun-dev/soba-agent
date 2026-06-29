@@ -1,10 +1,290 @@
-import type { AgentEvent, AgentTurnResult } from "../core/loop/types";
-import type { SessionInfo } from "../core/session/types";
+import type { ItemParam, ResponseResource, Usage } from "../kernel/model/openresponses-types";
+import type { ToolResult } from "../kernel/tools/types";
+import type { SessionInfo } from "../kernel/transcript/types";
 import type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
 
 export type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
 
 export type RuntimeSource = "print" | "tui" | "acp";
+
+export type RuntimeEventType =
+  | "turn_start"
+  | "thinking"
+  | "assistant_message"
+  | "assistant_message_superseded"
+  | "assistant_message_start"
+  | "assistant_text_delta"
+  | "assistant_reasoning_delta"
+  | "assistant_text_done"
+  | "function_call_delta"
+  | "function_call_done"
+  | "tool_call_start"
+  | "tool_call_result"
+  | "tool_call_end"
+  | "turn_end"
+  | "turn_error"
+  | "loop_guard"
+  | "budget_update"
+  | "dangerous_confirmation"
+  | "turn_stop_reason"
+  | "compaction_start"
+  | "compaction_done"
+  | "context_error"
+  | "working_narration"
+  | "skill_activated"
+  | "skill_deactivated";
+
+export interface BaseRuntimeEvent {
+  type: RuntimeEventType;
+  timestamp: number;
+}
+
+export interface RuntimeTurnStartEvent extends BaseRuntimeEvent {
+  type: "turn_start";
+  turnIndex: number;
+  userInput: string;
+}
+
+export interface RuntimeThinkingEvent extends BaseRuntimeEvent {
+  type: "thinking";
+  active: boolean;
+}
+
+export interface RuntimeAssistantMessageEvent extends BaseRuntimeEvent {
+  type: "assistant_message";
+  messageId: string;
+  text: string;
+  reasoningContent?: string;
+}
+
+export interface RuntimeAssistantMessageSupersededEvent extends BaseRuntimeEvent {
+  type: "assistant_message_superseded";
+  messageId: string;
+  reason: "autonomous_followup";
+}
+
+export interface RuntimeToolCallStartEvent extends BaseRuntimeEvent {
+  type: "tool_call_start";
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+export interface RuntimeToolCallResultEvent extends BaseRuntimeEvent {
+  type: "tool_call_result";
+  toolCallId: string;
+  toolName: string;
+  result: ToolResult;
+}
+
+export interface RuntimeToolCallEndEvent extends BaseRuntimeEvent {
+  type: "tool_call_end";
+  toolCallId: string;
+  toolName: string;
+  durationMs: number;
+}
+
+export interface RuntimeTurnEndEvent extends BaseRuntimeEvent {
+  type: "turn_end";
+  turnIndex: number;
+  response: ResponseResource;
+  totalUsage: Usage;
+}
+
+export interface RuntimeTurnErrorEvent extends BaseRuntimeEvent {
+  type: "turn_error";
+  error: string;
+  status?: string;
+}
+
+export interface RuntimeLoopGuardEvent extends BaseRuntimeEvent {
+  type: "loop_guard";
+  action: "recover" | "stop";
+  iteration: number;
+  message: string;
+}
+
+export interface RuntimeBudgetUpdateEvent extends BaseRuntimeEvent {
+  type: "budget_update";
+  usedTokens: number;
+  totalBudget: number;
+  contextWindow?: number;
+  percentage: number;
+  effectiveContextTokens?: number;
+}
+
+export type RuntimeApprovalDecision = "deny" | "once" | "session" | "repo" | "full";
+
+export interface RuntimeDangerousConfirmationEvent extends BaseRuntimeEvent {
+  type: "dangerous_confirmation";
+  toolName: string;
+  toolCallId: string;
+  description: string;
+  level: "dangerous";
+  reason: string;
+  resolve: (decision: RuntimeApprovalDecision) => void;
+}
+
+export interface RuntimeTurnStopReasonEvent extends BaseRuntimeEvent {
+  type: "turn_stop_reason";
+  turn: number;
+  iteration: number;
+  reason: "completed" | "loop-guard" | "api-error" | "aborted" | "budget-exceeded" | "continuation-exhausted" | "security-denial";
+  detail: string;
+  hasUsedTools: boolean;
+  autonomousFollowUps: number;
+}
+
+export interface RuntimeAssistantMessageStartEvent extends BaseRuntimeEvent {
+  type: "assistant_message_start";
+  messageId: string;
+}
+
+export interface RuntimeAssistantTextDeltaEvent extends BaseRuntimeEvent {
+  type: "assistant_text_delta";
+  messageId: string;
+  delta: string;
+}
+
+export interface RuntimeAssistantReasoningDeltaEvent extends BaseRuntimeEvent {
+  type: "assistant_reasoning_delta";
+  messageId: string;
+  delta: string;
+}
+
+export interface RuntimeAssistantTextDoneEvent extends BaseRuntimeEvent {
+  type: "assistant_text_done";
+  messageId: string;
+  fullText: string;
+  reasoningContent?: string;
+}
+
+export interface RuntimeFunctionCallDeltaEvent extends BaseRuntimeEvent {
+  type: "function_call_delta";
+  toolCallId: string;
+  toolName: string;
+  delta: string;
+}
+
+export interface RuntimeFunctionCallDoneEvent extends BaseRuntimeEvent {
+  type: "function_call_done";
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+}
+
+export interface RuntimeCompactionStartEvent extends BaseRuntimeEvent {
+  type: "compaction_start";
+  reason: "pre_inference" | "overflow_recovery" | "manual";
+  effectiveTokens: number;
+  hardLimit: number;
+}
+
+export interface RuntimeCompactionDoneEvent extends BaseRuntimeEvent {
+  type: "compaction_done";
+  reason: "pre_inference" | "overflow_recovery" | "manual";
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved: number;
+  strategy: string;
+}
+
+export interface RuntimeContextErrorEvent extends BaseRuntimeEvent {
+  type: "context_error";
+  error: string;
+  effectiveTokens: number;
+  hardLimit: number;
+  recoveryAttempted: boolean;
+}
+
+export type RuntimeWorkingNarrationEventType =
+  | "acknowledgement"
+  | "context_scan"
+  | "observation"
+  | "plan"
+  | "edit_intent"
+  | "verification"
+  | "recovery"
+  | "blocked"
+  | "completion";
+
+export interface RuntimeWorkingNarrationEvent extends BaseRuntimeEvent {
+  type: "working_narration";
+  eventType: RuntimeWorkingNarrationEventType;
+  message: string;
+  evidenceIds: string[];
+}
+
+export interface RuntimeSkillActivatedEvent extends BaseRuntimeEvent {
+  type: "skill_activated";
+  skillName: string;
+  skillRevision: string;
+  skillScope: string;
+}
+
+export interface RuntimeSkillDeactivatedEvent extends BaseRuntimeEvent {
+  type: "skill_deactivated";
+  skillName: string;
+  reason: string;
+}
+
+export type RuntimeEvent =
+  | RuntimeTurnStartEvent
+  | RuntimeThinkingEvent
+  | RuntimeAssistantMessageEvent
+  | RuntimeAssistantMessageSupersededEvent
+  | RuntimeAssistantMessageStartEvent
+  | RuntimeAssistantTextDeltaEvent
+  | RuntimeAssistantReasoningDeltaEvent
+  | RuntimeAssistantTextDoneEvent
+  | RuntimeFunctionCallDeltaEvent
+  | RuntimeFunctionCallDoneEvent
+  | RuntimeToolCallStartEvent
+  | RuntimeToolCallResultEvent
+  | RuntimeToolCallEndEvent
+  | RuntimeTurnEndEvent
+  | RuntimeTurnErrorEvent
+  | RuntimeLoopGuardEvent
+  | RuntimeBudgetUpdateEvent
+  | RuntimeDangerousConfirmationEvent
+  | RuntimeTurnStopReasonEvent
+  | RuntimeCompactionStartEvent
+  | RuntimeCompactionDoneEvent
+  | RuntimeContextErrorEvent
+  | RuntimeWorkingNarrationEvent
+  | RuntimeSkillActivatedEvent
+  | RuntimeSkillDeactivatedEvent;
+
+export interface RuntimeTurnError {
+  id: string;
+  type: "tool_error" | "api_error" | "timeout" | "cancelled" | "security_denial";
+  status: "active" | "resolved" | "acknowledged";
+  message: string;
+  toolName?: string;
+  toolCallId?: string;
+  operationKey?: string;
+  iteration?: number;
+  resolvedByToolCallId?: string;
+}
+
+export interface RuntimeCheckpointWorkPlanState {
+  lastKind: "milestone" | "plan_pivot";
+  reason: string;
+  nextDirection?: string;
+  completed: string[];
+  pending: string[];
+  updatedAt: string;
+}
+
+export interface TurnResult {
+  items: ItemParam[];
+  response: ResponseResource;
+  usage: Usage;
+  errors: RuntimeTurnError[];
+  activeErrors: RuntimeTurnError[];
+  evidenceSummary?: unknown;
+  checkpointState?: RuntimeCheckpointWorkPlanState;
+}
 
 export type RuntimeContentBlock =
   | { type: "text"; text: string }
@@ -25,10 +305,8 @@ export interface UserTurnInput {
   command?: RuntimeCommandInput;
 }
 
-export type RuntimeEvent = AgentEvent;
 export type RuntimeEventListener = (event: RuntimeEvent) => void;
 export type Unsubscribe = () => void;
-export type TurnResult = AgentTurnResult;
 
 export interface RuntimeCommandExecutionInput {
   command: string;

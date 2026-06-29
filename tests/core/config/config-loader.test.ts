@@ -10,14 +10,14 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
+  DEFAULT_SYNTHETIC_MAX_OUTPUT,
+} from "../../../src/application/providers/model-defaults";
+import {
   _resetDeprecationWarningsForTests,
   loadConfig,
   loadConfigFromFile,
-} from "../../../src/core/config/config-loader";
-import {
-  DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-  DEFAULT_SYNTHETIC_MAX_OUTPUT,
-} from "../../../src/core/provider/model-defaults";
+} from "../../../src/composition/config/config-loader";
 
 let tmpDir: string;
 let configPath: string;

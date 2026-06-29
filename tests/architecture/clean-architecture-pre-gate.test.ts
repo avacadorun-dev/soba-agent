@@ -17,12 +17,24 @@ interface ControllerCoverage {
 
 const layerRules: LayerRule[] = [
   {
-    root: "src/core",
-    forbiddenTargets: ["src/apps/", "src/application/", "src/adapters/", "src/ui/"],
+    root: "src/kernel",
+    forbiddenTargets: ["src/application/", "src/engine/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
+  },
+  {
+    root: "src/engine",
+    forbiddenTargets: ["src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
   },
   {
     root: "src/application",
-    forbiddenTargets: ["src/apps/", "src/adapters/", "src/ui/"],
+    forbiddenTargets: ["src/engine/", "src/composition/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
+  },
+  {
+    root: "src/infrastructure",
+    forbiddenTargets: ["src/engine/", "src/composition/", "src/apps/", "src/ui/"],
+  },
+  {
+    root: "src/adapters",
+    forbiddenTargets: ["src/engine/", "src/infrastructure/", "src/composition/", "src/apps/", "src/ui/"],
   },
   {
     root: "src/ui",
@@ -32,37 +44,37 @@ const layerRules: LayerRule[] = [
 
 const controllerCoverage: ControllerCoverage[] = [
   {
-    implementation: "src/core/loop/agent-loop.ts",
+    implementation: "src/engine/turn/agent-loop.ts",
     testFile: "tests/agent-loop.test.ts",
     symbol: "AgentLoop",
   },
   {
-    implementation: "src/core/model-turn/model-turn-runner.ts",
+    implementation: "src/engine/model-turn/model-turn-runner.ts",
     testFile: "tests/core/model-turn/model-turn-runner.test.ts",
     symbol: "ModelTurnRunner",
   },
   {
-    implementation: "src/core/tool-execution/tool-call-executor.ts",
+    implementation: "src/engine/tool-calls/tool-call-executor.ts",
     testFile: "tests/core/tool-execution/tool-call-executor.test.ts",
     symbol: "ToolCallExecutor",
   },
   {
-    implementation: "src/core/permissions/permission-broker.ts",
+    implementation: "src/engine/permissions/permission-broker.ts",
     testFile: "tests/core/permissions/permission-broker.test.ts",
     symbol: "PermissionBroker",
   },
   {
-    implementation: "src/core/completion/completion-controller.ts",
+    implementation: "src/engine/completion/completion-controller.ts",
     testFile: "tests/core/completion/completion-controller.test.ts",
     symbol: "CompletionController",
   },
   {
-    implementation: "src/core/verification/verification-controller.ts",
+    implementation: "src/engine/verification/verification-controller.ts",
     testFile: "tests/core/verification/verification-controller.test.ts",
     symbol: "VerificationController",
   },
   {
-    implementation: "src/core/context/context-controller.ts",
+    implementation: "src/engine/context/context-controller.ts",
     testFile: "tests/core/context/context-controller.test.ts",
     symbol: "ContextController",
   },
@@ -128,6 +140,10 @@ describe("clean architecture pre-gate", () => {
     expect(violations).toEqual([]);
   });
 
+  test("root application public facade stays retired", () => {
+    expect(existsSync(join(projectRoot, "src/application/public.ts"))).toBe(false);
+  });
+
   test("print and TUI entrypoints execute user turns through SobaRuntime", () => {
     const cli = readProjectFile("src/apps/cli/main.ts");
     const tuiTypes = readProjectFile("src/ui/terminal/interactive/model/types.ts");
@@ -159,42 +175,76 @@ describe("clean architecture pre-gate", () => {
   });
 
   test("legacy AgentLoop remains a transition shell over extracted services", () => {
-    const source = readProjectFile("src/core/loop/agent-loop.ts");
-    const requiredControllerSignals = [
+    const source = readProjectFile("src/engine/turn/agent-loop.ts");
+    const turnRunnerSource = readProjectFile("src/engine/turn/agent-turn-runner.ts");
+    const turnStageSource = [
+      "src/engine/turn/agent-turn-begin.ts",
+      "src/engine/turn/agent-turn-completion-stage.ts",
+      "src/engine/turn/agent-turn-prompt-context.ts",
+      "src/engine/turn/agent-turn-response-stage.ts",
+      "src/engine/turn/agent-turn-runner-events.ts",
+      "src/engine/turn/agent-turn-tool-stage.ts",
+      "src/engine/turn/agent-turn-verification-stage.ts",
+    ]
+      .map(readProjectFile)
+      .join("\n");
+    const runtimeSource = readProjectFile("src/engine/turn/agent-loop-runtime.ts");
+    const requiredShellSignals = [
+      "./agent-turn-runner",
+      "return runAgentTurn",
+    ];
+    const requiredTurnRunnerSignals = [
       "../model-turn/model-turn-runner",
-      "../tool-execution/tool-call-executor",
-      "../permissions/permission-broker",
       "../completion/completion-controller",
       "../verification/verification-controller",
+      "./model-turn-execution",
+      "new CompletionController",
+      "new VerificationController",
+      "executeModelTurn",
+    ];
+    const requiredRuntimeSignals = [
+      "../tool-calls/tool-call-executor",
+      "../permissions/permission-broker",
       "../context/context-controller",
       "new ContextController",
       "new PermissionBroker",
       "new ToolCallExecutor",
-      "new CompletionController",
-      "new VerificationController",
-      "new ModelTurnRunner",
+      "createAgentLoopRuntime",
     ];
     const forbiddenOwnershipImports = [
-      "../provider/registry",
-      "../provider/client-proxy",
-      "../mcp/config",
-      "../mcp/tool-registry-sync",
+      "../../infrastructure/llm/providers/registry",
+      "../../infrastructure/llm/providers/client-proxy",
+      "../../infrastructure/mcp/config",
+      "../../infrastructure/mcp/tool-registry-sync",
       "../memory/memory-tools",
-      "../tools/bash",
-      "../tools/edit",
-      "../tools/inspect-file",
-      "../tools/ls",
-      "../tools/read",
-      "../tools/search-files",
-      "../tools/write",
+      "../../infrastructure/tools/local/bash",
+      "../../infrastructure/tools/local/edit",
+      "../../infrastructure/tools/local/inspect-file",
+      "../../infrastructure/tools/local/ls",
+      "../../infrastructure/tools/local/read",
+      "../../infrastructure/tools/local/search-files",
+      "../../infrastructure/tools/local/write",
     ];
 
-    const missingSignals = requiredControllerSignals.filter((signal) => !source.includes(signal));
-    const ownershipLeaks = importSpecifiers(source).filter((specifier) => forbiddenOwnershipImports.includes(specifier));
+    const missingRuntimeSignals = requiredRuntimeSignals.filter((signal) => !runtimeSource.includes(signal));
+    const ownershipLeaks = [
+      ...importSpecifiers(source),
+      ...importSpecifiers(turnRunnerSource),
+      ...importSpecifiers(turnStageSource),
+      ...importSpecifiers(runtimeSource),
+    ].filter((specifier) => forbiddenOwnershipImports.includes(specifier));
 
-    expect(missingSignals).toEqual([]);
+    const missingShellSignals = requiredShellSignals.filter((signal) => !source.includes(signal));
+    const turnPipelineSource = `${turnRunnerSource}\n${turnStageSource}`;
+    const missingTurnRunnerSignals = requiredTurnRunnerSignals.filter((signal) => !turnPipelineSource.includes(signal));
+
+    expect(missingShellSignals).toEqual([]);
+    expect(missingTurnRunnerSignals).toEqual([]);
+    expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
-    expect(source).toContain("return this.toolExecutor.abortActiveTool()");
-    expect(source).toContain("return this.toolExecutor.runDirectShellCommand(command, silent)");
+    expect(source.split("\n").length).toBeLessThanOrEqual(300);
+    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(400);
+    expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
+    expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });
 });

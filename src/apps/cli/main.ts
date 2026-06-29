@@ -13,29 +13,29 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
-import { createSobaRuntime } from "../../application/runtime-factory";
-import type { RuntimeEvent } from "../../application/types";
+import { executeCommand } from "../../application/cli/commands/public";
+import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
+import { listSessions, redactMcpSensitiveText, SessionManager, syncMcpToolsIntoRegistry } from "../../composition/cli/public";
 import {
   firstTimeSetup,
   loadConfig,
   resolveCompactionConfig,
   resolveSoundConfig,
   validateConfig,
-} from "../../core/config/config-loader";
-import type { SobaConfig } from "../../core/config/types";
-import { detectLocale, I18n, isLocale } from "../../core/i18n/i18n";
-import type { Locale } from "../../core/i18n/types";
-import type { ApprovalDecision } from "../../core/loop/types";
-import { SoundNotifier } from "../../core/middleware/sound-notifier";
-import { listSessions, SessionManager } from "../../core/session/session-manager";
-import { APP_VERSION } from "../../core/version";
+} from "../../composition/config/config-loader";
+import { createSobaRuntime } from "../../composition/runtime/create-soba-runtime";
+import { SoundNotifier } from "../../infrastructure/terminal/sound-notifier";
+import { detectLocale, I18n, isLocale } from "../../shared/i18n/i18n";
+import type { Locale } from "../../shared/i18n/types";
+import { APP_VERSION } from "../../shared/version";
 import { setColorDisabled } from "../../ui/terminal/output/colors";
 import { createRenderer } from "../../ui/terminal/output/renderer";
 import { initTheme } from "../../ui/terminal/output/theme";
 import { parseArgs, printHelp } from "./args";
-import { executeCommand } from "./commands";
 
 const VERSION = APP_VERSION;
+
+type ApprovalDecision = "deny" | "once" | "session" | "repo" | "full";
 
 // ─── Helpers ───
 
@@ -43,7 +43,16 @@ function resolveLang(cliLang?: Locale): Locale {
   if (cliLang && isLocale(cliLang)) return cliLang;
   const envLang = process.env.SOBA_LANG;
   if (envLang && isLocale(envLang)) return envLang;
-  return detectLocale();
+  return detectLocale(currentLocaleEnvironment());
+}
+
+function currentLocaleEnvironment() {
+  return {
+    SOBA_LANG: process.env.SOBA_LANG,
+    LC_ALL: process.env.LC_ALL,
+    LC_MESSAGES: process.env.LC_MESSAGES,
+    LANG: process.env.LANG,
+  };
 }
 
 function emitAcpCommandOutput(
@@ -208,7 +217,7 @@ async function main() {
   // or the session manager — it only needs the ProviderRegistry.
   if (cliArgs.providerSubcommand !== undefined) {
     const { parseProviderCliArgs, runProviderCli } = await import("./provider-cli");
-    const { ProviderRegistry } = await import("../../core/provider/registry");
+    const { ProviderRegistry } = await import("../../composition/cli/public");
     const persistedRegistryForProvider = await ProviderRegistry.loadFromFile();
     const providerRegistryForCli = new ProviderRegistry(persistedRegistryForProvider ?? undefined);
     const options = parseProviderCliArgs(cliArgs.providerSubArgs);
@@ -277,7 +286,7 @@ async function main() {
   if (cliArgs.soundVolume !== undefined) soundCli.volume = cliArgs.soundVolume;
   if (cliArgs.soundRepeat) soundCli.repeatMode = "repeat";
   if (Object.keys(soundCli).length > 0) {
-    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<import("../../core/config/types").SoundConfig>;
+    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<SoundConfig>;
   }
 
   const configPath = process.env.SOBA_CONFIG_PATH;
@@ -331,7 +340,7 @@ async function main() {
           client: context.client,
           session: context.getSession(),
           sessionLifecycle: context.sessionLifecycle,
-          setSession: context.setSession,
+          setSession: (nextSession) => context.setSession(nextSession as SessionManager),
           config: context.config,
           i18n,
           renderer: {
@@ -339,13 +348,17 @@ async function main() {
           },
           contextManager: context.contextManager,
           skillManager: context.skillManager,
+          skillCommands: context.skillCommands,
           agentLoop: context.agentLoop,
-          registry: context.providerRegistry,
           mcpRuntime: context.mcpRuntime,
           mcpManager: context.mcpManager,
           mcpSecretStore: context.mcpSecretStore,
           toolRegistry: context.toolRegistry,
           trustManager: context.trustManager,
+          portableCapsuleServiceFactory: context.portableCapsuleServiceFactory,
+          fallbackCompactor: context.fallbackCompactor,
+          syncMcpToolsIntoRegistry,
+          redactMcpSensitiveText,
         });
       },
       providerRegistryConfigPath: configPath,
@@ -431,14 +444,17 @@ async function main() {
     tools,
     contextManager,
     skillManager,
+    skillCommands,
     trustStore,
     sessionLifecycle,
     mcpRuntime,
     mcpManager,
     trustManager,
     mcpSecretStore,
+    portableCapsuleServiceFactory,
+    fallbackCompactor,
   } = runtimeComposition;
-  let activeSession = session;
+  let activeSession: RuntimeSessionHandle = session;
 
   // Sound notifications — plays audio on agent events
   const soundNotifier = new SoundNotifier(soundConfig);
@@ -460,6 +476,7 @@ async function main() {
     const { InteractiveTUI } = await import("../../ui/terminal/interactive-tui");
     const { ProviderStore } = await import("../../ui/terminal/interactive/model/provider-store");
     const { slashCommandRegistry } = await import("../../ui/terminal/interactive/commands/registry");
+    const { notify } = await import("../../ui/terminal/interactive/lib/notification");
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
     const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({
@@ -494,14 +511,19 @@ async function main() {
           renderer: { emit: output },
           contextManager,
           skillManager,
+          skillCommands,
           agentLoop: loop,
-          registry: providerRegistry,
           mcpRuntime,
           mcpManager,
           mcpSecretStore,
           toolRegistry: tools,
           trustManager,
+          portableCapsuleServiceFactory,
+          fallbackCompactor,
           tuiRegistry: slashCommandRegistry,
+          notify,
+          syncMcpToolsIntoRegistry,
+          redactMcpSensitiveText,
         }),
     });
 
@@ -554,7 +576,7 @@ async function main() {
 // ─── Entry ───
 
 main().catch((err) => {
-  const i18n = new I18n(detectLocale());
+  const i18n = new I18n(detectLocale(currentLocaleEnvironment()));
   console.error(i18n.t("cli.error.fatal", { message: err.message }));
   process.exit(1);
 });

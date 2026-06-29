@@ -17,9 +17,9 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { SessionManager } from "../../src/core/session/session-manager";
-import type { ItemParam } from "../../src/core/session/types";
-import type { ContextCapsuleEntry } from "../../src/core/session/types-v2";
+import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
+import type { ItemParam } from "../../src/kernel/transcript/types";
+import type { ContextCapsuleEntry } from "../../src/kernel/transcript/types-v2";
 import {
   BenchmarkWorkload,
   type WorkloadConfig,

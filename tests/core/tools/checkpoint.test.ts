@@ -11,8 +11,8 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { checkpointTool, extractCheckpointEvent } from "../../../src/core/tools/checkpoint";
-import type { ToolContext } from "../../../src/core/tools/types";
+import { checkpointTool, extractCheckpointEvent } from "../../../src/infrastructure/tools/local/checkpoint";
+import type { ToolContext } from "../../../src/kernel/tools/types";
 
 // ─── Helpers ───
 

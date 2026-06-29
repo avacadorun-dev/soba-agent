@@ -10,7 +10,7 @@
  * Spec: internal-design-notes § Endurance Acceptance
  */
 
-import type { ContextCapsuleEntry } from "../../src/core/session/types-v2";
+import type { ContextCapsuleEntry } from "../../src/kernel/transcript/types-v2";
 
 // ─── Types ───
 

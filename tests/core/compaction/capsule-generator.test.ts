@@ -12,20 +12,20 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { CapsuleGenerator } from "../../../src/core/compaction/capsule-generator";
-import { CapsuleValidator } from "../../../src/core/compaction/capsule-validator";
-import type { ContextSnapshot } from "../../../src/core/compaction/context-meter";
-import { DeterministicStrategy } from "../../../src/core/compaction/strategies/deterministic";
-import { type NativeCompactor, NativePortableStrategy } from "../../../src/core/compaction/strategies/native-portable";
-import { type ModelInvoker, PortableOnlyStrategy } from "../../../src/core/compaction/strategies/portable-only";
-import type { CapsuleGenerationInput, ContextCapsuleDraft } from "../../../src/core/compaction/strategies/types";
-import type { ItemParam } from "../../../src/core/session/types";
+import { CapsuleGenerator } from "../../../src/engine/compaction/capsule-generator";
+import { CapsuleValidator } from "../../../src/engine/compaction/capsule-validator";
+import type { ContextSnapshot } from "../../../src/engine/compaction/context-meter";
+import { DeterministicStrategy } from "../../../src/engine/compaction/strategies/deterministic";
+import { type NativeCompactor, NativePortableStrategy } from "../../../src/engine/compaction/strategies/native-portable";
+import { type ModelInvoker, PortableOnlyStrategy } from "../../../src/engine/compaction/strategies/portable-only";
+import type { CapsuleGenerationInput, ContextCapsuleDraft } from "../../../src/engine/compaction/strategies/types";
+import type { ItemParam } from "../../../src/kernel/transcript/types";
 import type {
   ActivatedSkillRef,
   NativeContinuation,
   ProviderCapabilities,
   ProviderIdentity,
-} from "../../../src/core/session/types-v2";
+} from "../../../src/kernel/transcript/types-v2";
 
 // ─── Helpers ───
 

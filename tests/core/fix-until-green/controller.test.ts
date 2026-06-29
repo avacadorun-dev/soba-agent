@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { FixUntilGreenController, parseVerificationDiagnostics } from "../../../src/core/fix-until-green";
-import { EvidenceLedger } from "../../../src/core/loop/evidence-ledger";
+import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
+import { FixUntilGreenController, parseVerificationDiagnostics } from "../../../src/engine/recovery";
 
 describe("Fix-Until-Green diagnostics", () => {
   test("parses Bun test, Biome, TypeScript and build diagnostics", () => {

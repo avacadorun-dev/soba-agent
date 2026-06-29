@@ -2,12 +2,18 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import { firstTimeSetup, loadConfig, validateConfig } from "../../core/config/config-loader";
-import type { I18n } from "../../core/i18n/i18n";
-import { getMcpConfigPath, loadMcpConfig } from "../../core/mcp/config";
-import { McpSecretStore } from "../../core/mcp/secret-store";
-import { SkillDiscovery } from "../../core/skills/discovery";
-import { ProjectTrustStore } from "../../core/skills/project-trust-store";
+import { SkillDiscovery } from "../../application/cli/public";
+import {
+  computeSkillContentHashOnDisk,
+  createFilesystemProjectTrustStore,
+  FilesystemSkillValidationFilesystem,
+  getMcpConfigPath,
+  loadMcpConfig,
+  McpSecretStore,
+  validateSkillOnDisk,
+} from "../../composition/cli/public";
+import { firstTimeSetup, loadConfig, validateConfig } from "../../composition/config/config-loader";
+import type { I18n } from "../../shared/i18n/i18n";
 
 export interface InitCommandOptions {
   yes: boolean;
@@ -149,13 +155,16 @@ async function setupProvider(
 }
 
 async function setupProjectTrust(options: RunInitCommandOptions & { cwd: string; sobaDir: string }): Promise<string> {
-  const trustStore = new ProjectTrustStore({ sobaDir: options.sobaDir });
-  const identity = ProjectTrustStore.computeProjectIdentity(options.cwd);
+  const trustStore = createFilesystemProjectTrustStore({ sobaDir: options.sobaDir });
+  const identity = trustStore.computeProjectIdentity(options.cwd);
   const discovery = new SkillDiscovery({
     projectPath: options.cwd,
     userSkillsPath: join(options.sobaDir, "skills"),
     bundledSkillsPath: process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills"),
     trustStore,
+    files: new FilesystemSkillValidationFilesystem(),
+    validateSkill: validateSkillOnDisk,
+    computeSkillContentHash: computeSkillContentHashOnDisk,
   });
   const fingerprint = discovery.computeFingerprint(identity.canonicalRoot);
   const isTrusted = trustStore.isTrusted(identity);

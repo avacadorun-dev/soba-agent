@@ -13,16 +13,19 @@ import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import type { AgentEvent } from "../../../src/core/loop/types";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { createActivateSkillTool } from "../../../src/core/tools/activate-skill";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import type { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { AgentEvent } from "../../../src/engine/turn/types";
+import { createOpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
+import { createActivateSkillTool } from "../../../src/infrastructure/tools/local/activate-skill";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("I.6: Activate Skill Tool Integration", () => {
   let testDir: string;
@@ -123,18 +126,22 @@ Stop when the task-specific output is complete.
     tools = new ToolRegistry();
 
     // Initialize skill infrastructure
-    trustStore = new ProjectTrustStore({ sobaDir });
+    trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     skillCatalog = new SkillCatalog({ discovery });
     skillManager = new SkillManager({
       catalog: skillCatalog,
       discovery,
       trustStore,
+      readSkillContent: readSkillContentFromDisk,
     });
 
     // Initial scan
@@ -205,12 +212,16 @@ Stop when the task-specific output is complete.
         userSkillsPath: join(testDir, "empty-user"),
         bundledSkillsPath: join(testDir, "empty-bundled"),
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
       const emptyCatalog = new SkillCatalog({ discovery: emptyDiscovery });
       const emptyManager = new SkillManager({
         catalog: emptyCatalog,
         discovery: emptyDiscovery,
         trustStore,
+        readSkillContent: readSkillContentFromDisk,
       });
 
       mkdirSync(join(testDir, "empty-user"), { recursive: true });

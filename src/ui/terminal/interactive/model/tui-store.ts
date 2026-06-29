@@ -1,11 +1,6 @@
 import { type Accessor, batch, createSignal, type Setter } from "solid-js";
-import { isTuiThemeName, type TuiThemeName } from "../../../../core/config/types";
-import { I18n } from "../../../../core/i18n/i18n";
-import type { TranslationKey } from "../../../../core/i18n/types";
-import type { AgentEvent } from "../../../../core/loop/types";
-import { CURRENT_SESSION_VERSION } from "../../../../core/session/session-manager";
-import { ProjectTrustStore } from "../../../../core/skills/project-trust-store";
-import { type PermissionMode, TrustManager } from "../../../../core/trust/trust-manager";
+import type { RuntimeEvent, TranslationKey } from "../../../../application/ui/public";
+import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
 import { registerModelCommand } from "../commands/model-command";
@@ -24,6 +19,12 @@ import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type Queu
 const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "checkpoint", "activate_skill"]);
 const PROJECT_INFO_REFRESH_DELAY_MS = 0;
 
+interface TuiTrustController {
+  getPermissionMode(): PermissionMode;
+  setPermissionMode(mode: PermissionMode): void;
+  clearSessionApprovals(): void;
+}
+
 function shouldRefreshProjectInfoAfterTool(toolName: string): boolean {
   return !PROJECT_INFO_READ_ONLY_TOOLS.has(toolName);
 }
@@ -40,7 +41,7 @@ export class TuiStore {
   readonly fileTree: Accessor<string[]>;
   private readonly setFileTree: Setter<string[]>;
   readonly changes: Accessor<ChangeStat[]>;
-  readonly confirmation: Accessor<Extract<AgentEvent, { type: "dangerous_confirmation" }> | null>;
+  readonly confirmation: Accessor<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   readonly inputValue: Accessor<string>;
   readonly lastAssistantText: Accessor<string>;
   readonly isProcessing: Accessor<boolean>;
@@ -71,7 +72,7 @@ export class TuiStore {
   private readonly setUsedTokens: Setter<number>;
   private readonly setEffectiveContextTokens: Setter<number>;
   private readonly setChanges: Setter<ChangeStat[]>;
-  private readonly setConfirmation: Setter<Extract<AgentEvent, { type: "dangerous_confirmation" }> | null>;
+  private readonly setConfirmation: Setter<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   private readonly _toolSummaries = new Map<string, string>();
   private readonly _toolDetails = new Map<string, string[]>();
   private readonly setInputValue: Setter<string>;
@@ -104,7 +105,7 @@ export class TuiStore {
   private turnActive = false;
   private readonly onExit: () => void;
   private readonly i18n: I18n;
-  private readonly trustManager: TrustManager;
+  private readonly trustManager: TuiTrustController;
   private readonly _notificationStore: NotificationStore | undefined;
   private unsubscribeProxy: (() => void) | undefined;
   constructor(options: InteractiveTUIOptions, onExit: () => void = () => {}) {
@@ -124,7 +125,7 @@ export class TuiStore {
     [this.fileTree, this.setFileTree] = createSignal<string[]>(buildFileTree(options.cwd));
     [this.changes, this.setChanges] = createSignal<ChangeStat[]>(readChangeStats(options.cwd));
     [this.confirmation, this.setConfirmation] = createSignal<Extract<
-      AgentEvent,
+      RuntimeEvent,
       { type: "dangerous_confirmation" }
     > | null>(null);
     [this.inputValue, this.setInputValue] = createSignal("");
@@ -134,7 +135,7 @@ export class TuiStore {
     [this.model, this.setModel] = createSignal(options.agentLoop.getModel());
     [this.providerName, this.setProviderName] = createSignal(options.providerStore?.registry.getActiveProvider().name ?? "");
     const identity = options.trustStore
-      ? ProjectTrustStore.computeProjectIdentity(options.cwd)
+      ? options.trustStore.computeProjectIdentity(options.cwd)
       : null;
     [this.projectTrusted, this.setProjectTrusted] = createSignal(
       identity && options.trustStore ? options.trustStore.isTrusted(identity) : false,
@@ -314,7 +315,7 @@ export class TuiStore {
   /** Refresh project trust status from the trust store. */
   refreshProjectTrust(): void {
     const identity = this.options.trustStore
-      ? ProjectTrustStore.computeProjectIdentity(this.options.cwd)
+      ? this.options.trustStore.computeProjectIdentity(this.options.cwd)
       : null;
     this.setProjectTrusted(
       identity && this.options.trustStore ? this.options.trustStore.isTrusted(identity) : false,
@@ -546,7 +547,7 @@ export class TuiStore {
     await this.runNextQueued();
   }
 
-  onAgentEvent(event: AgentEvent): void {
+  onAgentEvent(event: RuntimeEvent): void {
     switch (event.type) {
       case "turn_start":
         this.add({ type: "user", content: event.userInput });

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectMemory, ProjectMemoryError } from "../../src/core/memory/project-memory";
-import { KNOWLEDGE_KEYS, type MemoryCapsuleInput } from "../../src/core/memory/types";
+import { KNOWLEDGE_KEYS, type MemoryCapsuleInput } from "../../src/engine/memory/types";
+import { ProjectMemory, ProjectMemoryError } from "../../src/infrastructure/persistence/memory/project-memory";
 
 describe("ProjectMemory aggregator", () => {
   let projectRoot: string;
@@ -98,7 +98,7 @@ describe("ProjectMemory aggregator", () => {
       id: "file:src/core/memory/project-memory.ts",
       type: "file",
       name: "project-memory.ts",
-      metadata: { path: "src/core/memory/project-memory.ts" },
+      metadata: { path: "../../src/infrastructure/persistence/memory/project-memory" },
     });
 
     const result = memory.save();

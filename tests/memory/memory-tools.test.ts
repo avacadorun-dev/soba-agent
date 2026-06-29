@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { MemoryCapsuleInput } from "../../src/engine/memory/types";
+import { ProjectMemory } from "../../src/infrastructure/persistence/memory/project-memory";
 import {
   createMemoryTools,
   MemoryToolError,
   readProjectMemory,
   writeProjectMemory,
-} from "../../src/core/memory/memory-tools";
-import { ProjectMemory } from "../../src/core/memory/project-memory";
-import type { MemoryCapsuleInput } from "../../src/core/memory/types";
+} from "../../src/infrastructure/tools/local/memory-tools";
 
 describe("Project memory tools", () => {
   let projectRoot: string;

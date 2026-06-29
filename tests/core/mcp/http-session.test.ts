@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MCP_SESSION_ID_HEADER, McpHttpSession, McpHttpSessionError } from "../../../src/core/mcp/http-session";
+import { MCP_SESSION_ID_HEADER, McpHttpSession, McpHttpSessionError } from "../../../src/infrastructure/mcp/http-session";
 
 describe("MCP HTTP session", () => {
   test("captures and applies a visible ASCII session id", () => {

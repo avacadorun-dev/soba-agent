@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { SkillEvaluator } from "../../../src/core/skills/evaluator";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { validateSkill } from "../../../src/core/skills/validator";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { SkillEvaluator } from "../../../src/application/skills/evaluator";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/persistence/skills/evaluation-storage";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 const repoSkillsDir = join(process.cwd(), "skills");
 const forbiddenLintToolExamples = ["eslint", "prettier"];
@@ -38,7 +40,7 @@ describe("Bundled skill eval baseline", () => {
   });
 
   test("UC-AL-03 lint-fix stays project-tooling-first without hard-coded formatter drift", () => {
-    const evaluator = new SkillEvaluator({ evalRunsPath: join(tempDir, "eval-runs") });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(tempDir, "eval-runs") }), validateSkill: validateSkillOnDisk });
     const content = readSkill("lint-fix");
     const lowerContent = content.toLowerCase();
     const result = evaluator.evaluateFixtureTask({
@@ -73,16 +75,19 @@ describe("Bundled skill eval baseline", () => {
   });
 
   test("UC-AL-07 activates code-review and preserves no-mutation review behavior", () => {
-    const evaluator = new SkillEvaluator({ evalRunsPath: join(tempDir, "eval-runs") });
-    const trustStore = new ProjectTrustStore({ sobaDir: tempDir });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(tempDir, "eval-runs") }), validateSkill: validateSkillOnDisk });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir: tempDir });
     const discovery = new SkillDiscovery({
       projectPath: tempDir,
       userSkillsPath: join(tempDir, "user-skills"),
       bundledSkillsPath: repoSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
-    const skillManager = new SkillManager({ catalog, discovery, trustStore });
+    const skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
 
     skillManager.refresh();
     const activation = skillManager.activate("code-review");
@@ -137,7 +142,7 @@ Missing the rest of the protocol sections.
 `,
     );
 
-    const result = validateSkill(skillPath, { scope: "bundled" });
+    const result = validateSkillOnDisk(skillPath, { scope: "bundled" });
 
     expect(result.valid).toBe(false);
     expect(result.errors.some((error) => error.code === "MISSING_BUNDLED_SKILL_SECTION")).toBe(true);
@@ -145,7 +150,7 @@ Missing the rest of the protocol sections.
 
   test("skill trigger precision baseline does not regress", () => {
     for (const skillName of listBundledSkillNames()) {
-      const result = validateSkill(join(repoSkillsDir, skillName), { scope: "bundled" });
+      const result = validateSkillOnDisk(join(repoSkillsDir, skillName), { scope: "bundled" });
       const triggers = result.frontmatter?.soba?.triggers ?? [];
 
       expect(result.valid).toBe(true);

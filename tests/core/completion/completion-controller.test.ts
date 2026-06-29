@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { FunctionCallField } from "../../../src/core/client/types";
-import { CompletionController } from "../../../src/core/completion/completion-controller";
-import type { CompletionState } from "../../../src/core/loop/completion-gate";
+import { CompletionController } from "../../../src/engine/completion/completion-controller";
+import type { CompletionState } from "../../../src/engine/completion/completion-gate";
+import type { FunctionCallField } from "../../../src/kernel/model/openresponses-types";
 
 function finishCall(args: Record<string, unknown> | string): FunctionCallField {
   return {

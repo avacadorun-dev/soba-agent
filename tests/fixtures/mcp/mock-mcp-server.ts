@@ -1,5 +1,5 @@
-import { MCP_DRAFT_PROTOCOL_VERSION, MCP_RELEASED_PROTOCOL_VERSION } from "../../../src/core/mcp/client";
-import { JSON_RPC_ERROR_CODES, JSON_RPC_VERSION, type JsonRpcId, type JsonRpcRequest } from "../../../src/core/mcp/json-rpc";
+import { MCP_DRAFT_PROTOCOL_VERSION, MCP_RELEASED_PROTOCOL_VERSION } from "../../../src/infrastructure/mcp/client";
+import { JSON_RPC_ERROR_CODES, JSON_RPC_VERSION, type JsonRpcId, type JsonRpcRequest } from "../../../src/infrastructure/mcp/json-rpc";
 
 type Scenario = "modern" | "legacy";
 

@@ -6,8 +6,7 @@
  * Clean status bar with token usage.
  */
 
-import type { I18n } from "../../../core/i18n/i18n";
-import type { AgentEvent } from "../../../core/loop/types";
+import type { I18n, RuntimeEvent } from "../../../application/ui/public";
 import { formatToolSummary } from "../interactive/lib/format-tool";
 import { bold, wrapText } from "./colors";
 import { Spinner } from "./spinner";
@@ -247,7 +246,7 @@ export class TuiRenderer {
   }
 
   /** Convert AgentLoop events → TUI events + render tool blocks with output */
-  emitAgentEvent(event: AgentEvent): void {
+  emitAgentEvent(event: RuntimeEvent): void {
     switch (event.type) {
       case "turn_start":
         this.turnCount = event.turnIndex;

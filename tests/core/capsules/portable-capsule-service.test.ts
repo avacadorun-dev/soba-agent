@@ -6,9 +6,10 @@ import {
   decodePortableCapsuleMarkdown,
   PortableCapsuleService,
   PortableCapsuleServiceError,
-} from "../../../src/core/capsules";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import type { ContextCapsuleEntry } from "../../../src/core/session/types-v2";
+} from "../../../src/application/capsules";
+import { FilesystemPortableCapsuleStorage } from "../../../src/infrastructure/persistence/capsules/portable-capsule-storage";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 
 let tmpDir: string;
 let sessionDir: string;
@@ -30,6 +31,10 @@ function makeSessionWithCapsules(...checkpointIds: string[]): SessionManager {
   return session;
 }
 
+function makeService(cwd: string): PortableCapsuleService {
+  return new PortableCapsuleService({ storage: new FilesystemPortableCapsuleStorage({ cwd }) });
+}
+
 function makeCheckpointPayload(
   checkpointId: string,
 ): Omit<ContextCapsuleEntry, "id" | "parentId" | "timestamp" | "type"> {
@@ -49,8 +54,8 @@ function makeCheckpointPayload(
       nextSteps: ["Run capsule service tests"],
     },
     artifacts: {
-      readFiles: ["src/core/capsules/service.ts"],
-      modifiedFiles: ["src/core/capsules/service.ts"],
+      readFiles: ["../../../src/application/capsules/service"],
+      modifiedFiles: ["../../../src/application/capsules/service"],
       verificationCommands: ["bun test tests/core/capsules/portable-capsule-service.test.ts"],
       verificationStatus: "passed",
     },
@@ -73,7 +78,7 @@ function makeCheckpointPayload(
 describe("PortableCapsuleService create/export lifecycle", () => {
   it("создаёт Quick handoff capsule в .soba/capsules из последнего checkpoint", () => {
     const session = makeSessionWithCapsules("ck_111111111111", "ck_222222222222");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
 
     const result = service.createFromSession(session, {
       createdAt: "2026-06-19T00:00:00.000Z",
@@ -92,7 +97,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 
   it("экспортирует checkpoint по однозначному prefix в заданный файл", () => {
     const session = makeSessionWithCapsules("ck_abcdef111111", "ck_123456222222");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
 
     const result = service.exportCheckpoint(session, "ck_abc", {
       destinationPath: "handoff/auth.capsule.md",
@@ -106,7 +111,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 
   it("отклоняет неоднозначный checkpoint prefix", () => {
     const session = makeSessionWithCapsules("ck_abcdef111111", "ck_abcdef222222");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
 
     expect(() =>
       service.exportCheckpoint(session, "ck_abcdef", {
@@ -117,7 +122,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 
   it("пишет capsule эксклюзивно и не перезаписывает существующий файл", () => {
     const session = makeSessionWithCapsules("ck_111111111111");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
     const options = {
       destinationPath: "existing.capsule.md",
       createdAt: "2026-06-19T00:00:00.000Z",
@@ -130,7 +135,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 
   it("отклоняет destination без .capsule.md extension", () => {
     const session = makeSessionWithCapsules("ck_111111111111");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
 
     expect(() =>
       service.exportCheckpoint(session, "ck_111", {
@@ -141,7 +146,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 
   it("отклоняет path traversal за пределы cwd", () => {
     const session = makeSessionWithCapsules("ck_111111111111");
-    const service = new PortableCapsuleService({ cwd: join(tmpDir, "project") });
+    const service = makeService(join(tmpDir, "project"));
 
     expect(() =>
       service.exportCheckpoint(session, "ck_111", {
@@ -154,7 +159,7 @@ describe("PortableCapsuleService create/export lifecycle", () => {
 describe("PortableCapsuleService load lifecycle", () => {
   it("загружает capsule как untrusted prompt без изменения session tree", () => {
     const session = makeSessionWithCapsules("ck_111111111111");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
     const beforeCount = session.getCapsuleEntries().length;
     const exported = service.exportCheckpoint(session, "ck_111", {
       destinationPath: "loadable.capsule.md",
@@ -173,7 +178,7 @@ describe("PortableCapsuleService load lifecycle", () => {
   });
 
   it("отклоняет corrupted .capsule.md без machine payload", () => {
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
     const corruptedPath = join(tmpDir, "broken.capsule.md");
     writeFileSync(corruptedPath, "# Not a capsule", "utf-8");
 
@@ -181,7 +186,7 @@ describe("PortableCapsuleService load lifecycle", () => {
   });
 
   it("отклоняет oversized capsule file", () => {
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
     const oversizedPath = join(tmpDir, "oversized.capsule.md");
     writeFileSync(oversizedPath, "x".repeat(1024 * 1024 + 1), "utf-8");
 
@@ -190,7 +195,7 @@ describe("PortableCapsuleService load lifecycle", () => {
 
   it("listStoredCapsules возвращает валидные файлы и пропускает corrupted", () => {
     const session = makeSessionWithCapsules("ck_111111111111");
-    const service = new PortableCapsuleService({ cwd: tmpDir });
+    const service = makeService(tmpDir);
     const exported = service.createFromSession(session, {
       createdAt: "2026-06-19T00:00:00.000Z",
     });

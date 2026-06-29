@@ -9,7 +9,7 @@
  */
 
 import { For, Show } from "solid-js";
-import type { TuiThemeName } from "../../../../core/config/types";
+import type { TuiThemeName } from "../../../../application/ui/public";
 import { getTuiTheme } from "../lib/theme";
 import type { Notification } from "../model/notification-store";
 import { NotificationStore } from "../model/notification-store";

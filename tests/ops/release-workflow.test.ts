@@ -32,4 +32,17 @@ describe("Release workflow", () => {
     expect(workflow).toContain("gh release upload");
     expect(workflow).toContain("gh release create");
   });
+
+  test("generates release notes from the changelog script", () => {
+    const workflow = readReleaseWorkflow();
+
+    expect(workflow).toContain(
+      "ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}",
+    );
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("bun run docs:changelog:check");
+    expect(workflow).toContain(
+      'bun run scripts/generate-changelog.ts --release-notes "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"',
+    );
+  });
 });

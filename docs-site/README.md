@@ -54,3 +54,22 @@ Documentation is organized by SOBA Agent versions. Rendered app surfaces read th
 ## Content Source
 
 Content lives in `content/docs/` — maintained alongside the main codebase.
+
+## Changelog
+
+The changelog pages are generated from git tags and commit subjects. Run these commands from the repository root:
+
+```bash
+bun run docs:changelog
+bun run docs:changelog:check
+```
+
+Before creating a release tag, render the future version section into the release commit:
+
+```bash
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z --check
+```
+
+CI and the release workflow run the check variant. GitHub release notes are generated with
+`bun run scripts/generate-changelog.ts --release-notes "$RELEASE_TAG"`.

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { inspectFileTool } from "../../../src/core/tools/inspect-file";
-import { searchFilesTool } from "../../../src/core/tools/search-files";
-import type { ToolContext, ToolResult } from "../../../src/core/tools/types";
+import { inspectFileTool } from "../../../src/infrastructure/tools/local/inspect-file";
+import { searchFilesTool } from "../../../src/infrastructure/tools/local/search-files";
+import type { ToolContext, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("search_files tool", () => {
   test("returns bounded matches with file and line metadata", async () => {

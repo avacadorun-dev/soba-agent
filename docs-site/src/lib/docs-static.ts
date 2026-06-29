@@ -11,6 +11,7 @@ type DocsPage = {
 const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   en: [
     { slug: "", path: "index.en.mdx", title: "Documentation" },
+    { slug: "changelog", path: "changelog.en.mdx", title: "Changelog" },
     { slug: "cli-reference", path: "cli-reference.en.mdx", title: "CLI reference" },
     { slug: "configuration", path: "configuration.en.mdx", title: "Configuration" },
     { slug: "notifications", path: "notifications.en.mdx", title: "Sound notifications" },
@@ -25,6 +26,7 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   ru: [
     { slug: "", path: "index.ru.mdx", title: "Руководство пользователя SOBA" },
     { slug: "acp", path: "acp.ru.mdx", title: "ACP и Zed" },
+    { slug: "changelog", path: "changelog.ru.mdx", title: "Changelog" },
     { slug: "cli-reference", path: "cli-reference.ru.mdx", title: "CLI reference" },
     { slug: "compaction", path: "compaction.ru.mdx", title: "Compaction и Context Capsules" },
     { slug: "configuration", path: "configuration.ru.mdx", title: "Конфигурация" },
@@ -49,6 +51,7 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   ],
   zh: [
     { slug: "", path: "index.zh.mdx", title: "文档" },
+    { slug: "changelog", path: "changelog.zh.mdx", title: "Changelog" },
     { slug: "cli-reference", path: "cli-reference.zh.mdx", title: "CLI 参考" },
     { slug: "configuration", path: "configuration.zh.mdx", title: "配置" },
     { slug: "notifications", path: "notifications.zh.mdx", title: "声音通知" },

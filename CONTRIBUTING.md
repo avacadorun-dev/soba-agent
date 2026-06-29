@@ -23,6 +23,8 @@ Before release-level commits, also run:
 
 ```bash
 bun run build
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z --check
 ```
 
 If the hook fails, fix the reported issue and retry the commit. Do not add ESLint, Prettier, Husky, or npm-only hook tooling to bypass the gate.

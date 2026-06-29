@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { detectLocale, I18n, isLocale, resetI18n } from "../src/core/i18n/i18n";
-import { SUPPORTED_LOCALES } from "../src/core/i18n/types";
+import { detectLocale, I18n, isLocale, resetI18n, type TranslationLoader } from "../src/shared/i18n/i18n";
+import { type Locale, SUPPORTED_LOCALES } from "../src/shared/i18n/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,37 @@ function loadJsonKeys(path: string): string[] {
 
 function loadJson(path: string): Record<string, string> {
   return JSON.parse(readFileSync(path, "utf-8")) as Record<string, string>;
+}
+
+function createFilesystemTranslationLoader(localesDir: string): TranslationLoader {
+  return (locale) => {
+    try {
+      const raw = readFileSync(join(localesDir, `${locale}.json`), "utf-8");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, string>;
+      }
+    } catch {
+      /* fall through */
+    }
+    return {};
+  };
+}
+
+function createFilesystemI18n(locale: Locale, localesDir: string): I18n {
+  return new I18n(locale, {
+    loadTranslations: createFilesystemTranslationLoader(localesDir),
+    fallbackToBuiltin: false,
+  });
+}
+
+function currentLocaleEnvironment() {
+  return {
+    SOBA_LANG: process.env.SOBA_LANG,
+    LC_ALL: process.env.LC_ALL,
+    LC_MESSAGES: process.env.LC_MESSAGES,
+    LANG: process.env.LANG,
+  };
 }
 
 function placeholders(value: string): string[] {
@@ -59,42 +90,26 @@ afterEach(() => {
 
 describe("detectLocale()", () => {
   test("UC-9: SOBA_LANG env var has highest priority", () => {
-    process.env.SOBA_LANG = "ru";
-    expect(detectLocale()).toBe("ru");
-    delete process.env.SOBA_LANG;
+    expect(detectLocale({ SOBA_LANG: "ru" })).toBe("ru");
   });
 
   test("UC-9: LC_ALL parsed for language code", () => {
-    delete process.env.SOBA_LANG;
-    process.env.LC_ALL = "ru_RU.UTF-8";
-    expect(detectLocale()).toBe("ru");
-    delete process.env.LC_ALL;
+    expect(detectLocale({ LC_ALL: "ru_RU.UTF-8" })).toBe("ru");
   });
 
   test("UC-9: LC_MESSAGES parsed for language code", () => {
-    delete process.env.SOBA_LANG;
-    process.env.LC_MESSAGES = "zh_CN.UTF-8";
-    expect(detectLocale()).toBe("zh");
-    delete process.env.LC_MESSAGES;
+    expect(detectLocale({ LC_MESSAGES: "zh_CN.UTF-8" })).toBe("zh");
   });
 
   test("UC-9: LANG parsed for language code", () => {
-    delete process.env.SOBA_LANG;
-    process.env.LANG = "en_US.UTF-8";
-    expect(detectLocale()).toBe("en");
+    expect(detectLocale({ LANG: "en_US.UTF-8" })).toBe("en");
   });
 
   test("UC-9: fallback to en for unsupported locale", () => {
-    delete process.env.SOBA_LANG;
-    process.env.LANG = "fr_FR.UTF-8";
-    expect(detectLocale()).toBe("en");
+    expect(detectLocale({ LANG: "fr_FR.UTF-8" })).toBe("en");
   });
 
   test("UC-9: fallback to en when no env vars set", () => {
-    delete process.env.SOBA_LANG;
-    delete process.env.LC_ALL;
-    delete process.env.LC_MESSAGES;
-    delete process.env.LANG;
     expect(detectLocale()).toBe("en");
   });
 });
@@ -114,7 +129,7 @@ describe("isLocale()", () => {
 describe("I18n translation", () => {
   test("UC-9: переводы загружаются независимо от текущей рабочей директории", () => {
     const tempDir = createTempLocalesDir("cwd-independent");
-    const modulePath = join(import.meta.dir, "..", "src", "core", "i18n", "i18n.ts");
+    const modulePath = join(import.meta.dir, "..", "src", "shared", "i18n", "i18n.ts");
     const script = `import { I18n } from ${JSON.stringify(modulePath)}; console.log(new I18n("ru").t("cli.help.title"));`;
     const result = Bun.spawnSync(["bun", "-e", script], { cwd: tempDir });
 
@@ -127,44 +142,44 @@ describe("I18n translation", () => {
   });
 
   test("UC-9: простой ключ без переменных", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("repl.goodbye");
     expect(result).toBe("Goodbye!");
   });
 
   test("UC-9: ключ с одной переменной", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("tool.write.written", { path: "src/index.ts", size: 1024 });
     expect(result).toBe("File src/index.ts written (1024 bytes).");
   });
 
   test("UC-9: ключ с несколькими переменными", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("compact.complete", { before: 50000, after: 12000, id: "abc123" });
     expect(result).toBe("Context compacted: 50000 → 12000 tokens. Checkpoint: abc123");
   });
 
   test("UC-9: переменная отсутствует — оставляем {var} как есть", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("tool.write.written", { path: "x.ts" });
     expect(result).toBe("File x.ts written ({size} bytes).");
   });
 
   test("UC-9: нет переменных — возвращаем шаблон как есть", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("tool.write.written");
     expect(result).toBe("File {path} written ({size} bytes).");
   });
 
   test("UC-9: перевод на русском", () => {
-    const i18n = new I18n("ru", LOCALES_DIR);
+    const i18n = new I18n("ru");
     expect(i18n.getLocale()).toBe("ru");
     const result = i18n.t("repl.goodbye");
     expect(result).toBe("До встречи!");
   });
 
   test("UC-9: перевод на китайском", () => {
-    const i18n = new I18n("zh", LOCALES_DIR);
+    const i18n = new I18n("zh");
     expect(i18n.getLocale()).toBe("zh");
     const result = i18n.t("repl.goodbye");
     expect(result).toBe("再见！");
@@ -192,7 +207,7 @@ describe("I18n fallback", () => {
         }),
       );
 
-      const i18n = new I18n("ru", tempDir);
+      const i18n = createFilesystemI18n("ru", tempDir);
 
       expect(i18n.t("test.key")).toBe("Русское значение");
       expect(i18n.t("test.onlyEn")).toBe("Only in English");
@@ -206,7 +221,7 @@ describe("I18n fallback", () => {
   });
 
   test("UC-9: ключ отсутствует во всех языках → возвращаем сам ключ", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("this.key.does.not.exist.anywhere");
     expect(result).toBe("this.key.does.not.exist.anywhere");
   });
@@ -223,7 +238,7 @@ describe("I18n fallback", () => {
       );
       writeFileSync(join(tempDir, "ru.json"), JSON.stringify({}));
 
-      const i18n = new I18n("ru", tempDir);
+      const i18n = createFilesystemI18n("ru", tempDir);
       const result = i18n.t("test.interp", { name: "World" });
       expect(result).toBe("Hello World!");
     } finally {
@@ -240,7 +255,7 @@ describe("I18n fallback", () => {
 
 describe("I18n locale switching", () => {
   test("UC-9: переключение языка на лету", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
 
     expect(i18n.t("repl.goodbye")).toBe("Goodbye!");
 
@@ -257,7 +272,7 @@ describe("I18n locale switching", () => {
   });
 
   test("UC-9: setLocale на тот же язык — no-op", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     expect(i18n.getLocale()).toBe("en");
     i18n.setLocale("en");
     expect(i18n.getLocale()).toBe("en");
@@ -274,7 +289,7 @@ describe("I18n error handling", () => {
       writeFileSync(join(tempDir, "en.json"), JSON.stringify({ "test.key": "English" }));
       writeFileSync(join(tempDir, "ru.json"), "not valid {{{");
 
-      const i18n = new I18n("ru", tempDir);
+      const i18n = createFilesystemI18n("ru", tempDir);
       expect(i18n.t("test.key")).toBe("English");
     } finally {
       try {
@@ -292,7 +307,7 @@ describe("I18n error handling", () => {
       writeFileSync(join(tempDir, "en.json"), JSON.stringify({ "test.key": "English" }));
       writeFileSync(join(tempDir, "ru.json"), JSON.stringify(["not", "an", "object"]));
 
-      const i18n = new I18n("ru", tempDir);
+      const i18n = createFilesystemI18n("ru", tempDir);
       expect(i18n.t("test.key")).toBe("English");
     } finally {
       try {
@@ -304,7 +319,7 @@ describe("I18n error handling", () => {
   });
 
   test("несуществующая директория locale → fallback на ключ", () => {
-    const i18n = new I18n("ru", "/this/path/does/not/exist");
+    const i18n = createFilesystemI18n("ru", "/this/path/does/not/exist");
     expect(i18n.t("repl.goodbye")).toBe("repl.goodbye");
   });
 });
@@ -393,7 +408,7 @@ describe("Locale file consistency", () => {
 
 describe("I18n edge cases", () => {
   test("числовые значения в интерполяции", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("budget.usage", { used: 42500, total: 100000, percent: 42.5 });
     expect(result).toContain("42500");
     expect(result).toContain("100000");
@@ -401,13 +416,13 @@ describe("I18n edge cases", () => {
   });
 
   test("спецсимволы в значениях переменных", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("general.error", { message: 'file "test.ts" not found' });
     expect(result).toContain('file "test.ts" not found');
   });
 
   test("переменная содержит фигурные скобки — не ломает интерполяцию", () => {
-    const i18n = new I18n("en", LOCALES_DIR);
+    const i18n = new I18n("en");
     const result = i18n.t("general.error", { message: "unexpected {" });
     expect(result).toContain("unexpected {");
   });
@@ -419,7 +434,7 @@ describe("I18n edge cases", () => {
       writeFileSync(join(tempDir, "en.json"), JSON.stringify({ "test.reload": "version 1" }));
       writeFileSync(join(tempDir, "ru.json"), JSON.stringify({ "test.reload": "версия 1" }));
 
-      const i18n = new I18n("ru", tempDir);
+      const i18n = createFilesystemI18n("ru", tempDir);
       expect(i18n.t("test.reload")).toBe("версия 1");
 
       writeFileSync(join(tempDir, "ru.json"), JSON.stringify({ "test.reload": "версия 2" }));
@@ -442,14 +457,16 @@ describe("I18n edge cases", () => {
 describe("detectLocale integration", () => {
   test("SOBA_LANG=ru → detectLocale returns ru", () => {
     process.env.SOBA_LANG = "ru";
-    expect(detectLocale()).toBe("ru");
+    expect(detectLocale(currentLocaleEnvironment())).toBe("ru");
     delete process.env.SOBA_LANG;
   });
 
   test("SOBA_LANG=invalid → falls through to LANG", () => {
     process.env.SOBA_LANG = "de";
+    delete process.env.LC_ALL;
+    delete process.env.LC_MESSAGES;
     process.env.LANG = "zh_CN.UTF-8";
-    expect(detectLocale()).toBe("zh");
+    expect(detectLocale(currentLocaleEnvironment())).toBe("zh");
     delete process.env.SOBA_LANG;
     delete process.env.LANG;
   });
@@ -460,7 +477,7 @@ describe("detectLocale integration", () => {
     delete process.env.LC_MESSAGES;
     delete process.env.LANG;
     // isLocale requires exact match, "RU" !== "ru"
-    expect(detectLocale()).toBe("en");
+    expect(detectLocale(currentLocaleEnvironment())).toBe("en");
     delete process.env.SOBA_LANG;
   });
 });

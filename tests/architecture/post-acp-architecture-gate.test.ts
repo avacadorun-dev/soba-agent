@@ -12,18 +12,7 @@ interface BoundaryRule {
 const acpBoundaryRules: BoundaryRule[] = [
   {
     root: "src/adapters/acp",
-    forbiddenTargets: ["src/apps/", "src/core/", "src/ui/"],
-  },
-  {
-    root: "src/apps/acp",
-    forbiddenTargets: ["src/apps/cli/", "src/core/", "src/ui/"],
-  },
-  {
-    root: "src/core",
-    forbiddenTargets: [
-      "src/apps/acp",
-      "src/adapters/acp",
-    ],
+    forbiddenTargets: ["src/apps/", "src/engine/", "src/infrastructure/", "src/kernel/", "src/ui/"],
   },
   {
     root: "src/ui",
@@ -40,6 +29,7 @@ function readProjectFile(path: string): string {
 
 function walkTypescriptFiles(root: string): string[] {
   const absoluteRoot = join(projectRoot, root);
+  if (!existsSync(absoluteRoot)) return [];
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory)) {
@@ -107,13 +97,13 @@ describe("post-ACP architecture gate", () => {
       /src\/(core|cli|tui|widgets|apps)\//.test(entry),
     );
     expect(forbiddenImports).toEqual([]);
-    expect(adapterImports).toContain("src/adapters/acp/dispatcher.ts -> src/application/types");
+    expect(adapterImports).toContain("src/adapters/acp/dispatcher.ts -> src/application/acp/public");
     expect(adapterImports).toContain("src/adapters/acp/client-delegation.ts -> src/application/tool-delegation");
   });
 
   test("ACP config, mode and permission paths delegate to runtime/application ports", () => {
     const dispatcher = readProjectFile("src/adapters/acp/dispatcher.ts");
-    const server = readProjectFile("src/apps/acp/server.ts");
+    const server = readProjectFile("src/adapters/acp/server.ts");
     const runtimeTypes = readProjectFile("src/application/types.ts");
 
     expect(runtimeTypes).toContain("setSessionConfig(input: SetSessionConfigInput)");

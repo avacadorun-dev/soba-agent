@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EvidenceLedger } from "../../../src/core/loop/evidence-ledger";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
-import { VerificationController } from "../../../src/core/verification/verification-controller";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { EvidenceLedger } from "../../../src/engine/evidence/evidence-ledger";
+import type { ProjectCommandFileReader } from "../../../src/engine/verification/types";
+import { VerificationController } from "../../../src/engine/verification/verification-controller";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("VerificationController", () => {
   test("runs auto-verification and keeps attempted fingerprints across calls", async () => {
@@ -23,6 +24,7 @@ describe("VerificationController", () => {
         bashTool: makeBashTool(executed, true),
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
       });
       const second = await controller.runAutoVerification({
         cwd,
@@ -32,6 +34,7 @@ describe("VerificationController", () => {
         bashTool: makeBashTool(executed, true),
         toolContext: { cwd },
         trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
       });
 
       expect(first.didExecute).toBe(true);
@@ -122,4 +125,24 @@ async function withFixture(run: (cwd: string) => Promise<void>): Promise<void> {
 
 async function writePackageJson(cwd: string, packageJson: Record<string, unknown>): Promise<void> {
   await writeFile(join(cwd, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+function testProjectFiles(cwd: string): ProjectCommandFileReader {
+  return {
+    async readText(relativePath) {
+      try {
+        return await readFile(join(cwd, relativePath), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async exists(relativePath) {
+      try {
+        await stat(join(cwd, relativePath));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }

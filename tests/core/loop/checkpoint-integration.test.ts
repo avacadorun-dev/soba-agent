@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import type { ContextManager } from "../../../src/core/compaction/context-manager";
-import type { ContextSnapshot } from "../../../src/core/compaction/context-meter";
-import type { BackgroundScheduler } from "../../../src/core/compaction/scheduler";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { checkpointTool } from "../../../src/core/tools/checkpoint";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
+import type { ContextManager } from "../../../src/engine/compaction/context-manager";
+import type { ContextSnapshot } from "../../../src/engine/compaction/context-meter";
+import type { BackgroundScheduler } from "../../../src/engine/compaction/scheduler";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { checkpointTool } from "../../../src/infrastructure/tools/local/checkpoint";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
 describe("AgentLoop checkpoint integration", () => {
   test("successful checkpoint output creates ledger evidence and plan_pivot updates work plan state", async () => {

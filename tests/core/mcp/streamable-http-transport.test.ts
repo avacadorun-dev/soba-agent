@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { McpClient } from "../../../src/core/mcp/client";
-import { McpClientManager } from "../../../src/core/mcp/client-manager";
-import { MCP_SESSION_ID_HEADER } from "../../../src/core/mcp/http-session";
-import { JSON_RPC_VERSION } from "../../../src/core/mcp/json-rpc";
+import { McpClient } from "../../../src/infrastructure/mcp/client";
+import { McpClientManager } from "../../../src/infrastructure/mcp/client-manager";
+import { MCP_SESSION_ID_HEADER } from "../../../src/infrastructure/mcp/http-session";
+import { JSON_RPC_VERSION } from "../../../src/infrastructure/mcp/json-rpc";
 import {
   McpStreamableHttpTransport,
   STREAMABLE_HTTP_ACCEPT,
   STREAMABLE_HTTP_LISTEN_ACCEPT,
-} from "../../../src/core/mcp/streamable-http-transport";
-import type { McpTransportEvent } from "../../../src/core/mcp/transport";
-import type { McpServerConfig } from "../../../src/core/mcp/types";
+} from "../../../src/infrastructure/mcp/streamable-http-transport";
+import type { McpTransportEvent } from "../../../src/infrastructure/mcp/transport";
+import type { McpServerConfig } from "../../../src/infrastructure/mcp/types";
 
 describe("MCP Streamable HTTP transport JSON path", () => {
   test("POST request returns JSON-RPC response", async () => {

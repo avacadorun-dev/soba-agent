@@ -45,9 +45,8 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { I18n } from "../../core/i18n/i18n";
-import { ProviderRegistry } from "../../core/provider/registry";
-import type { ModelDefinition, ProviderDefinition } from "../../core/provider/types";
+import type { ModelDefinition, ProviderDefinition } from "../../application/cli/public";
+import type { I18n } from "../../shared/i18n/i18n";
 
 // ─── Public types ───
 
@@ -71,6 +70,17 @@ export interface ProviderCliResult {
   exitCode: 0 | 1 | 2;
   /** If a subcommand produced side effects (add/remove/use), this flag is true. */
   changed: boolean;
+}
+
+export interface ProviderCliRegistry {
+  getAllProviders(): ProviderDefinition[];
+  getActiveProvider(): ProviderDefinition;
+  getActiveModel(): ModelDefinition;
+  getProvider(id: string): ProviderDefinition | undefined;
+  addProvider(provider: ProviderDefinition): void;
+  removeProvider(id: string): boolean;
+  switchModel(providerId: string, modelId: string): unknown;
+  persistConfig(): Promise<void>;
 }
 
 export class ProviderCliError extends Error {
@@ -101,7 +111,7 @@ export class ProviderCliError extends Error {
 export async function runProviderCli(
   subcommand: string | undefined,
   options: ProviderCliOptions,
-  registry: ProviderRegistry,
+  registry: ProviderCliRegistry,
   i18n: I18n,
 ): Promise<ProviderCliResult> {
   const t = (key: string, vars?: Record<string, string | number>): string => i18n.t(key, vars);
@@ -144,7 +154,7 @@ export async function runProviderCli(
 
 // ─── Subcommand handlers ───
 
-function handleList(registry: ProviderRegistry, t: (k: string, v?: Record<string, string | number>) => string): ProviderCliResult {
+function handleList(registry: ProviderCliRegistry, t: (k: string, v?: Record<string, string | number>) => string): ProviderCliResult {
   const providers = registry.getAllProviders();
   const active = registry.getActiveProvider();
   const activeModel = registry.getActiveModel();
@@ -172,7 +182,7 @@ function handleList(registry: ProviderRegistry, t: (k: string, v?: Record<string
 
 function handleShow(
   options: ProviderCliOptions,
-  registry: ProviderRegistry,
+  registry: ProviderCliRegistry,
   t: (k: string, v?: Record<string, string | number>) => string,
 ): ProviderCliResult {
   const id = options.positional[0];
@@ -184,7 +194,7 @@ function handleShow(
 
 async function handleAdd(
   options: ProviderCliOptions,
-  registry: ProviderRegistry,
+  registry: ProviderCliRegistry,
   t: (k: string, v?: Record<string, string | number>) => string,
 ): Promise<ProviderCliResult> {
   // Resolve the id up front so we can reject duplicate-id errors before
@@ -253,7 +263,7 @@ async function handleAdd(
 
 async function handleRemove(
   options: ProviderCliOptions,
-  registry: ProviderRegistry,
+  registry: ProviderCliRegistry,
   t: (k: string, v?: Record<string, string | number>) => string,
 ): Promise<ProviderCliResult> {
   const id = options.positional[0];
@@ -289,7 +299,7 @@ async function handleRemove(
 
 async function handleUse(
   options: ProviderCliOptions,
-  registry: ProviderRegistry,
+  registry: ProviderCliRegistry,
   t: (k: string, v?: Record<string, string | number>) => string,
 ): Promise<ProviderCliResult> {
   const id = options.positional[0];
@@ -586,4 +596,3 @@ function assignFlagValue(
 }
 
 // ─── Default config path helper (exported for convenience) ───
-

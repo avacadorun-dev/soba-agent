@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SseParser } from "../../../src/core/mcp/sse-parser";
+import { SseParser } from "../../../src/infrastructure/mcp/sse-parser";
 
 describe("MCP SSE parser", () => {
   test("multi-line data parses as one event", () => {

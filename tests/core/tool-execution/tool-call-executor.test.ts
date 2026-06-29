@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { FunctionCallField } from "../../../src/core/client/types";
-import type { AgentEvent, ApprovalDecision } from "../../../src/core/loop/types";
-import { PermissionBroker } from "../../../src/core/permissions/permission-broker";
-import { ToolCallExecutor } from "../../../src/core/tool-execution/tool-call-executor";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition } from "../../../src/core/tools/types";
-import { TrustManager } from "../../../src/core/trust/trust-manager";
+import { TrustManager } from "../../../src/application/trust/trust-manager";
+import { PermissionBroker } from "../../../src/engine/permissions/permission-broker";
+import { ToolCallExecutor } from "../../../src/engine/tool-calls/tool-call-executor";
+import type { AgentEvent, ApprovalDecision } from "../../../src/engine/turn/types";
+import type { FunctionCallField } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition } from "../../../src/kernel/tools/types";
 
 function toolCall(name: string, args: string): FunctionCallField {
   return {

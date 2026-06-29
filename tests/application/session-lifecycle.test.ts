@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionLifecycleService } from "../../src/application/session-lifecycle";
-import { SessionManager } from "../../src/core/session/session-manager";
+import { PersistentSessionLifecycleService } from "../../src/infrastructure/persistence/sessions/session-lifecycle-service";
+import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
 
 let testHome: string;
 let projectRoot: string;
@@ -25,9 +25,9 @@ afterEach(() => {
   rmSync(projectRoot, { recursive: true, force: true });
 });
 
-describe("SessionLifecycleService", () => {
+describe("PersistentSessionLifecycleService", () => {
   test("creates, lists, loads, resumes, and deletes project sessions", () => {
-    const service = new SessionLifecycleService(projectRoot);
+    const service = new PersistentSessionLifecycleService(projectRoot);
     const created = service.createSession({ cwd: projectRoot });
     const session = SessionManager.openById(projectRoot, created.id);
     session.appendItem({

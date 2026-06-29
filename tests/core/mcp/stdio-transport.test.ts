@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { JSON_RPC_VERSION } from "../../../src/core/mcp/json-rpc";
-import { McpStdioTransport, McpStdioTransportError } from "../../../src/core/mcp/stdio-transport";
-import type { McpTransportEvent } from "../../../src/core/mcp/transport";
+import { JSON_RPC_VERSION } from "../../../src/infrastructure/mcp/json-rpc";
+import { McpStdioTransport, McpStdioTransportError } from "../../../src/infrastructure/mcp/stdio-transport";
+import type { McpTransportEvent } from "../../../src/infrastructure/mcp/transport";
 
 const ECHO_SERVER = String.raw`
 process.stdin.setEncoding("utf8");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { buildSystemPrompt, estimateSystemPromptTokens } from "../src/core/prompt/system-prompt";
+import { buildSystemPrompt, estimateSystemPromptTokens } from "../src/engine/prompt/system-prompt";
 
 const systemMarkdown = readFileSync(new URL("../SYSTEM.md", import.meta.url), "utf-8");
 

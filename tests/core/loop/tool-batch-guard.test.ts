@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { evaluateToolBatch } from "../../../src/core/loop/tool-batch-guard";
+import { evaluateToolBatch } from "../../../src/engine/tool-calls/tool-batch-guard";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
 
 describe("tool batch guard", () => {
   test("rejects mutation plus dependent verification", () => {

@@ -17,13 +17,16 @@ import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSystemPrompt } from "../../../src/core/prompt/system-prompt";
-import type { ActivatedSkillRef } from "../../../src/core/session/types-v2";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/core/skills/slash-handler";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import type { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/application/skills/slash-handler";
+import { buildSystemPrompt } from "../../../src/engine/prompt/system-prompt";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
+import type { ActivatedSkillRef } from "../../../src/kernel/transcript/types-v2";
 
 describe("Task B.2: Progressive disclosure и activation", () => {
   let tempDir: string;
@@ -69,17 +72,20 @@ Use this skill for testing purposes.
     writeFileSync(join(scriptDir, "helper.sh"), "#!/bin/bash\necho 'helper script'");
 
     // Initialize trust store and skill manager
-    trustStore = new ProjectTrustStore({ sobaDir });
+    trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: skillsDir,
       bundledSkillsPath: join(tempDir, "bundled"),
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
 
     const catalog = new SkillCatalog({ discovery });
-    skillManager = new SkillManager({ catalog, discovery, trustStore });
+    skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
     
     // Refresh catalog to discover skills
     skillManager.refresh();
@@ -240,7 +246,7 @@ Use this skill for testing purposes.
   describe("trust revoke stops injection", () => {
     it("прекращает injection после trust revoke", () => {
       // Trust project
-      const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const projectIdentity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       trustStore.approve(projectIdentity, "fingerprint");
 
       // Create project skill

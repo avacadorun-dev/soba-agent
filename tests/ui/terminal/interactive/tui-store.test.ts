@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SobaRuntime, UserTurnInput } from "../../../../src/application/types";
-import { I18n } from "../../../../src/core/i18n/i18n";
-import type { AgentLoop } from "../../../../src/core/loop/agent-loop";
-import type { AgentEvent } from "../../../../src/core/loop/types";
-import { ProjectTrustStore } from "../../../../src/core/skills/project-trust-store";
+import type { RuntimeAgentHandle, SobaRuntime, UserTurnInput } from "../../../../src/application/ui/public";
+import type { AgentEvent } from "../../../../src/engine/turn/types";
+import { createFilesystemProjectTrustStore } from "../../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { I18n } from "../../../../src/shared/i18n/i18n";
 import { readChangeStats } from "../../../../src/ui/terminal/interactive/lib/project-info";
 import { NotificationStore } from "../../../../src/ui/terminal/interactive/model/notification-store";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
@@ -31,7 +30,7 @@ function createStore(onExit: () => void = () => {}): TuiStore {
     abort: () => {},
     runShellCommand: async () => ({ content: [{ type: "text" as const, text: "ok" }], isError: false }),
     onEvent: () => () => {},
-  } as unknown as AgentLoop;
+  } as unknown as RuntimeAgentHandle;
   const options: InteractiveTUIOptions = {
     cwd: process.cwd(),
     tokenBudget: 10_000,
@@ -77,7 +76,7 @@ describe("OpenTUI Solid store", () => {
       abort: () => {},
       runShellCommand: async () => ({ content: [{ type: "text" as const, text: "ok" }], isError: false }),
       onEvent: () => () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const runtime = {
       runTurn: async (input: UserTurnInput) => {
         runtimeInput = input;
@@ -336,7 +335,7 @@ describe("OpenTUI Solid store", () => {
       getTrustManager: () => ({
         getPermissionMode: () => "ask" as const,
       }),
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 10_000,
@@ -417,7 +416,7 @@ describe("OpenTUI Solid store", () => {
         getTrustManager: () => ({
           getPermissionMode: () => "ask" as const,
         }),
-      } as unknown as AgentLoop;
+      } as unknown as RuntimeAgentHandle;
       const store = new TuiStore({
         cwd: process.cwd(),
         tokenBudget: 10_000,
@@ -500,7 +499,7 @@ describe("OpenTUI Solid store", () => {
         shellCalls.push({ command, silent });
         return { content: [{ type: "text" as const, text: "ok" }], isError: false };
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -541,7 +540,7 @@ describe("OpenTUI Solid store", () => {
         shellCalls.push({ command, silent });
         return { content: [{ type: "text" as const, text: "ok" }], isError: false };
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -588,7 +587,7 @@ describe("OpenTUI Solid store", () => {
         turns.push(input);
         if (input === "first") await firstTurn;
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -628,7 +627,7 @@ describe("OpenTUI Solid store", () => {
         turns.push(input);
         if (input === "first") await firstTurn;
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -734,7 +733,7 @@ describe("OpenTUI Solid store", () => {
       runTurn: async (input: string) => {
         turns.push(input);
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -761,7 +760,7 @@ describe("OpenTUI Solid store", () => {
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -792,7 +791,7 @@ describe("OpenTUI Solid store", () => {
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -837,7 +836,7 @@ describe("OpenTUI Solid store", () => {
 
   test("/lang обновляет chrome, но не переводит старые сообщения", async () => {
     const i18n = new I18n("en");
-    const agentLoop = { getModel: () => "test-model", runTurn: async () => {} } as unknown as AgentLoop;
+    const agentLoop = { getModel: () => "test-model", runTurn: async () => {} } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -877,7 +876,7 @@ describe("OpenTUI Solid store", () => {
       abort: () => {
         aborted = true;
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -919,7 +918,7 @@ describe("OpenTUI Solid store", () => {
       abort: () => {
         turnAborted = true;
       },
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: process.cwd(),
       tokenBudget: 0,
@@ -986,12 +985,12 @@ describe("Project trust status", () => {
   test("показывает UNTRUSTED когда проект не одобрен", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: tempDir,
       tokenBudget: 0,
@@ -1017,14 +1016,14 @@ describe("Project trust status", () => {
   test("показывает TRUSTED когда проект одобрен", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: tempDir,
       tokenBudget: 0,
@@ -1050,12 +1049,12 @@ describe("Project trust status", () => {
   test("обновляется при trust_changed событии (approve)", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: tempDir,
       tokenBudget: 0,
@@ -1066,7 +1065,7 @@ describe("Project trust status", () => {
       trustStore,
       executeCommand: async (_input, output) => {
         // Simulate /project-trust approve
-        const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+        const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
         trustStore.approve(identity, "test-fingerprint");
         output({ type: "trust_changed", trusted: true, timestamp: Date.now() });
         return { handled: true };
@@ -1089,14 +1088,14 @@ describe("Project trust status", () => {
   test("обновляется при trust_changed событии (revoke)", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd: tempDir,
       tokenBudget: 0,
@@ -1204,7 +1203,7 @@ describe("Sidebar reactivity", () => {
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd,
       tokenBudget: 10_000,
@@ -1249,7 +1248,7 @@ describe("Sidebar reactivity", () => {
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd,
       tokenBudget: 10_000,
@@ -1293,7 +1292,7 @@ describe("Sidebar reactivity", () => {
     const agentLoop = {
       getModel: () => "test-model",
       runTurn: async () => {},
-    } as unknown as AgentLoop;
+    } as unknown as RuntimeAgentHandle;
     const store = new TuiStore({
       cwd,
       tokenBudget: 10_000,

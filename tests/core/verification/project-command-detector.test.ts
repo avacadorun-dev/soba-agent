@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectProjectCommands } from "../../../src/core/verification/project-command-detector";
-import type { ProjectCommandSet } from "../../../src/core/verification/types";
+import { detectProjectCommands } from "../../../src/engine/verification/project-command-detector";
+import type { ProjectCommandFileReader, ProjectCommandSet } from "../../../src/engine/verification/types";
 
 describe("project command detector", () => {
   test("SOBA fixture returns Bun/Biome-first verification commands", async () => {
@@ -11,6 +11,7 @@ describe("project command detector", () => {
 
     const commands = await detectProjectCommands({
       cwd,
+      projectFiles: testProjectFiles(cwd),
       projectInstructions: ["SOBA Agent uses Bun, Biome, TypeScript, and bun test."],
       includeFullGate: true,
     });
@@ -31,7 +32,7 @@ describe("project command detector", () => {
         },
       });
 
-      const commands = await detectProjectCommands({ cwd });
+      const commands = await detectProjectCommands({ cwd, projectFiles: testProjectFiles(cwd) });
 
       expect(firstCommand(commands, "test")).toBe("bun test tests/parser.test.ts");
       expect(commands.lint).toEqual([]);
@@ -43,7 +44,7 @@ describe("project command detector", () => {
     await withFixture(async (cwd) => {
       await writePackageJson(cwd, {});
 
-      const commands = await detectProjectCommands({ cwd });
+      const commands = await detectProjectCommands({ cwd, projectFiles: testProjectFiles(cwd) });
 
       expect(commands.test).toEqual([]);
       expect(commands.lint).toEqual([]);
@@ -65,6 +66,7 @@ describe("project command detector", () => {
 
       const commands = await detectProjectCommands({
         cwd,
+        projectFiles: testProjectFiles(cwd),
         projectInstructions: ["SOBA Agent uses Biome. ESLint and Prettier are forbidden."],
       });
 
@@ -85,6 +87,7 @@ describe("project command detector", () => {
 
       const commands = await detectProjectCommands({
         cwd,
+        projectFiles: testProjectFiles(cwd),
         projectInstructions: ["Use `bun test tests/instructions.test.ts` and `bun run lint` for this project."],
       });
 
@@ -108,6 +111,26 @@ async function withFixture(run: (cwd: string) => Promise<void>): Promise<void> {
 async function writePackageJson(cwd: string, packageJson: Record<string, unknown>): Promise<void> {
   await mkdir(cwd, { recursive: true });
   await writeFile(join(cwd, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+function testProjectFiles(cwd: string): ProjectCommandFileReader {
+  return {
+    async readText(relativePath) {
+      try {
+        return await readFile(join(cwd, relativePath), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async exists(relativePath) {
+      try {
+        await stat(join(cwd, relativePath));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }
 
 function firstCommand(commands: ProjectCommandSet, kind: Exclude<keyof ProjectCommandSet, "skipped">): string | undefined {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   buildPortableCapsuleFromCheckpoint,
   PortableCapsuleQualityEvaluator,
-} from "../../../src/core/capsules";
+} from "../../../src/application/capsules";
 import {
   conversationExpectation,
   makeConversationCheckpoint,

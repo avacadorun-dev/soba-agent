@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSobaRuntime } from "../../src/application/runtime-factory";
-import type { ResponseResource, StreamingEvent } from "../../src/core/client/types";
-import { DEFAULT_COMPACTION_CONFIG } from "../../src/core/compaction/trigger-policy";
-import type { SobaConfig } from "../../src/core/config/types";
-import type { ProviderRegistryState } from "../../src/core/provider/types";
-import { SessionManager } from "../../src/core/session/session-manager";
+import type { SobaConfig } from "../../src/application/config/types";
+import type { ProviderRegistryState } from "../../src/application/providers/types";
+import { createSobaRuntime } from "../../src/composition/runtime/create-soba-runtime";
+import { DEFAULT_COMPACTION_CONFIG } from "../../src/engine/compaction/trigger-policy";
+import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
+import type { ResponseResource, StreamingEvent } from "../../src/kernel/model/openresponses-types";
 
 let testHome: string;
 let projectRoot: string;

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { TrustManager } from "../src/core/trust/trust-manager";
+import { TrustManager } from "../src/application/trust/trust-manager";
 
 describe("TrustManager", () => {
   test("read → safe", () => {

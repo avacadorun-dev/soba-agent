@@ -3,10 +3,10 @@ import {
   diagnoseFinishArguments,
   evaluateCompletion,
   parseFinishRequest,
-} from "../src/core/loop/completion-gate";
-import type { TaskKind, VerificationKind } from "../src/core/loop/verification-policy";
+} from "../src/engine/completion/completion-gate";
+import type { TaskKind, VerificationKind } from "../src/engine/verification/verification-policy";
 
-function makeToolCall(args: string): import("../src/core/client/types").FunctionCallField {
+function makeToolCall(args: string): import("../src/kernel/model/openresponses-types").FunctionCallField {
   return {
     type: "function_call",
     id: "fc_test_1",

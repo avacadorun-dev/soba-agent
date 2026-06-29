@@ -6,7 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeTool } from "../../src/core/tools/write";
+import { writeTool } from "../../src/infrastructure/tools/local/write";
 
 describe("write tool", () => {
   let tmpDir: string;

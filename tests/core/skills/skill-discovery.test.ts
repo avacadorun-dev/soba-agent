@@ -20,10 +20,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { computeSkillContentHash, validateSkill } from "../../../src/core/skills/validator";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 describe("Skill Discovery, Validation, and Catalog", () => {
   let tempDir: string;
@@ -163,7 +163,7 @@ description: Skill with symlink
   describe("Validator", () => {
     test("валидирует корректный skill", () => {
       const skillDir = createValidSkill(userSkillsDir, "test-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -173,7 +173,7 @@ description: Skill with symlink
 
     test("отклоняет skill без name", () => {
       const skillDir = createInvalidSkill(userSkillsDir, "invalid-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "MISSING_NAME")).toBe(true);
@@ -193,7 +193,7 @@ description: Invalid name format
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "INVALID_NAME_FORMAT")).toBe(true);
     });
@@ -212,14 +212,14 @@ description: Name does not match directory
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "NAME_DIRECTORY_MISMATCH")).toBe(true);
     });
 
     test("отклоняет skill с symlink", () => {
       const skillDir = createSkillWithSymlink(userSkillsDir, "symlink-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "SYMLINK_DETECTED")).toBe(true);
@@ -227,12 +227,12 @@ description: Name does not match directory
 
     test("вычисляет content hash", () => {
       const skillDir = createValidSkill(userSkillsDir, "hash-test");
-      const hash = computeSkillContentHash(skillDir);
+      const hash = computeSkillContentHashOnDisk(skillDir);
 
       expect(hash).toMatch(/^[a-f0-9]{64}$/);
 
       // Same content should produce same hash
-      const hash2 = computeSkillContentHash(skillDir);
+      const hash2 = computeSkillContentHashOnDisk(skillDir);
       expect(hash2).toBe(hash);
     });
 
@@ -252,7 +252,7 @@ metadata:
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(true);
       expect(result.warnings.some((w) => w.code === "SOBA_SPECIFIC_METADATA")).toBe(true);
     });
@@ -274,14 +274,14 @@ allowed-tools:
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(true);
       expect(result.warnings.some((w) => w.code === "ALLOWED_TOOLS_NOT_PRE_APPROVED")).toBe(true);
     });
 
     test("валидирует bundled skill с обязательными playbook секциями", () => {
       const skillDir = createBundledPlaybookSkill(bundledSkillsDir, "bundled-playbook");
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -307,7 +307,7 @@ Purpose exists.
 `,
       );
 
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((error) => error.code === "MISSING_BUNDLED_SKILL_SECTION")).toBe(true);
@@ -359,7 +359,7 @@ Anti-patterns exist.
 `,
       );
 
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((error) => error.code === "INVALID_SOBA_METADATA")).toBe(true);
@@ -370,8 +370,8 @@ Anti-patterns exist.
 
   describe("ProjectTrustStore", () => {
     test("сохраняет и загружает trust record", () => {
-      const store = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const store = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
       expect(store.isTrusted(identity)).toBe(false);
 
@@ -380,13 +380,13 @@ Anti-patterns exist.
       expect(store.isTrusted(identity)).toBe(true);
 
       // Reload and verify persistence
-      const store2 = new ProjectTrustStore({ sobaDir });
+      const store2 = createFilesystemProjectTrustStore({ sobaDir });
       expect(store2.isTrusted(identity)).toBe(true);
     });
 
     test("отзывает trust", () => {
-      const store = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const store = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
       store.approve(identity, "fp1");
       expect(store.isTrusted(identity)).toBe(true);
@@ -397,8 +397,8 @@ Anti-patterns exist.
     });
 
     test("обновляет fingerprint", () => {
-      const store = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const store = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
       store.approve(identity, "fp1");
       const updated = store.updateFingerprint(identity, "fp2");
@@ -409,17 +409,17 @@ Anti-patterns exist.
     });
 
     test("вычисляет canonical identity", () => {
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       expect(identity.canonicalRoot).toBeTruthy();
     });
 
     test("список trusted projects", () => {
-      const store = new ProjectTrustStore({ sobaDir });
-      const identity1 = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const store = createFilesystemProjectTrustStore({ sobaDir });
+      const identity1 = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
       const project2 = join(tempDir, "project2");
       mkdirSync(project2, { recursive: true });
-      const identity2 = ProjectTrustStore.computeProjectIdentity(project2);
+      const identity2 = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(project2);
 
       store.approve(identity1, "fp1");
       store.approve(identity2, "fp2");
@@ -433,11 +433,14 @@ Anti-patterns exist.
     test("обнаруживает skills в user directory", () => {
       createValidSkill(userSkillsDir, "user-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -449,12 +452,15 @@ Anti-patterns exist.
     test("обнаруживает bundled skills", () => {
       createBundledPlaybookSkill(bundledSkillsDir, "bundled-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -468,11 +474,14 @@ Anti-patterns exist.
       mkdirSync(projectSkillsDir, { recursive: true });
       createValidSkill(projectSkillsDir, "project-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -485,14 +494,17 @@ Anti-patterns exist.
       mkdirSync(projectSkillsDir, { recursive: true });
       createValidSkill(projectSkillsDir, "project-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       trustStore.approve(identity, "fp");
 
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -505,12 +517,15 @@ Anti-patterns exist.
       createBundledPlaybookSkill(bundledSkillsDir, "shared-skill", "Bundled version");
       createValidSkill(userSkillsDir, "shared-skill", "User version");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -524,14 +539,17 @@ Anti-patterns exist.
       mkdirSync(agentsSkillsDir, { recursive: true });
       createValidSkill(agentsSkillsDir, "cross-agent-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       trustStore.approve(identity, "fp");
 
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -542,11 +560,14 @@ Anti-patterns exist.
     test("добавляет invalid skills в catalog с ошибками", () => {
       createInvalidSkill(userSkillsDir, "invalid-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -558,11 +579,14 @@ Anti-patterns exist.
     test("вычисляет content hash для valid skills", () => {
       createValidSkill(userSkillsDir, "hash-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -574,12 +598,15 @@ Anti-patterns exist.
       createValidSkill(userSkillsDir, "fingerprint-skill");
       createValidSkill(bundledSkillsDir, "bundled-fp-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp1 = discovery.computeFingerprint(projectDir);
@@ -592,11 +619,14 @@ Anti-patterns exist.
     test("computeFingerprint меняется при изменении skill", () => {
       createValidSkill(userSkillsDir, "changing-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp1 = discovery.computeFingerprint(projectDir);
@@ -625,14 +655,17 @@ This skill has been modified.
       mkdirSync(projectSkillsDir, { recursive: true });
       createValidSkill(projectSkillsDir, "project-fp-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
-      const identity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+      const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       trustStore.approve(identity, "fp");
 
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp = discovery.computeFingerprint(projectDir);
@@ -644,11 +677,14 @@ This skill has been modified.
     test("обновляет catalog", () => {
       createValidSkill(userSkillsDir, "catalog-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -661,11 +697,14 @@ This skill has been modified.
     test("активирует skill", () => {
       createValidSkill(userSkillsDir, "activate-me");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -677,11 +716,14 @@ This skill has been modified.
     });
 
     test("отклоняет активацию несуществующего skill", () => {
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -695,11 +737,14 @@ This skill has been modified.
     test("отклоняет активацию disabled skill", () => {
       createInvalidSkill(userSkillsDir, "disabled-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -713,11 +758,14 @@ This skill has been modified.
     test("возвращает model-invocable skills", () => {
       createValidSkill(userSkillsDir, "invocable-skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -744,11 +792,14 @@ metadata:
 `,
       );
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -774,11 +825,14 @@ soba:
 `,
       );
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -791,11 +845,14 @@ soba:
     test("генерирует summary для system prompt", () => {
       createValidSkill(userSkillsDir, "summary-skill", "A helpful skill");
 
-      const trustStore = new ProjectTrustStore({ sobaDir });
+      const trustStore = createFilesystemProjectTrustStore({ sobaDir });
       const discovery = new SkillDiscovery({
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });

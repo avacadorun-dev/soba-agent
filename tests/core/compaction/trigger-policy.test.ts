@@ -10,12 +10,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { ContextSnapshot } from "../../../src/core/compaction/context-meter";
+import type { ContextSnapshot } from "../../../src/engine/compaction/context-meter";
 import {
   DEFAULT_COMPACTION_CONFIG,
   TriggerPolicy,
   validateCompactionConfig,
-} from "../../../src/core/compaction/trigger-policy";
+} from "../../../src/engine/compaction/trigger-policy";
 
 // ─── Helpers ───
 

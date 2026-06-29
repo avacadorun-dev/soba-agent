@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { MCP_DRAFT_PROTOCOL_VERSION, McpClient } from "../../../src/core/mcp/client";
-import { McpClientManager } from "../../../src/core/mcp/client-manager";
-import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage } from "../../../src/core/mcp/json-rpc";
+import { MCP_DRAFT_PROTOCOL_VERSION, McpClient } from "../../../src/infrastructure/mcp/client";
+import { McpClientManager } from "../../../src/infrastructure/mcp/client-manager";
+import { JSON_RPC_VERSION, type JsonRpcOutgoingMessage } from "../../../src/infrastructure/mcp/json-rpc";
 import {
   type McpTransport,
   type McpTransportDiagnostics,
   McpTransportError,
   type McpTransportEventHandler,
   throwIfTransportAborted,
-} from "../../../src/core/mcp/transport";
-import type { McpServerConfig } from "../../../src/core/mcp/types";
+} from "../../../src/infrastructure/mcp/transport";
+import type { McpServerConfig } from "../../../src/infrastructure/mcp/types";
 
 describe("MCP transport abstraction", () => {
   test("fake in-memory transport drives MCP client lifecycle", async () => {

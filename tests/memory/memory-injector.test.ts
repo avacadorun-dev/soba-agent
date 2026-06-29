@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildProjectMemorySection, type ProjectMemorySource } from "../../src/core/memory/memory-injector";
-import { ProjectMemory } from "../../src/core/memory/project-memory";
-import type { MemoryCapsuleInput } from "../../src/core/memory/types";
-import { buildSystemPrompt } from "../../src/core/prompt/system-prompt";
+import { buildProjectMemorySection, type ProjectMemorySource } from "../../src/engine/memory/memory-injector";
+import type { MemoryCapsuleInput } from "../../src/engine/memory/types";
+import { buildSystemPrompt } from "../../src/engine/prompt/system-prompt";
+import { ProjectMemory } from "../../src/infrastructure/persistence/memory/project-memory";
 
 describe("Memory Injector", () => {
   let projectRoot: string;

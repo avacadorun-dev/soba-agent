@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SkillCatalog } from "../../../src/core/skills/catalog";
-import { SkillDiscovery } from "../../../src/core/skills/discovery";
-import { ProjectTrustStore } from "../../../src/core/skills/project-trust-store";
-import { SkillManager } from "../../../src/core/skills/skill-manager";
-import { validateSkill } from "../../../src/core/skills/validator";
+import { SkillCatalog } from "../../../src/application/skills/catalog";
+import { SkillDiscovery } from "../../../src/application/skills/discovery";
+import type { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 const CORE_BUNDLED_SKILLS = [
   "bug-fix",
@@ -108,7 +110,7 @@ Stop when the requested result is complete.
     mkdirSync(projectDir, { recursive: true });
 
     // Initialize trust store
-    trustStore = new ProjectTrustStore({ sobaDir: tempDir });
+    trustStore = createFilesystemProjectTrustStore({ sobaDir: tempDir });
 
     // Initialize skill system
     const discovery = new SkillDiscovery({
@@ -116,10 +118,13 @@ Stop when the requested result is complete.
       userSkillsPath: userSkillsDir,
       projectPath: projectDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
 
     const catalog = new SkillCatalog({ discovery });
-    skillManager = new SkillManager({ catalog, discovery, trustStore });
+    skillManager = new SkillManager({ catalog, discovery, trustStore, readSkillContent: readSkillContentFromDisk });
   });
 
   afterEach(() => {
@@ -133,7 +138,7 @@ Stop when the requested result is complete.
 
       for (const skillName of skills) {
         const skillPath = join(repoBundledSkillsDir, skillName);
-        const result = validateSkill(skillPath, { scope: "bundled" });
+        const result = validateSkillOnDisk(skillPath, { scope: "bundled" });
 
         expect(result.valid).toBe(true);
         expect(result.errors).toHaveLength(0);
@@ -149,7 +154,7 @@ Stop when the requested result is complete.
 
       for (const skillName of skills) {
         const skillPath = join(repoBundledSkillsDir, skillName);
-        const result = validateSkill(skillPath, { scope: "bundled" });
+        const result = validateSkillOnDisk(skillPath, { scope: "bundled" });
 
         // Check required fields
         expect(result.frontmatter?.name).toBe(skillName);

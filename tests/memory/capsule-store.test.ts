@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CapsuleStore, CapsuleStoreError } from "../../src/core/memory/capsule-store";
-import type { CapsulePriority, CapsuleType, MemoryCapsuleInput, MemoryIndex } from "../../src/core/memory/types";
+import type { CapsulePriority, CapsuleType, MemoryCapsuleInput, MemoryIndex } from "../../src/engine/memory/types";
+import { CapsuleStore, CapsuleStoreError } from "../../src/infrastructure/persistence/memory/capsule-store";
 
 describe("CapsuleStore", () => {
   let projectRoot: string;

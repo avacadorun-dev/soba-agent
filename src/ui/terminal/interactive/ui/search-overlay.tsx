@@ -8,7 +8,7 @@
 
 import type { TextareaRenderable } from "@opentui/core";
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
-import type { TuiThemeName } from "../../../../core/config/types";
+import type { TuiThemeName } from "../../../../application/ui/public";
 import { getTuiTheme } from "../lib/theme";
 import { type SearchResult, searchMessages } from "../lib/search-engine";
 import type { TuiMessage } from "../model/types";

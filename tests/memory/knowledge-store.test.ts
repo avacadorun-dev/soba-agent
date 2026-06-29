@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { estimateMarkdownTokens, KnowledgeStore } from "../../src/core/memory/knowledge-store";
-import { KNOWLEDGE_KEYS, type KnowledgeKey } from "../../src/core/memory/types";
+import { KNOWLEDGE_KEYS, type KnowledgeKey } from "../../src/engine/memory/types";
+import { estimateMarkdownTokens, KnowledgeStore } from "../../src/infrastructure/persistence/memory/knowledge-store";
 
 describe("KnowledgeStore", () => {
   let projectRoot: string;

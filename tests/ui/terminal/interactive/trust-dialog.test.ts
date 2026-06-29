@@ -11,8 +11,8 @@
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { Accessor } from "solid-js";
-import type { AgentEvent, ApprovalDecision } from "../../../../src/core/loop/types";
-import { TrustManager } from "../../../../src/core/trust/trust-manager";
+import { TrustManager } from "../../../../src/application/trust/trust-manager";
+import type { AgentEvent, ApprovalDecision } from "../../../../src/engine/turn/types";
 import { type TrustDecision, TrustDialogManager } from "../../../../src/ui/terminal/interactive/lib/trust-dialog-manager";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

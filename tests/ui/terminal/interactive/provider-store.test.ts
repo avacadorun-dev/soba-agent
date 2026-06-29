@@ -2,9 +2,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { I18n } from "../../../../src/core/i18n/i18n";
-import { OpenResponsesClientProxy } from "../../../../src/core/provider/client-proxy";
-import { ProviderRegistry } from "../../../../src/core/provider/registry";
+import { OpenResponsesClientProxy } from "../../../../src/infrastructure/llm/providers/client-proxy";
+import { ProviderRegistry } from "../../../../src/infrastructure/llm/providers/registry";
+import { I18n } from "../../../../src/shared/i18n/i18n";
 import { ProviderStore } from "../../../../src/ui/terminal/interactive/model/provider-store";
 
 let configPath: string;

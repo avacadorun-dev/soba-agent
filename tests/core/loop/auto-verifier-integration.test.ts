@@ -1,13 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { OpenResponsesClient } from "../../../src/core/client/openresponses-client";
-import type { ResponseResource } from "../../../src/core/client/types";
-import { AgentLoop } from "../../../src/core/loop/agent-loop";
-import { SessionManager } from "../../../src/core/session/session-manager";
-import { ToolRegistry } from "../../../src/core/tools/tool-registry";
-import type { ToolDefinition, ToolResult } from "../../../src/core/tools/types";
+import { AgentLoop } from "../../../src/engine/turn/agent-loop";
+import type { ProjectCommandFileReader } from "../../../src/engine/verification/types";
+import type { OpenResponsesClient } from "../../../src/infrastructure/llm/openresponses/openresponses-client";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { ResponseResource } from "../../../src/kernel/model/openresponses-types";
+import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
+import type { ToolDefinition, ToolResult } from "../../../src/kernel/tools/types";
 
 describe("AgentLoop auto-verifier integration", () => {
   test("model cannot finish successfully before Auto-Verifier opportunity", async () => {
@@ -22,7 +23,22 @@ describe("AgentLoop auto-verifier integration", () => {
       tools.register(makeTool("edit", "edited"));
       tools.register(makeBashTool(executedCommands));
       const session = SessionManager.inMemory(cwd);
-      const loop = new AgentLoop(client, session, tools, cwd);
+      const loop = new AgentLoop(
+        client,
+        session,
+        tools,
+        cwd,
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        testProjectFiles(cwd),
+      );
 
       const result = await loop.runTurn("Fix bug in parser");
 
@@ -190,4 +206,24 @@ async function withFixture(run: (cwd: string) => Promise<void>): Promise<void> {
 
 async function writePackageJson(cwd: string, packageJson: Record<string, unknown>): Promise<void> {
   await writeFile(join(cwd, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+function testProjectFiles(cwd: string): ProjectCommandFileReader {
+  return {
+    async readText(relativePath) {
+      try {
+        return await readFile(join(cwd, relativePath), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async exists(relativePath) {
+      try {
+        await stat(join(cwd, relativePath));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }

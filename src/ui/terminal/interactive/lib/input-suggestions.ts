@@ -1,8 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { RUNTIME_COMMANDS } from "../../../../application/command-service";
-import type { I18n } from "../../../../core/i18n/i18n";
-import type { TranslationKey } from "../../../../core/i18n/types";
+import type { I18n, TranslationKey } from "../../../../application/ui/public";
+import { RUNTIME_COMMANDS } from "../../../../application/ui/public";
 
 export const VISIBLE_INPUT_SUGGESTIONS = 6;
 const MAX_FILE_SUGGESTIONS = 200;
