@@ -710,6 +710,7 @@ export class AgentLoop {
             allItems,
             errors,
             turn: turnIndex,
+            taskKind,
             iteration,
             autonomousFollowUps,
             maxAutonomousFollowUps: this.runtime.options.maxAutonomousFollowUps,

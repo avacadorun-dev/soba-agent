@@ -15,6 +15,7 @@ import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolResult } from "../../kernel/tools/types";
 import type { UserMessageItemParam } from "../../kernel/transcript/types";
 import type { AutoVerifierToolCall } from "../verification/auto-verifier";
+import type { TaskKind } from "../verification/verification-policy";
 import type { AgentTurnError, CheckpointWorkPlanState } from "./types";
 
 export const FINISH_TOOL_NAME = "finish";
@@ -250,6 +251,7 @@ export function getAutonomousFollowUpReason(
   activeErrors: AgentTurnError[],
   hasMutatedFiles: boolean,
   hasUsedTools: boolean,
+  taskKind: TaskKind = "unknown",
 ): string | null {
   if (assistantMessages.length === 0) {
     return null;
@@ -275,6 +277,10 @@ export function getAutonomousFollowUpReason(
       )
       .join("\n    ");
     return `Active tool errors must be resolved before finishing. Fix their cause with tools, or use status blocked only if a concrete external blocker makes recovery impossible:\n    ${errorList}`;
+  }
+
+  if (taskKind === "read_only_question" && !hasMutatedFiles) {
+    return null;
   }
 
   if (hasFinishIntentReasoning(assistantMessages)) {
