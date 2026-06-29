@@ -119,13 +119,12 @@ bun run check:boundaries
 ## Current Compromises
 
 - `src/engine/turn/agent-turn-runner.ts` remains the main turn coordinator. The
-  public `AgentLoop` shell is small, and begin/prompt/response/event helpers
-  are split out, but the runner still carries the tool/verification routing
-  pipeline.
+  public `AgentLoop` shell is small, and begin/prompt/response/tool/event
+  helpers are split out, but the runner still carries verification routing.
 - Some tests still live under `tests/core/**` for historical continuity. Those
   test locations do not imply a production `src/core` namespace.
 
 ## Next Refactors
 
-1. Continue splitting `engine/turn/agent-turn-runner.ts` tool and verification
-   routing into smaller turn-stage coordinators.
+1. Continue splitting `engine/turn/agent-turn-runner.ts` verification routing
+   into smaller turn-stage coordinators.

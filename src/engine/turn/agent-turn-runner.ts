@@ -7,7 +7,6 @@ import type {
 } from "../../kernel/transcript/types";
 import { CompletionController } from "../completion/completion-controller";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
-import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
 import { VerificationController } from "../verification/verification-controller";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
 import { beginAgentTurn } from "./agent-turn-begin";
@@ -16,22 +15,16 @@ import { handleAgentTurnResponseStage } from "./agent-turn-response-stage";
 import {
   buildDenialEphemeralMessages,
   createTurnStopEmitter,
-  emitToolResultAndEnd,
 } from "./agent-turn-runner-events";
+import { handleAgentTurnToolStage } from "./agent-turn-tool-stage";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
-import { scheduleCheckpointCompactionForTurn } from "./checkpoint-compaction-scheduler";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
-import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
-import { executeObservedToolBatch } from "./tool-batch-execution";
-import type { ToolExecutionObservationState } from "./tool-execution-observer";
-import { decideAfterToolIteration } from "./tool-iteration-decision";
 import { completeAgentTurn } from "./turn-completion";
 import {
   autoVerifierTimeoutSeconds,
-  checkpointEventToPlanState,
   FINISH_TOOL_NAME,
   wantsFullVerification,
 } from "./turn-helpers";
@@ -378,59 +371,10 @@ export async function runAgentTurn(
         break;
       }
       autonomousFollowUps = 0;
-      // Store the complete assistant tool-call group before any tool outputs.
-      // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
-      appendToolCallGroupToSession(readyToolCalls);
-      const batchDecision = evaluateToolBatch(readyToolCalls);
-      if (batchDecision.action === "reject") {
-        hasUsedTools = true;
-        const rejectedBatchResult = handleRejectedToolBatch({
-          batchDecision,
-          toolCalls: readyToolCalls,
-          session: session,
-          allItems,
-          errors,
-          successfulToolCallIds,
-          evidenceLedger,
-          loopGuard,
-          iteration,
-          emit: (event) => emit(event),
-          emitToolResultAndEnd: (toolCall, result, startedAt) =>
-            emitToolResultAndEnd(emit, toolCall, result, startedAt),
-          emitStopReason: (reason, detail) => {
-            emitStopReason(
-              turnIndex,
-            iteration,
-            reason,
-            detail,
-            hasUsedTools,
-            autonomousFollowUps,
-            );
-          },
-          narrate: (eventType, message, evidenceIds = []) => {
-            emitNarrationOnce(eventType, message, evidenceIds);
-          },
-        });
-        hasUsedTools = hasUsedTools || rejectedBatchResult.usedTools;
-        if (rejectedBatchResult.action === "break") {
-          break;
-        }
-        iteration++;
-        continue;
-      }
-      let fixUntilGreenFollowUp: string | null = null;
-      let fixUntilGreenStop: string | null = null;
-      const toolObservationState: ToolExecutionObservationState = {
-        needsVerification,
-        hasMutatedFiles,
-        mutationSucceededInCurrentBatch: false,
-        recoveryReflectionDraft,
-        fixUntilGreenFollowUp,
-        fixUntilGreenStop,
-      };
-      const toolBatchExecution = await executeObservedToolBatch({
+      const toolStage = await handleAgentTurnToolStage({
         toolCalls: readyToolCalls,
-        toolExecutor: runtime.toolExecutor,
+        appendToolCallGroupToSession,
+        runtime,
         signal: abortController.signal,
         session: session,
         allItems,
@@ -439,70 +383,45 @@ export async function runAgentTurn(
         verificationEvidenceCallIds,
         evidenceLedger,
         verificationController,
-        skillManager: runtime.skillManager,
-        projectMemory: runtime.projectMemory,
+        loopGuard,
         taskText: userText,
+        turnIndex,
         iteration,
-        state: toolObservationState,
+        systemPrompt,
+        needsVerification,
+        hasMutatedFiles,
+        recoveryReflectionDraft,
         recordDenial: (description) => {
           state.denialCount++;
           state.lastDeniedOperation = description;
         },
         emit: (event) => emit(event),
-        narrate: (eventType, message, evidenceIds = []) => {
-          emitNarrationOnce(eventType, message, evidenceIds);
-        },
-      });
-      hasUsedTools = hasUsedTools || toolBatchExecution.usedTools;
-      for (const checkpointEvent of toolBatchExecution.checkpointEvents) {
-        checkpointState = checkpointEventToPlanState(checkpointEvent);
-      }
-      needsVerification = toolBatchExecution.state.needsVerification;
-      hasMutatedFiles = toolBatchExecution.state.hasMutatedFiles;
-      recoveryReflectionDraft =
-        toolBatchExecution.state.recoveryReflectionDraft;
-      fixUntilGreenFollowUp = toolBatchExecution.state.fixUntilGreenFollowUp;
-      fixUntilGreenStop = toolBatchExecution.state.fixUntilGreenStop;
-      if (toolBatchExecution.checkpointEvents.length > 0) {
-        scheduleCheckpointCompactionForTurn({
-          checkpointEvents: toolBatchExecution.checkpointEvents,
-          contextController: runtime.contextController,
-          tools: runtime.tools,
-          turnIndex,
-          iteration,
-          systemPrompt,
-          debug: (data) => debug(data),
-        });
-      }
-      iteration++;
-      const afterToolDecision = decideAfterToolIteration({
-        fixUntilGreenStop,
-        fixUntilGreenFollowUp,
-        loopGuard,
-        iterationOutcomes: toolBatchExecution.iterationOutcomes,
-        session: session,
-        allItems,
-        errors,
-        iteration,
-        emit: (event) => emit(event),
-        emitStopReason: (reason, detail) => {
+        debug: (data) => debug(data),
+        emitStopReason: (stopIteration, stageHasUsedTools, reason, detail) => {
           emitStopReason(
             turnIndex,
-            iteration,
+            stopIteration,
             reason,
             detail,
-            hasUsedTools,
+            stageHasUsedTools,
             autonomousFollowUps,
           );
         },
-        narrate: (eventType, message, evidenceIds = []) => {
-          emitNarrationOnce(eventType, message, evidenceIds);
-        },
+        narrate: (eventType, message, evidenceIds = []) =>
+          emitNarrationOnce(eventType, message, evidenceIds),
       });
-      if (afterToolDecision === "break") {
+
+      hasUsedTools = hasUsedTools || toolStage.usedTools;
+      iteration = toolStage.iteration;
+      needsVerification = toolStage.needsVerification;
+      hasMutatedFiles = toolStage.hasMutatedFiles;
+      recoveryReflectionDraft = toolStage.recoveryReflectionDraft;
+      if (toolStage.checkpointState) checkpointState = toolStage.checkpointState;
+
+      if (toolStage.action === "break") {
         break;
       }
-      if (afterToolDecision === "continue") continue;
+      if (toolStage.action === "continue") continue;
     } while (true);
     return completeAgentTurn({
       currentResponse,
