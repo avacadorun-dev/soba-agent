@@ -7,8 +7,6 @@
  * - dangerous: requires confirmation (rm, sudo, curl, etc.)
  */
 
-import { resolve } from "node:path";
-
 // ─── Types ───
 
 export type TrustLevel = "safe" | "normal" | "dangerous";
@@ -168,8 +166,34 @@ function extractAbsolutePaths(command: string): string[] {
     .filter((path): path is string => Boolean(path));
 }
 
+function normalizePath(path: string): string {
+  const isAbsolute = path.startsWith("/");
+  const segments: string[] = [];
+
+  for (const segment of path.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      if (segments.length > 0 && segments[segments.length - 1] !== "..") {
+        segments.pop();
+      } else if (!isAbsolute) {
+        segments.push(segment);
+      }
+      continue;
+    }
+    segments.push(segment);
+  }
+
+  const normalized = segments.join("/");
+  if (isAbsolute) {
+    return normalized ? `/${normalized}` : "/";
+  }
+  return normalized || ".";
+}
+
 function isTempPath(path: string): boolean {
-  const normalized = resolve(path);
+  const normalized = normalizePath(path);
   return (
     normalized === "/tmp" ||
     normalized.startsWith("/tmp/") ||
@@ -195,7 +219,7 @@ export class TrustManager {
 
   constructor(options: TrustManagerOptions = {}) {
     if (options.repoRoot) {
-      this.repoRoot = resolve(options.repoRoot);
+      this.repoRoot = normalizePath(options.repoRoot);
     }
   }
 
@@ -310,7 +334,7 @@ export class TrustManager {
   }
 
   setRepoRoot(repoRoot: string): void {
-    this.repoRoot = resolve(repoRoot);
+    this.repoRoot = normalizePath(repoRoot);
   }
 
   approveForSession(kind: "tool" | "command", value: string): void {
@@ -364,7 +388,7 @@ export class TrustManager {
 
   private isPathInsideRepo(path: string): boolean {
     if (!this.repoRoot) return false;
-    const absolute = resolve(path);
+    const absolute = normalizePath(path);
     return absolute === this.repoRoot || absolute.startsWith(`${this.repoRoot}/`);
   }
 
