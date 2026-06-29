@@ -7,7 +7,7 @@ import type {
   MemoryCapsule,
   MemoryCapsuleInput,
   ProjectMemoryOptions,
-} from "../../../engine/memory/types";
+} from "../../../kernel/memory/types";
 import { CapsuleStore } from "./capsule-store";
 import { EntityGraphStore } from "./entity-graph";
 import { KnowledgeStore } from "./knowledge-store";

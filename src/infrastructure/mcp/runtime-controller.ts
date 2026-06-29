@@ -1,5 +1,5 @@
 import type { McpRuntimeControllerLike, McpRuntimeReloadResult, McpToolRegistrySyncResult } from "../../application/mcp-runtime-controller";
-import type { TrustManager } from "../../application/trust/trust-manager";
+import type { TrustController } from "../../kernel/permissions/trust";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { McpClientManager } from "./client-manager";
 import { McpClientManager as DefaultMcpClientManager } from "./client-manager";
@@ -15,7 +15,7 @@ interface McpRuntimeControllerOptions {
   projectRoot: string;
   secretStore: McpSecretStore;
   toolRegistry: ToolRegistry;
-  trustManager: TrustManager;
+  trustManager: TrustController;
   loadConfig?: (options: McpConfigLoadOptions) => Promise<McpConfig | null>;
   createManager?: (input: { servers: McpServerConfig[]; env: Record<string, string | undefined> }) => McpClientManager;
 }
@@ -25,7 +25,7 @@ export class McpRuntimeController implements McpRuntimeControllerLike {
   private readonly projectRoot: string;
   private readonly secretStore: McpSecretStore;
   private readonly toolRegistry: ToolRegistry;
-  private readonly trustManager: TrustManager;
+  private readonly trustManager: TrustController;
   private readonly loadConfig: (options: McpConfigLoadOptions) => Promise<McpConfig | null>;
   private readonly createManager: (input: { servers: McpServerConfig[]; env: Record<string, string | undefined> }) => McpClientManager;
 

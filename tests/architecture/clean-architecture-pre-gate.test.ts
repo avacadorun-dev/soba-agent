@@ -26,7 +26,15 @@ const layerRules: LayerRule[] = [
   },
   {
     root: "src/application",
-    forbiddenTargets: ["src/apps/", "src/adapters/", "src/ui/"],
+    forbiddenTargets: ["src/composition/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
+  },
+  {
+    root: "src/infrastructure",
+    forbiddenTargets: ["src/engine/", "src/composition/", "src/apps/", "src/ui/"],
+  },
+  {
+    root: "src/adapters",
+    forbiddenTargets: ["src/engine/", "src/infrastructure/", "src/composition/", "src/apps/", "src/ui/"],
   },
   {
     root: "src/ui",

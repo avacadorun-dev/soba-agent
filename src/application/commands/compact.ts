@@ -1,5 +1,4 @@
 import { compact } from "../../engine/compaction/compaction";
-import type { ContextManager } from "../../engine/compaction/context-manager";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import { estimateTokens } from "../../kernel/session/estimation";
 import type { RuntimeSessionHandle } from "../session-lifecycle";
@@ -18,13 +17,36 @@ export interface CompactCommandView {
   events: CompactCommandEvent[];
 }
 
+export interface CompactContextManagerPort {
+  manualCompact(
+    customInstructions: string | undefined,
+    systemPromptTokens: number,
+    toolSchemaTokens: number,
+    requestFingerprint: string,
+  ): Promise<CompactContextManagerOutcome>;
+}
+
+export interface CompactContextManagerOutcome {
+  compacted: boolean;
+  reason?: string;
+  checkpointId: string | null;
+  strategy: string | null;
+  quality: string | null;
+  metrics: {
+    effectiveTokensBefore: number;
+    estimatedTokensAfter: number;
+    reclaimedTokens: number;
+    savingsRatio: number;
+  } | null;
+}
+
 export async function executeCompactCommand(input: {
   args: string[];
   session: RuntimeSessionHandle;
   client: OpenResponsesClient;
   contextWindow: number;
   i18n: CompactCommandI18n;
-  contextManager?: ContextManager;
+  contextManager?: CompactContextManagerPort;
 }): Promise<CompactCommandView> {
   const { args, session, client, contextWindow, i18n, contextManager } = input;
   const instructions = args.join(" ") || undefined;
@@ -70,7 +92,7 @@ export async function executeCompactCommand(input: {
 }
 
 async function runManagedCompaction(input: {
-  contextManager: ContextManager;
+  contextManager: CompactContextManagerPort;
   instructions: string | undefined;
   tokens: number;
   session: RuntimeSessionHandle;
@@ -116,7 +138,7 @@ async function runManagedCompaction(input: {
   events.push({
     type: "info",
     timestamp: Date.now(),
-    message: i18n.t("command.compact.noOp", { reason: outcome.reason }),
+    message: i18n.t("command.compact.noOp", { reason: outcome.reason ?? "no reclaimable context" }),
   });
   events.push({
     type: "compaction_skipped",

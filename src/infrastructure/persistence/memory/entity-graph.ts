@@ -9,7 +9,7 @@ import {
   type EntityNeighbor,
   type EntityNeighborFilters,
   type EntityNode,
-} from "../../../engine/memory/types";
+} from "../../../kernel/memory/types";
 
 const GRAPH_STORE_VERSION = 1;
 

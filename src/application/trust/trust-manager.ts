@@ -7,25 +7,9 @@
  * - dangerous: requires confirmation (rm, sudo, curl, etc.)
  */
 
-// ─── Types ───
+import type { PermissionMode, TrustCheckResult, TrustController, TrustLevel, TrustRule } from "../../kernel/permissions/trust";
 
-export type TrustLevel = "safe" | "normal" | "dangerous";
-export type PermissionMode = "ask" | "repo" | "full";
-
-export interface TrustRule {
-  /** Pattern to match (tool name or command prefix) */
-  pattern: string;
-  /** Trust level for matches */
-  level: TrustLevel;
-}
-
-export interface TrustCheckResult {
-  level: TrustLevel;
-  /** Whether user confirmation is required */
-  needsConfirmation: boolean;
-  /** Human-readable reason for the classification */
-  reason: string;
-}
+export type { PermissionMode, TrustCheckResult, TrustController, TrustLevel, TrustRule } from "../../kernel/permissions/trust";
 
 export interface TrustManagerOptions {
   repoRoot?: string;
@@ -210,7 +194,7 @@ function usesDestructiveTempOperation(command: string): boolean {
 
 // ─── Trust Manager ───
 
-export class TrustManager {
+export class TrustManager implements TrustController {
   private toolRules: TrustRule[] = [...DEFAULT_TOOL_RULES];
   private commandRules: TrustRule[] = [...DEFAULT_COMMAND_RULES];
   private permissionMode: PermissionMode = "ask";

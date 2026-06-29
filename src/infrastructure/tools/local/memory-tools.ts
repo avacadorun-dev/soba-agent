@@ -9,7 +9,7 @@ import {
   type KnowledgeKey,
   type MemoryCapsule,
   type MemoryCapsuleInput,
-} from "../../../engine/memory/types";
+} from "../../../kernel/memory/types";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import { ProjectMemory } from "../../persistence/memory/project-memory";
 
