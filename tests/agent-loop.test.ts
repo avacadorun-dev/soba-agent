@@ -1823,6 +1823,60 @@ describe("AgentLoop", () => {
     }
   });
 
+  test("read-only question после inspection tools не требует finish и не supersede-ит ответ", async () => {
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("read", '{"path":"README.md"}'),
+      makeTextResponse("Это консольный агент кодинга.", "commentary"),
+      makeFinishResponse("Не должен вызываться"),
+    ];
+    let responseIndex = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("read"));
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: true,
+    });
+    const events: AgentEvent[] = [];
+    loop.onEvent((event) => events.push(event));
+
+    const result = await loop.runTurn("Что это за проект?");
+
+    expect(requests).toHaveLength(2);
+    expect(events.some((event) => event.type === "assistant_message_superseded")).toBe(false);
+    expect(result.errors).toHaveLength(0);
+    const syntheticNudges = session
+      .buildInput()
+      .items.filter(
+        (item) =>
+          item.type === "message" &&
+          item.role === "user" &&
+          item.content.some(
+            (content) =>
+              content.type === "input_text" &&
+              content.text.includes("Tool-assisted turns must end through finish"),
+          ),
+      );
+    expect(syntheticNudges).toHaveLength(0);
+    const assistant = result.items.at(-1);
+    expect(assistant?.type).toBe("message");
+    if (assistant?.type === "message" && assistant.role === "assistant") {
+      expect(
+        assistant.content[0]?.type === "output_text" &&
+          assistant.content[0].text,
+      ).toBe("Это консольный агент кодинга.");
+    }
+  });
+
   test("после инструментов без изменения файлов принимает повторяющийся commentary как финальный ответ", async () => {
     const requests: CreateResponseParams[] = [];
     const responses = [
