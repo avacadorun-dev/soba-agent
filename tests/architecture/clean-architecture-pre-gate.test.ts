@@ -172,12 +172,16 @@ describe("clean architecture pre-gate", () => {
 
   test("legacy AgentLoop remains a transition shell over extracted services", () => {
     const source = readProjectFile("src/engine/turn/agent-loop.ts");
+    const turnRunnerSource = readProjectFile("src/engine/turn/agent-turn-runner.ts");
     const runtimeSource = readProjectFile("src/engine/turn/agent-loop-runtime.ts");
-    const requiredControllerSignals = [
+    const requiredShellSignals = [
+      "./agent-turn-runner",
+      "return runAgentTurn",
+    ];
+    const requiredTurnRunnerSignals = [
       "../model-turn/model-turn-runner",
       "../completion/completion-controller",
       "../verification/verification-controller",
-      "./agent-loop-runtime",
       "./model-turn-execution",
       "new CompletionController",
       "new VerificationController",
@@ -207,16 +211,21 @@ describe("clean architecture pre-gate", () => {
       "../../infrastructure/tools/local/write",
     ];
 
-    const missingSignals = requiredControllerSignals.filter((signal) => !source.includes(signal));
     const missingRuntimeSignals = requiredRuntimeSignals.filter((signal) => !runtimeSource.includes(signal));
     const ownershipLeaks = [
       ...importSpecifiers(source),
+      ...importSpecifiers(turnRunnerSource),
       ...importSpecifiers(runtimeSource),
     ].filter((specifier) => forbiddenOwnershipImports.includes(specifier));
 
-    expect(missingSignals).toEqual([]);
+    const missingShellSignals = requiredShellSignals.filter((signal) => !source.includes(signal));
+    const missingTurnRunnerSignals = requiredTurnRunnerSignals.filter((signal) => !turnRunnerSource.includes(signal));
+
+    expect(missingShellSignals).toEqual([]);
+    expect(missingTurnRunnerSignals).toEqual([]);
     expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
+    expect(source.split("\n").length).toBeLessThanOrEqual(300);
     expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
     expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });
