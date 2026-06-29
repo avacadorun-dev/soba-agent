@@ -33,17 +33,13 @@ export function decideAfterToolIteration(
   input: ToolIterationDecisionInput,
 ): ToolIterationDecision {
   if (input.fixUntilGreenStop) {
+    const message =
+      `${input.fixUntilGreenStop}\n` +
+      "Switch strategy and continue with tools if you can still make progress. " +
+      "If the remaining issue is a concrete blocker, call finish with status blocked and explain the blocker.";
     input.narrate("blocked", input.fixUntilGreenStop);
-    input.errors.push(
-      createTurnError("timeout", input.fixUntilGreenStop, input.iteration),
-    );
-    input.emit({
-      type: "turn_error",
-      timestamp: Date.now(),
-      error: input.fixUntilGreenStop,
-    });
-    input.emitStopReason("loop-guard", input.fixUntilGreenStop);
-    return "break";
+    appendRecoveryItem(input, message);
+    return "continue";
   }
 
   if (input.fixUntilGreenFollowUp) {

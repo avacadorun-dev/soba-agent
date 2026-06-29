@@ -4,7 +4,6 @@ import type { TrustController } from "../permissions/trust-controller";
 import { detectProjectCommands } from "./project-command-detector";
 import type { ProjectCommand, ProjectCommandFileReader, ProjectCommandKind, SkippedProjectCommand } from "./types";
 import type { TaskKind, VerificationKind } from "./verification-policy";
-import { verificationKindFromCommand } from "./verification-policy";
 
 export interface AutoVerifierToolCall {
   callId: string;
@@ -108,7 +107,7 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
       options.ledger.recordVerificationCommandSkipped({
         command: command.command,
         reason,
-        verificationKind: verificationKindForCommand(command.command),
+        verificationKind: verificationKindForCommandKind(command.kind),
       });
       continue;
     }
@@ -120,7 +119,7 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
       options.ledger.recordVerificationCommandSkipped({
         command: command.command,
         reason,
-        verificationKind: verificationKindForCommand(command.command),
+        verificationKind: verificationKindForCommandKind(command.kind),
       });
       continue;
     }
@@ -133,7 +132,7 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
       options.ledger.recordVerificationCommandSkipped({
         command: command.command,
         reason,
-        verificationKind: verificationKindForCommand(command.command),
+        verificationKind: verificationKindForCommandKind(command.kind),
       });
       continue;
     }
@@ -143,7 +142,7 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
     options.ledger.recordVerificationCommandSelected({
       command: command.command,
       reason: command.reason,
-      verificationKind: verificationKindForCommand(command.command),
+      verificationKind: verificationKindForCommandKind(command.kind),
     });
 
     const execution = await executeVerificationCommand(options, command, kind);
@@ -199,6 +198,7 @@ async function executeVerificationCommand(
     isError: result.isError,
     output: result.content.map((content) => content.text).join("\n"),
     iteration: options.iteration ?? 0,
+    verificationKind: verificationKindForCommandKind(kind),
   });
 
   return { call, result, durationMs };
@@ -211,10 +211,6 @@ function autoVerifierArgs(command: string, timeoutSeconds: number | undefined): 
 
 function verificationFingerprint(summary: EvidenceLedgerSummary, command: string): string {
   return `${summary.unverifiedMutationIds.join(",") || "none"}::${command}`;
-}
-
-function verificationKindForCommand(command: string): VerificationKind {
-  return verificationKindFromCommand(command) ?? "run";
 }
 
 function verificationKindForCommandKind(kind: ProjectCommandKind): VerificationKind {

@@ -206,6 +206,20 @@ describe("parseFinishRequest", () => {
     expect(req!.criteria).toHaveLength(1);
   });
 
+  test("парсит legacy completed finish без criteria с fallback-критерием из summary", () => {
+    const req = parseFinishRequest(
+      makeToolCall(
+        JSON.stringify({
+          summary: "Проверки прошли, задача завершена.",
+          status: "completed",
+        }),
+      ),
+    );
+
+    expect(req).not.toBeNull();
+    expect(req!.criteria).toEqual([{ criterion: "Проверки прошли, задача завершена." }]);
+  });
+
   test("возвращает null для невалидного JSON", () => {
     expect(parseFinishRequest(makeToolCall("not json"))).toBeNull();
   });

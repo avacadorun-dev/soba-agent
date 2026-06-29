@@ -74,6 +74,27 @@ describe("CompletionController", () => {
     }
   });
 
+  test("accepts legacy completed finish without criteria after gate checks pass", () => {
+    const controller = new CompletionController();
+
+    const result = controller.evaluateFinishCall(
+      finishCall({
+        summary: "Tests passed and the requested work is complete.",
+        status: "completed",
+      }),
+      completionState({
+        hasUsedTools: true,
+        successfulToolCallIds: new Set(["verify_1"]),
+      }),
+    );
+
+    expect(result.kind).toBe("accepted");
+    if (result.kind !== "accepted") throw new Error("Expected accepted finish");
+    expect(result.request.criteria).toEqual([
+      { criterion: "Tests passed and the requested work is complete." },
+    ]);
+  });
+
   test("diagnoses invalid finish arguments and tracks rejection limit", () => {
     const controller = new CompletionController({ maxFinishRejections: 2 });
     const result = controller.evaluateFinishCall(finishCall("{bad json"), completionState());

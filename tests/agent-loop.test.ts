@@ -154,6 +154,13 @@ function makeBlockedFinishResponse(summary: string): ResponseResource {
   );
 }
 
+function makeLegacyFinishResponseWithoutCriteria(
+  summary: string,
+  status: "completed" | "completed_with_unverified_changes" = "completed",
+): ResponseResource {
+  return makeToolCallResponse("finish", JSON.stringify({ summary, status }));
+}
+
 function makeToolCallResponse(
   toolName: string,
   args: string,
@@ -1789,6 +1796,121 @@ describe("AgentLoop", () => {
         .getDebugEntries()
         .filter((entry) => entry.data.event === "loop/finish-rejected"),
     ).toHaveLength(3);
+  });
+
+  test("legacy finish без criteria после успешных gates завершается без loop-guard ошибки", async () => {
+    const responses = [
+      makeToolCallResponse("bash", '{"input":"test"}', "verify_1"),
+      makeLegacyFinishResponseWithoutCriteria(
+        "Verification passed and the requested work is complete.",
+      ),
+      makeToolCallResponse("bash", '{"input":"must not run"}', "unexpected"),
+    ];
+    const tools = new ToolRegistry();
+    const execute = mock(async () => ({
+      content: [{ type: "text" as const, text: "ok" }],
+      isError: false,
+    }));
+    tools.register(makeDummyTool("bash", execute));
+    const session = SessionManager.inMemory("/test");
+    const loop = new AgentLoop(makeClient(responses), session, tools, "/test", {
+      debug: true,
+    });
+
+    const result = await loop.runTurn("Проверь результат");
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(result.activeErrors).toHaveLength(0);
+    expect(result.errors).toHaveLength(0);
+    expect(
+      session
+        .getDebugEntries()
+        .some((entry) => entry.data.event === "loop/finish-rejected"),
+    ).toBe(false);
+    expect(
+      session
+        .getDebugEntries()
+        .some((entry) => entry.data.event === "loop/explicit-finish"),
+    ).toBe(true);
+    const finalMessage = result.items.at(-1);
+    expect(finalMessage?.type).toBe("message");
+    if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
+      const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
+      expect(text).toContain("Verification passed");
+      expect(text).toContain("**Evidence**");
+      expect(text).toContain("Status: verified");
+    }
+  });
+
+  test("Fix-Until-Green stop возвращает управление модели для blocked finish без turn_error", async () => {
+    const events: AgentEvent[] = [];
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("bash", '{"input":"bun test"}', "verify_1"),
+      makeToolCallResponse("bash", '{"input":"bun test"}', "verify_2"),
+      makeToolCallResponse("bash", '{"input":"bun test"}', "verify_3"),
+      makeToolCallResponse("bash", '{"input":"bun test"}', "verify_4"),
+      makeBlockedFinishResponse("Blocked: verification still fails after bounded recovery attempts."),
+    ];
+    let responseIndex = 0;
+    let verificationAttempts = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const tools = new ToolRegistry();
+    tools.register(
+      makeDummyTool("bash", async () => {
+        verificationAttempts++;
+        return {
+          content: [{ type: "text", text: `(fail) still red ${verificationAttempts}` }],
+          isError: true,
+        };
+      }),
+    );
+    const session = SessionManager.inMemory("/test");
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      debug: true,
+      emitEvents: true,
+      onEvent: (event) => events.push(event),
+    });
+
+    const result = await loop.runTurn("Почини тесты");
+
+    expect(requests).toHaveLength(5);
+    expect(events.some((event) => event.type === "turn_error")).toBe(false);
+    expect(
+      session
+        .getDebugEntries()
+        .some((entry) => entry.data.event === "loop/explicit-finish"),
+    ).toBe(true);
+    const recoveryInput = requests[4]?.input;
+    expect(Array.isArray(recoveryInput)).toBe(true);
+    if (Array.isArray(recoveryInput)) {
+      const lastItem = recoveryInput.at(-1);
+      expect(lastItem?.type).toBe("message");
+      if (lastItem?.type === "message" && lastItem.role === "user") {
+        const text = lastItem.content
+          .filter((content) => content.type === "input_text")
+          .map((content) => content.text)
+          .join("");
+        expect(text).toContain("Fix-Until-Green stopped after 3 recovery iterations");
+        expect(text).toContain("call finish with status blocked");
+      }
+    }
+    const finalMessage = result.items.at(-1);
+    expect(finalMessage?.type).toBe("message");
+    if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
+      const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
+      expect(text).toContain("Blocked:");
+      expect(text).toContain("**Evidence**");
+      expect(text).toContain("Status: blocked");
+    }
   });
 
   test("принимает текстовый ответ без инструментов как финальный, без требования finish", async () => {

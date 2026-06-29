@@ -168,9 +168,9 @@ export function verificationKindFromCommand(command: string): VerificationKind |
   const normalized = normalizeWhitespace(command).toLowerCase();
   if (isNonVerificationProbeCommand(normalized)) return null;
   if (/\bgit\s+(diff|show|status)\b/.test(normalized)) return "diff_inspection";
-  if (/\b(tsc|typecheck)\b/.test(normalized)) return "typecheck";
-  if (/\b(biome|lint)\b/.test(normalized)) return "lint";
-  if (/\b(test|spec)\b/.test(normalized)) return "test";
+  if (/\b(tsc|typecheck|pyright|mypy)\b/.test(normalized)) return "typecheck";
+  if (/\b(biome|lint)\b/.test(normalized) || /\bruff\s+(check|format\s+--check)\b/.test(normalized)) return "lint";
+  if (isTestCommand(normalized)) return "test";
   if (/\bbuild\b/.test(normalized)) return "build";
   if (/\b(run|start|dev)\b/.test(normalized)) return "run";
   return null;
@@ -181,10 +181,32 @@ export function isNonVerificationProbeCommand(command: string): boolean {
   if (normalized.length === 0) return true;
   if (isRoutineInspectionShellCommand(normalized)) return true;
   if (hasHeadTailPipeline(normalized)) return true;
-  if (/(?:^|\s)(?:--help|--version|-h|-v)(?:\s|$)/.test(normalized)) return true;
+  if (/(?:^|\s)(?:--help|--version|-h)(?:\s|$)/.test(normalized)) return true;
+  if (/(?:^|\s)-v(?:\s|$)/.test(normalized) && !looksLikeVerificationExecution(normalized)) return true;
   if (/(?:^|[;&|]\s*)(?:which|command\s+-v|type|man)\s+/.test(normalized)) return true;
   if (/(?:^|[;&|]\s*)[^\s;&|]+\s+help(?:\s|$)/.test(normalized)) return true;
   return false;
+}
+
+function looksLikeVerificationExecution(command: string): boolean {
+  return (
+    /\b(tsc|typecheck|pyright|mypy)\b/.test(command) ||
+    /\b(biome|lint)\b/.test(command) ||
+    /\bruff\s+(check|format\s+--check)\b/.test(command) ||
+    isTestCommand(command) ||
+    /\bbuild\b/.test(command)
+  );
+}
+
+function isTestCommand(command: string): boolean {
+  return (
+    /\b(test|spec)\b/.test(command) ||
+    /\b(pytest|unittest|nosetests?|vitest|jest|mocha|ava)\b/.test(command) ||
+    /\bgo\s+test\b/.test(command) ||
+    /\bcargo\s+test\b/.test(command) ||
+    /\bplaywright\s+test\b/.test(command) ||
+    /\bcypress\s+run\b/.test(command)
+  );
 }
 
 function isRoutineInspectionShellCommand(command: string): boolean {

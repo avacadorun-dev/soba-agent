@@ -113,9 +113,8 @@ export function parseFinishRequest(toolCall: FunctionCallField): FinishRequest |
       return null;
     }
 
-    // criteria is required for successful statuses, optional for "blocked"
     if (args.status === "completed" || args.status === "completed_with_unverified_changes") {
-      const criteria = readCriteria(args.criteria);
+      const criteria = readSuccessfulCriteria(args.criteria, args.summary);
       if (!criteria) return null;
       return {
         summary: args.summary,
@@ -355,6 +354,23 @@ function readCriteria(value: unknown): FinishCriterion[] | null {
     criteria.push({ criterion: record.criterion, evidenceIds: readStringArray(record.evidenceIds) });
   }
   return criteria;
+}
+
+function readSuccessfulCriteria(value: unknown, summary: string): FinishCriterion[] | null {
+  const criteria = readCriteria(value);
+  if (criteria) return criteria;
+  if (value !== undefined && value !== null) return null;
+  return [{ criterion: criterionFromSummary(summary) }];
+}
+
+function criterionFromSummary(summary: string): string {
+  const firstUsefulLine = summary
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  const text = firstUsefulLine ?? summary.trim();
+  if (text.length <= 220) return text;
+  return `${text.slice(0, 217).trimEnd()}...`;
 }
 
 function isStringArray(value: unknown): value is string[] {

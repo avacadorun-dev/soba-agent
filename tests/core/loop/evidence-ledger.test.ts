@@ -108,6 +108,39 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationEvidenceCallIds).toEqual(new Set(["test_pass"]));
   });
 
+  test("explicit verification kind metadata verifies arbitrary command text", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "write_1",
+      toolName: "write",
+      arguments: JSON.stringify({ path: "src/parser.ts" }),
+      isError: false,
+      output: "wrote",
+      iteration: 1,
+    });
+
+    const verification = ledger.recordToolOutcome({
+      toolCallId: "custom_ci_pass",
+      toolName: "bash",
+      arguments: recordArgs("custom-ci --users-suite"),
+      isError: false,
+      output: "ok",
+      iteration: 2,
+      verificationKind: "test",
+    });
+
+    const summary = ledger.getSummary();
+    expect(verification).toMatchObject({
+      kind: "verification",
+      status: "success",
+      command: "custom-ci --users-suite",
+      verificationKind: "test",
+      mutationIds: [mutation.id],
+    });
+    expect(summary.needsVerification).toBe(false);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set(["custom_ci_pass"]));
+  });
+
   test("failed verification remains unresolved until same kind passes later", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({
@@ -142,6 +175,61 @@ describe("EvidenceLedger", () => {
     });
 
     expect(ledger.getSummary().unresolvedVerificationFailureIds).toEqual([]);
+  });
+
+  test("pytest -v verification resolves earlier pytest failure and survives memory writes", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_1",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "app/main.py" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+    const failed = ledger.recordToolOutcome({
+      toolCallId: "pytest_fail",
+      toolName: "bash",
+      arguments: recordArgs("uv run pytest -v 2>&1"),
+      isError: true,
+      output: "FAILED app/tests/test_users.py::test_create_user",
+      iteration: 2,
+    });
+
+    expect(failed).toMatchObject({ kind: "diagnostic", status: "active" });
+    expect(ledger.getSummary().unresolvedVerificationFailureIds).toHaveLength(1);
+
+    const passed = ledger.recordToolOutcome({
+      toolCallId: "pytest_pass",
+      toolName: "bash",
+      arguments: recordArgs("uv run pytest -v 2>&1"),
+      isError: false,
+      output: "11 passed in 0.16s",
+      iteration: 3,
+    });
+    ledger.recordToolOutcome({
+      toolCallId: "memory_read_1",
+      toolName: "read_project_memory",
+      arguments: JSON.stringify({ kind: "capsules" }),
+      isError: false,
+      output: "read memory capsules",
+      iteration: 4,
+    });
+    ledger.recordToolOutcome({
+      toolCallId: "memory_write_1",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule" }),
+      isError: false,
+      output: "stored memory capsule",
+      iteration: 5,
+    });
+
+    const summary = ledger.getSummary();
+    expect(passed).toMatchObject({ kind: "verification", status: "success", verificationKind: "test" });
+    expect(summary.needsVerification).toBe(false);
+    expect(summary.unverifiedMutationIds).toEqual([]);
+    expect(summary.unresolvedVerificationFailureIds).toEqual([]);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set(["pytest_pass"]));
   });
 
   test("successful probe commands do not verify previous mutations", () => {

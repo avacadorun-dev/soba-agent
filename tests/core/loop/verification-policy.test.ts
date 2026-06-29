@@ -40,7 +40,15 @@ describe("verification policy", () => {
 
   test("command classifier maps Bun/Biome project commands to verification kinds", () => {
     expect(verificationKindFromCommand("bun test tests/parser.test.ts")).toBe("test");
+    expect(verificationKindFromCommand("uv run pytest -v 2>&1")).toBe("test");
+    expect(
+      verificationKindFromCommand(
+        "cd /Users/avacado/Projects/ai-projects/tests-soba/fastapi-users && uv run pytest -v 2>&1",
+      ),
+    ).toBe("test");
     expect(verificationKindFromCommand("bun run lint")).toBe("lint");
+    expect(verificationKindFromCommand("uv run ruff check . 2>&1")).toBe("lint");
+    expect(verificationKindFromCommand("uv run ruff format --check . 2>&1")).toBe("lint");
     expect(verificationKindFromCommand("bunx tsc --noEmit")).toBe("typecheck");
     expect(verificationKindFromCommand("bun run build")).toBe("build");
     expect(verificationKindFromCommand("git diff -- docs")).toBe("diff_inspection");
@@ -50,6 +58,8 @@ describe("verification policy", () => {
     expect(verificationKindFromCommand("bun lint --help 2>&1 | head -20")).toBeNull();
     expect(verificationKindFromCommand("bun test 2>&1 | tail -80")).toBeNull();
     expect(verificationKindFromCommand("bun run typecheck --version")).toBeNull();
+    expect(verificationKindFromCommand("node -v")).toBeNull();
+    expect(verificationKindFromCommand("ruff -v")).toBeNull();
     expect(verificationKindFromCommand("which bun")).toBeNull();
     expect(verificationKindFromCommand("command -v bun")).toBeNull();
     expect(verificationKindFromCommand("man tsc")).toBeNull();

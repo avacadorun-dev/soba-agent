@@ -47,6 +47,7 @@ export interface EvidenceToolOutcome {
   isError: boolean;
   output: string;
   iteration: number;
+  verificationKind?: VerificationKind;
 }
 
 export interface VerificationCommandNotice {
@@ -94,8 +95,9 @@ export class EvidenceLedger {
     if (outcome.isError) {
       if (outcome.toolName === "bash") {
         const command = readCommand(outcome.arguments);
-        if (isVerificationCommand(command)) {
-          this.recordFailedVerification(outcome, command);
+        const verificationKind = verificationKindForOutcome(outcome, command);
+        if (verificationKind && verificationKind !== "diff_inspection" && verificationKind !== "manual_inspection") {
+          this.recordFailedVerification(outcome, command, verificationKind);
         }
       }
       return this.recordDiagnostic(outcome, "active");
@@ -120,10 +122,11 @@ export class EvidenceLedger {
 
     if (outcome.toolName === "bash") {
       const command = readCommand(outcome.arguments);
-      if (isVerificationCommand(command)) {
-        return this.recordVerification(outcome, command);
+      const verificationKind = verificationKindForOutcome(outcome, command);
+      if (verificationKind && verificationKind !== "diff_inspection" && verificationKind !== "manual_inspection") {
+        return this.recordVerification(outcome, command, verificationKind);
       }
-      if (isDiffInspectionCommand(command)) {
+      if (verificationKind === "diff_inspection") {
         return this.addEntry({
           id: evidenceId("inspection", outcome.toolCallId),
           kind: "verification",
@@ -386,7 +389,11 @@ export class EvidenceLedger {
     });
   }
 
-  private recordVerification(outcome: EvidenceToolOutcome, command: string): EvidenceEntry {
+  private recordVerification(
+    outcome: EvidenceToolOutcome,
+    command: string,
+    verificationKind: VerificationKind,
+  ): EvidenceEntry {
     const unverifiedMutations = this.entries.filter((entry) => entry.kind === "mutation" && entry.status === "unverified");
     const activeDiagnostics = this.entries.filter((entry) => entry.kind === "diagnostic" && entry.status === "active");
     const mutationIds = unverifiedMutations.map((entry) => entry.id);
@@ -409,7 +416,7 @@ export class EvidenceLedger {
       toolCallId: outcome.toolCallId,
       toolName: outcome.toolName,
       command,
-      verificationKind: verificationKindFromCommand(command) ?? "run",
+      verificationKind,
       mutationIds,
       resolves: diagnosticIds,
       iteration: outcome.iteration,
@@ -417,7 +424,11 @@ export class EvidenceLedger {
     });
   }
 
-  private recordFailedVerification(outcome: EvidenceToolOutcome, command: string): EvidenceEntry {
+  private recordFailedVerification(
+    outcome: EvidenceToolOutcome,
+    command: string,
+    verificationKind: VerificationKind,
+  ): EvidenceEntry {
     return this.addEntry({
       id: evidenceId("verification", outcome.toolCallId),
       kind: "verification",
@@ -426,7 +437,7 @@ export class EvidenceLedger {
       toolCallId: outcome.toolCallId,
       toolName: outcome.toolName,
       command,
-      verificationKind: verificationKindFromCommand(command) ?? "run",
+      verificationKind,
       iteration: outcome.iteration,
       summary: `Verification command failed: ${command}`,
     });
@@ -502,8 +513,8 @@ function isSearchCommand(command: string): boolean {
   return /\b(rg|grep|find)\b/.test(command);
 }
 
-function isDiffInspectionCommand(command: string): boolean {
-  return verificationKindFromCommand(command) === "diff_inspection";
+function verificationKindForOutcome(outcome: EvidenceToolOutcome, command: string): VerificationKind | null {
+  return outcome.verificationKind ?? verificationKindFromCommand(command);
 }
 
 export function isVerificationCommand(command: string): boolean {
