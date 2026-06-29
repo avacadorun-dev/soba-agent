@@ -29,6 +29,7 @@ type Copy = {
   unreleasedDescription(latestTag?: string): string;
   releaseDescription(tag: string, date?: string): string;
   compareLabel: string;
+  localRangeLabel: string;
   noChanges: string;
   categories: Record<Category, string>;
 };
@@ -63,6 +64,7 @@ const copy: Record<Lang, Copy> = {
         : "Changes that are not attached to a version tag yet.",
     releaseDescription: (tag, date) => `Released ${date ?? "with the recorded git tag"} as \`${tag}\`.`,
     compareLabel: "Compare",
+    localRangeLabel: "Local range",
     noChanges: "No commits in this range.",
     categories: {
       added: "Added",
@@ -86,6 +88,7 @@ const copy: Record<Lang, Copy> = {
         : "Изменения, которые пока не привязаны к version tag.",
     releaseDescription: (tag, date) => `Релиз ${date ?? "по recorded git tag"}: \`${tag}\`.`,
     compareLabel: "Compare",
+    localRangeLabel: "Local range",
     noChanges: "В этом диапазоне нет коммитов.",
     categories: {
       added: "Added",
@@ -109,6 +112,7 @@ const copy: Record<Lang, Copy> = {
         : "尚未归入版本标签的更改。",
     releaseDescription: (tag, date) => `${date ?? "记录的 git tag"} 发布为 \`${tag}\`。`,
     compareLabel: "Compare",
+    localRangeLabel: "Local range",
     noChanges: "此范围内没有提交。",
     categories: {
       added: "Added",
@@ -271,10 +275,13 @@ function groupedCommits(section: ChangelogSection): Map<Category, Commit[]> {
 function renderSectionBody(section: ChangelogSection, lang: Lang, repoUrl: string): string[] {
   const labels = copy[lang];
   const groups = groupedCommits(section);
-  const lines: string[] = [
-    `[${labels.compareLabel}](${compareUrl(section, repoUrl)})`,
-    "",
-  ];
+  const lines: string[] = [];
+
+  if (section.tag) {
+    lines.push(`[${labels.compareLabel}](${compareUrl(section, repoUrl)})`, "");
+  } else if (section.previousTag) {
+    lines.push(`${labels.localRangeLabel}: \`${section.previousTag}..HEAD\``, "");
+  }
 
   if (section.commits.length === 0) {
     lines.push(labels.noChanges, "");
@@ -288,7 +295,10 @@ function renderSectionBody(section: ChangelogSection, lang: Lang, repoUrl: strin
     lines.push(`### ${labels.categories[category]}`, "");
     for (const commit of commits) {
       const subject = escapeMarkdown(stripConventionalPrefix(commit.subject));
-      lines.push(`- ${subject} ([${commit.shortHash}](${repoUrl}/commit/${commit.fullHash}))`);
+      const hash = section.tag
+        ? `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`
+        : `\`${commit.shortHash}\``;
+      lines.push(`- ${subject} (${hash})`);
     }
     lines.push("");
   }
