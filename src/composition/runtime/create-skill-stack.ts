@@ -9,6 +9,7 @@ import { RevisionStore } from "../../application/skills/revisions";
 import { SkillManager } from "../../application/skills/skill-manager";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import { FilesystemDraftStorage } from "../../infrastructure/persistence/skills/draft-storage";
+import { FilesystemSkillEvaluationStorage } from "../../infrastructure/persistence/skills/evaluation-storage";
 import { FilesystemRevisionStorage } from "../../infrastructure/persistence/skills/revision-storage";
 import {
   FilesystemSkillFileOperations,
@@ -51,7 +52,7 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
     revisionStore: new RevisionStore({
       storage: new FilesystemRevisionStorage({ revisionsPath: join(sobaDir, "skill-revisions") }),
     }),
-    evaluator: new SkillEvaluator({ evalRunsPath: join(sobaDir, "eval-runs") }),
+    evaluator: new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(sobaDir, "eval-runs") }) }),
     catalog: skillCatalog,
     files: new FilesystemSkillFileOperations(),
     userSkillsPath: join(sobaDir, "skills"),
