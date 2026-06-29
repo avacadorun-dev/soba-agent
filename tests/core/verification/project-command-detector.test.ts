@@ -50,8 +50,16 @@ describe("project command detector", () => {
       expect(commands.lint).toEqual([]);
       expect(commands.typecheck).toEqual([]);
       expect(commands.build).toEqual([]);
+      expect(commands.run).toEqual([]);
       expect(commands.deadCode).toEqual([]);
-    expect(commands.skipped.map((skipped) => skipped.kind).sort()).toEqual(["build", "deadCode", "lint", "test", "typecheck"]);
+      expect(commands.skipped.map((skipped) => skipped.kind).sort()).toEqual([
+        "build",
+        "deadCode",
+        "lint",
+        "run",
+        "test",
+        "typecheck",
+      ]);
     });
   });
 
@@ -97,6 +105,84 @@ describe("project command detector", () => {
       expect(commands.lint[0]?.source).toBe("project-instructions");
     });
   });
+
+  test("project instructions can select non-TypeScript verification commands", async () => {
+    await withFixture(async (cwd) => {
+      const commands = await detectProjectCommands({
+        cwd,
+        projectFiles: testProjectFiles(cwd),
+        projectInstructions: ["Use `zig build test` for tests and `make verify` for the project gate."],
+      });
+
+      expect(firstCommand(commands, "test")).toBe("zig build test");
+      expect(firstCommand(commands, "run")).toBe("make verify");
+    });
+  });
+
+  test("project instructions detect labeled uncommon toolchain commands without language allowlists", async () => {
+    await withFixture(async (cwd) => {
+      const commands = await detectProjectCommands({
+        cwd,
+        projectFiles: testProjectFiles(cwd),
+        projectInstructions: [
+          [
+            "Verification: cobc -x legacy/PAYROLL.COB && ./payroll_test",
+            "Build: msbuild LegacyApp.dproj /t:Build",
+          ].join("\n"),
+        ],
+      });
+
+      expect(firstCommand(commands, "run")).toBe("cobc -x legacy/PAYROLL.COB && ./payroll_test");
+      expect(firstCommand(commands, "build")).toBe("msbuild LegacyApp.dproj /t:Build");
+    });
+  });
+
+  test("project instructions do not treat natural-language guidance as a shell command", async () => {
+    await withFixture(async (cwd) => {
+      const commands = await detectProjectCommands({
+        cwd,
+        projectFiles: testProjectFiles(cwd),
+        projectInstructions: ["Run the standard project checks before finishing."],
+      });
+
+      expect(commands.run).toEqual([]);
+      expect(commands.test).toEqual([]);
+      expect(commands.build).toEqual([]);
+    });
+  });
+
+  test("does not reject npm or eslint commands from normal project instructions", async () => {
+    await withFixture(async (cwd) => {
+      const commands = await detectProjectCommands({
+        cwd,
+        projectFiles: testProjectFiles(cwd),
+        projectInstructions: ["Run `npm test` and `eslint .` before finishing."],
+      });
+
+      expect(firstCommand(commands, "test")).toBe("npm test");
+      expect(firstCommand(commands, "lint")).toBe("eslint .");
+      expect(commands.skipped.some((skipped) => skipped.command === "npm test" || skipped.command === "eslint .")).toBe(
+        false,
+      );
+    });
+  });
+
+  test("package script runner follows project package manager metadata and lockfiles", async () => {
+    await withFixture(async (cwd) => {
+      await writePackageJson(cwd, {
+        packageManager: "pnpm@9.0.0",
+        scripts: {
+          test: "vitest",
+          verify: "custom-ci",
+        },
+      });
+
+      const commands = await detectProjectCommands({ cwd, projectFiles: testProjectFiles(cwd) });
+
+      expect(firstCommand(commands, "test")).toBe("pnpm run test");
+      expect(firstCommand(commands, "run")).toBe("pnpm run verify");
+    });
+  });
 });
 
 async function withFixture(run: (cwd: string) => Promise<void>): Promise<void> {
@@ -138,7 +224,12 @@ function firstCommand(commands: ProjectCommandSet, kind: Exclude<keyof ProjectCo
 }
 
 function allSelectedCommands(commands: ProjectCommandSet): string[] {
-  return [...commands.test, ...commands.lint, ...commands.typecheck, ...commands.build, ...commands.deadCode].map(
-    (command) => command.command,
-  );
+  return [
+    ...commands.test,
+    ...commands.lint,
+    ...commands.typecheck,
+    ...commands.build,
+    ...commands.run,
+    ...commands.deadCode,
+  ].map((command) => command.command);
 }

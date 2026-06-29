@@ -148,6 +148,30 @@ describe("auto verifier", () => {
       expect(second.skipped[0]?.reason).toContain("already attempted");
     });
   });
+
+  test("uses generic run command from project instructions for unknown toolchains", async () => {
+    await withFixture(async (cwd) => {
+      const ledger = ledgerWithMutation("legacy/PAYROLL.COB");
+      const executed: string[] = [];
+
+      const result = await runAutoVerifier({
+        cwd,
+        taskKind: "feature",
+        evidenceSummary: ledger.getSummary(),
+        ledger,
+        bashTool: makeBashTool(executed),
+        toolContext: { cwd },
+        trustManager: new TrustManager({ repoRoot: cwd }),
+        projectInstructions: ["Use `make verify` for this project."],
+        projectFiles: testProjectFiles(cwd),
+      });
+
+      expect(result.executions.map((execution) => execution.call.args.command)).toContain("make verify");
+      expect(executed).toContain("make verify");
+      expect(ledger.getSummary().verificationKinds.has("run")).toBe(true);
+      expect(ledger.getSummary().needsVerification).toBe(false);
+    });
+  });
 });
 
 function ledgerWithMutation(path: string): EvidenceLedger {

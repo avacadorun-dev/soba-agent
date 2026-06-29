@@ -38,12 +38,10 @@ describe("System Prompt", () => {
     expect(prompt).toContain("inspect_file for exact line-numbered ranges before edit/write");
     expect(prompt).toContain("use ls only for directory shape or filename discovery");
     expect(prompt).toContain("use read for images or whole-file reads");
-    expect(prompt).toContain("Do not use bash for pwd, ls/find/grep/rg/sed/cat inspection");
-    expect(prompt).toContain("routine file inspection through bash is rejected");
+    expect(prompt).toContain("Prefer ls, search_files, inspect_file, or read");
     expect(prompt).toContain("Use bash for verification commands");
     expect(prompt).toContain("Run final verification commands directly");
-    expect(prompt).toContain("Do not pipe final verification through head/tail");
-    expect(prompt).toContain("filtered verification commands are rejected");
+    expect(prompt).toContain("Verification commands piped through head/tail do not count");
     expect(prompt).toContain("Do not present --help, --version, which");
     expect(prompt).toContain("use mktemp -d or another unique temp directory");
     expect(prompt).toContain("env-configured storage paths, or test fixtures");
@@ -139,8 +137,8 @@ describe("System Prompt", () => {
     expect(prompt).toContain("search_files: Search file contents for text, regex, or symbols");
     expect(prompt).toContain("inspect_file: Inspect bounded line-numbered text ranges");
     expect(prompt).toContain("bash: Run project commands, verification workflows");
-    expect(prompt).toContain("Do not use for pwd, ls/find/grep/rg/sed/cat inspection");
-    expect(prompt).toContain("routine file inspection through bash is rejected");
+    expect(prompt).toContain("Prefer bounded file tools for pwd, ls/find/grep/rg/sed/cat inspection");
+    expect(prompt).toContain("Verification commands piped through head/tail do not count");
   });
 
   test("промпт содержит дату и рабочую директорию", () => {

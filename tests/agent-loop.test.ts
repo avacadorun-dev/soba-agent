@@ -1756,7 +1756,7 @@ describe("AgentLoop", () => {
       expect(text).toContain("Completed with unverified changes:");
       expect(text).toContain("**Evidence**");
       expect(text).toContain("Status: unverified");
-      expect(text).toContain("Mutation verification not run");
+      expect(text).toContain("verification not run");
       expect(text).toContain("Some file mutations are not covered by passing verification evidence.");
     }
     expect(result.activeErrors).toHaveLength(0);
@@ -1877,8 +1877,8 @@ describe("AgentLoop", () => {
     const loop = new AgentLoop(client, session, tools, "/test", {
       debug: true,
       emitEvents: true,
-      onEvent: (event) => events.push(event),
     });
+    loop.onEvent((event) => events.push(event));
 
     const result = await loop.runTurn("Почини тесты");
 

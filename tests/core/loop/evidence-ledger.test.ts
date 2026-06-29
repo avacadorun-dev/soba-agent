@@ -141,6 +141,70 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationEvidenceCallIds).toEqual(new Set(["custom_ci_pass"]));
   });
 
+  test("successful non-probe bash command verifies arbitrary language project mutations as generic run", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "edit_zig",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "src/main.zig" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const verification = ledger.recordToolOutcome({
+      toolCallId: "zig_verify",
+      toolName: "bash",
+      arguments: recordArgs("zig build test"),
+      isError: false,
+      output: "All tests passed",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(verification).toMatchObject({
+      kind: "verification",
+      status: "success",
+      command: "zig build test",
+      verificationKind: "test",
+      mutationIds: [mutation.id],
+    });
+    expect(summary.needsVerification).toBe(false);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set(["zig_verify"]));
+  });
+
+  test("successful custom verification command without known tool name counts as generic run", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "edit_cobol",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "legacy/PAYROLL.COB" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const verification = ledger.recordToolOutcome({
+      toolCallId: "make_verify",
+      toolName: "bash",
+      arguments: recordArgs("make verify"),
+      isError: false,
+      output: "ok",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(verification).toMatchObject({
+      kind: "verification",
+      status: "success",
+      command: "make verify",
+      verificationKind: "run",
+      mutationIds: [mutation.id],
+    });
+    expect(summary.needsVerification).toBe(false);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set(["make_verify"]));
+  });
+
   test("failed verification remains unresolved until same kind passes later", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({

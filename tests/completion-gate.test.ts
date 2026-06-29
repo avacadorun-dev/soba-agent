@@ -382,6 +382,21 @@ describe("evaluateCompletion", () => {
     expect(decision.accepted).toBe(true);
   });
 
+  test("feature code mutations can finish with generic run evidence from unknown toolchains", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "feature",
+        hasMutatedFiles: true,
+        hasCodeMutations: true,
+        verificationEvidenceCallIds: new Set(["make_verify"]),
+        verificationKinds: new Set(["run"]),
+      }),
+    );
+
+    expect(decision.accepted).toBe(true);
+  });
+
   test("completed rejects unresolved failed verification even when older passing evidence exists", () => {
     const decision = evaluateCompletion(
       completedRequest(),

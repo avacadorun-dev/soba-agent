@@ -1,4 +1,4 @@
-export type ProjectCommandKind = "test" | "lint" | "typecheck" | "build" | "deadCode";
+export type ProjectCommandKind = "test" | "lint" | "typecheck" | "build" | "run" | "deadCode";
 
 export type ProjectCommandSource = "project-instructions" | "package-json" | "known-config" | "soba-default";
 
@@ -21,6 +21,7 @@ export interface ProjectCommandSet {
   lint: ProjectCommand[];
   typecheck: ProjectCommand[];
   build: ProjectCommand[];
+  run: ProjectCommand[];
   deadCode: ProjectCommand[];
   skipped: SkippedProjectCommand[];
 }

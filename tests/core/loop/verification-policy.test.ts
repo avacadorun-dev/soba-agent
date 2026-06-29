@@ -12,7 +12,7 @@ describe("verification policy", () => {
   test("feature/refactor/bug fix require command evidence", () => {
     expect(decideVerificationPolicy("feature")).toMatchObject({
       requirement: "command",
-      acceptedKinds: ["test", "lint", "typecheck", "build"],
+      acceptedKinds: ["test", "lint", "typecheck", "build", "run"],
     });
     expect(decideVerificationPolicy("refactor").requirement).toBe("command");
     expect(decideVerificationPolicy("bug_fix").acceptedKinds).toContain("test");
@@ -33,7 +33,7 @@ describe("verification policy", () => {
     const decision = decideVerificationPolicy("release_task");
 
     expect(decision.requirement).toBe("full_gate");
-    expect(decision.acceptedKinds).toEqual(["test", "lint", "typecheck", "build"]);
+    expect(decision.acceptedKinds).toEqual(["test", "lint", "typecheck", "build", "run"]);
     expect(decision.commands).toEqual([]);
     expect(decision.reason).toContain("project verification gate");
   });
@@ -51,6 +51,9 @@ describe("verification policy", () => {
     expect(verificationKindFromCommand("uv run ruff format --check . 2>&1")).toBe("lint");
     expect(verificationKindFromCommand("bunx tsc --noEmit")).toBe("typecheck");
     expect(verificationKindFromCommand("bun run build")).toBe("build");
+    expect(verificationKindFromCommand("zig build test")).toBe("test");
+    expect(verificationKindFromCommand("make verify")).toBe("run");
+    expect(verificationKindFromCommand("./ci/verify-users")).toBe("run");
     expect(verificationKindFromCommand("git diff -- docs")).toBe("diff_inspection");
   });
 
@@ -67,6 +70,9 @@ describe("verification policy", () => {
     expect(verificationKindFromCommand("tail test.log")).toBeNull();
     expect(verificationKindFromCommand("grep test src/app.ts")).toBeNull();
     expect(verificationKindFromCommand("pwd && ls -la")).toBeNull();
+    expect(verificationKindFromCommand("echo ok")).toBeNull();
+    expect(verificationKindFromCommand("npm install")).toBeNull();
+    expect(verificationKindFromCommand("uv add fastapi")).toBeNull();
   });
 
   test("prompt inference recognizes common task kinds", () => {
@@ -94,6 +100,10 @@ describe("verification policy", () => {
     expect(isDocumentationPath("docs/phase/plan.md")).toBe(true);
     expect(isCodePath("../../../src/engine/turn/agent-loop")).toBe(true);
     expect(isCodePath("tests/core/loop/verification-policy.test.ts")).toBe(true);
+    expect(isCodePath("src/main.zig")).toBe(true);
+    expect(isCodePath("legacy/PAYROLL.COB")).toBe(true);
+    expect(isCodePath("desktop/MainForm.pas")).toBe(true);
+    expect(isCodePath("Makefile")).toBe(true);
     expect(isCodePath("README.md")).toBe(false);
   });
 });

@@ -22,31 +22,6 @@ export interface VerificationPolicyDecision {
   reason: string;
 }
 
-const CODE_EXTENSIONS = new Set([
-  ".c",
-  ".cc",
-  ".cpp",
-  ".css",
-  ".go",
-  ".h",
-  ".hpp",
-  ".html",
-  ".java",
-  ".js",
-  ".json",
-  ".jsx",
-  ".mjs",
-  ".py",
-  ".rs",
-  ".sh",
-  ".sql",
-  ".ts",
-  ".tsx",
-  ".vue",
-  ".yaml",
-  ".yml",
-]);
-
 const DOC_EXTENSIONS = new Set([".md", ".mdx", ".txt", ".rst", ".adoc"]);
 
 export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): VerificationPolicyDecision {
@@ -75,14 +50,14 @@ export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): Verifi
     case "lint_failure":
       return {
         requirement: "command",
-        acceptedKinds: ["lint"],
+        acceptedKinds: ["lint", "run"],
         commands: [],
         reason: "Lint-failure work must finish with passing lint evidence discovered from the project.",
       };
     case "test_failure":
       return {
         requirement: "command",
-        acceptedKinds: ["test"],
+        acceptedKinds: ["test", "run"],
         commands: [],
         reason: "Test-failure work must finish with passing test evidence discovered from the project.",
       };
@@ -98,14 +73,14 @@ export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): Verifi
     case "refactor":
       return {
         requirement: "command",
-        acceptedKinds: ["test", "lint", "typecheck", "build"],
+        acceptedKinds: ["test", "lint", "typecheck", "build", "run"],
         commands: [],
         reason: "Feature and refactor work require project command verification.",
       };
     case "release_task":
       return {
         requirement: "full_gate",
-        acceptedKinds: ["test", "lint", "typecheck", "build"],
+        acceptedKinds: ["test", "lint", "typecheck", "build", "run"],
         commands: [],
         reason: "Release work requires the full project verification gate.",
       };
@@ -173,7 +148,7 @@ export function verificationKindFromCommand(command: string): VerificationKind |
   if (isTestCommand(normalized)) return "test";
   if (/\bbuild\b/.test(normalized)) return "build";
   if (/\b(run|start|dev)\b/.test(normalized)) return "run";
-  return null;
+  return "run";
 }
 
 export function isNonVerificationProbeCommand(command: string): boolean {
@@ -181,6 +156,8 @@ export function isNonVerificationProbeCommand(command: string): boolean {
   if (normalized.length === 0) return true;
   if (isRoutineInspectionShellCommand(normalized)) return true;
   if (hasHeadTailPipeline(normalized)) return true;
+  if (isShellUtilityOnlyCommand(normalized)) return true;
+  if (isFileMutationOrSetupCommand(normalized)) return true;
   if (/(?:^|\s)(?:--help|--version|-h)(?:\s|$)/.test(normalized)) return true;
   if (/(?:^|\s)-v(?:\s|$)/.test(normalized) && !looksLikeVerificationExecution(normalized)) return true;
   if (/(?:^|[;&|]\s*)(?:which|command\s+-v|type|man)\s+/.test(normalized)) return true;
@@ -217,6 +194,88 @@ function hasHeadTailPipeline(command: string): boolean {
   return /\|\s*&?\s*(?:head|tail)\b/.test(command);
 }
 
+const SHELL_UTILITY_COMMANDS = new Set([
+  "awk",
+  "cat",
+  "cut",
+  "date",
+  "echo",
+  "env",
+  "false",
+  "find",
+  "grep",
+  "head",
+  "ls",
+  "printenv",
+  "printf",
+  "pwd",
+  "rg",
+  "sed",
+  "sleep",
+  "sort",
+  "tail",
+  "tee",
+  "true",
+  "uniq",
+  "wc",
+  "whoami",
+  "xargs",
+]);
+
+const FILE_MUTATION_COMMANDS = new Set([
+  "chmod",
+  "chown",
+  "cp",
+  "ln",
+  "mkdir",
+  "mv",
+  "rm",
+  "rmdir",
+  "tar",
+  "touch",
+  "unlink",
+  "unzip",
+  "zip",
+]);
+
+const SETUP_SUBCOMMANDS = new Set(["add", "create", "generate", "init", "install", "new", "scaffold"]);
+
+function isShellUtilityOnlyCommand(command: string): boolean {
+  const commands = commandSegments(command).map(leadingExecutable).filter((value): value is string => Boolean(value));
+  return commands.length > 0 && commands.every((name) => SHELL_UTILITY_COMMANDS.has(name));
+}
+
+function isFileMutationOrSetupCommand(command: string): boolean {
+  return commandSegments(command).some((segment) => {
+    const words = commandWords(segment);
+    const executable = words[0];
+    if (!executable) return false;
+    if (FILE_MUTATION_COMMANDS.has(executable)) return true;
+    return words.some((word, index) => index > 0 && SETUP_SUBCOMMANDS.has(word));
+  });
+}
+
+function commandSegments(command: string): string[] {
+  return command.split(/&&|\|\||[;|]/).map((segment) => segment.trim()).filter(Boolean);
+}
+
+function leadingExecutable(segment: string): string | null {
+  return commandWords(segment)[0] ?? null;
+}
+
+function commandWords(segment: string): string[] {
+  return segment
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .filter((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
+    .map((word) => word.replace(/^["']|["']$/g, ""))
+    .map((word) => {
+      const slash = word.lastIndexOf("/");
+      return slash === -1 ? word : word.slice(slash + 1);
+    })
+    .map((word) => word.toLowerCase());
+}
+
 export function isDocumentationPath(path: string): boolean {
   const normalized = path.toLowerCase();
   if (normalized.startsWith("docs/") || normalized.includes("/docs/")) return true;
@@ -225,16 +284,7 @@ export function isDocumentationPath(path: string): boolean {
 
 export function isCodePath(path: string): boolean {
   const normalized = path.toLowerCase();
-  if (isDocumentationPath(normalized)) return false;
-  if (
-    normalized.startsWith("src/") ||
-    normalized.startsWith("tests/") ||
-    normalized.includes("/src/") ||
-    normalized.includes("/tests/")
-  ) {
-    return true;
-  }
-  return CODE_EXTENSIONS.has(extensionOf(normalized));
+  return !isDocumentationPath(normalized);
 }
 
 function extensionOf(path: string): string {

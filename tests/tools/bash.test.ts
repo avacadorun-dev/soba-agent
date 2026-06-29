@@ -106,20 +106,53 @@ describe("bash tool", () => {
     expect(result.error?.code).toBe("bash_invalid_arguments");
   });
 
-  test("отклоняет routine file inspection через bash", async () => {
+  test("выполняет routine file inspection через bash", async () => {
     const cwd = makeCwd();
     writeFileSync(join(cwd, "file1.txt"), "content1");
     writeFileSync(join(cwd, "file2.txt"), "content2");
 
     const result = await bashTool.execute({ command: "pwd && ls -la" }, { cwd });
 
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain(cwd);
+    expect(result.content[0].text).toContain("file1.txt");
+  });
+
+  test("выполняет head/tail в пайпе", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute({ command: "printf 'a\\nb\\n' | head -1" }, { cwd });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text.trim()).toBe("a");
+  });
+
+  test("выполняет package-manager diagnostics с head/tail", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute(
+      { command: "command -v uv >/dev/null || exit 0; uv add --help 2>&1 | tail -5" },
+      { cwd },
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("выполняет database diagnostics с head/tail", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute(
+      { command: "command -v psql >/dev/null || exit 0; psql --version 2>&1 | head -1" },
+      { cwd },
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
+  test("не блокирует неизвестные toolchain-команды до shell execution", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute({ command: "definitely-missing-zig-build-tool" }, { cwd });
+
     expect(result.isError).toBe(true);
-    expect(result.error).toMatchObject({
-      code: "bash_routine_filesystem_inspection",
-      category: "validation",
-      retryable: false,
-    });
-    expect(result.content[0].text).toContain("Use ls for directory structure");
+    expect(result.error?.code).toBe("command_not_found");
+    expect(result.content[0].text).toContain("Exit code: 127");
   });
 
   test("команда без вывода возвращает (no output)", async () => {
@@ -158,17 +191,12 @@ describe("bash tool", () => {
     expect(result.content[0].text).toContain("project content");
   });
 
-  test("отклоняет verification commands, пропущенные через head/tail", async () => {
+  test("выполняет verification commands, пропущенные через head/tail", async () => {
     const cwd = makeCwd();
-    const result = await bashTool.execute({ command: "bun test 2>&1 | tail -10" }, { cwd });
+    const result = await bashTool.execute({ command: "bun --version 2>&1 | tail -1" }, { cwd });
 
-    expect(result.isError).toBe(true);
-    expect(result.error).toMatchObject({
-      code: "bash_verification_output_filter",
-      category: "validation",
-      retryable: false,
-    });
-    expect(result.content[0].text).toContain("verification commands must not be piped through head or tail");
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text.trim()).toMatch(/\d+\.\d+\.\d+/);
   });
 
   test("truncateOutput ограничивает длинный вывод", async () => {

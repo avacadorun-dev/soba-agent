@@ -45,19 +45,19 @@ export interface AutoVerifierOptions {
   onToolCallResult?: (call: AutoVerifierToolCall, result: ToolResult, durationMs: number) => void;
 }
 
-const FULL_GATE_KINDS: ProjectCommandKind[] = ["test", "lint", "typecheck", "build", "deadCode"];
+const FULL_GATE_KINDS: ProjectCommandKind[] = ["test", "lint", "typecheck", "build", "run", "deadCode"];
 const TARGETED_KINDS_BY_TASK: Record<TaskKind, ProjectCommandKind[]> = {
   read_only_question: [],
   docs_change: [],
   review: [],
-  test_failure: ["test"],
-  lint_failure: ["lint"],
-  bug_fix: ["test", "lint", "typecheck"],
-  code_change: ["test", "lint", "typecheck"],
-  feature: ["test", "lint", "typecheck", "build"],
-  refactor: ["test", "lint", "typecheck", "build"],
+  test_failure: ["test", "run"],
+  lint_failure: ["lint", "run"],
+  bug_fix: ["test", "lint", "typecheck", "run"],
+  code_change: ["test", "lint", "typecheck", "run"],
+  feature: ["test", "lint", "typecheck", "build", "run"],
+  refactor: ["test", "lint", "typecheck", "build", "run"],
   release_task: FULL_GATE_KINDS,
-  unknown: ["test", "lint", "typecheck"],
+  unknown: ["test", "lint", "typecheck", "run"],
 };
 
 export async function runAutoVerifier(options: AutoVerifierOptions): Promise<AutoVerifierResult> {
@@ -223,6 +223,8 @@ function verificationKindForCommandKind(kind: ProjectCommandKind): VerificationK
       return "typecheck";
     case "build":
       return "build";
+    case "run":
+      return "run";
     case "deadCode":
       return "run";
   }

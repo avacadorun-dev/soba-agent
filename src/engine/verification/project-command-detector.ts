@@ -9,23 +9,25 @@ import type {
 
 interface PackageJson {
   scripts?: Record<string, string>;
+  packageManager?: string;
 }
 
 type ProjectCommandBuckets = Omit<ProjectCommandSet, "skipped">;
 
-const COMMAND_KINDS: ProjectCommandKind[] = ["test", "lint", "typecheck", "build", "deadCode"];
+const COMMAND_KINDS: ProjectCommandKind[] = ["test", "lint", "typecheck", "build", "run", "deadCode"];
 
 export async function detectProjectCommands(options: DetectProjectCommandsOptions): Promise<ProjectCommandSet> {
   const commandSet = emptyCommandSet();
   const packageJson = await readPackageJson(options);
   const scripts = packageJson?.scripts ?? {};
+  const packageScriptRunner = await detectPackageScriptRunner(options, packageJson);
   const instructions = options.projectInstructions ?? [];
   const shouldIncludeDeadCode = Boolean(options.includeFullGate || options.includeReleaseGate);
   const hasSobaInstructions = instructions.some((instruction) => /SOBA Agent|soba-agent/i.test(instruction));
   const isSobaProject = hasSobaInstructions;
 
   addInstructionCommands(commandSet, instructions, shouldIncludeDeadCode);
-  addPackageCommands(commandSet, scripts, isSobaProject);
+  addPackageCommands(commandSet, scripts, isSobaProject, packageScriptRunner);
   await addKnownConfigCommands(commandSet, options);
   addSobaDefaults(commandSet, isSobaProject);
   addMissingReasons(commandSet);
@@ -40,17 +42,6 @@ function addInstructionCommands(
 ): void {
   for (const instruction of instructions) {
     for (const command of extractCommands(instruction)) {
-      const forbiddenKind = forbiddenCommandKind(command);
-      if (forbiddenKind) {
-        addSkipped(commandSet, {
-          kind: forbiddenKind,
-          source: "project-instructions",
-          command,
-          reason: "Rejected forbidden npm/eslint/prettier command from project instructions.",
-        });
-        continue;
-      }
-
       const kind = classifyCommand(command);
       if (!kind) continue;
       if (kind === "deadCode" && !shouldIncludeDeadCode) {
@@ -73,11 +64,19 @@ function addInstructionCommands(
   }
 }
 
-function addPackageCommands(commandSet: ProjectCommandSet, scripts: Record<string, string>, isSobaProject: boolean): void {
-  addPackageScriptCommand(commandSet, scripts, "test", "test", isSobaProject);
-  addPackageScriptCommand(commandSet, scripts, "lint", "lint", isSobaProject);
-  addPackageScriptCommand(commandSet, scripts, "typecheck", "typecheck", isSobaProject);
-  addPackageScriptCommand(commandSet, scripts, "build", "build", isSobaProject);
+function addPackageCommands(
+  commandSet: ProjectCommandSet,
+  scripts: Record<string, string>,
+  isSobaProject: boolean,
+  scriptRunner: string,
+): void {
+  addPackageScriptCommand(commandSet, scripts, "test", "test", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "lint", "lint", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "typecheck", "typecheck", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "build", "build", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "verify", "run", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "check", "run", isSobaProject, scriptRunner);
+  addPackageScriptCommand(commandSet, scripts, "ci", "run", isSobaProject, scriptRunner);
 }
 
 function addPackageScriptCommand(
@@ -86,24 +85,24 @@ function addPackageScriptCommand(
   scriptName: string,
   kind: ProjectCommandKind,
   isSobaProject: boolean,
+  scriptRunner: string,
 ): void {
   const script = scripts[scriptName];
   if (!script) return;
 
-  const forbiddenKind = forbiddenCommandKind(script);
-  if (forbiddenKind || (isSobaProject && kind === "lint" && /(?:^|\s)(?:eslint|prettier)(?:\s|$)/i.test(script))) {
+  if (isSobaProject && kind === "lint" && /(?:^|\s)(?:eslint|prettier)(?:\s|$)/i.test(script)) {
     addSkipped(commandSet, {
       kind,
       source: "package-json",
       command: script,
-      reason: "Rejected forbidden npm/eslint/prettier package script.",
+      reason: "Rejected ESLint/Prettier package script for this SOBA project.",
     });
     return;
   }
 
   addCommand(commandSet, {
     kind,
-    command: commandForPackageScript(scriptName, script, kind),
+    command: commandForPackageScript(scriptName, script, kind, scriptRunner),
     source: "package-json",
     reason: `Detected from package.json script "${scriptName}".`,
   });
@@ -186,10 +185,17 @@ function addSkipped(commandSet: ProjectCommandSet, skipped: SkippedProjectComman
   commandSet.skipped.push(skipped);
 }
 
-function commandForPackageScript(scriptName: string, script: string, kind: ProjectCommandKind): string {
+function commandForPackageScript(
+  scriptName: string,
+  script: string,
+  kind: ProjectCommandKind,
+  scriptRunner: string,
+): string {
   const normalizedScript = normalizeWhitespace(script);
-  if (kind === "test" && /\bbun\s+test\b/i.test(normalizedScript)) return normalizedScript;
-  return `bun run ${scriptName}`;
+  if (scriptRunner === "bun run" && kind === "test" && /\bbun\s+test\b/i.test(normalizedScript)) {
+    return normalizedScript;
+  }
+  return `${scriptRunner} ${scriptName}`;
 }
 
 function normalizeInstructionCommand(command: string, kind: ProjectCommandKind): string {
@@ -200,26 +206,13 @@ function normalizeInstructionCommand(command: string, kind: ProjectCommandKind):
 
 function classifyCommand(command: string): ProjectCommandKind | null {
   const normalized = normalizeWhitespace(command).toLowerCase();
-  if (/\bbunx\s+tsc\b/.test(normalized) || /\bbun\s+run\s+typecheck\b/.test(normalized)) return "typecheck";
-  if (/\bbun\s+run\s+build\b/.test(normalized)) return "build";
-  if (/\bbun\s+test\b/.test(normalized) || /\bbun\s+run\s+test\b/.test(normalized)) return "test";
-  if (/\bbun\s+run\s+lint\b/.test(normalized) || /\bbiome\s+check\b/.test(normalized)) return "lint";
-  return null;
-}
-
-function forbiddenCommandKind(command: string): ProjectCommandKind | null {
-  const normalized = normalizeWhitespace(command).toLowerCase();
-  if (/(?:^|\s)(?:npm|yarn|pnpm)(?:\s|$)/.test(normalized)) return kindFromForbiddenCommand(normalized);
-  if (/(?:^|\s)(?:eslint|prettier)(?:\s|$)/.test(normalized)) return "lint";
-  return null;
-}
-
-function kindFromForbiddenCommand(command: string): ProjectCommandKind {
-  if (/\btest\b/.test(command)) return "test";
-  if (/\b(?:lint|eslint|prettier)\b/.test(command)) return "lint";
-  if (/\b(?:typecheck|tsc)\b/.test(command)) return "typecheck";
-  if (/\bbuild\b/.test(command)) return "build";
-  return "test";
+  if (isNonVerificationInstructionCommand(normalized)) return null;
+  if (/\b(?:typecheck|type-check|type\s+check|tsc|mypy|pyright)\b/.test(normalized)) return "typecheck";
+  if (/\b(?:lint|eslint|prettier|biome|ruff|fmt|format)\b/.test(normalized)) return "lint";
+  if (/\b(?:test|tests|spec|check)\b/.test(normalized)) return "test";
+  if (/\b(?:verify|ci)\b/.test(normalized)) return "run";
+  if (/\b(?:build|compile|make)\b/.test(normalized)) return "build";
+  return "run";
 }
 
 function extractCommands(instruction: string): string[] {
@@ -232,13 +225,13 @@ function extractCommands(instruction: string): string[] {
     match = backtickPattern.exec(instruction);
   }
 
+  for (const command of extractLabeledInstructionCommands(instruction)) {
+    if (!commands.includes(command)) commands.push(command);
+  }
+
   const linePatterns = [
-    /\bbun\s+test(?:\s+[^\n\r`]*)?/gi,
-    /\bbun\s+run\s+(?:lint|build|test|typecheck)(?:\s+[^\n\r`]*)?/gi,
-    /\bbunx\s+tsc\s+--noEmit(?:\s+[^\n\r`]*)?/gi,
-    /\bbiome\s+check(?:\s+[^\n\r`]*)?/gi,
-    /\b(?:npm|yarn|pnpm)\s+run\s+(?:test|lint|build|typecheck)(?:\s+[^\n\r`]*)?/gi,
-    /\b(?:eslint|prettier)(?:\s+[^\n\r`]*)?/gi,
+    /\b(?:bun|npm|pnpm|yarn)\s+(?:test|run\s+(?:lint|build|test|typecheck|verify|check|ci))(?:\s+[^\n\r`]*)?/gi,
+    /\b(?:make|cmake|zig|cargo|go|dotnet|mvn|gradle|swift|xcodebuild)\s+(?:test|check|verify|build|compile)(?:\s+[^\n\r`]*)?/gi,
   ];
 
   for (const pattern of linePatterns) {
@@ -250,7 +243,50 @@ function extractCommands(instruction: string): string[] {
     }
   }
 
-  return commands.map((command) => command.replace(/[.,;:]+$/g, "").trim()).filter(Boolean);
+  return commands.map(cleanExtractedCommand).filter(Boolean);
+}
+
+function extractLabeledInstructionCommands(instruction: string): string[] {
+  const commands: string[] = [];
+  for (const rawLine of instruction.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/^[-*]\s+/, "");
+    const labeled = /^(?:run|command|commands|verify|verification|check|test|tests|build|lint|typecheck|type-check|ci)\s*[:=-]\s*(?<command>.+)$/i.exec(
+      line,
+    )?.groups?.command;
+    const imperative = /^(?:before\s+finishing,?\s*)?(?:run|execute|use)\s+(?<command>.+)$/i.exec(line)?.groups
+      ?.command;
+    const command = labeled ?? imperative;
+    if (!command) continue;
+    const cleaned = cleanExtractedCommand(command);
+    if (looksLikeShellInstructionCommand(cleaned) && !commands.includes(cleaned)) {
+      commands.push(cleaned);
+    }
+  }
+  return commands;
+}
+
+function cleanExtractedCommand(command: string): string {
+  let trimmed = command.trim().replace(/[;:,]+$/g, "").trim();
+  trimmed = trimmed.replace(/^["']|["']$/g, "");
+  trimmed = trimmed.replace(/\s+(?:before finishing|before you finish|before finalizing)\.?$/i, "").trim();
+  if (trimmed.endsWith(".") && !trimmed.endsWith(" .")) {
+    trimmed = trimmed.slice(0, -1).trim();
+  }
+  return trimmed;
+}
+
+function looksLikeShellInstructionCommand(command: string): boolean {
+  const normalized = normalizeWhitespace(command).toLowerCase();
+  if (!normalized || isNonVerificationInstructionCommand(normalized)) return false;
+  const firstToken = normalized.split(/\s+/)[0] ?? "";
+  if (/^(?:the|a|an|all|standard|project|current|appropriate|whatever|recommended)\b/.test(firstToken)) return false;
+  if (/^(?:\.{0,2}\/|~\/|[a-z]:\\)/i.test(command)) return true;
+  if (/(?:&&|\|\|)/.test(command)) return true;
+  if (/\b(?:test|tests|verify|check|build|compile|lint|typecheck|type-check|ci)\b/.test(normalized)) return true;
+  if (/\s-{1,2}[A-Za-z0-9][\w-]*/.test(command)) return true;
+  if (/\s\/[A-Za-z][\w:-]*/.test(command)) return true;
+  if (/(?:^|\s)[^\s]+\.[A-Za-z0-9]{1,8}(?:\s|$)/.test(command)) return true;
+  return false;
 }
 
 function commandPriority(command: ProjectCommand): number {
@@ -278,6 +314,29 @@ function commandPreference(command: ProjectCommand): number {
   return 10;
 }
 
+async function detectPackageScriptRunner(options: DetectProjectCommandsOptions, packageJson: PackageJson | null): Promise<string> {
+  const declared = packageJson?.packageManager?.toLowerCase();
+  if (declared?.startsWith("pnpm@")) return "pnpm run";
+  if (declared?.startsWith("yarn@")) return "yarn run";
+  if (declared?.startsWith("npm@")) return "npm run";
+  if (declared?.startsWith("bun@")) return "bun run";
+
+  if (await exists(options, "pnpm-lock.yaml")) return "pnpm run";
+  if (await exists(options, "yarn.lock")) return "yarn run";
+  if (await exists(options, "package-lock.json")) return "npm run";
+  if (await exists(options, "npm-shrinkwrap.json")) return "npm run";
+  return "bun run";
+}
+
+function isNonVerificationInstructionCommand(command: string): boolean {
+  if (/(?:^|\s)(?:--help|--version|-h|-v)(?:\s|$)/.test(command)) return true;
+  if (/(?:^|[;&|]\s*)(?:which|command\s+-v|type|man)\s+/.test(command)) return true;
+  if (/\|\s*&?\s*(?:head|tail)\b/.test(command)) return true;
+  if (/(?:^|[;&|]\s*)(?:pwd|ls|find|grep|rg|sed|cat|head|tail)\b/.test(command)) return true;
+  if (/(?:^|[;&|]\s*)[^\s;&|]+\s+(?:add|create|generate|init|install|new|scaffold)\b/.test(command)) return true;
+  return false;
+}
+
 async function readPackageJson(options: DetectProjectCommandsOptions): Promise<PackageJson | null> {
   if (!(await exists(options, "package.json"))) return null;
 
@@ -296,6 +355,7 @@ function emptyCommandSet(): ProjectCommandSet {
     lint: [],
     typecheck: [],
     build: [],
+    run: [],
     deadCode: [],
   };
   return {
