@@ -30,27 +30,24 @@ import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { CompletionController } from "../completion/completion-controller";
-import { ContextController } from "../context/context-controller";
 import { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
-import {
-  createDangerousConfirmationAdapter,
-  PermissionBroker,
-} from "../permissions/permission-broker";
-import { DefaultTrustController, type TrustController } from "../permissions/trust-controller";
+import type { TrustController } from "../permissions/trust-controller";
 import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
-import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
 import { VerificationController } from "../verification/verification-controller";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
-import { AgentLoopEventBus } from "./agent-loop-event-bus";
 import {
   buildDenialEphemeralMessages,
   turnStopDebugData,
   turnStopReasonEvent,
 } from "./agent-loop-event-recording";
+import {
+  type AgentLoopRuntimeServices,
+  createAgentLoopRuntime,
+} from "./agent-loop-runtime";
 import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { scheduleCheckpointCompactionForTurn } from "./checkpoint-compaction-scheduler";
@@ -90,7 +87,6 @@ import {
   type AgentTurnError,
   type AgentTurnResult,
   type CheckpointWorkPlanState,
-  DEFAULT_LOOP_OPTIONS,
   type TurnStopReasonEvent,
 } from "./types";
 
@@ -100,24 +96,10 @@ export type { ProjectContextReader } from "./turn-prompt-preparation";
 // ─── AgentLoop ───
 
 export class AgentLoop {
-  private client: OpenResponsesClient;
   private session: SessionPort;
-  private tools: ToolRegistry;
-  private options: AgentLoopOptions;
   private cwd: string;
-  private trustManager: TrustController;
-  private budgetTracker: BudgetTracker;
-  private contextManager: ContextManager | undefined;
-  private backgroundScheduler: BackgroundScheduler | undefined;
-  private contextController: ContextController;
-  private skillManager: SkillSource | undefined;
-  private autoCompactOverride: { enabled: boolean } | undefined;
-  private projectMemory: ProjectMemorySource | undefined;
-  private projectContextReader: ProjectContextReader | undefined;
-  private projectCommandFiles: ProjectCommandFileReader | undefined;
+  private runtime: AgentLoopRuntimeServices;
   private _abortController: AbortController | null = null;
-  private eventBus: AgentLoopEventBus;
-  private toolExecutor: ToolCallExecutor;
   private state = {
     totalUsage: {
       input_tokens: 0,
@@ -150,45 +132,25 @@ export class AgentLoop {
     projectContextReader?: ProjectContextReader,
     projectCommandFiles?: ProjectCommandFileReader,
   ) {
-    this.client = client;
     this.session = session;
-    this.tools = tools;
     this.cwd = cwd;
-    this.options = { ...DEFAULT_LOOP_OPTIONS, ...options };
-    this.trustManager = trustManager ?? new DefaultTrustController({ repoRoot: cwd });
-    this.trustManager.setRepoRoot(cwd);
-    this.budgetTracker =
-      budgetTracker ??
-      new BudgetTracker({ totalBudget: this.options.tokenBudget });
-    this.contextManager = contextManager;
-    this.backgroundScheduler = backgroundScheduler;
-    this.skillManager = skillManager;
-    this.autoCompactOverride = autoCompactOverride;
-    this.projectMemory = projectMemory;
-    this.projectContextReader = projectContextReader;
-    this.projectCommandFiles = projectCommandFiles;
-    this.eventBus = new AgentLoopEventBus({
-      shouldEmit: () => this.options.emitEvents,
+    this.runtime = createAgentLoopRuntime({
+      client,
+      session,
+      tools,
+      cwd,
+      options,
+      trustManager,
+      budgetTracker,
+      contextManager,
+      backgroundScheduler,
+      skillManager,
+      autoCompactOverride,
+      projectMemory,
+      projectContextReader,
+      projectCommandFiles,
+      createToolContext: () => this.createToolContext(),
       flight: (data) => this.flight(data),
-    });
-    this.contextController = new ContextController({
-      contextManager: this.contextManager,
-      backgroundScheduler: this.backgroundScheduler,
-      autoCompactEnabled: () => this.autoCompactOverride?.enabled ?? true,
-      emit: (event) => this.emit(event),
-    });
-    const permissionBroker = new PermissionBroker({
-      trustManager: this.trustManager,
-      requestPermission: createDangerousConfirmationAdapter({
-        hasListeners: () => this.eventBus.hasListeners(),
-        dispatch: (event) => this.eventBus.dispatchDangerousConfirmationEvent(event),
-      }),
-    });
-    this.toolExecutor = new ToolCallExecutor({
-      registry: this.tools,
-      permissionBroker,
-      toolContext: () => this.createToolContext(),
-      emit: (event) => this.emit(event),
     });
   }
 
@@ -204,22 +166,22 @@ export class AgentLoop {
 
   /** Get the active model from the client config */
   getModel(): string {
-    return this.client.getConfig().model;
+    return this.runtime.client.getConfig().model;
   }
 
   /** Get trust controller (legacy method name kept for host compatibility). */
   getTrustManager(): TrustController {
-    return this.trustManager;
+    return this.runtime.trustManager;
   }
 
   /** Get budget tracker */
   getBudgetTracker(): BudgetTracker {
-    return this.budgetTracker;
+    return this.runtime.budgetTracker;
   }
 
   /** Get context manager (if available) */
   getContextManager(): ContextManager | undefined {
-    return this.contextManager;
+    return this.runtime.contextManager;
   }
 
   getSessionManager(): SessionPort {
@@ -229,7 +191,7 @@ export class AgentLoop {
   setSessionManager(session: SessionPort): void {
     this.session = session;
     this.cwd = session.getCwd();
-    this.trustManager.setRepoRoot(this.cwd);
+    this.runtime.trustManager.setRepoRoot(this.cwd);
   }
 
   private createToolContext(): ToolContext {
@@ -237,18 +199,18 @@ export class AgentLoop {
       cwd: this.cwd,
       sessionId: this.session.getSessionId(),
       session: this.session,
-      bashMaxTimeoutSeconds: this.options.bashMaxTimeoutSeconds,
+      bashMaxTimeoutSeconds: this.runtime.options.bashMaxTimeoutSeconds,
     };
   }
 
   /** Get background scheduler (if available) */
   getBackgroundScheduler(): BackgroundScheduler | undefined {
-    return this.backgroundScheduler;
+    return this.runtime.backgroundScheduler;
   }
 
   /** Get skill source (legacy method name kept for host compatibility). */
   getSkillManager(): SkillSource | undefined {
-    return this.skillManager;
+    return this.runtime.skillManager;
   }
 
   /**
@@ -256,26 +218,26 @@ export class AgentLoop {
    * When enabled is false, background compaction is skipped.
    */
   setAutoCompactOverride(override: { enabled: boolean }): void {
-    this.autoCompactOverride = override;
+    this.runtime.setAutoCompactOverride(override);
   }
 
   /**
    * Get current auto-compact override status.
    */
   getAutoCompactOverride(): { enabled: boolean } | undefined {
-    return this.autoCompactOverride;
+    return this.runtime.getAutoCompactOverride();
   }
 
   /** Subscribe to agent events */
   onEvent(listener: (event: AgentEvent) => void): () => void {
-    return this.eventBus.onEvent(listener);
+    return this.runtime.eventBus.onEvent(listener);
   }
 
   /**
    * Write a debug entry to the session when debug mode is enabled.
    */
   private debug(data: DebugEntry["data"]): void {
-    if (!this.options.debug) return;
+    if (!this.runtime.options.debug) return;
     this.session.appendDebug(data);
   }
 
@@ -321,7 +283,7 @@ export class AgentLoop {
 
   /** Emit an event to all listeners */
   private emit(event: AgentEvent): void {
-    this.eventBus.emit(event);
+    this.runtime.eventBus.emit(event);
   }
 
   /**
@@ -343,11 +305,11 @@ export class AgentLoop {
 
   /** Stop only the currently executing tool and allow the agent turn to continue. */
   abortActiveTool(): boolean {
-    return this.toolExecutor.abortActiveTool();
+    return this.runtime.toolExecutor.abortActiveTool();
   }
 
   hasActiveTool(): boolean {
-    return this.toolExecutor.hasActiveTool();
+    return this.runtime.toolExecutor.hasActiveTool();
   }
 
   /**
@@ -355,7 +317,7 @@ export class AgentLoop {
    * Explicit user shell commands bypass agent trust checks.
    */
   async runShellCommand(command: string, silent = false): Promise<ToolResult> {
-    return this.toolExecutor.runDirectShellCommand(command, silent);
+    return this.runtime.toolExecutor.runDirectShellCommand(command, silent);
   }
 
   /**
@@ -370,7 +332,7 @@ export class AgentLoop {
     }
 
     // Cancel any background compaction operation when starting a new turn
-    this.contextController.cancelBackgroundCompaction("new turn started");
+    this.runtime.contextController.cancelBackgroundCompaction("new turn started");
 
     this.state.isProcessing = true;
     this.state.turnCount++;
@@ -416,11 +378,11 @@ export class AgentLoop {
       const preparedPrompt = await prepareTurnPrompt({
         cwd: this.cwd,
         userText,
-        selectedTools: this.tools.getNames(),
-        contextReader: this.projectContextReader,
-        skillManager: this.skillManager,
-        projectMemory: this.projectMemory,
-        modelConfig: this.client.getConfig(),
+        selectedTools: this.runtime.tools.getNames(),
+        contextReader: this.runtime.projectContextReader,
+        skillManager: this.runtime.skillManager,
+        projectMemory: this.runtime.projectMemory,
+        modelConfig: this.runtime.client.getConfig(),
       });
       const {
         contextFiles,
@@ -446,7 +408,7 @@ export class AgentLoop {
           userInput: userText,
           taskKind,
           model,
-          selectedTools: this.tools.getNames(),
+          selectedTools: this.runtime.tools.getNames(),
           contextFiles: contextFiles.map((file) => file.path),
           systemPrompt,
         },
@@ -468,7 +430,7 @@ export class AgentLoop {
       const successfulToolCallIds = new Set<string>();
       const verificationEvidenceCallIds = new Set<string>();
       const includeFullGate = wantsFullVerification(userText) || taskKind === "release_task";
-      const loopGuard = new LoopGuard(this.options);
+      const loopGuard = new LoopGuard(this.runtime.options);
       const completionController = new CompletionController();
       const verificationController = new VerificationController();
       let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
@@ -481,14 +443,14 @@ export class AgentLoop {
           taskKind,
           ledger: evidenceLedger,
           verificationController,
-          tools: this.tools,
+          tools: this.runtime.tools,
           createToolContext: () => this.createToolContext(),
-          trustManager: this.trustManager,
+          trustManager: this.runtime.trustManager,
           projectInstructions,
-          projectFiles: this.projectCommandFiles,
+          projectFiles: this.runtime.projectCommandFiles,
           includeFullGate,
           includeReleaseGate: taskKind === "release_task",
-          timeoutSeconds: autoVerifierTimeoutSeconds(this.options.bashMaxTimeoutSeconds),
+          timeoutSeconds: autoVerifierTimeoutSeconds(this.runtime.options.bashMaxTimeoutSeconds),
           signal: this._abortController?.signal,
           session: this.session,
           allItems,
@@ -545,27 +507,27 @@ export class AgentLoop {
 
         // Get ephemeral developer messages from active skills + denial warnings
         const ephemeralMessages = [
-          ...(this.skillManager?.buildEphemeralMessages() ?? []),
+          ...(this.runtime.skillManager?.buildEphemeralMessages() ?? []),
           ...this.buildDenialEphemeralMessages(),
         ];
 
         const modelTurnExecution = await executeModelTurn({
-          client: this.client,
+          client: this.runtime.client,
           session: this.session,
-          tools: this.tools,
-          contextController: this.contextController,
+          tools: this.runtime.tools,
+          contextController: this.runtime.contextController,
           systemPrompt,
           model,
           maxOutputTokens,
           maxCompletionTokens,
           temperature,
-          stream: this.options.stream,
+          stream: this.runtime.options.stream,
           ephemeralMessages,
           allowParallelToolCalls: !needsVerification,
           turn: this.state.turnCount,
           iteration,
           totalUsage: this.state.totalUsage,
-          tokenBudget: this.options.tokenBudget,
+          tokenBudget: this.runtime.options.tokenBudget,
           contextWindow,
           errors,
           emit: (event) => this.emit(event),
@@ -596,7 +558,7 @@ export class AgentLoop {
         currentResponse = response;
         
         // Record provider usage for context tracking
-        this.contextController.recordProviderUsage(response, `turn_${this.state.turnCount}`);
+        this.runtime.contextController.recordProviderUsage(response, `turn_${this.state.turnCount}`);
         this.debug({
           event: "loop/response",
           turn: turnIndex,
@@ -643,9 +605,9 @@ export class AgentLoop {
         recordResponseUsage({
           response,
           totalUsage: this.state.totalUsage,
-          budgetTracker: this.budgetTracker,
-          contextController: this.contextController,
-          tokenBudget: this.options.tokenBudget,
+          budgetTracker: this.runtime.budgetTracker,
+          contextController: this.runtime.contextController,
+          tokenBudget: this.runtime.options.tokenBudget,
           contextWindow,
           systemPromptTokens,
           toolSchemaTokens,
@@ -668,7 +630,7 @@ export class AgentLoop {
           shouldContinue,
           toolCallsLength: toolCalls.length,
           continuationAttempts,
-          maxContinuationAttempts: this.options.maxContinuationAttempts,
+          maxContinuationAttempts: this.runtime.options.maxContinuationAttempts,
           session: this.session,
           allItems,
           errors,
@@ -750,7 +712,7 @@ export class AgentLoop {
             turn: turnIndex,
             iteration,
             autonomousFollowUps,
-            maxAutonomousFollowUps: this.options.maxAutonomousFollowUps,
+            maxAutonomousFollowUps: this.runtime.options.maxAutonomousFollowUps,
             ledgerNeedsVerification: () => evidenceLedger.getSummary().needsVerification,
             getTurnState: () => ({
               needsVerification,
@@ -839,7 +801,7 @@ export class AgentLoop {
         };
         const toolBatchExecution = await executeObservedToolBatch({
           toolCalls,
-          toolExecutor: this.toolExecutor,
+          toolExecutor: this.runtime.toolExecutor,
           signal: this._abortController?.signal,
           session: this.session,
           allItems,
@@ -848,8 +810,8 @@ export class AgentLoop {
           verificationEvidenceCallIds,
           evidenceLedger,
           verificationController,
-          skillManager: this.skillManager,
-          projectMemory: this.projectMemory,
+          skillManager: this.runtime.skillManager,
+          projectMemory: this.runtime.projectMemory,
           taskText: userText,
           iteration,
           state: toolObservationState,
@@ -876,8 +838,8 @@ export class AgentLoop {
         if (toolBatchExecution.checkpointEvents.length > 0) {
           scheduleCheckpointCompactionForTurn({
             checkpointEvents: toolBatchExecution.checkpointEvents,
-            contextController: this.contextController,
-            tools: this.tools,
+            contextController: this.runtime.contextController,
+            tools: this.runtime.tools,
             turnIndex,
             iteration,
             systemPrompt,
@@ -929,13 +891,13 @@ export class AgentLoop {
         evidenceSummary: evidenceLedger.getSummary(),
         checkpointState,
         systemPrompt,
-        tools: this.tools,
-        contextController: this.contextController,
+        tools: this.runtime.tools,
+        contextController: this.runtime.contextController,
         emit: (event) => this.emit(event),
         debug: (data) => this.debug(data),
       });
     } finally {
-      this.toolExecutor.clearActiveTool();
+      this.runtime.toolExecutor.clearActiveTool();
       this._abortController = null;
       this.state.isProcessing = false;
     }
