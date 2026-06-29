@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { validateSkill } from "../../../src/application/skills/validator";
 import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/persistence/skills/evaluation-storage";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 const repoSkillsDir = join(process.cwd(), "skills");
@@ -76,7 +76,7 @@ describe("Bundled skill eval baseline", () => {
 
   test("UC-AL-07 activates code-review and preserves no-mutation review behavior", () => {
     const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(tempDir, "eval-runs") }) });
-    const trustStore = new ProjectTrustStore({ sobaDir: tempDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir: tempDir });
     const discovery = new SkillDiscovery({
       projectPath: tempDir,
       userSkillsPath: join(tempDir, "user-skills"),

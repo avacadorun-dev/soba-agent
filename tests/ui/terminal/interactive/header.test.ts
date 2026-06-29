@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectTrustStore } from "../../../../src/application/skills/project-trust-store";
+import type { ProjectTrustStore } from "../../../../src/application/skills/project-trust-store";
 import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
+import { createFilesystemProjectTrustStore } from "../../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../../src/ui/terminal/interactive/model/types";
 
@@ -50,7 +51,7 @@ describe("Header trust status", () => {
   });
 
   test("store.projectTrusted() === false когда проект не одобрен", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const store = createStore(tempDir, trustStore);
 
     expect(store.projectTrusted()).toBe(false);
@@ -58,8 +59,8 @@ describe("Header trust status", () => {
   });
 
   test("store.projectTrusted() === true когда проект одобрен", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const store = createStore(tempDir, trustStore);
@@ -69,14 +70,14 @@ describe("Header trust status", () => {
   });
 
   test("статус обновляется после approve через trust_changed", async () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const store = createStore(tempDir, trustStore, () => {});
 
     expect(store.projectTrusted()).toBe(false);
 
     // Simulate /project-trust approve
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
     store.refreshProjectTrust();
 
@@ -85,8 +86,8 @@ describe("Header trust status", () => {
   });
 
   test("статус обновляется после revoke через trust_changed", async () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const store = createStore(tempDir, trustStore, () => {});
@@ -109,8 +110,8 @@ describe("Header trust status", () => {
   });
 
   test("Header показывает ✓ TRUSTED для одобренного проекта", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const store = createStore(tempDir, trustStore);
@@ -124,7 +125,7 @@ describe("Header trust status", () => {
   });
 
   test("Header показывает ⚠ UNTRUSTED для не одобренного проекта", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const store = createStore(tempDir, trustStore);
 
     // Header логика: trusted() ? "✓ TRUSTED" : "⚠ UNTRUSTED"
@@ -136,7 +137,7 @@ describe("Header trust status", () => {
   });
 
   test("Header скрывает статус при width < 60", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const store = createStore(tempDir, trustStore);
 
     // Header логика: width >= 60 ? show status : ""
@@ -148,7 +149,7 @@ describe("Header trust status", () => {
   });
 
   test("Header показывает статус при width >= 60", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const store = createStore(tempDir, trustStore);
 
     // Header логика: width >= 60 ? show status : ""

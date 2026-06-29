@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
 describe("Skills CLI Integration", () => {
@@ -102,7 +102,7 @@ Stop when the requested output is complete.
   });
 
   test("SkillManager инициализируется при старте CLI", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
@@ -129,7 +129,7 @@ Stop when the requested output is complete.
     // Create a bundled skill
     createBundledPlaybookSkill("test-bundled-skill", "A test bundled skill", "This is a test skill.");
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
@@ -170,7 +170,7 @@ This is a project skill.
 `,
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
@@ -201,7 +201,7 @@ This is a project skill.
   });
 
   test("Catalog refresh обновляет список skills без restart", () => {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
@@ -231,17 +231,17 @@ This is a project skill.
   });
 
   test("Trust store persistence работает между сессиями", () => {
-    const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectDir);
+    const projectIdentity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
     // First session - approve project
-    const trustStore1 = new ProjectTrustStore({ sobaDir });
+    const trustStore1 = createFilesystemProjectTrustStore({ sobaDir });
     expect(trustStore1.isTrusted(projectIdentity)).toBe(false);
 
     trustStore1.approve(projectIdentity, "test-fingerprint-1");
     expect(trustStore1.isTrusted(projectIdentity)).toBe(true);
 
     // Second session - should still be trusted
-    const trustStore2 = new ProjectTrustStore({ sobaDir });
+    const trustStore2 = createFilesystemProjectTrustStore({ sobaDir });
     expect(trustStore2.isTrusted(projectIdentity)).toBe(true);
 
     const record = trustStore2.getRecord(projectIdentity);
@@ -267,8 +267,8 @@ This is a project skill.
 `,
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const projectIdentity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
 
     // Approve project
     trustStore.approve(projectIdentity, "test-fingerprint");
@@ -303,7 +303,7 @@ This is a project skill.
       "This skill can be activated by the model.",
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
       userSkillsPath: userSkillsDir,
@@ -372,8 +372,8 @@ description: Project version
 `,
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const projectIdentity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
     trustStore.approve(projectIdentity, "test-fingerprint");
 
     const discovery = new SkillDiscovery({

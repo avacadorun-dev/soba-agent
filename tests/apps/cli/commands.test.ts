@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "../../../src/application/config/types";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import type { SkillManager } from "../../../src/application/skills/skill-manager";
 import { TrustManager } from "../../../src/application/trust/trust-manager";
 import { type CommandContext, executeCommand } from "../../../src/apps/cli/commands";
@@ -13,6 +12,7 @@ import { McpSecretStore } from "../../../src/infrastructure/mcp/secret-store";
 import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
 import { createFilesystemPortableCapsuleService } from "../../../src/infrastructure/persistence/capsules/portable-capsule-storage";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 import { I18n } from "../../../src/shared/i18n/i18n";
 
@@ -663,7 +663,7 @@ describe("/project-trust commands", () => {
   });
 
   function createMockSkillManager(): SkillManager {
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
     const discovery = {
       computeFingerprint: (_root: string) => "mock-fingerprint-hash",
       discover: () => ({ skills: [], diagnostics: [] }),
@@ -706,7 +706,7 @@ describe("/project-trust commands", () => {
   test("/project-trust approve одобряет новый проект", async () => {
     const output: Array<{ type: string; message?: string; trusted?: boolean }> = [];
     const skillManager = createMockSkillManager();
-    const identity = ProjectTrustStore.computeProjectIdentity(process.cwd());
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(process.cwd());
     expect(skillManager.trustStore.isTrusted(identity)).toBe(false);
 
     const context = {
@@ -729,7 +729,7 @@ describe("/project-trust commands", () => {
     const skillManager = createMockSkillManager();
 
     // Pre-approve the project (using process.cwd() identity since that's what the command uses)
-    const identity = ProjectTrustStore.computeProjectIdentity(process.cwd());
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(process.cwd());
     skillManager.trustStore.approve(identity, "old-fingerprint");
 
     const context = {
@@ -753,7 +753,7 @@ describe("/project-trust commands", () => {
     const skillManager = createMockSkillManager();
 
     // Pre-approve the project (using process.cwd() identity since that's what the command uses)
-    const identity = ProjectTrustStore.computeProjectIdentity(process.cwd());
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(process.cwd());
     skillManager.trustStore.approve(identity, "fingerprint");
     expect(skillManager.trustStore.isTrusted(identity)).toBe(true);
 
@@ -777,7 +777,7 @@ describe("/project-trust commands", () => {
     const skillManager = createMockSkillManager();
 
     // Ensure project is not trusted (using process.cwd() identity)
-    const identity = ProjectTrustStore.computeProjectIdentity(process.cwd());
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(process.cwd());
     skillManager.trustStore.revoke(identity);
     expect(skillManager.trustStore.isTrusted(identity)).toBe(false);
 

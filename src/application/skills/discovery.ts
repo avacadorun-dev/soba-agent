@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { ProjectTrustStore } from "./project-trust-store";
+import type { ProjectTrustStore } from "./project-trust-store";
 import type {
   DiscoveryResult,
   SkillCatalogEntry,
@@ -47,7 +47,7 @@ export class SkillDiscovery {
     const diagnostics: SkillDiagnostic[] = [];
 
     // Check project trust
-    const projectIdentity = ProjectTrustStore.computeProjectIdentity(this.options.projectPath);
+    const projectIdentity = this.options.trustStore.computeProjectIdentity(this.options.projectPath);
     const isProjectTrusted = this.options.trustStore.isTrusted(projectIdentity);
 
     // Discover from each location with precedence: bundled < user < project
@@ -235,7 +235,7 @@ export class SkillDiscovery {
    * Check if project is trusted.
    */
   private isProjectTrusted(): boolean {
-    const projectIdentity = ProjectTrustStore.computeProjectIdentity(this.options.projectPath);
+    const projectIdentity = this.options.trustStore.computeProjectIdentity(this.options.projectPath);
     return this.options.trustStore.isTrusted(projectIdentity);
   }
 
@@ -246,7 +246,7 @@ export class SkillDiscovery {
    */
   computeFingerprint(projectRoot: string): string {
     const hash = createHash("sha256");
-    ProjectTrustStore.computeProjectIdentity(projectRoot);
+    this.options.trustStore.computeProjectIdentity(projectRoot);
 
     // Collect all skill entries from all locations (ignoring trust for fingerprint)
     const locations: SkillLocation[] = [];

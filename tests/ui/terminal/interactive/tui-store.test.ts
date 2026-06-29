@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectTrustStore, type SobaRuntime, type UserTurnInput } from "../../../../src/application/ui/public";
+import { createFilesystemProjectTrustStore, type SobaRuntime, type UserTurnInput } from "../../../../src/application/ui/public";
 import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
 import type { AgentEvent } from "../../../../src/engine/turn/types";
 import { I18n } from "../../../../src/shared/i18n/i18n";
@@ -985,7 +985,7 @@ describe("Project trust status", () => {
   test("показывает UNTRUSTED когда проект не одобрен", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const agentLoop = {
       getModel: () => "test-model",
@@ -1016,8 +1016,8 @@ describe("Project trust status", () => {
   test("показывает TRUSTED когда проект одобрен", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const agentLoop = {
@@ -1049,7 +1049,7 @@ describe("Project trust status", () => {
   test("обновляется при trust_changed событии (approve)", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const agentLoop = {
       getModel: () => "test-model",
@@ -1065,7 +1065,7 @@ describe("Project trust status", () => {
       trustStore,
       executeCommand: async (_input, output) => {
         // Simulate /project-trust approve
-        const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+        const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
         trustStore.approve(identity, "test-fingerprint");
         output({ type: "trust_changed", trusted: true, timestamp: Date.now() });
         return { handled: true };
@@ -1088,8 +1088,8 @@ describe("Project trust status", () => {
   test("обновляется при trust_changed событии (revoke)", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-trust-test-"));
     const sobaDir = join(tempDir, ".soba");
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(tempDir);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(tempDir);
     trustStore.approve(identity, "test-fingerprint");
 
     const agentLoop = {

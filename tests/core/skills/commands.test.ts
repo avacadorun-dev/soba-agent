@@ -6,10 +6,10 @@ import { SkillCommands } from "../../../src/application/skills/commands";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import { DraftStore } from "../../../src/application/skills/drafts";
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { RevisionStore } from "../../../src/application/skills/revisions";
 import { FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
 import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/persistence/skills/evaluation-storage";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { FilesystemRevisionStorage } from "../../../src/infrastructure/persistence/skills/revision-storage";
 import { FilesystemSkillFileOperations } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
@@ -40,7 +40,7 @@ describe("SkillCommands", () => {
     revisionStore = new RevisionStore({ storage: new FilesystemRevisionStorage({ revisionsPath }) });
     evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
 
-    const trustStore = new ProjectTrustStore({ sobaDir: testDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir: testDir });
     const discovery = new SkillDiscovery({
       projectPath,
       userSkillsPath,
@@ -307,7 +307,7 @@ description: Bundled skill
 `,
       "utf-8",
     );
-    const trustStore = new ProjectTrustStore({ sobaDir: testDir });
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir: testDir });
     const bundledCatalog = new SkillCatalog({
       discovery: new SkillDiscovery({
         projectPath,
