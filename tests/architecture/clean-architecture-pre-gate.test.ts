@@ -179,6 +179,7 @@ describe("clean architecture pre-gate", () => {
     const turnRunnerSource = readProjectFile("src/engine/turn/agent-turn-runner.ts");
     const turnStageSource = [
       "src/engine/turn/agent-turn-begin.ts",
+      "src/engine/turn/agent-turn-completion-stage.ts",
       "src/engine/turn/agent-turn-prompt-context.ts",
       "src/engine/turn/agent-turn-response-stage.ts",
       "src/engine/turn/agent-turn-runner-events.ts",
@@ -242,7 +243,7 @@ describe("clean architecture pre-gate", () => {
     expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
     expect(source.split("\n").length).toBeLessThanOrEqual(300);
-    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(450);
+    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(400);
     expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
     expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });
