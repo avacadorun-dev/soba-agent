@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { RevisionStore } from "../../../src/application/skills/revisions";
+import { FilesystemRevisionStorage } from "../../../src/infrastructure/persistence/skills/revision-storage";
 
 describe("RevisionStore", () => {
   const testDir = join(process.cwd(), ".test-revisions");
@@ -23,8 +24,12 @@ describe("RevisionStore", () => {
     }
   });
 
+  function createRevisionStore(): RevisionStore {
+    return new RevisionStore({ storage: new FilesystemRevisionStorage({ revisionsPath }) });
+  }
+
   it("создаёт immutable revision snapshot", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     // Create a skill
     const skillPath = join(skillsPath, "test-skill");
@@ -52,7 +57,7 @@ description: Test skill
   });
 
   it("snapshot содержит копию skill содержимого", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -79,7 +84,7 @@ description: Test skill
   });
 
   it("помечает revision как approved", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -94,7 +99,7 @@ description: Test skill
   });
 
   it("помечает revision как promoted", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -109,7 +114,7 @@ description: Test skill
   });
 
   it("прикрепляет eval result к revision", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -147,7 +152,7 @@ description: Test skill
   });
 
   it("получает revision по ID", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -161,13 +166,13 @@ description: Test skill
   });
 
   it("возвращает null для несуществующего revision", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
     const revision = store.getRevision("test-skill", "non-existent");
     expect(revision).toBeNull();
   });
 
   it("получает историю revisions для skill", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -189,7 +194,7 @@ description: Test skill
   });
 
   it("получает последний approved revision", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -210,7 +215,7 @@ description: Test skill
   });
 
   it("rollback создаёт новый revision из старого snapshot", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -247,7 +252,7 @@ description: Test skill
   });
 
   it("revision snapshots immutable", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });
@@ -274,7 +279,7 @@ description: Test skill
   });
 
   it("вычисляет content hash для revision", () => {
-    const store = new RevisionStore({ revisionsPath });
+    const store = createRevisionStore();
 
     const skillPath = join(skillsPath, "test-skill");
     mkdirSync(skillPath, { recursive: true });

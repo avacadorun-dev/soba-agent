@@ -7,13 +7,10 @@
  * Spec: internal-design-notes § Revisions
  */
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type { EvalResult } from "./evaluator";
 
 export interface RevisionOptions {
-  revisionsPath: string;
+  storage: RevisionStorage;
 }
 
 export interface SkillRevision {
@@ -37,17 +34,23 @@ export interface RevisionHistory {
   currentRevision: string | null;
 }
 
+export interface RevisionStorage {
+  createSnapshotPath(skillName: string, revisionId: string): string;
+  computeContentHash(skillPath: string): string;
+  copySkillToSnapshot(skillPath: string, snapshotPath: string): void;
+  readRevision(skillName: string, revisionId: string): SkillRevision | null;
+  listRevisionIds(skillName: string): string[];
+  writeRevision(revision: SkillRevision): void;
+}
+
 /**
  * Manages immutable revision snapshots for skills.
  */
 export class RevisionStore {
-  private readonly revisionsPath: string;
+  private readonly storage: RevisionStorage;
 
   constructor(options: RevisionOptions) {
-    this.revisionsPath = options.revisionsPath;
-    if (!existsSync(this.revisionsPath)) {
-      mkdirSync(this.revisionsPath, { recursive: true });
-    }
+    this.storage = options.storage;
   }
 
   /**
@@ -63,11 +66,10 @@ export class RevisionStore {
     const revisionId = `rev_${contentHash.slice(0, 12)}_${Date.now().toString(36)}`;
 
     // Create snapshot directory
-    const snapshotPath = join(this.revisionsPath, skillName, revisionId);
-    mkdirSync(snapshotPath, { recursive: true });
+    const snapshotPath = this.storage.createSnapshotPath(skillName, revisionId);
 
     // Copy skill content to snapshot
-    this.copySkillToSnapshot(skillPath, snapshotPath);
+    this.storage.copySkillToSnapshot(skillPath, snapshotPath);
 
     const revision: SkillRevision = {
       revisionId,
@@ -136,43 +138,16 @@ export class RevisionStore {
    * Get a specific revision.
    */
   getRevision(skillName: string, revisionId: string): SkillRevision | null {
-    const revisionPath = join(this.revisionsPath, skillName, revisionId, ".revision.json");
-
-    if (!existsSync(revisionPath)) {
-      return null;
-    }
-
-    try {
-      const data = JSON.parse(readFileSync(revisionPath, "utf-8"));
-      return data as SkillRevision;
-    } catch {
-      return null;
-    }
+    return this.storage.readRevision(skillName, revisionId);
   }
 
   /**
    * Get history for a skill.
    */
   getHistory(skillName: string): RevisionHistory {
-    const skillRevisionsPath = join(this.revisionsPath, skillName);
-
-    if (!existsSync(skillRevisionsPath)) {
-      return {
-        skillName,
-        revisions: [],
-        currentRevision: null,
-      };
-    }
-
     const revisions: SkillRevision[] = [];
-    const entries = readdirSync(skillRevisionsPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-
-      const revision = this.getRevision(skillName, entry.name);
+    for (const revisionId of this.storage.listRevisionIds(skillName)) {
+      const revision = this.getRevision(skillName, revisionId);
       if (revision) {
         revisions.push(revision);
       }
@@ -228,68 +203,13 @@ export class RevisionStore {
    * Compute content hash for a skill directory.
    */
   private computeContentHash(skillPath: string): string {
-    const hash = createHash("sha256");
-    const files: Array<{ relativePath: string; content: Buffer }> = [];
-
-    const walk = (dir: string): void => {
-      const entries = readdirSync(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          walk(fullPath);
-        } else if (entry.isFile()) {
-          const relativePath = fullPath.slice(skillPath.length + 1);
-          const content = readFileSync(fullPath);
-          files.push({ relativePath, content });
-        }
-      }
-    };
-
-    walk(skillPath);
-
-    // Sort by relative path for deterministic hashing
-    files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-
-    for (const file of files) {
-      hash.update(file.relativePath);
-      hash.update(file.content);
-    }
-
-    return hash.digest("hex");
-  }
-
-  /**
-   * Copy skill content to snapshot directory.
-   */
-  private copySkillToSnapshot(sourcePath: string, snapshotPath: string): void {
-    const walk = (dir: string, relativeTo: string): void => {
-      const entries = readdirSync(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-        const relativePath = fullPath.slice(relativeTo.length + 1);
-        const targetPath = join(snapshotPath, relativePath);
-
-        if (entry.isDirectory()) {
-          mkdirSync(targetPath, { recursive: true });
-          walk(fullPath, relativeTo);
-        } else if (entry.isFile()) {
-          const content = readFileSync(fullPath);
-          writeFileSync(targetPath, content);
-        }
-      }
-    };
-
-    walk(sourcePath, sourcePath);
+    return this.storage.computeContentHash(skillPath);
   }
 
   /**
    * Save revision metadata.
    */
   private saveRevision(revision: SkillRevision): void {
-    const revisionPath = join(revision.snapshotPath, ".revision.json");
-    writeFileSync(revisionPath, JSON.stringify(revision, null, 2), "utf-8");
+    this.storage.writeRevision(revision);
   }
 }
