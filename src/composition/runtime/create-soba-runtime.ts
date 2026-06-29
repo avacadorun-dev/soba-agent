@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import type { PortableCapsuleServiceFactory } from "../../application/capsules/service";
+import type { CompactFallbackCompactorPort } from "../../application/commands/compact";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import type { SkillCatalog } from "../../application/skills/catalog";
@@ -26,6 +27,7 @@ import { PersistentSessionLifecycleService } from "../../infrastructure/persiste
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
 import { AgentLoopRuntimeAdapter } from "./agent-loop-runtime-adapter";
+import { EngineCompactFallbackCompactor } from "./compact-fallback-compactor";
 import { createMcpStack } from "./create-mcp-stack";
 import { createProviderStack } from "./create-provider-stack";
 import { createSkillStack } from "./create-skill-stack";
@@ -68,6 +70,7 @@ export interface RuntimeCommandExecutorFactoryContext {
   trustManager: TrustManager;
   getSession: () => SessionManager;
   portableCapsuleServiceFactory: PortableCapsuleServiceFactory;
+  fallbackCompactor: CompactFallbackCompactorPort;
 }
 
 export interface SobaRuntimeComposition {
@@ -89,6 +92,7 @@ export interface SobaRuntimeComposition {
   mcpRuntime: McpRuntimeController;
   mcpManager?: McpClientManager;
   portableCapsuleServiceFactory: PortableCapsuleServiceFactory;
+  fallbackCompactor: CompactFallbackCompactorPort;
 }
 
 export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<SobaRuntimeComposition> {
@@ -182,6 +186,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, createProjectContextReader(), createProjectCommandFileReader(cwd));
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const portableCapsuleServiceFactory = createFilesystemPortableCapsuleService;
+  const fallbackCompactor = new EngineCompactFallbackCompactor();
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
   const commandExecutor = commandExecutorFactory?.({
     client,
@@ -200,6 +205,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     trustManager,
     getSession: () => runtime.getSessionManager(),
     portableCapsuleServiceFactory,
+    fallbackCompactor,
   });
   runtime.setCommandExecutor(commandExecutor);
 
@@ -222,5 +228,6 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     mcpRuntime,
     mcpManager,
     portableCapsuleServiceFactory,
+    fallbackCompactor,
   };
 }

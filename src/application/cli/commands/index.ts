@@ -10,7 +10,7 @@ import type { ToolRegistry } from "../../../kernel/tools/tool-registry";
 import type { I18n } from "../../../shared/i18n/i18n";
 import type { PortableCapsuleServiceFactory } from "../../capsules";
 import type { CommandResult, RuntimeCommandMetadata } from "../../command-service";
-import type { CompactContextManagerPort } from "../../commands/compact";
+import type { CompactContextManagerPort, CompactFallbackCompactorPort } from "../../commands/compact";
 import type { McpSecretStoreLike } from "../../commands/mcp";
 import type { SessionContextSnapshotView } from "../../commands/session";
 import type { SobaConfig } from "../../config/types";
@@ -51,6 +51,7 @@ export interface CommandContext {
   i18n: I18n;
   renderer: CommandRenderer;
   contextManager?: CommandContextManagerPort;
+  fallbackCompactor?: CompactFallbackCompactorPort;
   autoCompactOverride?: { enabled: boolean };
   skillManager?: SkillManager;
   skillCommands?: SkillCommands;

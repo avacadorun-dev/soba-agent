@@ -26,7 +26,7 @@ const layerRules: LayerRule[] = [
   },
   {
     root: "src/application",
-    forbiddenTargets: ["src/composition/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
+    forbiddenTargets: ["src/engine/", "src/composition/", "src/infrastructure/", "src/apps/", "src/adapters/", "src/ui/"],
   },
   {
     root: "src/infrastructure",
@@ -140,6 +140,10 @@ describe("clean architecture pre-gate", () => {
     expect(violations).toEqual([]);
   });
 
+  test("root application public facade stays retired", () => {
+    expect(existsSync(join(projectRoot, "src/application/public.ts"))).toBe(false);
+  });
+
   test("print and TUI entrypoints execute user turns through SobaRuntime", () => {
     const cli = readProjectFile("src/apps/cli/main.ts");
     const tuiTypes = readProjectFile("src/ui/terminal/interactive/model/types.ts");
@@ -226,6 +230,7 @@ describe("clean architecture pre-gate", () => {
     expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
     expect(source.split("\n").length).toBeLessThanOrEqual(300);
+    expect(turnRunnerSource.split("\n").length).toBeLessThanOrEqual(600);
     expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
     expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });

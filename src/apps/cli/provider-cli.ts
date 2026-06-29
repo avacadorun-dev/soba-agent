@@ -45,7 +45,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ModelDefinition, ProviderDefinition } from "../../application/public";
+import type { ModelDefinition, ProviderDefinition } from "../../application/cli/public";
 import type { I18n } from "../../shared/i18n/i18n";
 
 // ─── Public types ───
