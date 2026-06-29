@@ -49,6 +49,9 @@
     "docs:deps:check": "bun run scripts/generate-dependency-graph.ts --check",
     "docs:changelog": "bun run scripts/generate-changelog.ts",
     "docs:changelog:check": "bun run scripts/generate-changelog.ts --check",
+    "docs:version:snapshot": "bun run scripts/generate-docs-version-snapshot.ts",
+    "docs:version:check": "bun run scripts/generate-docs-version-snapshot.ts --check",
+    "docs:release-baseline:check": "bun run scripts/check-docs-release-baseline.ts",
     "prepack": "bun run build"
   },
   "devDependencies": {

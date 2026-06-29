@@ -1,0 +1,128 @@
+---
+title: Безопасность
+description: Разрешения, trust-уровни, project trust и режимы безопасности SOBA Agent.
+---
+
+SOBA классифицирует операции агента (инструменты и shell-команды) по уровням доверия
+и запрашивает подтверждение пользователя для опасных действий.
+
+---
+
+## 1. Уровни доверия (TrustLevel)
+
+Каждый вызов инструмента или shell-команды получает один из трёх уровней
+(`src/core/trust/trust-manager.ts`):
+
+| Уровень | Поведение | Примеры |
+|---------|-----------|---------|
+| **safe** | Выполняется автоматически | `read`, `ls`, `git status`, `npm test` |
+| **normal** | Выполняется без подтверждения (логируется) | `write`, `edit`, `git commit`, `bun install` |
+| **dangerous** | Требует подтверждения пользователя | `rm`, `sudo`, `curl`, `git push` |
+
+---
+
+## 2. Режимы разрешений (PermissionMode)
+
+Три режима, задаются в `TrustManager.setPermissionMode()`:
+
+| Режим | Поведение |
+|--------|----------|
+| **ask** (по умолчанию) | Каждая dangerous-команда запрашивает подтверждение |
+| **repo** | Dangerous-команды внутри текущего repo разрешены без повторного запроса; внешние, сетевые и privileged команды по-прежнему требуют подтверждения |
+| **full** | Все dangerous-операции разрешены без повторного запроса до конца текущей сессии |
+
+---
+
+## 3. Классификация shell-команд
+
+Полный список правил: `DEFAULT_COMMAND_RULES` в `src/core/trust/trust-manager.ts`.
+
+### Dangerous — требуют подтверждения
+
+Удаление: `rm`, `rm -rf`, `rmdir`, `unlink`, `shred`, `srm`  
+Привилегии: `sudo`, `chown`, `chmod 777`  
+Сеть: `curl`, `wget`, `nc`, `ssh`, `scp`  
+Git: `git push`, `git reset`  
+Dev-серверы (блокировка агента): `bun run dev`, `npm run dev`, `npx vite`  
+Скриптовые обходы: `node -e`, `bun -e`, `python -c`, `ruby -e`  
+Перемещение за пределы проекта: `mv ... /tmp/`, `mv ... $HOME/`  
+Файловые системы: `mkfs.*`, `dd if=`  
+Перенаправление в устройство: `> /dev/sda`
+
+### Normal — выполняются без спроса
+
+Запись: `write`, `edit`, `mkdir`, `cp`, `mv` (внутри проекта), `touch`, `chmod`  
+Git: `git add`, `git commit`, `git checkout`  
+Пакетные менеджеры: `bun install`, `npm install`, `yarn install`, `pnpm install`  
+Сборка: `make`, `cargo`, `go`, `docker`, `docker-compose`
+
+### Safe — всегда разрешены
+
+Чтение: `read`, `ls`, `cat`, `head`, `tail`, `wc`  
+Поиск: `grep`, `rg`, `find` (без `-delete`/`-exec rm`)  
+Git: `git status`, `git log`, `git diff`, `git branch`  
+Тесты/запуск: `npm test`, `npm run`, `bun test`, `bun run`  
+Информация: `echo`, `pwd`, `which`, `env`, `date`, `whoami`  
+Перенаправление: `> /dev/null`
+
+---
+
+## 4. Подтверждение опасных операций
+
+Когда агент вызывает dangerous-команду, пользователь видит запрос с вариантами
+(`src/ui/terminal/interactive/lib/trust-dialog-manager.ts`, `ApprovalDecision` в `src/core/loop/types.ts`):
+
+| Решение | Действие |
+|---------|----------|
+| **deny** (n) | Отклонить |
+| **once** (y) | Разрешить один раз |
+| **session** (s) | Разрешить на всю сессию (та же команда больше не запросит подтверждения) |
+| **repo** (r) | Включить repo-режим |
+| **full** (f) | Включить полный session-режим для всех dangerous-операций |
+
+---
+
+## 5. Прямые shell-команды (`!`)
+
+В TUI синтаксис `!команда` выполняет команду напрямую, минуя AI.
+Проверка безопасности применяется перед выполнением
+(`src/core/loop/agent-loop.ts` — `_directShellAbortController`).
+
+---
+
+## 6. Project Trust для skills
+
+Skills из `.soba/skills/` требуют одобрения перед первым использованием в проекте
+(`src/core/skills/project-trust-store.ts`).
+
+Хранилище: `~/.soba/project-trust.json`.
+
+Slash-команды:
+
+| Команда | Действие |
+|---------|----------|
+| `/project-trust status` | Показать статус доверия текущего проекта |
+| `/project-trust approve` | Одобрить проект |
+| `/project-trust revoke` | Отозвать доверие |
+
+---
+
+## 7. Кастомизация правил
+
+`TrustManager` позволяет добавлять и удалять правила:
+
+```typescript
+trustManager.addToolRule("my-tool", "dangerous");
+trustManager.addCommandRule("my-cmd ", "safe");
+trustManager.removeToolRule("my-tool");
+```
+
+---
+
+## 8. Аудит
+
+Все действия агента записываются в сессию (JSONL). Для просмотра shell-команд:
+
+```bash
+grep '"name":"bash"' ~/.soba/sessions/<session-id>.jsonl
+```

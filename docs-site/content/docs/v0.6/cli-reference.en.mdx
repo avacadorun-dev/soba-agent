@@ -1,0 +1,168 @@
+---
+title: CLI reference
+description: SOBA launch modes, top-level flags, provider subcommands, and check commands.
+---
+
+This page lists the SOBA Agent v0.6.x CLI surface available from the console.
+
+---
+
+## 1. Launch modes
+
+| Command | Purpose |
+|---|---|
+| `soba "prompt"` | One-shot task with session persistence |
+| `soba` | Interactive TUI when the process is running in a TTY |
+| `soba -i` | Explicit interactive TUI |
+| `soba -c` | Continue the latest session |
+| `soba -r` | Pick a session with the interactive selector |
+| `soba -s <id> "prompt"` | Continue a specific session |
+| `soba --no-session "prompt"` | Run without saving session history |
+
+---
+
+## 2. Top-level flags
+
+### Session and modes
+
+| Flag | Short | Description |
+|---|---|---|
+| `--interactive` | `-i` | Start the TUI |
+| `--continue` | `-c` | Continue the latest session |
+| `--resume` | `-r` | Pick a session |
+| `--session <id>` | `-s` | Open a specific session |
+| `--no-session` | — | Do not save history to disk |
+
+### Provider and model
+
+| Flag | Short | Description |
+|---|---|---|
+| `--model <id>` | `-m` | Override the model for one run |
+| `--api-key <key>` | `-k` | Override the API key for one run |
+| `--base-url <url>` | — | Override the OpenAI-compatible base URL |
+
+### Limits
+
+| Flag | Description |
+|---|---|
+| `--budget <n>` | Limit the task token budget |
+| `--max-output-tokens <n>` | Limit response output tokens |
+| `--max-completion-tokens <n>` | Limit reasoning/completion tokens |
+| `--context-window <n>` | Override the model context window |
+| `--max-agent-iterations <n>` | Emergency limit for model/tool loop iterations |
+| `--max-stalled-iterations <n>` | Iterations without progress before stall recovery |
+| `--max-run-minutes <n>` | Maximum duration of one task |
+| `--bash-max-timeout-seconds <n>` | Maximum timeout for one `bash` tool call in seconds; default is 300 |
+
+### Interface and behavior
+
+| Flag | Description |
+|---|---|
+| `--lang <en\|ru\|zh>` | Interface language |
+| `--theme <name>` | TUI theme |
+| `--no-color` | Disable ANSI colors |
+| `--no-stream` | Disable streaming |
+| `--stream` | Explicitly enable streaming |
+| `--debug` | Write loop decisions to the session JSONL |
+| `--no-auto-compact` | Disable proactive compaction |
+
+### Sound
+
+| Flag | Description |
+|---|---|
+| `--sound-enabled` | Enable sound notifications |
+| `--no-sound` | Disable sound notifications |
+| `--sound-volume <0..1>` | Volume |
+| `--sound-repeat` | Repeat the sound until the next event or state change |
+
+### Info
+
+| Flag | Short | Description |
+|---|---|---|
+| `--help` | `-h` | Show help |
+| `--version` | `-v` | Show version |
+
+---
+
+## 3. Provider subcommands
+
+The provider registry is managed through the `soba provider` sub-route.
+
+| Command | Purpose |
+|---|---|
+| `soba provider help` | Provider CLI help |
+| `soba provider list` | List built-in and custom providers |
+| `soba provider show <id>` | Show provider definition |
+| `soba provider use <id>` | Make a provider active |
+| `soba provider add <id> ...` | Add a custom provider |
+| `soba provider remove <id>` | Remove a custom provider |
+
+### `soba provider add`
+
+Supported flags:
+
+| Flag | Description |
+|---|---|
+| `--name <name>` | Human-readable name |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | Env var with the API key; empty value means a keyless provider |
+| `--adapter <openai\|anthropic>` | Adapter id; runtime path is oriented around OpenAI-compatible APIs |
+| `--default-model <id>` | Default model |
+| `--model <spec>` | Model spec; the flag can be repeated |
+| `--from-file <path>` | Load provider definition from JSON |
+| `--set-active` | Switch to the added provider immediately |
+
+`--model` format:
+
+```text
+id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
+```
+
+Example keyless local provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+`8192,2048` is a gentle starting point for a local model: context window first, max output tokens second. Larger values such as `128000,8192` can put a lot of pressure on memory and make a laptop feel painfully slow.
+
+---
+
+## 4. Practical check commands
+
+```bash
+soba --version
+soba --help
+soba provider list
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+For development in the repository:
+
+```bash
+soba -i --lang en --theme graphite
+```
+
+---
+
+## 5. Direct shell in the TUI
+
+In interactive mode, shell commands can be run directly:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` runs the command immediately. `!!` runs it without adding output to the transcript. If you want the agent to see and
+analyze the output, ask it to run the command through a normal prompt, which uses the `bash` tool.
+
+## Next
+
+- [Providers and models](/en/docs/v0.6/providers)
+- [Interface and commands](/en/docs/v0.6/usage)
+- [Configuration](/en/docs/v0.6/configuration)

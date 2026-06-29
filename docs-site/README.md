@@ -51,6 +51,14 @@ src/
 Documentation is organized by SOBA Agent versions. Rendered app surfaces read the current version from the root
 `package.json` through `src/lib/version.ts`. Version switcher in sidebar allows navigation between versions.
 
+Latest documentation keeps the stable `/docs/...` URLs. Frozen minor-version snapshots live under `/docs/vX.Y/...`.
+Before a minor release, refresh the current snapshot from the repository root:
+
+```bash
+bun run docs:version:snapshot vX.Y
+bun run docs:version:check vX.Y
+```
+
 ## Content Source
 
 Content lives in `content/docs/` — maintained alongside the main codebase.

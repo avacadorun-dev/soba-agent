@@ -49,6 +49,8 @@ describe("CI quality gate", () => {
       "bun run check:boundaries",
       "bun run docs:deps:check",
       "bun run docs:changelog:check",
+      "bun run docs:version:check",
+      "bun run docs:release-baseline:check",
       "bun run build",
       "bun test",
     ]);
@@ -74,6 +76,15 @@ describe("CI quality gate", () => {
     expect(packageJson.scripts?.["docs:changelog"]).toBe("bun run scripts/generate-changelog.ts");
     expect(packageJson.scripts?.["docs:changelog:check"]).toBe(
       "bun run scripts/generate-changelog.ts --check",
+    );
+    expect(packageJson.scripts?.["docs:version:snapshot"]).toBe(
+      "bun run scripts/generate-docs-version-snapshot.ts",
+    );
+    expect(packageJson.scripts?.["docs:version:check"]).toBe(
+      "bun run scripts/generate-docs-version-snapshot.ts --check",
+    );
+    expect(packageJson.scripts?.["docs:release-baseline:check"]).toBe(
+      "bun run scripts/check-docs-release-baseline.ts",
     );
     expect(packageJson.scripts?.test).toBe("bun test");
     expect(packageJson.scripts?.build).toBe("bun run scripts/build.ts");

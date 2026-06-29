@@ -1,0 +1,86 @@
+---
+title: 声音通知
+description: "SOBA 声音通知：CLI 标志、环境变量、config.json，以及不同平台上的行为。"
+---
+
+SOBA 可以在重要事件发生时播放声音：任务完成、出现错误，或者危险操作需要确认。
+
+---
+
+## 1. CLI 标志
+
+| 标志 | 作用 |
+|---|---|
+| `--sound-enabled` | 为本次运行启用声音 |
+| `--no-sound` | 为本次运行关闭声音 |
+| `--sound-volume <0..1>` | 音量 |
+| `--sound-repeat` | 重复播放声音，直到下一个事件或状态变化 |
+
+示例：
+
+```bash
+soba -i --sound-enabled --sound-volume 0.5
+```
+
+---
+
+## 2. 配置
+
+`~/.soba/config.json` 中的 `sound` 块：
+
+```json
+{
+  "sound": {
+    "enabled": true,
+    "volume": 0.7,
+    "repeatMode": "once",
+    "repeatIntervalMs": 3000
+  }
+}
+```
+
+| 键 | 取值 |
+|---|---|
+| `enabled` | `true` 或 `false` |
+| `volume` | `0.0` 到 `1.0` 之间的数字 |
+| `repeatMode` | `"once"` 或 `"repeat"` |
+| `repeatIntervalMs` | 重复间隔，单位是毫秒 |
+
+---
+
+## 3. 环境变量
+
+```bash
+export SOBA_SOUND_ENABLED=true
+export SOBA_SOUND_VOLUME=0.7
+export SOBA_SOUND_REPEAT=once
+```
+
+优先级是常规顺序：
+
+```text
+CLI flags > env > config.json > defaults
+```
+
+---
+
+## 4. 实际使用
+
+对于耗时较长的任务：
+
+```bash
+soba -i --sound-enabled --sound-repeat
+```
+
+对于 CI、录屏或安静模式：
+
+```bash
+soba -i --no-sound
+```
+
+如果没有播放声音，请检查系统播放器和操作系统音量。SOBA 不应该因为音频不可用而阻塞任务执行。
+
+## 下一步
+
+- [配置](/ru/docs/v0.6/configuration)
+- [界面和命令](/ru/docs/v0.6/usage)

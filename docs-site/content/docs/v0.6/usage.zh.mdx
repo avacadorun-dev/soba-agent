@@ -1,0 +1,316 @@
+---
+title: 界面与命令
+description: SOBA Agent 的 TUI、斜杠命令、直接 shell、任务队列、token 预算、主题和快捷键。
+---
+
+SOBA 提供一个交互式控制台界面：可以使用斜杠命令、快捷键、直接 shell，以及一个轻量的任务队列。
+
+---
+
+## 1. 启动 TUI
+
+```bash
+# 交互模式；没有传入 prompt 时默认使用
+soba
+
+# 显式进入交互模式
+soba -i
+
+# 指定主题
+soba --theme forest
+
+# 继续指定会话
+soba -s abc123
+
+# 在 TUI 中继续最近的会话
+soba -c
+
+# 打开会话选择器
+soba -r
+```
+
+### TUI 大致长这样
+
+```
+┌──────────────────────────────────────────────────────┐
+│  SOBA  Agent  [-][_][×]    Budget: 12K/64K    ZH │
+│──────────────────────────────────────────────────────│
+│  ● Active    soba-agent                               │
+│──────────────────────────────────────────────────────│
+│  You: Fix all TypeScript errors in src/              │
+│                                                      │
+│  Agent: Analyzing...                                 │
+│  ┌────────────────────────────────────────────────┐   │
+│  │ 🔧 read: src/utils/parser.ts                   │   │
+│  │    ...                                         │   │
+│  └────────────────────────────────────────────────┘   │
+│  ┌────────────────────────────────────────────────┐   │
+│  │ ✅ edit: Fixed 3 type errors                   │   │
+│  └────────────────────────────────────────────────┘   │
+│  Agent: Done. Fixed 3 errors in parser.ts.          │
+│──────────────────────────────────────────────────────│
+│  > _                                                  │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. 快捷键
+
+| 按键 | 动作 | 场景 |
+|---|---|---|
+| `Enter` | 发送消息 | 输入行 |
+| `Ctrl+C` | 中断当前代理响应 | 代理正在工作时 |
+| `Ctrl+Z` | 挂起 SOBA (SIGTSTP) | 始终可用 |
+| `Ctrl+L` / `/clear` | 清屏 | 始终可用 |
+| `Ctrl+D` | 退出 TUI | 输入行为空时 |
+| `Escape` | 清空输入或关闭对话框 | 输入行 / 对话框 |
+| `Tab` | 补全斜杠命令 | 输入行 |
+| `↑` / `↓` | 浏览消息历史 | 输入行 |
+| `Page Up` / `Page Down` | 滚动 TUI 消息历史 | 主区域 |
+| `Home` | 跳到历史开头 | 主区域 |
+| `End` | 跳到当前历史末尾 | 主区域 |
+| `F1` | 打开帮助侧栏 | 主区域 |
+| `F2` / `/model` | 打开 provider/model 选择器 | 主区域 |
+| `F3` / `/search` | 搜索会话历史 | 主区域 |
+| `F6` / `/sidebar` | 切换侧栏面板 | 主区域 |
+| `Ctrl+Shift+S` / `/sidebar toggle` | 折叠或展开侧栏 | 主区域 |
+| `/keys` | 显示运行时 keymap 和命令 fallback | 主区域 |
+
+### 模型选择器
+
+`F2` 或 `/model` 会打开一个紧凑的双列选择器。左侧是 providers，右侧是当前高亮 provider 的模型；搜索框会同时过滤 provider 名称、模型名称和模型 ID。`Ctrl+M` 仍作为旧别名保留，但很多终端会把它编码成 Enter，因此不要依赖它。
+
+用 `↑` / `↓` 在模型间移动，用 `←` / `→` 或 `Tab` / `Shift+Tab` 切换 provider，用 `Enter` 选择高亮模型。顶部会显示当前 provider/model；每个模型行会显示 context window、max output、streaming 和 thinking 支持情况（如果 provider 提供了这些元数据）。打开选择器也会刷新内置 providers 的 discovery，因此新模型通常可以不用重启整个 session 就出现在列表里。
+
+---
+
+## 3. 斜杠命令
+
+所有斜杠命令都以 `/` 开头。命令名不区分大小写。
+
+### 3.1. 会话管理
+
+| 命令 | 动作 |
+|---|---|
+| `/session` | 显示当前会话信息：ID、回合数、预算 |
+| `/session rewind <turn-id>` | 回退到指定回合，并创建一个分支 |
+
+### 3.2. Compaction 与预算
+
+| 命令 | 动作 |
+|---|---|
+| `/compact` | 强制 compaction，创建 context capsule |
+| `/auto-compact on` | 开启自动 compaction |
+| `/auto-compact off` | 关闭自动 compaction |
+| `/budget` | 显示当前 token 与上下文预算 |
+| `/capsule` | 显示最近的 capsule |
+
+### 3.3. Skills
+
+| 命令 | 动作 |
+|---|---|
+| `/skill list` | 显示可用的 bundled、user、project skills |
+| `/skill new` | 创建新 skill |
+| `/skill edit <name>` | 编辑已有 skill |
+| `/skill remove <name>` | 删除 skill |
+| `/skill:<name>` | 用冒号形式激活 skill |
+
+### 3.4. 界面设置
+
+| 命令 | 动作 |
+|---|---|
+| `/theme` | 显示当前主题和可用主题 |
+| `/theme <name>` | 切换主题，例如 `/theme forest` |
+| `/lang` | 显示当前语言 |
+| `/lang <locale>` | 切换语言：`en`、`ru`、`zh` |
+| `/config show` | 显示当前配置 |
+| `/permissions [ask\|repo\|full\|clear]` | 管理权限模式 |
+| `/clear` | 清空 TUI 屏幕 |
+| `/search` | 搜索对话历史 |
+| `/notifications` | 显示通知历史 |
+
+### 3.5. 其他命令
+
+| 命令 | 动作 |
+|---|---|
+| `/help` | 显示所有命令帮助 |
+| `/queue` | 显示任务队列 |
+| `/queue clear` | 清空任务队列 |
+| `/project-trust status` | 显示项目信任状态 |
+| `/project-trust approve` | 信任当前项目 |
+| `/project-trust revoke` | 撤销项目信任 |
+| `/mcp status` | 显示已配置 MCP 服务器状态 |
+| `/mcp start <server>` | 启动 MCP 服务器并注册它的工具 |
+| `/mcp stop <server>` | 停止 MCP 服务器 |
+| `/mcp restart <server>` | 重启 MCP 服务器并同步工具 |
+| `/mcp auth status <server>` | 显示 remote auth 状态和下一步动作 |
+| `/mcp auth login <server>` | 为 remote MCP server 启动 OAuth 登录 |
+| `/mcp auth logout <server>` | 清除保存的 OAuth credentials |
+| `/exit`, `/quit` | 退出 TUI |
+
+---
+
+## 4. 直接 shell
+
+使用 `!` 可以直接执行 shell 命令，不经过 AI。
+
+### 4.1. 基本语法
+
+```bash
+# 执行一条命令
+!ls -la src/
+
+# 重复上一条 shell 命令
+!!
+
+# 查看 Node 版本
+!node --version
+
+# 查看 git 状态
+!git status
+
+# 运行测试
+!bun test
+```
+
+### 4.2. 细节
+
+- **代理看不到 `!` 命令的输出**。这是一个快速操作方式，不会把输出花在 AI token 上。
+- **如果希望代理读取输出**，请发送普通 prompt，让代理自己调用 `bash` 工具。
+- **Trust 仍然生效**：`rm -rf`、`sudo` 等危险命令在 `safe` trust mode 下会被阻止，在 `normal` 下需要确认。见 [安全](/zh/docs/v0.6/security)。
+
+---
+
+## 5. 任务队列
+
+代理工作时你仍然可以继续发送任务。SOBA 会按顺序执行它们。
+
+```bash
+# 代理正在处理第一个请求
+> Fix all TS errors                                  # → 任务 1，正在执行
+
+# 在它忙的时候继续加入任务
+> Add tests for utils                                # → 队列，第 1 位
+> Update README with new features                    # → 队列，第 2 位
+
+# 查看队列
+/queue
+# 输出: Queue (2 tasks)
+#   1. Add tests for utils
+#   2. Update README with new features
+
+# 清空队列
+/queue clear
+```
+
+---
+
+## 6. Token 预算
+
+SOBA 会实时跟踪 token 使用量，并在需要时自动压缩上下文。
+
+```bash
+# 查看预算
+/budget
+
+# 输出:
+#   Used:      28,450 tokens
+#   Limit:     64,000 tokens (context window)
+#   Available: 35,550 tokens
+#   Messages:  42
+#   Turns:     8
+#   Capsules:  2
+
+# 更多上下文细节
+/budget
+/session
+
+# 输出:
+#   Effective tokens:   32,100
+#   Hard limit:         47,616
+#   Safety reserve:     8,192
+#   Max output:         8,192
+#   Reclaimable:        12,100
+#   Auto-compact:       ON
+```
+
+---
+
+## 7. 滚动历史
+
+完整的消息和工具历史可以这样滚动：
+
+- **`Page Up` / `Page Down`** — 按页滚动
+- **`Home`** — 跳到会话历史开头
+- **`End`** — 跳到末尾，也就是当前状态
+
+滚动时输入行仍然可见，所以你可以一边查看旧上下文，一边写新的消息。
+
+---
+
+## 8. 自动补全
+
+### 8.1. 斜杠命令
+
+在 `/` 后按 `Tab` 会显示可用命令：
+
+```
+/             # Tab →
+help         session      compact      budget
+auto-compact capsule      config       lang
+theme         skill       project-trust exit
+quit          clear       search       notifications
+permissions   queue
+```
+
+### 8.2. 子命令
+
+对支持子命令的命令：
+
+```
+/skill        # Tab →
+/skill list    /skill new     /skill edit
+/skill eval   /skill remove   /skill:
+```
+
+---
+
+## 9. 主题
+
+SOBA 内置 10 个颜色主题，也可以创建自己的主题。
+
+```bash
+# 切换主题
+/theme forest
+
+# 查看当前主题
+/theme
+
+# 可用主题:
+# graphite, ember, aurora, synthwave, paper,
+# forest, highContrast, clay, operator, ink
+```
+
+每个主题都定义语义 token，例如 accent、text、muted、success、error、border，并支持深色和浅色模式。更多细节见[主题指南](/zh/docs/v0.6/themes)。
+
+---
+
+## 10. 多语言
+
+SOBA 支持英文、俄文和中文。
+
+```bash
+# 在 TUI 中切换语言
+/lang zh
+
+# 启动时指定
+soba --lang zh
+
+# 在配置中
+{
+  "lang": "zh"
+}
+```
+
+翻译文件位于 `locales/`。如果要添加新语言，需要创建对应的 JSON 文件，并在 i18n 系统中注册它。

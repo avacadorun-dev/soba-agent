@@ -41,6 +41,7 @@ describe("Release workflow", () => {
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("bun run docs:changelog:check");
+    expect(workflow).toContain("bun run docs:version:check");
     expect(workflow).toContain(
       'bun run scripts/generate-changelog.ts --release-notes "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"',
     );

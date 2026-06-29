@@ -1,0 +1,87 @@
+---
+title: Звуковые уведомления
+description: "Sound notifications SOBA: CLI-флаги, env-переменные, config.json и поведение на разных платформах."
+---
+
+SOBA может воспроизводить звуки при важных событиях: завершение задачи, ошибка, запрос dangerous-операции.
+
+---
+
+## 1. CLI-флаги
+
+| Флаг | Назначение |
+|---|---|
+| `--sound-enabled` | Включить звук на текущий запуск |
+| `--no-sound` | Отключить звук на текущий запуск |
+| `--sound-volume <0..1>` | Громкость |
+| `--sound-repeat` | Повторять звук до следующего события или смены состояния |
+
+Пример:
+
+```bash
+soba -i --sound-enabled --sound-volume 0.5
+```
+
+---
+
+## 2. Config
+
+Блок `sound` в `~/.soba/config.json`:
+
+```json
+{
+  "sound": {
+    "enabled": true,
+    "volume": 0.7,
+    "repeatMode": "once",
+    "repeatIntervalMs": 3000
+  }
+}
+```
+
+| Ключ | Значения |
+|---|---|
+| `enabled` | `true` или `false` |
+| `volume` | число от `0.0` до `1.0` |
+| `repeatMode` | `"once"` или `"repeat"` |
+| `repeatIntervalMs` | интервал повтора в миллисекундах |
+
+---
+
+## 3. Env
+
+```bash
+export SOBA_SOUND_ENABLED=true
+export SOBA_SOUND_VOLUME=0.7
+export SOBA_SOUND_REPEAT=once
+```
+
+Приоритет стандартный:
+
+```text
+CLI flags > env > config.json > defaults
+```
+
+---
+
+## 4. Практика
+
+Для долгих задач:
+
+```bash
+soba -i --sound-enabled --sound-repeat
+```
+
+Для CI, записи экрана или тихого режима:
+
+```bash
+soba -i --no-sound
+```
+
+Если звук не воспроизводится, проверьте системный player и громкость ОС. SOBA не должен блокировать выполнение задачи
+из-за недоступного аудио.
+
+## Что дальше
+
+- [Конфигурация](/ru/docs/v0.6/configuration)
+- [Интерфейс и команды](/ru/docs/v0.6/usage)

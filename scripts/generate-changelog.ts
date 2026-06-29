@@ -313,10 +313,12 @@ function renderSectionBody(section: ChangelogSection, lang: Lang, repoUrl: strin
     lines.push(`### ${labels.categories[category]}`, "");
     for (const commit of commits) {
       const subject = escapeMarkdown(stripConventionalPrefix(commit.subject));
-      const hash = section.linkCommits
-        ? `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`
-        : `\`${commit.shortHash}\``;
-      lines.push(`- ${subject} (${hash})`);
+      if (section.linkCommits) {
+        const hash = `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`;
+        lines.push(`- ${subject} (${hash})`);
+      } else {
+        lines.push(`- ${subject}`);
+      }
     }
     lines.push("");
   }

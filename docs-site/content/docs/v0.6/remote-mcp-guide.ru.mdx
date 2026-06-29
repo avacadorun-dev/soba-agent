@@ -1,0 +1,202 @@
+---
+title: "Remote MCP: пошаговый гайд"
+description: Как подключить hosted Streamable HTTP MCP server к SOBA, выбрать auth mode, проверить tools и разобрать типовые ошибки.
+---
+
+Этот гайд подключает SOBA v0.6.0 к hosted MCP server через актуальный `streamableHttp` transport.
+
+Используйте его для провайдеров, которые дают один MCP endpoint вида `https://mcp.example.com/mcp`. Не настраивайте
+deprecated HTTP+SSE transport со старой парой SSE/messages endpoints. SSE stream как формат ответа внутри Streamable HTTP
+при этом поддержан.
+
+---
+
+## 1. Получить endpoint у provider
+
+Откройте dashboard или docs провайдера и скопируйте Streamable HTTP MCP URL для workspace/project.
+
+Подходит:
+
+```text
+https://mcp.example.com/mcp
+```
+
+Не подходит для SOBA v0.6.0:
+
+```text
+https://mcp.example.com/sse
+https://mcp.example.com/messages
+```
+
+---
+
+## 2. Выбрать auth mode
+
+Для первого рабочего remote подключения используйте env-backed auth:
+
+| Mode | Когда использовать |
+|---|---|
+| `bearerEnv` | Provider выдаёт bearer token. |
+| `apiKeyEnv` | Provider ждёт API key в конкретном header. |
+| `none` | Только для local mocks или servers без auth. |
+
+OAuth в SOBA включает discovery, PKCE browser flow, callback, token storage, refresh, logout и UX-команды
+`/mcp auth ...`. Команды auth работают через provider-specific auth controller. Если controller не подключён для
+конкретного remote provider в текущей сборке, `/mcp auth login <server>` сообщает, что login flow недоступен.
+
+Для первого production-подключения используйте env-backed auth: `bearerEnv` или `apiKeyEnv`. OAuth подходит для provider
+integration, где controller уже подключает login flow и применение сохранённых bearer credentials к remote requests.
+
+---
+
+## 3. Создать `.soba/mcp.json`
+
+Создайте project-local config:
+
+```bash
+mkdir -p .soba
+```
+
+Пример с bearer token:
+
+```json
+{
+  "version": 1,
+  "servers": {
+    "hosted-docs": {
+      "name": "Hosted docs MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "X-Workspace": "${ENV:MCP_WORKSPACE_ID}"
+      },
+      "auth": {
+        "type": "bearerEnv",
+        "env": "REMOTE_MCP_BEARER_TOKEN"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}
+```
+
+Важные детали:
+
+- `auth.env` — это имя env-переменной без `${ENV:...}`.
+- `url` может использовать `${ENV:...}` placeholders для providers, которые требуют auth в query string.
+- `headers` могут использовать `${ENV:...}` placeholders.
+- Не задавайте `MCP-Session-Id` вручную: SOBA управляет session id внутри Streamable HTTP transport.
+- Не включайте remote template, пока не проверили URL, auth и `trustMode`.
+
+Query-parameter auth example для providers, которые реализуют auth прямо в MCP endpoint URL:
+
+```json
+{
+  "version": 1,
+  "servers": {
+    "hosted-search": {
+      "name": "Hosted search MCP",
+      "transport": "streamableHttp",
+      "url": "https://mcp.example.com/mcp?apiKey=${ENV:REMOTE_MCP_API_KEY}",
+      "auth": {
+        "type": "none"
+      },
+      "timeoutMs": 30000,
+      "maxOutputBytes": 1048576,
+      "trustMode": "normal",
+      "enabled": true
+    }
+  }
+}
+```
+
+Используйте этот вариант только если provider docs явно показывают auth в URL. Если provider ждёт HTTP header,
+используйте `bearerEnv` или `apiKeyEnv`.
+
+---
+
+## 4. Экспортировать secrets
+
+Secrets хранятся в окружении, не в committed config:
+
+```bash
+export MCP_WORKSPACE_ID="workspace_..."
+export REMOTE_MCP_BEARER_TOKEN="..."
+```
+
+Если provider ждёт API key:
+
+```json
+{
+  "auth": {
+    "type": "apiKeyEnv",
+    "header": "X-API-Key",
+    "env": "REMOTE_MCP_API_KEY"
+  }
+}
+```
+
+И затем:
+
+```bash
+export REMOTE_MCP_API_KEY="..."
+```
+
+---
+
+## 5. Запустить SOBA и проверить status
+
+Запустите interactive SOBA из project root и выполните:
+
+```text
+/mcp status
+/mcp start hosted-docs
+/mcp status
+```
+
+Готовый server публикует tools в registry модели с именами:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Например:
+
+```text
+mcp_hosted_docs_search
+```
+
+---
+
+## 6. Проверить реальный tool call
+
+Попросите SOBA явно использовать remote MCP source:
+
+```text
+Найди через MCP hosted-docs документацию по настройке rate limits и кратко перескажи.
+```
+
+Если server остаётся `ready`, а модель вызывает `mcp_hosted_docs_*`, remote connection работает.
+
+---
+
+## 7. Разобрать типовые ошибки
+
+| Симптом | Что проверить |
+|---|---|
+| HTTP 401 | Env vars экспортированы в той же shell, где стартует SOBA; token не истёк; OAuth подключён перед `/mcp auth login`. |
+| HTTP 403 | Token валиден, но не имеет provider permissions, workspace access или scopes. |
+| HTTP 404 | URL не является Streamable HTTP MCP endpoint провайдера. |
+| Malformed SSE | URL ведёт на старый standalone `/sse` endpoint или provider вернул невалидный Streamable HTTP event stream. |
+| Session expired | Выполните `/mcp restart hosted-docs`; при необходимости обновите credentials. |
+| Tools не видны | Server не `ready`, не отдаёт `tools`, или SOBA не перезапущена после правки config. |
+
+---
+
+## 8. Что читать дальше
+
+- [MCP-серверы](/ru/docs/v0.6/mcp) — полный reference по config, commands, trust boundary и troubleshooting.
+- [Инструменты агента](/ru/docs/v0.6/tools) — как MCP tools попадают в общий tool registry.

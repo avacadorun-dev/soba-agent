@@ -23,7 +23,9 @@ export const Route = createFileRoute("/$lang/docs/$")({
 
     return {
       path: page.path,
-      pageTree: getStaticDocsTree(params.lang),
+      pageSlug: page.slug,
+      pageTree: getStaticDocsTree(params.lang, page.version),
+      version: page.version,
     };
   },
 });
@@ -58,7 +60,7 @@ function Page() {
       sidebar={{
         banner: (
           <div className="flex flex-col gap-2 p-2">
-            <VersionSwitcher lang={lang} />
+            <VersionSwitcher lang={lang} currentSlug={data.pageSlug} currentVersion={data.version} />
             <LanguageSwitcher lang={lang} docs />
           </div>
         ),
