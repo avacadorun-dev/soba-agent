@@ -164,20 +164,25 @@ describe("clean architecture pre-gate", () => {
 
   test("legacy AgentLoop remains a transition shell over extracted services", () => {
     const source = readProjectFile("src/engine/turn/agent-loop.ts");
+    const runtimeSource = readProjectFile("src/engine/turn/agent-loop-runtime.ts");
     const requiredControllerSignals = [
       "../model-turn/model-turn-runner",
-      "../tool-calls/tool-call-executor",
-      "../permissions/permission-broker",
       "../completion/completion-controller",
       "../verification/verification-controller",
-      "../context/context-controller",
+      "./agent-loop-runtime",
       "./model-turn-execution",
-      "new ContextController",
-      "new PermissionBroker",
-      "new ToolCallExecutor",
       "new CompletionController",
       "new VerificationController",
       "executeModelTurn",
+    ];
+    const requiredRuntimeSignals = [
+      "../tool-calls/tool-call-executor",
+      "../permissions/permission-broker",
+      "../context/context-controller",
+      "new ContextController",
+      "new PermissionBroker",
+      "new ToolCallExecutor",
+      "createAgentLoopRuntime",
     ];
     const forbiddenOwnershipImports = [
       "../../infrastructure/llm/providers/registry",
@@ -195,11 +200,16 @@ describe("clean architecture pre-gate", () => {
     ];
 
     const missingSignals = requiredControllerSignals.filter((signal) => !source.includes(signal));
-    const ownershipLeaks = importSpecifiers(source).filter((specifier) => forbiddenOwnershipImports.includes(specifier));
+    const missingRuntimeSignals = requiredRuntimeSignals.filter((signal) => !runtimeSource.includes(signal));
+    const ownershipLeaks = [
+      ...importSpecifiers(source),
+      ...importSpecifiers(runtimeSource),
+    ].filter((specifier) => forbiddenOwnershipImports.includes(specifier));
 
     expect(missingSignals).toEqual([]);
+    expect(missingRuntimeSignals).toEqual([]);
     expect(ownershipLeaks).toEqual([]);
-    expect(source).toContain("return this.toolExecutor.abortActiveTool()");
-    expect(source).toContain("return this.toolExecutor.runDirectShellCommand(command, silent)");
+    expect(source).toContain("return this.runtime.toolExecutor.abortActiveTool()");
+    expect(source).toContain("return this.runtime.toolExecutor.runDirectShellCommand(command, silent)");
   });
 });
