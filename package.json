@@ -47,6 +47,8 @@
     "check:boundaries": "bun run scripts/check-boundaries.ts",
     "docs:deps": "bun run scripts/generate-dependency-graph.ts",
     "docs:deps:check": "bun run scripts/generate-dependency-graph.ts --check",
+    "docs:changelog": "bun run scripts/generate-changelog.ts",
+    "docs:changelog:check": "bun run scripts/generate-changelog.ts --check",
     "prepack": "bun run build"
   },
   "devDependencies": {

@@ -23,6 +23,8 @@ Before release-level commits, also run:
 
 ```bash
 bun run build
+bun run docs:changelog
+bun run docs:changelog:check
 ```
 
 If the hook fails, fix the reported issue and retry the commit. Do not add ESLint, Prettier, Husky, or npm-only hook tooling to bypass the gate.
