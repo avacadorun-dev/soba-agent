@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
+import type { RuntimeAgentHandle } from "../../../../src/application/ui/public";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions, TuiMessage } from "../../../../src/ui/terminal/interactive/model/types";
 
@@ -17,11 +17,11 @@ function msgText(m: TuiMessage): string {
   return "";
 }
 
-function createMockAgentLoop(): AgentLoop {
+function createMockAgentLoop(): RuntimeAgentHandle {
   return {
     getModel: () => "test-model",
     runTurn: async () => {},
-  } as unknown as AgentLoop;
+  } as unknown as RuntimeAgentHandle;
 }
 
 describe("TUI slash-commands via TuiStore", () => {

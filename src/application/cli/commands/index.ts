@@ -4,13 +4,28 @@
  * Commands are prefixed with "/" and processed before sending to the LLM.
  */
 
+import type { ContextManager } from "../../../engine/compaction/context-manager";
 import type { TrustController } from "../../../engine/permissions/trust-controller";
-import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, PortableCapsuleServiceFactory, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TuiRenderer } from "../public";
+import type { AgentLoop } from "../../../engine/turn/agent-loop";
+import type { OpenResponsesClient } from "../../../kernel/model/model-gateway";
+import type { ToolRegistry } from "../../../kernel/tools/tool-registry";
+import type { I18n } from "../../../shared/i18n/i18n";
+import type { PortableCapsuleServiceFactory } from "../../capsules";
+import type { CommandResult, RuntimeCommandMetadata } from "../../command-service";
+import type { McpSecretStoreLike } from "../../commands/mcp";
+import type { SobaConfig } from "../../config/types";
+import type { McpRuntimeControllerLike, McpRuntimeManager } from "../../mcp-runtime-controller";
+import type { RuntimeSessionHandle, SessionLifecycleService } from "../../session-lifecycle";
+import type { SkillCommands } from "../../skills/commands";
+import type { SkillManager } from "../../skills/skill-manager";
+import type { SlashCommandFallbackRegistry } from "../../skills/slash-handler";
 import {
-  type CommandResult, handleSkillSlashCommand, isSkillSlashCommand, McpSecretStore, notify,
+  handleSkillSlashCommand,
+  isSkillSlashCommand,
+  notify,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
-  type RuntimeCommandMetadata, tryTuiRegistryFallback
+  tryTuiRegistryFallback,
 } from "../public";
 import { handleCapsule } from "./capsule";
 import {
@@ -35,21 +50,29 @@ export interface CommandContext {
   setSession?: (session: RuntimeSessionHandle) => void;
   config: SobaConfig;
   i18n: I18n;
-  renderer: Pick<TuiRenderer, "emit">;
+  renderer: CommandRenderer;
   contextManager?: ContextManager;
   autoCompactOverride?: { enabled: boolean };
   skillManager?: SkillManager;
   skillCommands?: SkillCommands;
   agentLoop?: AgentLoop;
-  registry?: ProviderRegistry;
   mcpRuntime?: McpRuntimeControllerLike;
   mcpManager?: McpRuntimeManager;
-  mcpSecretStore?: McpSecretStore;
+  mcpSecretStore?: McpSecretStoreLike;
   toolRegistry?: ToolRegistry;
   trustManager?: TrustController;
   portableCapsuleServiceFactory?: PortableCapsuleServiceFactory;
   /** TUI slash command registry for dispatching TUI commands (Phase 2.5 A4). */
-  tuiRegistry?: SlashCommandRegistry;
+  tuiRegistry?: SlashCommandFallbackRegistry<SlashCommandContext>;
+}
+
+interface CommandRenderer {
+  emit(event: { type: string; timestamp?: number; [key: string]: unknown }): void;
+}
+
+interface SlashCommandContext {
+  addMessage?: undefined;
+  exit?: undefined;
 }
 
 export type { CommandResult };

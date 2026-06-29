@@ -68,6 +68,11 @@ flowchart TD
 - `src/infrastructure` does not import apps or UI.
 - `src/apps` and `src/ui` use public application API modules instead of
   reaching into kernel, engine, or infrastructure internals.
+- `src/apps/acp` may host the ACP protocol adapter; ACP adapter code still
+  depends only on application runtime contracts.
+- `src/apps/cli` may launch terminal UI and terminal integration modules
+  directly; the UI still depends on application runtime contracts instead of
+  engine or infrastructure internals.
 - `src/composition` is the only layer allowed to assemble concrete
   application, engine, infrastructure, and kernel implementations.
 

@@ -1,4 +1,4 @@
-import type { AgentLoop, CommandResult, I18n, OpenResponsesClientProxy, ProjectTrustStore, SobaRuntime, TuiThemeName } from "../../../../application/ui/public";
+import type { CommandResult, I18n, ProjectTrustStore, RuntimeAgentHandle, RuntimeModelChangeSource, SobaRuntime, TuiThemeName } from "../../../../application/ui/public";
 import type { TuiEvidenceSummary } from "../lib/evidence-summary";
 import type { NotificationStore } from "./notification-store";
 import type { ProviderStore } from "./provider-store";
@@ -12,7 +12,7 @@ export interface InteractiveTUIOptions {
   theme: TuiThemeName;
   runtime?: SobaRuntime;
   /** Legacy transition handle for shell shortcuts, status data and cancellation. */
-  agentLoop: AgentLoop;
+  agentLoop: RuntimeAgentHandle;
   toolNames: string[];
   executeCommand: (input: string, output: (event: CommandOutput) => void) => Promise<CommandResult>;
   /** I18n instance for localized status messages (optional, defaults to English). */
@@ -22,7 +22,7 @@ export interface InteractiveTUIOptions {
   /** Notification store for TUI notifications system (Phase 2.5 A2). */
   notificationStore?: NotificationStore;
   /** Client proxy for subscribing to model changes (keeps sidebar model in sync). */
-  clientProxy?: OpenResponsesClientProxy;
+  clientProxy?: RuntimeModelChangeSource;
   /** Provider store for showing active provider name in sidebar. */
   providerStore?: ProviderStore;
   // ─── Agent configuration parameters (displayed in sidebar) ───
