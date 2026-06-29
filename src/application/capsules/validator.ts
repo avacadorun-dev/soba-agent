@@ -23,7 +23,14 @@ const MAX_TOTAL_VERBATIM_BYTES = 512 * 1024;
 const MAX_CORE_CONTENT_ENTRIES = 100;
 const MAX_INTEGRATION_STEPS = 50;
 
-export function validatePortableCapsule(capsule: PortableCapsule): PortableCapsuleValidationResult {
+export interface PortableCapsuleValidationOptions {
+  homeDirectory?: string | null;
+}
+
+export function validatePortableCapsule(
+  capsule: PortableCapsule,
+  options: PortableCapsuleValidationOptions = {},
+): PortableCapsuleValidationResult {
   const errors: PortableCapsuleValidationIssue[] = [];
   const warnings: PortableCapsuleValidationIssue[] = [];
 
@@ -103,7 +110,7 @@ export function validatePortableCapsule(capsule: PortableCapsule): PortableCapsu
       path: "provenance.checkpointId",
     });
   }
-  if (containsAbsoluteHomePath(JSON.stringify(capsule))) {
+  if (containsAbsoluteHomePath(JSON.stringify(capsule), options.homeDirectory)) {
     warnings.push({
       code: "absolute_project_path",
       message: "Capsule still appears to contain an absolute home path",
@@ -297,7 +304,6 @@ function byteLength(value: string): number {
   return Buffer.byteLength(value, "utf8");
 }
 
-function containsAbsoluteHomePath(value: string): boolean {
-  const home = process.env.HOME;
+function containsAbsoluteHomePath(value: string, home: string | null | undefined): boolean {
   return Boolean(home && home !== "/" && value.includes(home));
 }

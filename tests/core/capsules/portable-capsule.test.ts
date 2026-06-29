@@ -183,7 +183,10 @@ describe("PortableCapsule sanitization and checkpoint mapping", () => {
       sanitation: { checkedAt: "2026-06-19T00:00:00.000Z", redactions: [], secretLeakDetected: false },
     });
 
-    const sanitized = sanitizePortableCapsule(dirtyCapsule, new Date("2026-06-19T00:00:00.000Z"));
+    const sanitized = sanitizePortableCapsule(dirtyCapsule, {
+      now: new Date("2026-06-19T00:00:00.000Z"),
+      homeDirectory: process.env.HOME,
+    });
     const serialized = JSON.stringify(sanitized);
     const validation = validatePortableCapsule(sanitized);
 
@@ -203,6 +206,7 @@ describe("PortableCapsule sanitization and checkpoint mapping", () => {
   it("строит portable capsule из internal checkpoint без native continuation и с artifact ledger", () => {
     const capsule = buildPortableCapsuleFromCheckpoint(makeCheckpoint(), {
       createdAt: "2026-06-19T00:00:00.000Z",
+      homeDirectory: process.env.HOME,
     });
     const validation = validatePortableCapsule(capsule);
     const serialized = JSON.stringify(capsule);

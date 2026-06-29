@@ -84,6 +84,7 @@ export class FilesystemPortableCapsuleStorage implements PortableCapsuleStorage 
 export const createFilesystemPortableCapsuleService: PortableCapsuleServiceFactory = (session) =>
   new PortableCapsuleService({
     storage: new FilesystemPortableCapsuleStorage({ cwd: session.getCwd() }),
+    homeDirectory: process.env.HOME ?? null,
   });
 
 function resolveRelativeToCwd(cwd: string, path: string): string {
