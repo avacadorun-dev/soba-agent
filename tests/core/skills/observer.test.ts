@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { type ToolSequence, WorkflowObserver } from "../../../src/application/skills/observer";
+import { FilesystemWorkflowObservationStore } from "../../../src/infrastructure/persistence/skills/workflow-observation-store";
 
 describe("WorkflowObserver", () => {
   const testDir = join(process.cwd(), ".test-observer");
@@ -20,8 +21,15 @@ describe("WorkflowObserver", () => {
     }
   });
 
+  function createObserver(options: { threshold?: number } = {}): WorkflowObserver {
+    return new WorkflowObserver({
+      store: new FilesystemWorkflowObservationStore({ observationsPath }),
+      ...options,
+    });
+  }
+
   it("записывает tool sequence", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit", "bash"],
@@ -39,7 +47,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("агрегирует повторяющиеся sequences", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -58,7 +66,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("отслеживает разные outcomes", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const tools = ["bash", "read"];
 
@@ -88,7 +96,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("возвращает patterns, достигшие threshold", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 3 });
+    const observer = createObserver({ threshold: 3 });
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -112,7 +120,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("сортирует suggestions по occurrences", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 2 });
+    const observer = createObserver({ threshold: 2 });
 
     const seq1: ToolSequence = {
       tools: ["read"],
@@ -140,7 +148,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("предлагает skill для pattern", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -161,14 +169,14 @@ describe("WorkflowObserver", () => {
   });
 
   it("возвращает false для несуществующего pattern", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const result = observer.suggestSkill("non-existent", "my-skill");
     expect(result).toBe(false);
   });
 
   it("подавляет pattern после rejection", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 2 });
+    const observer = createObserver({ threshold: 2 });
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -190,7 +198,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("не записывает sequences когда disabled", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     observer.setEnabled(false);
 
@@ -207,7 +215,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("проверяет enabled status", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     expect(observer.isEnabled()).toBe(true);
 
@@ -219,7 +227,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("обновляет threshold", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 3 });
+    const observer = createObserver({ threshold: 3 });
 
     expect(observer.getConfig().threshold).toBe(3);
 
@@ -228,7 +236,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("очищает все observations", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -247,7 +255,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("сохраняет patterns на диск", () => {
-    const observer1 = new WorkflowObserver({ observationsPath });
+    const observer1 = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
@@ -258,7 +266,7 @@ describe("WorkflowObserver", () => {
     observer1.recordSequence(sequence);
 
     // Create new observer instance
-    const observer2 = new WorkflowObserver({ observationsPath });
+    const observer2 = createObserver();
 
     const patterns = observer2.getAllPatterns();
     expect(patterns).toHaveLength(1);
@@ -266,20 +274,20 @@ describe("WorkflowObserver", () => {
   });
 
   it("сохраняет config на диск", () => {
-    const observer1 = new WorkflowObserver({ observationsPath });
+    const observer1 = createObserver();
 
     observer1.setEnabled(false);
     observer1.setThreshold(10);
 
     // Create new observer instance
-    const observer2 = new WorkflowObserver({ observationsPath });
+    const observer2 = createObserver();
 
     expect(observer2.isEnabled()).toBe(false);
     expect(observer2.getConfig().threshold).toBe(10);
   });
 
   it("хеширует tool sequences для privacy", () => {
-    const observer = new WorkflowObserver({ observationsPath });
+    const observer = createObserver();
 
     const sequence: ToolSequence = {
       tools: ["read", "edit", "bash"],
@@ -297,8 +305,8 @@ describe("WorkflowObserver", () => {
   });
 
   it("использует salt для hashing", () => {
-    const observer1 = new WorkflowObserver({ observationsPath });
-    const observer2 = new WorkflowObserver({ observationsPath });
+    const observer1 = createObserver();
+    const observer2 = createObserver();
 
     const config1 = observer1.getConfig();
     const config2 = observer2.getConfig();
@@ -308,7 +316,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("возвращает текущую конфигурацию", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 5 });
+    const observer = createObserver({ threshold: 5 });
 
     const config = observer.getConfig();
 
@@ -318,7 +326,7 @@ describe("WorkflowObserver", () => {
   });
 
   it("не автоматический promotion - только suggestion", () => {
-    const observer = new WorkflowObserver({ observationsPath, threshold: 2 });
+    const observer = createObserver({ threshold: 2 });
 
     const sequence: ToolSequence = {
       tools: ["read", "edit"],
