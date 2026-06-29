@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import type { I18n } from "../../application/cli/public";
-import { createFilesystemProjectTrustStore, firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, SkillDiscovery, validateConfig } from "../../application/cli/public";
+import { computeSkillContentHashOnDisk, createFilesystemProjectTrustStore, FilesystemSkillValidationFilesystem, firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, SkillDiscovery, validateConfig, validateSkillOnDisk } from "../../application/cli/public";
 
 export interface InitCommandOptions {
   yes: boolean;
@@ -152,6 +152,9 @@ async function setupProjectTrust(options: RunInitCommandOptions & { cwd: string;
     userSkillsPath: join(options.sobaDir, "skills"),
     bundledSkillsPath: process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills"),
     trustStore,
+    files: new FilesystemSkillValidationFilesystem(),
+    validateSkill: validateSkillOnDisk,
+    computeSkillContentHash: computeSkillContentHashOnDisk,
   });
   const fingerprint = discovery.computeFingerprint(identity.canonicalRoot);
   const isTrusted = trustStore.isTrusted(identity);

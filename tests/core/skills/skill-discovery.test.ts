@@ -22,8 +22,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
-import { computeSkillContentHash, validateSkill } from "../../../src/application/skills/validator";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 describe("Skill Discovery, Validation, and Catalog", () => {
   let tempDir: string;
@@ -163,7 +163,7 @@ description: Skill with symlink
   describe("Validator", () => {
     test("валидирует корректный skill", () => {
       const skillDir = createValidSkill(userSkillsDir, "test-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -173,7 +173,7 @@ description: Skill with symlink
 
     test("отклоняет skill без name", () => {
       const skillDir = createInvalidSkill(userSkillsDir, "invalid-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "MISSING_NAME")).toBe(true);
@@ -193,7 +193,7 @@ description: Invalid name format
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "INVALID_NAME_FORMAT")).toBe(true);
     });
@@ -212,14 +212,14 @@ description: Name does not match directory
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "NAME_DIRECTORY_MISMATCH")).toBe(true);
     });
 
     test("отклоняет skill с symlink", () => {
       const skillDir = createSkillWithSymlink(userSkillsDir, "symlink-skill");
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.code === "SYMLINK_DETECTED")).toBe(true);
@@ -227,12 +227,12 @@ description: Name does not match directory
 
     test("вычисляет content hash", () => {
       const skillDir = createValidSkill(userSkillsDir, "hash-test");
-      const hash = computeSkillContentHash(skillDir);
+      const hash = computeSkillContentHashOnDisk(skillDir);
 
       expect(hash).toMatch(/^[a-f0-9]{64}$/);
 
       // Same content should produce same hash
-      const hash2 = computeSkillContentHash(skillDir);
+      const hash2 = computeSkillContentHashOnDisk(skillDir);
       expect(hash2).toBe(hash);
     });
 
@@ -252,7 +252,7 @@ metadata:
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(true);
       expect(result.warnings.some((w) => w.code === "SOBA_SPECIFIC_METADATA")).toBe(true);
     });
@@ -274,14 +274,14 @@ allowed-tools:
 `,
       );
 
-      const result = validateSkill(skillDir);
+      const result = validateSkillOnDisk(skillDir);
       expect(result.valid).toBe(true);
       expect(result.warnings.some((w) => w.code === "ALLOWED_TOOLS_NOT_PRE_APPROVED")).toBe(true);
     });
 
     test("валидирует bundled skill с обязательными playbook секциями", () => {
       const skillDir = createBundledPlaybookSkill(bundledSkillsDir, "bundled-playbook");
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -307,7 +307,7 @@ Purpose exists.
 `,
       );
 
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((error) => error.code === "MISSING_BUNDLED_SKILL_SECTION")).toBe(true);
@@ -359,7 +359,7 @@ Anti-patterns exist.
 `,
       );
 
-      const result = validateSkill(skillDir, { scope: "bundled" });
+      const result = validateSkillOnDisk(skillDir, { scope: "bundled" });
 
       expect(result.valid).toBe(false);
       expect(result.errors.some((error) => error.code === "INVALID_SOBA_METADATA")).toBe(true);
@@ -438,6 +438,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -455,6 +458,9 @@ Anti-patterns exist.
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -473,6 +479,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -493,6 +502,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -511,6 +523,9 @@ Anti-patterns exist.
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -532,6 +547,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -547,6 +565,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -563,6 +584,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const result = discovery.discover();
@@ -580,6 +604,9 @@ Anti-patterns exist.
         userSkillsPath: userSkillsDir,
         bundledSkillsPath: bundledSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp1 = discovery.computeFingerprint(projectDir);
@@ -597,6 +624,9 @@ Anti-patterns exist.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp1 = discovery.computeFingerprint(projectDir);
@@ -633,6 +663,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const fp = discovery.computeFingerprint(projectDir);
@@ -649,6 +682,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -666,6 +702,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -682,6 +721,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -700,6 +742,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -718,6 +763,9 @@ This skill has been modified.
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -749,6 +797,9 @@ metadata:
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -779,6 +830,9 @@ soba:
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });
@@ -796,6 +850,9 @@ soba:
         projectPath: projectDir,
         userSkillsPath: userSkillsDir,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
 
       const catalog = new SkillCatalog({ discovery });

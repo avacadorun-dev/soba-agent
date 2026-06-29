@@ -23,6 +23,7 @@ import { createOpenResponsesClient } from "../../../src/infrastructure/llm/openr
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 import { createActivateSkillTool } from "../../../src/infrastructure/tools/local/activate-skill";
 import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
 
@@ -131,6 +132,9 @@ Stop when the task-specific output is complete.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     skillCatalog = new SkillCatalog({ discovery });
     skillManager = new SkillManager({
@@ -208,6 +212,9 @@ Stop when the task-specific output is complete.
         userSkillsPath: join(testDir, "empty-user"),
         bundledSkillsPath: join(testDir, "empty-bundled"),
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       });
       const emptyCatalog = new SkillCatalog({ discovery: emptyDiscovery });
       const emptyManager = new SkillManager({

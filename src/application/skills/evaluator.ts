@@ -9,10 +9,11 @@
 
 import { createHash } from "node:crypto";
 import type { DraftSkill, EvalCase } from "./drafts";
-import { validateSkill } from "./validator";
+import type { SkillValidationOptions, ValidationResult } from "./types";
 
 export interface EvaluatorOptions {
   storage: SkillEvaluationStorage;
+  validateSkill: SkillEvaluationValidator;
   evaluatorModel?: string;
 }
 
@@ -111,15 +112,19 @@ export interface SkillEvaluationStorage {
   readSkillMarkdown(skillPath: string): string;
 }
 
+export type SkillEvaluationValidator = (skillPath: string, options?: SkillValidationOptions) => ValidationResult;
+
 /**
  * Evaluates skills against test cases.
  */
 export class SkillEvaluator {
   private readonly storage: SkillEvaluationStorage;
+  private readonly validateSkill: SkillEvaluationValidator;
   private readonly evaluatorModel: string;
 
   constructor(options: EvaluatorOptions) {
     this.storage = options.storage;
+    this.validateSkill = options.validateSkill;
     this.evaluatorModel = options.evaluatorModel || "gpt-4";
   }
 
@@ -178,7 +183,7 @@ export class SkillEvaluator {
    * This runs without an external model: the trace represents observed agent behavior.
    */
   evaluateFixtureTask(task: SkillEvalFixtureTask): SkillFixtureEvalResult {
-    const validation = validateSkill(task.skillPath, { scope: "bundled" });
+    const validation = this.validateSkill(task.skillPath, { scope: "bundled" });
     const skillName = validation.frontmatter?.name || task.requiredSkillName;
     const failures: string[] = [];
 

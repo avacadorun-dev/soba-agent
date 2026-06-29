@@ -6,9 +6,9 @@ import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import type { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
-import { validateSkill } from "../../../src/application/skills/validator";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 const CORE_BUNDLED_SKILLS = [
   "bug-fix",
@@ -118,6 +118,9 @@ Stop when the requested result is complete.
       userSkillsPath: userSkillsDir,
       projectPath: projectDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
 
     const catalog = new SkillCatalog({ discovery });
@@ -135,7 +138,7 @@ Stop when the requested result is complete.
 
       for (const skillName of skills) {
         const skillPath = join(repoBundledSkillsDir, skillName);
-        const result = validateSkill(skillPath, { scope: "bundled" });
+        const result = validateSkillOnDisk(skillPath, { scope: "bundled" });
 
         expect(result.valid).toBe(true);
         expect(result.errors).toHaveLength(0);
@@ -151,7 +154,7 @@ Stop when the requested result is complete.
 
       for (const skillName of skills) {
         const skillPath = join(repoBundledSkillsDir, skillName);
-        const result = validateSkill(skillPath, { scope: "bundled" });
+        const result = validateSkillOnDisk(skillPath, { scope: "bundled" });
 
         // Check required fields
         expect(result.frontmatter?.name).toBe(skillName);

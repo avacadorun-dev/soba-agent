@@ -5,6 +5,7 @@ import { DraftStore, type EvalCase } from "../../../src/application/skills/draft
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 import { FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
 import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/persistence/skills/evaluation-storage";
+import { validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 describe("SkillEvaluator", () => {
   const testDir = join(process.cwd(), ".test-evaluator");
@@ -89,8 +90,8 @@ Stop when the task is complete.
   }
 
   it("оценивает skill с eval cases", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -123,8 +124,8 @@ This skill uses bash to execute commands.
   });
 
   it("пропускает dangerous cases", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -165,8 +166,8 @@ description: Test skill
   });
 
   it("сохраняет detailed eval run", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -197,8 +198,8 @@ description: Test skill
   });
 
   it("вычисляет pass rate", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -236,8 +237,8 @@ Uses bash tool.
   });
 
   it("проверяет tool intent matchers", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -268,8 +269,8 @@ Uses bash tool.
   });
 
   it("выполняет safety check", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -297,8 +298,8 @@ description: Test skill
   });
 
   it("обнаруживает semantic regression", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -329,8 +330,8 @@ description: Test skill
   });
 
   it("обнаруживает safety regression и не позволяет override", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -364,8 +365,8 @@ description: Test skill
   });
 
   it("требует --override-metrics для metric regression", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -399,8 +400,8 @@ description: Test skill
   });
 
   it("список eval runs для skill", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -432,8 +433,8 @@ description: Test skill
   });
 
   it("rebaseline выполняет повторную оценку", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -463,8 +464,8 @@ description: Test skill
   });
 
   it("выбрасывает ошибку при отсутствии eval cases", async () => {
-    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const content = `---
 name: test-skill
@@ -483,7 +484,7 @@ description: Test skill
   });
 
   it("fixture harness принимает good skill trace", () => {
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
     const skillPath = createBundledSkill("lint-fix", "Use existing project tooling and rerun verification.");
 
     const result = evaluator.evaluateFixtureTask({
@@ -514,7 +515,7 @@ description: Test skill
   });
 
   it("fixture harness отклоняет missing skill activation", () => {
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
     const skillPath = createBundledSkill("code-review", "Findings first review without file mutation.");
 
     const result = evaluator.evaluateFixtureTask({
@@ -535,7 +536,7 @@ description: Test skill
   });
 
   it("fixture harness отклоняет bad lint-fix example suggesting ESLint", () => {
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
     const skillPath = createBundledSkill("lint-fix", "Suggest running eslint when lint fails.");
 
     const result = evaluator.evaluateFixtureTask({
@@ -561,7 +562,7 @@ description: Test skill
   });
 
   it("fixture report содержит score breakdown и regressions", () => {
-    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    const evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
     const baseline = [
       {
         taskId: "case-1",

@@ -6,8 +6,6 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
 import type {
   SkillDiagnostic,
   SkillFrontmatter,
@@ -37,6 +35,23 @@ const BUNDLED_REQUIRED_SECTIONS = [
 ];
 
 const SOBA_MEMORY_POLICIES = new Set<SobaSkillMemoryPolicy>(["none", "read", "write", "read-write"]);
+
+export interface SkillFilesystemEntry {
+  name: string;
+  kind: "directory" | "file" | "symlink" | "other";
+}
+
+export interface SkillValidationFilesystem {
+  exists(path: string): boolean;
+  isDirectory(path: string): boolean;
+  basename(path: string): string;
+  join(...parts: string[]): string;
+  relative(from: string, to: string): string;
+  realpath(path: string): string;
+  readText(path: string): string;
+  readBytes(path: string): Uint8Array;
+  listEntries(path: string): SkillFilesystemEntry[];
+}
 
 /**
  * Parse YAML frontmatter from SKILL.md content.
@@ -143,9 +158,20 @@ function ensureObject(container: Record<string, unknown>, key: string): Record<s
 export function validateSkill(skillPath: string, options: SkillValidationOptions = {}): ValidationResult {
   const errors: SkillDiagnostic[] = [];
   const warnings: SkillDiagnostic[] = [];
+  const files = options.files;
+
+  if (!files) {
+    errors.push({
+      code: "FILESYSTEM_NOT_CONFIGURED",
+      severity: "error",
+      message: "Skill validation filesystem is not configured",
+      path: skillPath,
+    });
+    return { valid: false, errors, warnings };
+  }
 
   // Check if directory exists
-  if (!existsSync(skillPath)) {
+  if (!files.exists(skillPath)) {
     errors.push({
       code: "SKILL_NOT_FOUND",
       severity: "error",
@@ -155,8 +181,7 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
     return { valid: false, errors, warnings };
   }
 
-  const stat = statSync(skillPath);
-  if (!stat.isDirectory()) {
+  if (!files.isDirectory(skillPath)) {
     errors.push({
       code: "NOT_A_DIRECTORY",
       severity: "error",
@@ -167,8 +192,8 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
   }
 
   // Check for SKILL.md
-  const skillMdPath = join(skillPath, "SKILL.md");
-  if (!existsSync(skillMdPath)) {
+  const skillMdPath = files.join(skillPath, "SKILL.md");
+  if (!files.exists(skillMdPath)) {
     errors.push({
       code: "MISSING_SKILL_MD",
       severity: "error",
@@ -181,7 +206,7 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
   // Read and parse SKILL.md
   let content: string;
   try {
-    content = readFileSync(skillMdPath, "utf-8");
+    content = files.readText(skillMdPath);
   } catch (error) {
     errors.push({
       code: "CANNOT_READ_SKILL_MD",
@@ -224,7 +249,7 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
     }
 
     // Check name matches directory name
-    const dirName = basename(skillPath);
+    const dirName = files.basename(skillPath);
     if (name !== dirName) {
       errors.push({
         code: "NAME_DIRECTORY_MISMATCH",
@@ -303,7 +328,7 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
   }
 
   // Check for symlinks and path traversal
-  const symlinkErrors = checkSymlinksAndTraversal(skillPath);
+  const symlinkErrors = checkSymlinksAndTraversal(skillPath, files);
   errors.push(...symlinkErrors.errors);
   warnings.push(...symlinkErrors.warnings);
 
@@ -516,20 +541,23 @@ function normalizeSectionName(section: string): string {
 /**
  * Check for symlinks and path traversal attacks.
  */
-function checkSymlinksAndTraversal(skillPath: string): { errors: SkillDiagnostic[]; warnings: SkillDiagnostic[] } {
+function checkSymlinksAndTraversal(
+  skillPath: string,
+  files: SkillValidationFilesystem,
+): { errors: SkillDiagnostic[]; warnings: SkillDiagnostic[] } {
   const errors: SkillDiagnostic[] = [];
   const warnings: SkillDiagnostic[] = [];
-  const realSkillPath = realpathSync(skillPath);
+  const realSkillPath = files.realpath(skillPath);
 
   function walk(dir: string): void {
-    const entries = readdirSync(dir, { withFileTypes: true });
+    const entries = files.listEntries(dir);
 
     for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
-      const relativePath = relative(skillPath, fullPath);
+      const fullPath = files.join(dir, entry.name);
+      const relativePath = files.relative(skillPath, fullPath);
 
       // Check for symlinks
-      if (lstatSync(fullPath).isSymbolicLink()) {
+      if (entry.kind === "symlink") {
         errors.push({
           code: "SYMLINK_DETECTED",
           severity: "error",
@@ -540,7 +568,7 @@ function checkSymlinksAndTraversal(skillPath: string): { errors: SkillDiagnostic
       }
 
       // Check for path traversal
-      const realFullPath = realpathSync(fullPath);
+      const realFullPath = files.realpath(fullPath);
       if (!realFullPath.startsWith(realSkillPath + "/") && realFullPath !== realSkillPath) {
         errors.push({
           code: "PATH_TRAVERSAL",
@@ -552,7 +580,7 @@ function checkSymlinksAndTraversal(skillPath: string): { errors: SkillDiagnostic
       }
 
       // Recurse into directories
-      if (entry.isDirectory()) {
+      if (entry.kind === "directory") {
         walk(fullPath);
       }
     }
@@ -576,28 +604,28 @@ function checkSymlinksAndTraversal(skillPath: string): { errors: SkillDiagnostic
  * Compute content hash for a skill directory.
  * Hash is computed over sorted relative paths and file contents.
  */
-export function computeSkillContentHash(skillPath: string): string {
+export function computeSkillContentHash(skillPath: string, files: SkillValidationFilesystem): string {
   const hash = createHash("sha256");
-  const realSkillPath = realpathSync(skillPath);
-  const files: Array<{ relativePath: string; content: Buffer }> = [];
+  const realSkillPath = files.realpath(skillPath);
+  const skillFiles: Array<{ relativePath: string; content: Uint8Array }> = [];
 
   function walk(dir: string): void {
-    const entries = readdirSync(dir, { withFileTypes: true });
+    const entries = files.listEntries(dir);
 
     for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
+      const fullPath = files.join(dir, entry.name);
 
       // Skip symlinks
-      if (lstatSync(fullPath).isSymbolicLink()) {
+      if (entry.kind === "symlink") {
         continue;
       }
 
-      if (entry.isDirectory()) {
+      if (entry.kind === "directory") {
         walk(fullPath);
-      } else if (entry.isFile()) {
-        const relativePath = relative(realSkillPath, fullPath);
-        const content = readFileSync(fullPath);
-        files.push({ relativePath, content });
+      } else if (entry.kind === "file") {
+        const relativePath = files.relative(realSkillPath, fullPath);
+        const content = files.readBytes(fullPath);
+        skillFiles.push({ relativePath, content });
       }
     }
   }
@@ -605,9 +633,9 @@ export function computeSkillContentHash(skillPath: string): string {
   walk(realSkillPath);
 
   // Sort by relative path for deterministic hashing
-  files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  skillFiles.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
-  for (const file of files) {
+  for (const file of skillFiles) {
     hash.update(file.relativePath);
     hash.update(file.content);
   }

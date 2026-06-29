@@ -7,11 +7,11 @@
  * Spec: internal-design-notes § Drafts
  */
 
-import type { SkillDiagnostic } from "./types";
-import { validateSkill } from "./validator";
+import type { SkillDiagnostic, ValidationResult } from "./types";
 
 export interface DraftOptions {
   storage: DraftStorage;
+  validateSkill: SkillValidator;
 }
 
 export interface DraftSkill {
@@ -51,14 +51,18 @@ export interface DraftStorage {
   writeDraft(draft: DraftSkill): void;
 }
 
+export type SkillValidator = (skillPath: string) => ValidationResult;
+
 /**
  * Manages draft skills during creation and editing.
  */
 export class DraftStore {
   private readonly storage: DraftStorage;
+  private readonly validateSkill: SkillValidator;
 
   constructor(options: DraftOptions) {
     this.storage = options.storage;
+    this.validateSkill = options.validateSkill;
   }
 
   /**
@@ -73,7 +77,7 @@ export class DraftStore {
     }
 
     // Validate draft
-    const validation = validateSkill(draftPath);
+    const validation = this.validateSkill(draftPath);
     const diagnostics = [...validation.errors, ...validation.warnings];
 
     const status: DraftSkill["status"] = validation.valid ? "draft" : "invalid";
@@ -117,7 +121,7 @@ export class DraftStore {
     this.storage.writeSkillContent(draft.skillPath, content);
 
     // Re-validate
-    const validation = validateSkill(draft.skillPath);
+    const validation = this.validateSkill(draft.skillPath);
     const diagnostics = [...validation.errors, ...validation.warnings];
 
     draft.updatedAt = new Date().toISOString();

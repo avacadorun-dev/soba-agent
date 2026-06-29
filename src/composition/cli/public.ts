@@ -9,6 +9,11 @@ export * from "../../infrastructure/mcp/security";
 export { syncMcpToolsIntoRegistry } from "../../infrastructure/mcp/tool-registry-sync";
 export * from "../../infrastructure/persistence/sessions/session-manager";
 export { createFilesystemProjectTrustStore } from "../../infrastructure/persistence/skills/project-trust-storage";
+export {
+  computeSkillContentHashOnDisk,
+  FilesystemSkillValidationFilesystem,
+  validateSkillOnDisk,
+} from "../../infrastructure/persistence/skills/skill-validation-filesystem";
 export * from "../../infrastructure/terminal/sound-notifier";
 export * from "../../ui/terminal/interactive/commands/registry";
 export * from "../../ui/terminal/interactive/commands/types";

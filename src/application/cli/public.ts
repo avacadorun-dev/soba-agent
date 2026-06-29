@@ -25,7 +25,7 @@ export type {
 export {
   AcpClientToolDelegation,
   applyMcpToolTrustRules,
-  bold,
+  bold,computeSkillContentHashOnDisk, 
   configureOpenTuiAssets,
   createDefaultMcpServerSecurity,
   createFilesystemProjectTrustStore,
@@ -34,6 +34,7 @@ export {
   DEFAULT_MCP_MAX_OUTPUT_BYTES,
   DEFAULT_MCP_TIMEOUT_MS,
   dim,
+  FilesystemSkillValidationFilesystem,
   findMostRecentSession,
   formatMcpConfigIssues,
   getDefaultSessionDir,
@@ -72,7 +73,8 @@ export {
   TuiRenderer,
   trustLevelForMcpServer,
   validateMcpConfig,
-  visibleWidth,
+  validateSkillOnDisk,
+  visibleWidth
 } from "../../composition/cli/public";
 export type { CompactionOptions, CompactionResult } from "../../engine/compaction/compaction";
 export {

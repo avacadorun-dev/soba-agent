@@ -25,6 +25,7 @@ import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/appli
 import { buildSystemPrompt } from "../../../src/engine/prompt/system-prompt";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 import type { ActivatedSkillRef } from "../../../src/kernel/transcript/types-v2";
 
 describe("Task B.2: Progressive disclosure и activation", () => {
@@ -78,6 +79,9 @@ Use this skill for testing purposes.
       userSkillsPath: skillsDir,
       bundledSkillsPath: join(tempDir, "bundled"),
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
 
     const catalog = new SkillCatalog({ discovery });

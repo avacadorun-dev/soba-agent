@@ -7,16 +7,16 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
 import type { ProjectTrustStore } from "./project-trust-store";
 import type {
   DiscoveryResult,
   SkillCatalogEntry,
   SkillDiagnostic,
   SkillLocation,
+  SkillValidationOptions,
+  ValidationResult,
 } from "./types";
-import { computeSkillContentHash, validateSkill } from "./validator";
+import type { SkillValidationFilesystem } from "./validator";
 
 export interface SkillDiscoveryOptions {
   /** Project root path */
@@ -27,6 +27,10 @@ export interface SkillDiscoveryOptions {
   bundledSkillsPath?: string;
   /** Project trust store */
   trustStore: ProjectTrustStore;
+  /** Filesystem adapter for skill discovery and validation. */
+  files: SkillValidationFilesystem;
+  validateSkill: (skillPath: string, options?: SkillValidationOptions) => ValidationResult;
+  computeSkillContentHash: (skillPath: string) => string;
 }
 
 /**
@@ -54,33 +58,33 @@ export class SkillDiscovery {
     const locations: SkillLocation[] = [];
 
     // Bundled skills (lowest precedence)
-    if (this.options.bundledSkillsPath && existsSync(this.options.bundledSkillsPath)) {
+    if (this.options.bundledSkillsPath && this.options.files.exists(this.options.bundledSkillsPath)) {
       locations.push({ path: this.options.bundledSkillsPath, scope: "bundled" });
     }
 
     // User skills
-    if (this.options.userSkillsPath && existsSync(this.options.userSkillsPath)) {
+    if (this.options.userSkillsPath && this.options.files.exists(this.options.userSkillsPath)) {
       locations.push({ path: this.options.userSkillsPath, scope: "user" });
     }
 
     // Project skills (highest precedence, only if trusted)
     if (isProjectTrusted) {
-      const projectSkillsPath = join(this.options.projectPath, ".soba", "skills");
-      if (existsSync(projectSkillsPath)) {
+      const projectSkillsPath = this.options.files.join(this.options.projectPath, ".soba", "skills");
+      if (this.options.files.exists(projectSkillsPath)) {
         locations.push({ path: projectSkillsPath, scope: "project" });
       }
 
       // Also check .agents/skills for cross-agent compatibility
-      const agentsSkillsPath = join(this.options.projectPath, ".agents", "skills");
-      if (existsSync(agentsSkillsPath)) {
+      const agentsSkillsPath = this.options.files.join(this.options.projectPath, ".agents", "skills");
+      if (this.options.files.exists(agentsSkillsPath)) {
         locations.push({ path: agentsSkillsPath, scope: "project" });
       }
     } else {
       // Report untrusted project skills without reading them
-      const projectSkillsPath = join(this.options.projectPath, ".soba", "skills");
-      const agentsSkillsPath = join(this.options.projectPath, ".agents", "skills");
+      const projectSkillsPath = this.options.files.join(this.options.projectPath, ".soba", "skills");
+      const agentsSkillsPath = this.options.files.join(this.options.projectPath, ".agents", "skills");
 
-      if (existsSync(projectSkillsPath) || existsSync(agentsSkillsPath)) {
+      if (this.options.files.exists(projectSkillsPath) || this.options.files.exists(agentsSkillsPath)) {
         diagnostics.push({
           code: "PROJECT_NOT_TRUSTED",
           severity: "warning",
@@ -138,12 +142,11 @@ export class SkillDiscovery {
     const skills: SkillCatalogEntry[] = [];
     const diagnostics: SkillDiagnostic[] = [];
 
-    if (!existsSync(location.path)) {
+    if (!this.options.files.exists(location.path)) {
       return { skills, diagnostics };
     }
 
-    const stat = statSync(location.path);
-    if (!stat.isDirectory()) {
+    if (!this.options.files.isDirectory(location.path)) {
       diagnostics.push({
         code: "INVALID_LOCATION",
         severity: "error",
@@ -153,23 +156,23 @@ export class SkillDiscovery {
       return { skills, diagnostics };
     }
 
-    const entries = readdirSync(location.path, { withFileTypes: true });
+    const entries = this.options.files.listEntries(location.path);
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) {
+      if (entry.kind !== "directory") {
         continue;
       }
 
-      const skillPath = join(location.path, entry.name);
-      const skillMdPath = join(skillPath, "SKILL.md");
+      const skillPath = this.options.files.join(location.path, entry.name);
+      const skillMdPath = this.options.files.join(skillPath, "SKILL.md");
 
       // Skip if no SKILL.md
-      if (!existsSync(skillMdPath)) {
+      if (!this.options.files.exists(skillMdPath)) {
         continue;
       }
 
       // Validate skill
-      const validation = validateSkill(skillPath, { scope: location.scope });
+      const validation = this.options.validateSkill(skillPath, { scope: location.scope });
 
       if (!validation.valid) {
         diagnostics.push(...validation.errors);
@@ -198,7 +201,7 @@ export class SkillDiscovery {
       let revision: string | undefined;
 
       try {
-        contentHash = computeSkillContentHash(skillPath);
+        contentHash = this.options.computeSkillContentHash(skillPath);
         revision = `external_${contentHash.slice(0, 12)}`;
       } catch (error) {
         diagnostics.push({
@@ -251,22 +254,22 @@ export class SkillDiscovery {
     // Collect all skill entries from all locations (ignoring trust for fingerprint)
     const locations: SkillLocation[] = [];
 
-    if (this.options.bundledSkillsPath && existsSync(this.options.bundledSkillsPath)) {
+    if (this.options.bundledSkillsPath && this.options.files.exists(this.options.bundledSkillsPath)) {
       locations.push({ path: this.options.bundledSkillsPath, scope: "bundled" });
     }
 
-    if (this.options.userSkillsPath && existsSync(this.options.userSkillsPath)) {
+    if (this.options.userSkillsPath && this.options.files.exists(this.options.userSkillsPath)) {
       locations.push({ path: this.options.userSkillsPath, scope: "user" });
     }
 
     // Always include project skills for fingerprint computation
-    const projectSkillsPath = join(projectRoot, ".soba", "skills");
-    if (existsSync(projectSkillsPath)) {
+    const projectSkillsPath = this.options.files.join(projectRoot, ".soba", "skills");
+    if (this.options.files.exists(projectSkillsPath)) {
       locations.push({ path: projectSkillsPath, scope: "project" });
     }
 
-    const agentsSkillsPath = join(projectRoot, ".agents", "skills");
-    if (existsSync(agentsSkillsPath)) {
+    const agentsSkillsPath = this.options.files.join(projectRoot, ".agents", "skills");
+    if (this.options.files.exists(agentsSkillsPath)) {
       locations.push({ path: agentsSkillsPath, scope: "project" });
     }
 
@@ -274,20 +277,20 @@ export class SkillDiscovery {
     const skillFingerprints: string[] = [];
 
     for (const location of locations) {
-      if (!existsSync(location.path)) continue;
+      if (!this.options.files.exists(location.path)) continue;
 
-      const entries = readdirSync(location.path, { withFileTypes: true });
+      const entries = this.options.files.listEntries(location.path);
 
       for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
+        if (entry.kind !== "directory") continue;
 
-        const skillDir = join(location.path, entry.name);
-        const skillMdPath = join(skillDir, "SKILL.md");
+        const skillDir = this.options.files.join(location.path, entry.name);
+        const skillMdPath = this.options.files.join(skillDir, "SKILL.md");
 
-        if (!existsSync(skillMdPath)) continue;
+        if (!this.options.files.exists(skillMdPath)) continue;
 
         try {
-          const contentHash = computeSkillContentHash(skillDir);
+          const contentHash = this.options.computeSkillContentHash(skillDir);
           skillFingerprints.push(`${entry.name}:${contentHash}`);
         } catch {
           skillFingerprints.push(`${entry.name}:no-hash`);
