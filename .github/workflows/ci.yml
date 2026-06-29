@@ -39,6 +39,9 @@ jobs:
       - name: Changelog docs
         run: bun run docs:changelog:check
 
+      - name: Versioned docs snapshot
+        run: bun run docs:version:check
+
       - name: Build
         run: bun run build
 

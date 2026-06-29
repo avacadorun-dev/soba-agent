@@ -1,0 +1,322 @@
+---
+title: Конфигурация
+description: Файл конфигурации, CLI-флаги, переменные окружения и приоритет настроек SOBA.
+---
+
+SOBA конфигурируется через три источника с чётким приоритетом: CLI-флаги > переменные окружения > config.json
+> значения по умолчанию. Этот гайд объясняет все доступные опции и их взаимодействие.
+
+---
+
+## 1. Файл конфигурации
+
+Файл конфигурации находится в `~/.soba/config.json`. При первом запуске SOBA создаёт его автоматически,
+либо его можно создать вручную. Пример полного файла:
+
+```json
+{
+  "baseUrl": "https://api.deepseek.com",
+  "apiKey": "YOUR_API_KEY",
+  "model": "deepseek/deepseek-v4-flash",
+  "maxOutputTokens": 8192,
+  "maxCompletionTokens": 0,
+  "contextWindow": 65536,
+  "temperature": 0.7,
+  "maxAgentIterations": 0,
+  "maxStalledIterations": 4,
+  "maxRunMinutes": 0,
+  "bashMaxTimeoutSeconds": 300,
+  "sessionDir": "~/.soba/sessions",
+  "lang": "ru",
+  "theme": "graphite",
+  "compaction": {
+    "auto": true,
+    "compactOnTurnComplete": true,
+    "compactOnMilestone": true,
+    "minTokensForAutoCompact": 32000,
+    "minReclaimableTokens": 12000,
+    "minSavingsRatio": 0.25,
+    "keepRecentTokens": 20000,
+    "safetyReserveTokens": 8192,
+    "backgroundTimeoutMs": 15000
+  },
+  "registry": {
+    "activeProvider": "deepseek",
+    "activeModelId": "deepseek-v4-flash",
+    "customProviders": []
+  }
+}
+```
+
+**Минимальная конфигурация** (только обязательные поля):
+```json
+{
+  "apiKey": "YOUR_API_KEY",
+  "model": "deepseek/deepseek-v4-flash"
+}
+```
+
+---
+
+## 2. Полный список параметров
+
+### 2.1. Параметры провайдера
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `baseUrl` | `string` | `""` | Базовый URL OpenAI-совместимого API (если пусто, определяется из активного провайдера) |
+| `apiKey` | `string` | `""` | API-ключ для аутентификации |
+| `model` | `string` | `""` | Полный идентификатор модели: `deepseek/deepseek-v4-flash`, `openrouter/anthropic/claude-sonnet-4.6` |
+
+### 2.2. Параметры ответов модели
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `maxOutputTokens` | `number` | `8192` | Максимальное количество выходных токенов на ответ модели. **Значение по умолчанию — плейсхолдер; реальное значение извлекается из активной модели** (`ModelDefinition.maxOutput`). Может быть переопределён через CLI (`--max-output-tokens`) или env (`SOBA_MAX_OUTPUT_TOKENS`) |
+| `maxCompletionTokens` | `number` | `0` | Максимальное количество reasoning/thinking токенов на ответ. 0 = без явного лимита (используется дефолт провайдера). Актуально для DeepSeek-R1, o1 и подобных reasoning-моделей |
+| `contextWindow` | `number` | `128000` | Контекстное окно модели в токенах. **Плейсхолдер; реальное значение извлекается из активной модели** (`ModelDefinition.contextWindow`). Может быть переопределён через CLI (`--context-window`) или env (`SOBA_CONTEXT_WINDOW`) |
+| `temperature` | `number` | `0.7` | Температура сэмплирования (0-2). Пользовательская настройка; применяется ко всем моделям |
+
+### 2.3. Параметры безопасности выполнения
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `maxAgentIterations` | `number` | `0` | Аварийный лимит вызовов модели за одну задачу. 0 = без лимита (рекомендуется) |
+| `maxStalledIterations` | `number` | `4` | Количество последовательных итераций без прогресса, после которых агент считается застрявшим |
+| `maxRunMinutes` | `number` | `0` | Максимальная длительность задачи в минутах. 0 = без лимита (рекомендуется) |
+| `bashMaxTimeoutSeconds` | `number` | `300` | Верхняя граница timeout для одного вызова `bash` tool в секундах. Если модель запросит больше, SOBA уменьшит timeout до этого значения |
+
+### 2.4. Параметры сессий
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `sessionDir` | `string` | `~/.soba/sessions` | Директория для хранения файлов сессий (JSONL) |
+
+### 2.5. Параметры интерфейса
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `lang` | `"en" \| "ru" \| "zh"` | `"en"` | Язык интерфейса по умолчанию |
+| `theme` | `TuiThemeName` | `"graphite"` | Цветовая тема TUI. Доступные: `"graphite"`, `"ember"`, `"aurora"`, `"synthwave"`, `"paper"`, `"forest"`, `"highContrast"`, `"clay"`, `"operator"`, `"ink"` |
+
+### 2.6. Compaction (сжатие контекста)
+
+См. [раздел 6](#6-compaction-конфигурация).
+
+### 2.7. Registry (провайдеры и модели)
+
+См. [раздел 5](#5-конфигурация-провайдеров).
+
+---
+
+## 3. Переменные окружения
+
+Все параметры конфигурации можно задать через переменные окружения. Они имеют **более высокий приоритет**, чем config.json.
+
+| Переменная | Эквивалент в config.json | Описание |
+|---|---|---|
+| `SOBA_BASE_URL` | `baseUrl` | Базовый URL API |
+| `SOBA_API_KEY` | `apiKey` | API-ключ |
+| `SOBA_MODEL` | `model` | Идентификатор модели |
+| `SOBA_MAX_OUTPUT_TOKENS` | `maxOutputTokens` | Лимит выходных токенов |
+| `SOBA_MAX_COMPLETION_TOKENS` | `maxCompletionTokens` | Лимит reasoning токенов |
+| `SOBA_CONTEXT_WINDOW` | `contextWindow` | Размер контекстного окна |
+| `SOBA_MAX_AGENT_ITERATIONS` | `maxAgentIterations` | Лимит итераций |
+| `SOBA_MAX_STALLED_ITERATIONS` | `maxStalledIterations` | Итерации без прогресса до stall recovery |
+| `SOBA_MAX_RUN_MINUTES` | `maxRunMinutes` | Максимальная длительность задачи в минутах |
+| `SOBA_BASH_MAX_TIMEOUT_SECONDS` | `bashMaxTimeoutSeconds` | Верхняя граница timeout для одного вызова `bash` tool в секундах |
+| `SOBA_LANG` | `lang` | Язык интерфейса |
+| `SOBA_THEME` | `theme` | Тема TUI |
+| `SOBA_AUTO_COMPACT` | `compaction.auto` | Авто-компакшн (`false`/`0` отключают) |
+| `SOBA_SOUND_ENABLED` | `sound.enabled` | Включить/отключить звуковые уведомления |
+| `SOBA_SOUND_VOLUME` | `sound.volume` | Громкость 0.0–1.0 |
+| `SOBA_SOUND_REPEAT` | `sound.repeatMode` | `repeat`/`true`/`1` = повтор, `once`/`false`/`0` = один раз |
+| `DEEPSEEK_API_KEY` | `apiKey` (для провайдера deepseek) | API-ключ DeepSeek |
+| `MOONSHOT_API_KEY` | `apiKey` (для провайдера kimi) | API-ключ Moonshot Kimi |
+| `DASHSCOPE_API_KEY` | `apiKey` (для провайдера alibaba) | API-ключ Alibaba Qwen |
+| `OPENROUTER_API_KEY` | `apiKey` (для провайдера openrouter) | API-ключ OpenRouter |
+
+---
+
+## 4. CLI-флаги
+
+**Высший приоритет.** Переопределяют и переменные окружения, и config.json.
+
+### 4.1. Режимы запуска
+
+| Флаг | Кратко | Описание |
+|---|---|---|
+| `--interactive`, `-i` | | Запуск в интерактивном TUI-режиме |
+| `--continue`, `-c` | | Продолжить последнюю сессию |
+| `--resume`, `-r` | | Возобновить сессию через интерактивный селектор |
+| `--session <id>`, `-s` | | Продолжить конкретную сессию по ID |
+
+### 4.2. Провайдер и модель
+
+| Флаг | Кратко | Описание |
+|---|---|---|
+| `--model <id>`, `-m` | | Переопределить идентификатор модели |
+| `--api-key <key>`, `-k` | | Переопределить API-ключ |
+| `--base-url <url>` | | Переопределить базовый URL API |
+
+### 4.3. Параметры ответов и лимитов
+
+| Флаг | Описание |
+|---|---|
+| `--max-output-tokens <n>` | Лимит выходных токенов на ответ |
+| `--max-completion-tokens <n>` | Лимит reasoning/thinking токенов на ответ |
+| `--context-window <n>` | Переопределить размер контекстного окна модели |
+| `--budget <n>` | Ограничить общий бюджет токенов на задачу |
+| `--max-agent-iterations <n>` | Аварийный лимит итераций |
+| `--max-stalled-iterations <n>` | Итерации без прогресса до stall recovery |
+| `--max-run-minutes <n>` | Максимальная длительность задачи в минутах |
+| `--bash-max-timeout-seconds <n>` | Верхняя граница timeout для одного вызова `bash` tool в секундах |
+
+### 4.4. Управление и отладка
+
+| Флаг | Описание |
+|---|---|
+| `--no-session` | Интерактивный режим без сохранения сессии |
+| `--no-color` | Отключить цвета |
+| `--no-stream` | Отключить стриминг (форсировать не-стриминговый режим) |
+| `--stream` | Включить стриминг явно |
+| `--debug` | Журналировать loop decisions в файл сессии JSONL |
+| `--no-auto-compact` | Отключить proactive compaction (эквивалент `compaction.auto: false`) |
+| `--lang <locale>` | Переопределить язык интерфейса (`en`, `ru`, `zh`) |
+| `--theme <name>` | Переопределить тему TUI |
+
+### 4.5. Информация
+
+| Флаг | Минимально | Описание |
+|---|---|---|
+| `--help`, `-h` | | Показать справку |
+| `--version`, `-v` | | Показать версию |
+
+---
+
+## 5. Конфигурация провайдеров
+
+SOBA v0.5.0 использует систему реестра провайдеров (registry). Подробнее о провайдерах — в
+[гайде по провайдерам](/ru/docs/v0.6/providers).
+
+### 5.1. Встроенные провайдеры
+
+SOBA поставляется с 4 встроенными провайдерами:
+
+| ID | Название | Базовый URL |
+|---|---|---|
+| `deepseek` | DeepSeek | `https://api.deepseek.com` |
+| `kimi` | Moonshot Kimi (K2 for code) | `https://api.moonshot.cn/v1` |
+| `alibaba` | Alibaba Qwen (Singapore) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` |
+
+Модели для каждого провайдера **обнаруживаются динамически** через `GET /models` и кэшируются в памяти текущего процесса. Селектор модели в TUI (`F2` или `/model`) запускает refresh встроенных провайдеров.
+
+### 5.2. Кастомные провайдеры
+
+Добавление своего провайдера:
+
+```bash
+soba provider add my-llm \
+  --base-url https://api.myllm.com/v1 \
+  --api-key-env MY_LLM_KEY \
+  --model my-code-model="My Code Model",128000,8192
+```
+
+Кастомные провайдеры сохраняются в `registry.customProviders` внутри `~/.soba/config.json`.
+
+### 5.3. Управление через CLI
+
+```bash
+# Просмотр всех провайдеров и моделей
+soba provider list
+
+# Добавить кастомный провайдер
+soba provider add <id> --base-url <url> --model <spec> [--api-key-env <VAR>]
+
+# Показать определение провайдера
+soba provider show <id>
+
+# Удалить кастомный провайдер
+soba provider remove <id>
+
+# Выбрать активного провайдера (использует его default model)
+soba provider use <provider-id>
+```
+
+---
+
+## 6. Compaction конфигурация
+
+Compaction управляется через секцию `compaction` в `~/.soba/config.json`.
+
+| Параметр | По умолчанию | Описание |
+|---|---|---|
+| `auto` | `true` | Включить proactive (фоновый) compaction |
+| `compactOnTurnComplete` | `true` | Фоновый compaction после завершения хода |
+| `compactOnMilestone` | `true` | Фоновый compaction при milestone checkpoint |
+| `minTokensForAutoCompact` | `32000` | Минимум эффективных токенов для рассмотрения авто-компакта |
+| `minReclaimableTokens` | `12000` | Минимум токенов, доступных для освобождения (ROI) |
+| `minSavingsRatio` | `0.25` | Минимальный коэффициент экономии для ROI (25%) |
+| `keepRecentTokens` | `20000` | Количество токенов, сохраняемых после компакта |
+| `safetyReserveTokens` | `8192` | Резерв безопасности (вычитается из context window для hard limit) |
+| `backgroundTimeoutMs` | `15000` | Таймаут для фоновых операций компакта в мс |
+
+**Формула hard limit:**
+```
+hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
+```
+
+Когда эффективных токенов больше чем `hardLimit`, выполняется блокирующий compaction. Это нельзя отключить через `auto: false`.
+
+Подробнее: [Compaction и Context Capsules](/ru/docs/v0.6/compaction).
+
+---
+
+## 7. Приоритет и переопределение
+
+```
+CLI-флаги (высший приоритет)
+    ↓ переопределяет
+Переменные окружения
+    ↓ переопределяет
+config.json
+    ↓ переопределяет
+Значения по умолчанию (низший приоритет)
+```
+
+**Пример:** Если в `config.json` указано `"theme": "graphite"`, а в переменной окружения
+`SOBA_THEME=forest` и передан CLI-флаг `--theme paper` — будет использоваться `paper`.
+
+### Особые правила
+
+- **`maxOutputTokens` и `contextWindow`**: извлекаются из активной модели (`ModelDefinition`) при загрузке конфига.
+  Значения из `config.json` — плейсхолдеры. CLI-флаг `--max-output-tokens` или `--context-window` переопределяет
+  извлечённые значения для продвинутых сценариев (например, локальные прокси, которые некорректно сообщают размеры модели).
+
+- **`auto` в compaction**: `SOBA_AUTO_COMPACT=false` или `--no-auto-compact` переопределяет `compaction.auto`.
+
+- **Строковые и числовые значения**: `0` для `maxAgentIterations` и `maxRunMinutes` означает «без лимита» (unlimited).
+  Для `maxCompletionTokens` — «без явного лимита» (используется дефолт провайдера).
+
+---
+
+## 8. Валидация конфигурации
+
+SOBA выполняет валидацию при старте:
+
+- **API-ключ обязателен** — если не указан, будет ошибка.
+- **`model` обязателен** — если не указан, агент не сможет делать запросы.
+- **Compaction инварианты**:
+  - `contextWindow > 0`
+  - `maxOutputTokens > 0`
+  - `safetyReserveTokens >= 0`
+  - `maxOutputTokens + safetyReserveTokens < contextWindow`
+  - `keepRecentTokens < contextWindow - maxOutputTokens - safetyReserveTokens`
+
+При нарушении инвариантов compaction отключается с предупреждением в лог.
+
+```
+⚠️  Compaction disabled: config validation failed:
+    keepRecentTokens (50000) must be < hard limit (47360)
+```

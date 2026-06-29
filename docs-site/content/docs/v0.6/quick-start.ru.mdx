@@ -1,0 +1,353 @@
+---
+title: Быстрый старт
+description: "Актуальный быстрый старт SOBA v0.5.0: запуск, first-run init, provider, TUI, sessions, Project Memory, MCP, capsules и проверки."
+---
+
+Этот гайд доводит от чистого запуска до рабочего SOBA v0.5.0 workflow. Он не заменяет справочник, а показывает
+минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, сохранить память проекта и проверить
+MCP.
+
+---
+
+## 1. Установка и проверка
+
+Через npm:
+
+```bash
+npm install -g soba-agent
+```
+
+Пакет npm включает закреплённую runtime-зависимость Bun, поэтому перед запуском `soba` не нужно отдельно ставить Bun.
+
+Через Bun:
+
+```bash
+bun add -g soba-agent
+```
+
+Используйте установку через Bun, если Bun уже входит в ваш toolchain и вы хотите управлять глобальным пакетом через него.
+
+Standalone-бинарники для macOS и Linux публикуются в GitHub Releases. Для обычной установки рекомендуется npm или Bun,
+а бинарник удобен для окружений, где не хочется ставить пакет глобально.
+
+Проверьте CLI:
+
+```bash
+soba --version
+soba --help
+soba init --check
+```
+
+Если вы работаете из исходников:
+
+```bash
+git clone <repo-url> soba-agent
+cd soba-agent
+bun install
+bun run build
+bun run src/cli.ts --version
+```
+
+---
+
+## 2. Настроить provider
+
+Первый запуск может создать `~/.soba/config.json`. Минимально нужен API key и модель.
+
+Быстрая проверка:
+
+```bash
+soba --no-session --max-agent-iterations 1 "Ответь одним словом: ok"
+```
+
+Посмотреть providers:
+
+```bash
+soba provider list
+```
+
+Добавить local OpenAI-compatible provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+Для локальных моделей лучше начинать с небольшого окна контекста и ответа: `8192,2048` обычно заметно спокойнее для ноутбука. Если модель и железо уверенно справляются, значения можно поднять позже.
+
+Подробнее: [Провайдеры и модели](/ru/docs/v0.6/providers).
+
+---
+
+## 3. Запустить TUI
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+Внутри TUI:
+
+```text
+/session
+/sessions list
+/budget
+/permissions
+/auto-compact on
+```
+
+Рекомендуемый режим разрешений для первого проекта:
+
+```text
+/permissions ask
+```
+
+Для disposable-репозитория можно включить repo-scoped режим:
+
+```text
+/permissions repo
+```
+
+`repo` убирает запросы только для dangerous-операций внутри текущего репозитория. `/permissions full` стоит включать
+только когда вы хотите доверить все dangerous-операции до конца текущей сессии, включая внешние команды.
+
+---
+
+## 4. Выполнить первую задачу
+
+Пример prompt:
+
+```text
+Проверь проект.
+Сначала прочитай package.json и структуру src/tests.
+Затем предложи короткий план.
+Если нужно менять файлы, меняй только в рамках плана.
+После изменений запусти targeted bun test.
+Не делай git commit.
+```
+
+Быстрые shell-проверки выполняются через `!`:
+
+```text
+!git status --short
+!git diff --stat
+!bun test
+```
+
+Если вывод не нужен в transcript:
+
+```text
+!!bun run build
+```
+
+---
+
+## 5. Использовать sessions
+
+SOBA сохраняет историю работы в session JSONL.
+
+```bash
+# новая интерактивная сессия
+soba -i
+
+# продолжить последнюю сессию
+soba -c -i
+
+# выбрать сессию из списка
+soba -r
+
+# продолжить конкретную сессию
+soba -s <SESSION_ID> "Продолжи задачу"
+```
+
+В TUI:
+
+```text
+/session
+/sessions list
+/budget
+```
+
+Для временных задач:
+
+```bash
+soba --no-session "Одноразовый вопрос"
+```
+
+---
+
+## 6. Управлять длинным контекстом
+
+Proactive compaction включается так:
+
+```text
+/auto-compact on
+```
+
+Ручной compact:
+
+```text
+/compact Сохрани цель, решения, изменённые файлы, проверки, риски и следующий шаг.
+```
+
+Посмотреть capsules:
+
+```text
+/capsule
+/capsule CHECKPOINT_ID
+```
+
+Откатиться к checkpoint:
+
+```text
+/rewind
+/rewind CHECKPOINT_ID
+```
+
+Подробнее: [Compaction и Context Capsules](/ru/docs/v0.6/compaction).
+
+---
+
+## 7. Сохранить Project Memory
+
+Project Memory хранит знания проекта в `.soba/memory/` и доступна агенту между сессиями.
+
+Попросите SOBA записать устойчивые факты:
+
+```text
+Обнови Project Memory:
+- architecture: основные модули проекта и data flow;
+- conventions: Bun only, strict TypeScript, тесты через bun test;
+- known-errors: повторяющиеся ошибки и команды проверки;
+- dependencies: важные runtime/dev зависимости.
+
+Используй project memory tools. Не сохраняй секреты.
+```
+
+Проверить файлы:
+
+```text
+!find .soba/memory -maxdepth 3 -type f | sort
+```
+
+Подробнее: [Project Memory](/ru/docs/v0.6/project-memory).
+
+---
+
+## 8. Подключить MCP tools
+
+MCP config хранится в проекте:
+
+```text
+.soba/mcp.json
+```
+
+Проверить servers:
+
+```text
+/mcp status
+/mcp start <server>
+/mcp reload
+/mcp status
+```
+
+SOBA поддерживает local `stdio` servers и remote `streamableHttp` endpoints. Для первого рабочего remote подключения
+используйте `bearerEnv` или `apiKeyEnv`; OAuth-команды требуют подключённого auth controller для provider:
+
+```text
+/mcp auth login <server>
+/mcp auth status <server>
+```
+
+MCP tools появляются в agent tool registry с именами:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Подробнее: [MCP-серверы](/ru/docs/v0.6/mcp) и [Remote MCP: пошаговый гайд](/ru/docs/v0.6/remote-mcp-guide).
+
+---
+
+## 9. Использовать skills
+
+Посмотреть skills:
+
+```text
+/skill list
+```
+
+Активировать skill:
+
+```text
+/skill:commit-message Предложи conventional commit message для текущих staged changes.
+```
+
+Project skills требуют trust:
+
+```text
+/project-trust status
+/project-trust approve
+```
+
+Подробнее: [Skills](/ru/docs/v0.6/skills).
+
+---
+
+## 10. Передать работу через Portable Capsule
+
+Создать handoff capsule:
+
+```text
+/capsule create "handoff current task"
+```
+
+Экспортировать:
+
+```text
+/capsule export CHECKPOINT_ID ./handoff.capsule.md
+```
+
+Загрузить:
+
+```text
+/capsule load ./handoff.capsule.md
+```
+
+Подробнее: [Portable Capsules](/ru/docs/v0.6/portable-capsules).
+
+---
+
+## 11. Минимальный gate перед завершением
+
+Для Bun/TypeScript проекта:
+
+```text
+!bun test
+!bun run build
+!bunx tsc --noEmit
+!git diff --check
+!git status --short
+```
+
+Для самого SOBA дополнительно:
+
+```text
+!bun run lint
+```
+
+---
+
+## 12. Куда идти дальше
+
+| Задача | Документ |
+|---|---|
+| Полный end-to-end проект | [Проект шаг за шагом](/ru/docs/v0.6/walkthrough-building-a-project) |
+| Все CLI-флаги | [CLI reference](/ru/docs/v0.6/cli-reference) |
+| TUI и slash-команды | [Интерфейс и команды](/ru/docs/v0.6/usage) |
+| Project Memory | [Project Memory](/ru/docs/v0.6/project-memory) |
+| MCP | [MCP-серверы](/ru/docs/v0.6/mcp) |
+| Tools | [Инструменты агента](/ru/docs/v0.6/tools) |
+| Security | [Безопасность](/ru/docs/v0.6/security) |
+| Sound | [Звуковые уведомления](/ru/docs/v0.6/notifications) |

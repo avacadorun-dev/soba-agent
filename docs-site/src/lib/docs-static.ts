@@ -1,4 +1,5 @@
 import type { Root } from "fumadocs-core/page-tree";
+import { type DocsVersionSlug, isDocsVersionSlug } from "@/lib/docs-versions";
 
 type SupportedLang = "en" | "ru" | "zh";
 
@@ -65,19 +66,59 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
   ],
 };
 
+export type StaticDocsPage = DocsPage & {
+  version?: DocsVersionSlug;
+};
+
 function normalizeLang(lang: string): SupportedLang | undefined {
   if (lang === "en" || lang === "ru" || lang === "zh") return lang;
 }
 
-export function getStaticDocsPage(slugs: string[], lang: string) {
+function parseVersionedSlug(slugs: string[]): {
+  version?: DocsVersionSlug;
+  pageSlug: string;
+} {
+  const normalizedSlugs = slugs.filter(Boolean);
+  const [firstSlug, ...restSlugs] = normalizedSlugs;
+
+  if (firstSlug && isDocsVersionSlug(firstSlug)) {
+    return {
+      version: firstSlug,
+      pageSlug: restSlugs.join("/"),
+    };
+  }
+
+  return {
+    pageSlug: normalizedSlugs.join("/"),
+  };
+}
+
+function pagePath(page: DocsPage, version?: DocsVersionSlug): string {
+  return version ? `${version}/${page.path}` : page.path;
+}
+
+function pageUrl(lang: SupportedLang, page: DocsPage, version?: DocsVersionSlug): string {
+  const versionPrefix = version ? `/${version}` : "";
+  return `/${lang}/docs${versionPrefix}${page.slug ? `/${page.slug}` : ""}`;
+}
+
+export function getStaticDocsPage(slugs: string[], lang: string): StaticDocsPage | undefined {
   const normalizedLang = normalizeLang(lang);
   if (!normalizedLang) return;
 
-  const slug = slugs.filter(Boolean).join("/");
-  return pagesByLang[normalizedLang].find((page) => page.slug === slug);
+  const { version, pageSlug } = parseVersionedSlug(slugs);
+  const page = pagesByLang[normalizedLang].find((candidate) => candidate.slug === pageSlug);
+
+  if (!page) return;
+
+  return {
+    ...page,
+    path: pagePath(page, version),
+    version,
+  };
 }
 
-export function getStaticDocsTree(lang: string): Root {
+export function getStaticDocsTree(lang: string, version?: DocsVersionSlug): Root {
   const normalizedLang = normalizeLang(lang) ?? "en";
   const pages = pagesByLang[normalizedLang];
 
@@ -87,7 +128,14 @@ export function getStaticDocsTree(lang: string): Root {
     children: pages.map((page) => ({
       type: "page",
       name: page.title,
-      url: `/${normalizedLang}/docs${page.slug ? `/${page.slug}` : ""}`,
+      url: pageUrl(normalizedLang, page, version),
     })),
   };
+}
+
+export function docsPageExists(slug: string, lang: string, version?: DocsVersionSlug): boolean {
+  const normalizedLang = normalizeLang(lang);
+  if (!normalizedLang) return false;
+
+  return pagesByLang[normalizedLang].some((page) => page.slug === slug);
 }

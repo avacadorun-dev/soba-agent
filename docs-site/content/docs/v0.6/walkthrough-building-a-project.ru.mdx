@@ -1,0 +1,583 @@
+---
+title: "Проект шаг за шагом: v0.5 workflow"
+description: "End-to-end руководство по SOBA Agent v0.5.0: первый запуск, TUI, evidence summary, diff review, MCP reload, sessions, Project Memory, skills и финальный handoff."
+---
+
+Это руководство показывает полный terminal workflow SOBA Agent v0.5.0 на одном проекте. Мы не проверяем ACP/Zed
+в этом сценарии: цель здесь — руками пройти UX в TUI и увидеть, что после задачи понятно, что поменялось, какие команды
+запускались, что прошло, а где остались риски.
+
+Проект tutorial — `shipyard-lite`: маленький Bun/TypeScript release cockpit для локального репозитория. Он строит
+интерактивную терминальную сводку релизной готовности: git-состояние, scripts из `package.json`, TODO/FIXME markers,
+размер diff и список следующих действий.
+
+## Что делает Shipyard Lite
+
+`shipyard-lite` — CLI для pre-release review:
+
+```text
+Shipyard Lite
+
+Status: BLOCKED
+
+Checks:
+  PASS package.json has test script
+  PASS TypeScript config found
+  WARN working tree has 3 changed files
+  FAIL 2 FIXME markers found
+
+Diff:
+  src/checks.ts       +42 -3
+  tests/checks.test.ts +61 -0
+
+Next actions:
+  1. Resolve FIXME markers
+  2. Run bun test
+  3. Run bunx tsc --noEmit
+```
+
+В конце tutorial у вас будет:
+
+- Bun/TypeScript CLI с командами `scan`, `scan --json` и `watch`;
+- локальный MCP stdio-server `shipyard-metrics`;
+- `.soba/memory/` с устойчивыми решениями проекта;
+- проверенный workflow через `bun test`, `bunx tsc --noEmit`, `bun run build` и `git diff --check`;
+- несколько SOBA sessions с evidence summary;
+- финальный handoff, где видны changed files, checks, diff summary и риски.
+
+## Что из v0.5.0 проверяется
+
+| Возможность | Где проверяется |
+|---|---|
+| Первый запуск | `soba init --check`, затем `soba init` |
+| TUI workflow | основная разработка через `soba -i --lang ru --theme graphite` |
+| Понятные подтверждения | `/permissions ask`, отдельные dangerous-действия, final evidence block |
+| Сводка проверок | финальный ответ после `finish`: команды, checks, pass/fail/skipped |
+| Разбор diff перед сдачей | отдельный reviewer prompt и финальный diff summary |
+| Direct shell | `!git status`, `!bun test`, `!!bun run build` |
+| MCP hot reload | правка `.soba/mcp.json`, затем `/mcp reload` без перезапуска SOBA |
+| Sessions UX | `/sessions list`, `/sessions resume`, `/sessions close`, evidence per session |
+| Project Memory | `read_project_memory` / `write_project_memory` tools через агентский prompt |
+| Skills и trust | `/skill list`, `/project-trust status`, project skills после approve |
+
+Не входит в этот walkthrough: ACP-проверка в Zed, SOBA как MCP-сервер, marketplace discovery и командная работа с
+shared memory.
+
+---
+
+## 1. Подготовить пустой проект
+
+```bash
+mkdir -p ~/projects/shipyard-lite
+cd ~/projects/shipyard-lite
+git init
+bun init -y
+```
+
+Проверьте SOBA:
+
+```bash
+soba --version
+soba --help
+```
+
+Если вы запускаете SOBA из исходников, используйте команду вашего окружения вместо `soba`.
+
+## 2. Пройти first-run setup
+
+Сначала dry-check:
+
+```bash
+soba init --check
+```
+
+Ожидаемый смысл вывода:
+
+- provider готов или явно написано, чего не хватает;
+- project trust проверен;
+- MCP config либо найден, либо честно пропущен;
+- есть первый полезный next step.
+
+Теперь обычный init:
+
+```bash
+soba init
+```
+
+Если проект disposable и вы хотите автоматизировать trust prompt:
+
+```bash
+soba init --yes
+```
+
+Не используйте `--yes` в чужом production-репозитории, пока не понимаете `.soba/skills/` и текущий diff.
+
+## 3. Запустить TUI и включить безопасный режим
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+Внутри TUI:
+
+```text
+/session
+/budget
+/permissions ask
+/auto-compact on
+```
+
+Проверьте shell bridge:
+
+```text
+!git status --short
+!pwd
+```
+
+Важно: `!` команды — это прямой shell из TUI. Агент не обязан видеть полный output. Если нужно, чтобы SOBA учёл вывод,
+попросите обычным prompt вызвать инструмент сам.
+
+## 4. Дать первый bounded prompt
+
+Первый prompt должен задавать цель, scope и gates:
+
+```text
+Создай Bun/TypeScript проект shipyard-lite.
+
+Цель:
+- CLI команда scan печатает release cockpit для текущего git-репозитория;
+- scan учитывает git status, package scripts, tsconfig, TODO/FIXME markers и diff stat;
+- scan --json отдаёт стабильный JSON без ANSI;
+- команда watch делает один scan сейчас и затем показывает понятный текст, что полноценный watcher будет отдельным scope.
+
+Ограничения:
+- Bun only;
+- TypeScript strict mode;
+- без внешних runtime-зависимостей;
+- adapters должны принимать cwd/rootDir, а не зависеть от process.cwd();
+- не выполнять сетевые команды;
+- не делать git commit;
+- перед крупным изменением покажи короткий план.
+
+Definition of Done:
+- есть src/, tests/, package.json, tsconfig.json;
+- покрыты no git repo, clean repo, dirty repo, missing scripts, TODO/FIXME markers;
+- проходят bun test, bunx tsc --noEmit, bun run build и git diff --check;
+- в финальном ответе покажи changed files, checks, что не проверялось и риски.
+```
+
+Хороший turn в v0.5.0 должен закончиться не просто “готово”, а видимым evidence handoff: какие файлы изменены, какие
+проверки запускались, какие прошли, какие были пропущены и почему.
+
+## 5. Проверить evidence block в TUI
+
+После завершения первого implementation turn пролистайте финальный ответ. В TUI должен быть отдельный evidence-блок или
+структурированный handoff с такими разделами:
+
+- статус: verified, partially verified, unverified или blocked;
+- changed files;
+- checks/commands;
+- diff summary;
+- risk notes.
+
+Если агент пишет только общий текст без проверок, дайте уточняющий prompt:
+
+```text
+Не заверши задачу текстом без evidence.
+Сначала проверь текущий diff, затем запусти минимальные gates:
+- bun test
+- bunx tsc --noEmit
+- bun run build
+- git diff --check
+После этого дай финальный handoff с changed files, checks и рисками.
+```
+
+## 6. Сделать read-only diff review перед продолжением
+
+Перед второй итерацией попросите SOBA посмотреть diff как reviewer:
+
+```text
+Проверь текущий diff как reviewer.
+
+Ищи:
+- лишние зависимости;
+- хрупкие тесты;
+- скрытую зависимость от process.cwd();
+- неточный JSON contract;
+- слабую обработку ошибок git-команд.
+
+Файлы пока не меняй. В конце дай список findings и предложи один следующий patch.
+```
+
+Ожидаемое поведение:
+
+- агент читает diff и relevant files;
+- не делает правки без нового решения;
+- findings привязаны к файлам/поведению;
+- если проблем нет, честно говорит про остаточный риск.
+
+После review можно дать точечный patch prompt:
+
+```text
+Исправь только findings из review.
+После правок запусти targeted tests и tsc.
+Не расширяй scope.
+```
+
+## 7. Добавить интерактивность проекта
+
+Теперь сделайте проект более живым:
+
+```text
+Добавь команду watch для shipyard-lite.
+
+Scope:
+- watch печатает тот же release cockpit каждые 2 секунды;
+- Ctrl+C должен завершать процесс без stack trace;
+- добавь --once, чтобы watch можно было тестировать детерминированно;
+- tests не должны ждать реальные 2 секунды;
+- обнови help output.
+
+Gates:
+- targeted bun test;
+- bunx tsc --noEmit;
+- bun run build.
+```
+
+Ручная проверка через direct shell:
+
+```text
+!bun run shipyard -- scan
+!bun run shipyard -- scan --json
+!bun run shipyard -- watch --once
+```
+
+Если команда даёт большой output, используйте `!!`:
+
+```text
+!!bun test
+```
+
+## 8. Сохранить решения в Project Memory
+
+Попросите агента записать устойчивые знания:
+
+```text
+Обнови Project Memory для shipyard-lite.
+
+Сохрани:
+- architecture: CLI layer, analyzer core, git/filesystem/process adapters, reporter;
+- conventions: Bun only, strict TypeScript, no external runtime deps by default;
+- known-errors: git commands must return controlled diagnostics outside git repo;
+- dependencies: runtime dependencies отсутствуют, dev flow через bun test/build/tsc.
+
+Используй project memory tools. Не сохраняй секреты, токены и абсолютные домашние пути.
+```
+
+Проверьте файлы:
+
+```text
+!find .soba/memory -maxdepth 3 -type f | sort
+!sed -n '1,160p' .soba/memory/knowledge/architecture.md
+```
+
+## 9. Подключить локальный MCP server
+
+Добавьте project-local MCP fixture:
+
+```text
+Добавь локальный MCP stdio server shipyard-metrics.
+
+Scope:
+- файл tools/shipyard-metrics-mcp.ts;
+- поддержать initialize, tools/list и tools/call;
+- tool release_summary возвращает JSON: branch, dirtyFiles, todoCount, hasTestScript, hasBuildScript;
+- добавить .soba/mcp.json с canonical ключом servers и server id shipyard-metrics;
+- не использовать внешний MCP пакет;
+- добавить минимальный protocol smoke test.
+
+После изменений запусти targeted test и tsc.
+```
+
+Проверьте lifecycle:
+
+```text
+!sed -n '1,200p' .soba/mcp.json
+/mcp status
+/mcp start shipyard-metrics
+/mcp status
+```
+
+Попросите SOBA использовать MCP tool:
+
+```text
+Используй MCP tool release_summary и сравни его вывод с shipyard scan --json.
+Если есть расхождение, сначала объясни причину и предложи patch plan.
+```
+
+## 10. Проверить MCP hot reload
+
+Теперь измените MCP config в рамках tutorial:
+
+```text
+Переименуй MCP server id в .soba/mcp.json с shipyard-metrics на shipyard-release-metrics.
+Код server не меняй.
+После правки не перезапускай SOBA, я хочу проверить /mcp reload.
+```
+
+В TUI:
+
+```text
+/mcp status
+/mcp reload
+/mcp status
+```
+
+Ожидаемое поведение v0.5.0:
+
+- config перечитан без перезапуска SOBA;
+- удалённый server id остановлен;
+- новый server id появился в status;
+- tools синхронизированы заново;
+- если config сломан, предыдущий runtime остаётся рабочим.
+
+Верните имя, если хотите продолжать tutorial с исходным server id:
+
+```text
+Переименуй MCP server id обратно в shipyard-metrics и затем я вызову /mcp reload.
+```
+
+## 11. Проверить sessions UX
+
+Посмотреть текущую сессию:
+
+```text
+/session
+/sessions list
+```
+
+Завершите TUI, затем продолжите последнюю сессию:
+
+```bash
+soba -c -i --lang ru
+```
+
+Внутри:
+
+```text
+/sessions list
+```
+
+Ожидаемо: список показывает активную сессию, количество записей и, если уже был финальный handoff, краткий evidence
+summary.
+
+Проверьте resume/load без удаления активной сессии:
+
+```text
+/sessions resume <SESSION_ID_PREFIX>
+/sessions close <SESSION_ID_PREFIX>
+```
+
+Удаление активной сессии должно быть заблокировано. Для удаления старой неактивной сессии:
+
+```text
+/sessions delete <OLD_SESSION_ID_PREFIX>
+```
+
+## 12. Использовать skills и project trust
+
+Посмотреть skills:
+
+```text
+/skill list
+/project-trust status
+```
+
+Если в проекте есть `.soba/skills/`, сначала включите trust:
+
+```text
+/project-trust approve
+```
+
+Пример полезного skill prompt:
+
+```text
+/skill:commit-message Предложи conventional commit message для текущих staged changes.
+```
+
+Project trust разрешает discovery project skills, но не отменяет permissions. Dangerous shell-команды всё ещё должны
+быть явными.
+
+## 13. Подготовить финальный handoff
+
+Перед коммитом попросите SOBA собрать результат:
+
+```text
+Подготовь результат shipyard-lite к сдаче.
+
+Нужно:
+- кратко описать реализованное поведение;
+- сгруппировать changed files;
+- отдельно перечислить commands/checks и их статус;
+- сделать diff review перед финальным ответом;
+- назвать skipped/not-run checks с причиной;
+- назвать риски и out-of-scope;
+- не делать git commit.
+```
+
+Ручной минимальный gate:
+
+```text
+!git diff --stat
+!git diff --check
+!bun test
+!bunx tsc --noEmit
+!bun run build
+!git status --short
+```
+
+Если full suite уже была красной до задачи, фиксируйте это явно:
+
+```text
+Full suite падает на существующем baseline.
+Для текущей задачи проходят:
+- bun test tests/shipyard.test.ts
+- bunx tsc --noEmit
+- bun run build
+Не относящийся к задаче fail: tests/legacy/foo.test.ts.
+```
+
+## 14. Коммит только явным запросом
+
+Stage делайте осознанно:
+
+```text
+!git add package.json tsconfig.json src tests tools .soba/mcp.json
+!git status --short
+```
+
+Попросите commit message:
+
+```text
+/skill:commit-message Предложи conventional commit message для staged changes.
+```
+
+Коммит:
+
+```text
+!git commit -m "feat: add shipyard release cockpit"
+```
+
+Не используйте `git add -A`, если в рабочем дереве есть чужие, временные или сгенерированные файлы.
+
+## 15. Финальная проверка новой сессии
+
+Откройте новую сессию:
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+Prompt:
+
+```text
+Продолжи работу над shipyard-lite.
+Сначала используй Project Memory и session context, затем скажи:
+- какая архитектура сейчас принята;
+- какие MCP tools доступны;
+- какие проверки уже проходили;
+- какой один следующий безопасный шаг.
+Ничего не меняй.
+```
+
+Хороший ответ должен ссылаться на сохранённые архитектурные решения, `.soba/mcp.json`, последние checks и следующий
+шаг. Если агент просит заново объяснить базовую архитектуру, значит Project Memory или handoff были сформированы
+недостаточно явно.
+
+---
+
+## Краткая шпаргалка v0.5.0
+
+### Запуск
+
+| Команда | Назначение |
+|---|---|
+| `soba init --check` | проверить first-run readiness без изменений |
+| `soba init` | пройти first-run setup |
+| `soba "prompt"` | one-shot запрос |
+| `soba -i` | новая интерактивная сессия |
+| `soba -c -i` | продолжить последнюю сессию |
+| `soba -r` | выбрать сессию |
+| `soba --no-session "prompt"` | выполнить без сохранения сессии |
+
+### Evidence и проверки
+
+| Команда | Назначение |
+|---|---|
+| `!git diff --stat` | увидеть размер diff |
+| `!git diff --check` | проверить whitespace/conflict markers |
+| `!bun test` | запустить tests |
+| `!bunx tsc --noEmit` | typecheck |
+| `!bun run build` | build |
+| `!!COMMAND` | выполнить shell-команду с компактным выводом |
+
+### Sessions
+
+| Команда | Назначение |
+|---|---|
+| `/session` | состояние текущей сессии |
+| `/sessions list` | список sessions с evidence summary |
+| `/sessions resume <id>` | активировать session |
+| `/sessions load <id>` | загрузить session |
+| `/sessions close [id]` | закрыть session |
+| `/sessions delete <id>` | удалить неактивную session |
+
+### MCP
+
+| Команда | Назначение |
+|---|---|
+| `/mcp status` | состояние настроенных MCP servers |
+| `/mcp start <server>` | запустить server и зарегистрировать tools |
+| `/mcp stop <server>` | остановить server |
+| `/mcp restart <server>` | перезапустить server и синхронизировать tools |
+| `/mcp reload` | перечитать `.soba/mcp.json` без перезапуска SOBA |
+| `/mcp auth status <server>` | remote auth state и next action |
+| `/mcp auth login <server>` | OAuth login для remote MCP server |
+| `/mcp auth logout <server>` | очистить OAuth credentials |
+
+### TUI и permissions
+
+| Команда | Назначение |
+|---|---|
+| `/permissions` | показать режим разрешений |
+| `/permissions ask` | подтверждать dangerous-действия |
+| `/permissions repo` | разрешать repo-scoped dangerous-действия |
+| `/permissions full` | разрешать dangerous-действия до конца текущей сессии |
+| `/permissions clear` | сбросить выданные разрешения |
+| `/queue` | показать очередь |
+| `/queue cancel all` | очистить очередь |
+| `/theme NAME` | сменить тему |
+| `/lang ru` | сменить язык интерфейса |
+
+### Project context
+
+| Команда | Назначение |
+|---|---|
+| `/budget` | использование контекста |
+| `/auto-compact on` | включить proactive compaction |
+| `/compact` | создать context capsule вручную |
+| `/capsule` | показать capsules/checkpoints |
+| `/rewind` | выбрать checkpoint для ветвления |
+| `/skill list` | список skills |
+| `/project-trust status` | статус доверия project skills |
+| `/project-trust approve` | разрешить discovery project skills |
+
+## Что дальше
+
+- [Интерфейс и команды](/ru/docs/v0.6/usage) — TUI, slash-команды, queue и shell shortcuts.
+- [MCP-серверы](/ru/docs/v0.6/mcp) — project-local MCP config, stdio/remote lifecycle и auth.
+- [Сессии](/ru/docs/v0.6/sessions) — JSONL, continuation, rewind и ветвление.
+- [Compaction и Context Capsules](/ru/docs/v0.6/compaction) — управление длинным контекстом.
+- [Portable Capsules](/ru/docs/v0.6/portable-capsules) — handoff через `.capsule.md`.
+- [Skills](/ru/docs/v0.6/skills) — bundled/user/project skills и lifecycle.
+- [Безопасность](/ru/docs/v0.6/security) — trust levels, permissions и project trust.

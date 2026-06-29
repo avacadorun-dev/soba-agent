@@ -1,0 +1,125 @@
+---
+title: 安全
+description: SOBA Agent 的权限、信任级别、项目信任和安全模式。
+---
+
+SOBA 会按信任级别分类代理操作，包括工具调用和 shell 命令，并在危险动作前请求用户确认。
+
+---
+
+## 1. 信任级别
+
+每个工具调用或 shell 命令都会得到三个级别之一（`src/core/trust/trust-manager.ts`）：
+
+| 级别 | 行为 | 示例 |
+|---------|-----------|---------|
+| **safe** | 自动执行 | `read`, `ls`, `git status`, `npm test` |
+| **normal** | 无需确认，执行并记录 | `write`, `edit`, `git commit`, `bun install` |
+| **dangerous** | 需要用户确认 | `rm`, `sudo`, `curl`, `git push` |
+
+---
+
+## 2. 权限模式
+
+三个模式通过 `TrustManager.setPermissionMode()` 设置：
+
+| 模式 | 行为 |
+|--------|----------|
+| **ask**（默认） | 每个 dangerous 命令都会请求确认 |
+| **repo** | 当前 repo 内的 dangerous 命令无需重复确认；外部、网络和特权命令仍然需要确认 |
+| **full** | 当前会话结束前，所有 dangerous 操作都无需重复确认 |
+
+---
+
+## 3. Shell 命令分类
+
+完整规则列表在 `src/core/trust/trust-manager.ts` 的 `DEFAULT_COMMAND_RULES` 中。
+
+### Dangerous：需要确认
+
+删除：`rm`, `rm -rf`, `rmdir`, `unlink`, `shred`, `srm`  
+权限：`sudo`, `chown`, `chmod 777`  
+网络：`curl`, `wget`, `nc`, `ssh`, `scp`  
+Git：`git push`, `git reset`  
+可能阻塞代理的开发服务器：`bun run dev`, `npm run dev`, `npx vite`  
+脚本快捷方式：`node -e`, `bun -e`, `python -c`, `ruby -e`  
+移动到项目外：`mv ... /tmp/`, `mv ... $HOME/`  
+文件系统：`mkfs.*`, `dd if=`  
+重定向到设备：`> /dev/sda`
+
+### Normal：无需询问
+
+写入：`write`, `edit`, `mkdir`, `cp`, 项目内的 `mv`, `touch`, `chmod`  
+Git：`git add`, `git commit`, `git checkout`  
+包管理器：`bun install`, `npm install`, `yarn install`, `pnpm install`  
+构建：`make`, `cargo`, `go`, `docker`, `docker-compose`
+
+### Safe：始终允许
+
+读取：`read`, `ls`, `cat`, `head`, `tail`, `wc`  
+搜索：不带 `-delete` 或 `-exec rm` 的 `grep`, `rg`, `find`  
+Git：`git status`, `git log`, `git diff`, `git branch`  
+测试和脚本：`npm test`, `npm run`, `bun test`, `bun run`  
+信息：`echo`, `pwd`, `which`, `env`, `date`, `whoami`  
+重定向：`> /dev/null`
+
+---
+
+## 4. 确认危险操作
+
+当代理调用 dangerous 命令时，用户会看到带有选项的确认提示
+（`src/ui/terminal/interactive/lib/trust-dialog-manager.ts`，以及 `src/core/loop/types.ts` 中的 `ApprovalDecision`）：
+
+| 决定 | 动作 |
+|---------|----------|
+| **deny** (n) | 拒绝 |
+| **once** (y) | 允许一次 |
+| **session** (s) | 允许整个会话；同一个命令不会再次请求确认 |
+| **repo** (r) | 启用 repo 模式 |
+| **full** (f) | 为所有 dangerous 操作启用完整会话模式 |
+
+---
+
+## 5. Direct shell 命令（`!`）
+
+在 TUI 中，`!command` 会直接执行命令，不经过 AI。执行前仍然会进行安全检查
+（`src/core/loop/agent-loop.ts` — `_directShellAbortController`）。
+
+---
+
+## 6. Skills 的项目信任
+
+项目中的 `.soba/skills/` skills 在首次使用前需要批准
+（`src/core/skills/project-trust-store.ts`）。
+
+存储位置：`~/.soba/project-trust.json`。
+
+Slash 命令：
+
+| 命令 | 动作 |
+|---------|----------|
+| `/project-trust status` | 显示当前项目的信任状态 |
+| `/project-trust approve` | 批准项目 |
+| `/project-trust revoke` | 撤销信任 |
+
+---
+
+## 7. 自定义规则
+
+`TrustManager` 可以添加和删除规则：
+
+```typescript
+trustManager.addToolRule("my-tool", "dangerous");
+trustManager.addCommandRule("my-cmd ", "safe");
+trustManager.removeToolRule("my-tool");
+```
+
+---
+
+## 8. 审计
+
+所有代理动作都会写入会话 JSONL。查看 shell 命令：
+
+```bash
+grep '"name":"bash"' ~/.soba/sessions/<session-id>.jsonl
+```

@@ -1,0 +1,126 @@
+---
+title: Security
+description: SOBA Agent permissions, trust levels, project trust, and safety modes.
+---
+
+SOBA classifies agent operations, including tools and shell commands, by trust level and asks the user to approve risky
+actions.
+
+---
+
+## 1. Trust levels
+
+Every tool call or shell command gets one of three levels (`src/core/trust/trust-manager.ts`):
+
+| Level | Behavior | Examples |
+|---------|-----------|---------|
+| **safe** | Runs automatically | `read`, `ls`, `git status`, `npm test` |
+| **normal** | Runs without confirmation and is logged | `write`, `edit`, `git commit`, `bun install` |
+| **dangerous** | Requires user approval | `rm`, `sudo`, `curl`, `git push` |
+
+---
+
+## 2. Permission modes
+
+The three modes are set through `TrustManager.setPermissionMode()`:
+
+| Mode | Behavior |
+|--------|----------|
+| **ask** (default) | Every dangerous command asks for confirmation |
+| **repo** | Dangerous commands inside the current repo are allowed without repeated prompts; external, network, and privileged commands still ask for confirmation |
+| **full** | All dangerous operations are allowed without repeated prompts until the current session ends |
+
+---
+
+## 3. Shell command classification
+
+Full rule list: `DEFAULT_COMMAND_RULES` in `src/core/trust/trust-manager.ts`.
+
+### Dangerous: confirmation required
+
+Deletion: `rm`, `rm -rf`, `rmdir`, `unlink`, `shred`, `srm`  
+Privileges: `sudo`, `chown`, `chmod 777`  
+Network: `curl`, `wget`, `nc`, `ssh`, `scp`  
+Git: `git push`, `git reset`  
+Dev servers that can block the agent: `bun run dev`, `npm run dev`, `npx vite`  
+Script shortcuts: `node -e`, `bun -e`, `python -c`, `ruby -e`  
+Moving outside the project: `mv ... /tmp/`, `mv ... $HOME/`  
+Filesystems: `mkfs.*`, `dd if=`  
+Device redirects: `> /dev/sda`
+
+### Normal: runs without asking
+
+Writing: `write`, `edit`, `mkdir`, `cp`, `mv` inside the project, `touch`, `chmod`  
+Git: `git add`, `git commit`, `git checkout`  
+Package managers: `bun install`, `npm install`, `yarn install`, `pnpm install`  
+Builds: `make`, `cargo`, `go`, `docker`, `docker-compose`
+
+### Safe: always allowed
+
+Reading: `read`, `ls`, `cat`, `head`, `tail`, `wc`  
+Search: `grep`, `rg`, `find` without `-delete` or `-exec rm`  
+Git: `git status`, `git log`, `git diff`, `git branch`  
+Tests and scripts: `npm test`, `npm run`, `bun test`, `bun run`  
+Info: `echo`, `pwd`, `which`, `env`, `date`, `whoami`  
+Redirects: `> /dev/null`
+
+---
+
+## 4. Approving dangerous operations
+
+When the agent calls a dangerous command, the user sees a prompt with these choices
+(`src/ui/terminal/interactive/lib/trust-dialog-manager.ts`, `ApprovalDecision` in `src/core/loop/types.ts`):
+
+| Decision | Action |
+|---------|----------|
+| **deny** (n) | Deny |
+| **once** (y) | Allow once |
+| **session** (s) | Allow for the whole session; the same command will not ask again |
+| **repo** (r) | Enable repo mode |
+| **full** (f) | Enable full session mode for all dangerous operations |
+
+---
+
+## 5. Direct shell commands (`!`)
+
+In the TUI, `!command` runs a command directly, without AI in the middle. The safety check still runs before execution
+(`src/core/loop/agent-loop.ts` — `_directShellAbortController`).
+
+---
+
+## 6. Project Trust for skills
+
+Skills from `.soba/skills/` must be approved before first use in a project
+(`src/core/skills/project-trust-store.ts`).
+
+Storage: `~/.soba/project-trust.json`.
+
+Slash commands:
+
+| Command | Action |
+|---------|----------|
+| `/project-trust status` | Show trust status for the current project |
+| `/project-trust approve` | Approve the project |
+| `/project-trust revoke` | Revoke trust |
+
+---
+
+## 7. Customizing rules
+
+`TrustManager` can add and remove rules:
+
+```typescript
+trustManager.addToolRule("my-tool", "dangerous");
+trustManager.addCommandRule("my-cmd ", "safe");
+trustManager.removeToolRule("my-tool");
+```
+
+---
+
+## 8. Audit
+
+All agent actions are written to the session JSONL. To inspect shell commands:
+
+```bash
+grep '"name":"bash"' ~/.soba/sessions/<session-id>.jsonl
+```

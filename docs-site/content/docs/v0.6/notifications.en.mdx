@@ -1,0 +1,87 @@
+---
+title: Sound notifications
+description: "SOBA sound notifications: CLI flags, environment variables, config.json, and platform behavior."
+---
+
+SOBA can play sounds for important events: a task is done, an error happened, or a dangerous operation needs approval.
+
+---
+
+## 1. CLI flags
+
+| Flag | Purpose |
+|---|---|
+| `--sound-enabled` | Enable sound for this run |
+| `--no-sound` | Disable sound for this run |
+| `--sound-volume <0..1>` | Volume |
+| `--sound-repeat` | Repeat the sound until the next event or state change |
+
+Example:
+
+```bash
+soba -i --sound-enabled --sound-volume 0.5
+```
+
+---
+
+## 2. Config
+
+The `sound` block in `~/.soba/config.json`:
+
+```json
+{
+  "sound": {
+    "enabled": true,
+    "volume": 0.7,
+    "repeatMode": "once",
+    "repeatIntervalMs": 3000
+  }
+}
+```
+
+| Key | Values |
+|---|---|
+| `enabled` | `true` or `false` |
+| `volume` | number from `0.0` to `1.0` |
+| `repeatMode` | `"once"` or `"repeat"` |
+| `repeatIntervalMs` | repeat interval in milliseconds |
+
+---
+
+## 3. Env
+
+```bash
+export SOBA_SOUND_ENABLED=true
+export SOBA_SOUND_VOLUME=0.7
+export SOBA_SOUND_REPEAT=once
+```
+
+The priority is standard:
+
+```text
+CLI flags > env > config.json > defaults
+```
+
+---
+
+## 4. In practice
+
+For long tasks:
+
+```bash
+soba -i --sound-enabled --sound-repeat
+```
+
+For CI, screen recording, or quiet mode:
+
+```bash
+soba -i --no-sound
+```
+
+If no sound is played, check the system player and OS volume. SOBA should not block the task just because audio is
+unavailable.
+
+## Next
+
+- [Configuration](/ru/docs/v0.6/configuration)
+- [Interface and commands](/ru/docs/v0.6/usage)

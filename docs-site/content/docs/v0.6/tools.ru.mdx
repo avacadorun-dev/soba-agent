@@ -1,0 +1,169 @@
+---
+title: Инструменты агента
+description: Built-in tools SOBA Agent, direct shell, MCP tools и граница между tool calls и slash-командами.
+---
+
+Инструменты — это функции, которые модель может вызвать во время agent loop. Они отличаются от slash-команд:
+
+- slash-команды выполняются пользователем в TUI;
+- tools вызываются агентом после рассуждения и проходят trust/permission flow;
+- direct shell `!` выполняется пользователем напрямую, минуя модель.
+
+---
+
+## 1. Built-in tools
+
+| Tool | Назначение |
+|---|---|
+| `ls` | Посмотреть содержимое директории |
+| `read` | Прочитать файл или диапазон строк |
+| `write` | Записать файл |
+| `edit` | Изменить файл |
+| `bash` | Выполнить shell-команду через agent loop |
+| `checkpoint` | Зафиксировать milestone/checkpoint |
+| `activate_skill` | Активировать skill из catalog |
+| `read_project_memory` | Прочитать Project Memory |
+| `write_project_memory` | Записать Project Memory |
+
+MCP tools регистрируются дополнительно после запуска MCP server. Их имена имеют вид:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Server/tool IDs нормализуются до OpenAI-compatible function names.
+
+---
+
+## 2. Trust и permissions
+
+Каждый tool call классифицируется как `safe`, `normal` или `dangerous`.
+
+| Уровень | Примеры |
+|---|---|
+| `safe` | `read`, `ls`, `git status`, `bun test` |
+| `normal` | `write`, `edit`, локальный build |
+| `dangerous` | `rm`, `sudo`, `curl`, `git push`, destructive git |
+
+Режимы:
+
+```text
+/permissions ask
+/permissions repo
+/permissions full
+/permissions clear
+```
+
+`repo` не означает “безопасно всё”: он убирает запросы только для dangerous-операций, которые остаются внутри текущего
+репозитория. Сетевые, privileged и внешние dangerous-действия в `repo` всё равно требуют подтверждения.
+
+`full` отключает повторные dangerous-подтверждения до конца текущей сессии. Используйте его только для окружений, где
+вы готовы доверить агенту внешние команды вроде `curl` или `git push`.
+
+Project skills управляются отдельной trust boundary:
+
+```text
+/project-trust status
+/project-trust approve
+/project-trust revoke
+```
+
+Внутренний API, который переключает permission mode в runtime, называется `TrustManager.setPermissionMode()`. Для
+пользователя нормальный интерфейс — slash-команда `/permissions`.
+
+---
+
+## 3. Direct shell `!`
+
+Direct shell используется, когда вы сами хотите быстро выполнить команду:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+Разница:
+
+| Способ | Кто вызывает | Агент видит вывод |
+|---|---|---|
+| `!command` | пользователь | нет |
+| `!!command` | пользователь | нет, вывод скрыт |
+| `bash` tool | агент | да |
+
+Если нужно, чтобы агент проанализировал вывод, попросите его выполнить команду сам:
+
+```text
+Запусти bun test и исправь фактические ошибки по выводу.
+```
+
+---
+
+## 4. Project Memory tools
+
+`read_project_memory` и `write_project_memory` работают только внутри agent loop.
+
+Пример prompt:
+
+```text
+Прочитай Project Memory, затем предложи план. Ничего не меняй.
+```
+
+Пример обновления:
+
+```text
+Обнови Project Memory: добавь в conventions правило, что тесты зеркалят src и запускаются через bun test.
+Не сохраняй секреты.
+```
+
+---
+
+## 5. MCP tools
+
+MCP tools появляются после запуска server:
+
+```text
+/mcp status
+/mcp start repo-metrics
+/mcp status
+```
+
+После этого агент может вызвать tool вроде:
+
+```text
+mcp_repo_metrics_repo_summary
+```
+
+Trust для MCP берётся из `.soba/mcp.json`, а не из metadata, присланной сервером.
+
+---
+
+## 6. Как писать prompts для tools
+
+Хороший prompt:
+
+```text
+Проверь проект.
+Сначала прочитай package.json и tests, затем запусти targeted bun test.
+Если тест падает, исправляй только причину падения.
+Не делай git commit.
+```
+
+Плохой prompt:
+
+```text
+Сделай всё.
+```
+
+Уточняйте:
+
+- какие файлы можно менять;
+- какие команды проверки обязательны;
+- какие действия запрещены;
+- когда нужно остановиться и спросить.
+
+## Что дальше
+
+- [Безопасность](/ru/docs/v0.6/security)
+- [MCP-серверы](/ru/docs/v0.6/mcp)
+- [Project Memory](/ru/docs/v0.6/project-memory)

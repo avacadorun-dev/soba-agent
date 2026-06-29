@@ -1,0 +1,169 @@
+---
+title: 代理工具
+description: SOBA Agent 的 built-in tools、direct shell、MCP tools，以及 tool calls 和 slash commands 的边界。
+---
+
+工具是模型在 agent loop 中可以调用的函数。它们和 slash 命令不同：
+
+- slash 命令由用户在 TUI 中执行；
+- tools 由代理在推理后调用，并经过 trust/permission flow；
+- direct shell `!` 由用户直接执行，不经过模型。
+
+---
+
+## 1. Built-in tools
+
+| Tool | 作用 |
+|---|---|
+| `ls` | 查看目录内容 |
+| `read` | 读取文件或行范围 |
+| `write` | 写入文件 |
+| `edit` | 修改文件 |
+| `bash` | 通过 agent loop 执行 shell 命令 |
+| `checkpoint` | 记录 milestone/checkpoint |
+| `activate_skill` | 从 catalog 激活 skill |
+| `read_project_memory` | 读取 Project Memory |
+| `write_project_memory` | 写入 Project Memory |
+
+MCP tools 会在 MCP server 启动后额外注册。它们的名称格式如下：
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+Server/tool IDs 会被规范化为 OpenAI-compatible function names。
+
+---
+
+## 2. Trust 和 permissions
+
+每个 tool call 都会被分类为 `safe`、`normal` 或 `dangerous`。
+
+| 级别 | 示例 |
+|---|---|
+| `safe` | `read`, `ls`, `git status`, `bun test` |
+| `normal` | `write`, `edit`, 本地 build |
+| `dangerous` | `rm`, `sudo`, `curl`, `git push`, destructive git |
+
+模式：
+
+```text
+/permissions ask
+/permissions repo
+/permissions full
+/permissions clear
+```
+
+`repo` 并不表示“一切都安全”。它只会取消当前仓库内部 dangerous 操作的确认提示。网络、特权和外部
+dangerous 动作在 `repo` 模式下仍然需要确认。
+
+`full` 会在当前会话结束前关闭重复的 dangerous 确认。只应在你愿意让代理运行 `curl` 或 `git push` 等外部命令的
+环境中使用。
+
+Project skills 有单独的 trust boundary：
+
+```text
+/project-trust status
+/project-trust approve
+/project-trust revoke
+```
+
+在 runtime 中切换 permission mode 的内部 API 是 `TrustManager.setPermissionMode()`。对用户来说，正常入口是
+`/permissions` slash 命令。
+
+---
+
+## 3. Direct shell `!`
+
+Direct shell 用于你自己快速执行命令：
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+区别：
+
+| 方式 | 谁调用 | 代理能看到输出 |
+|---|---|---|
+| `!command` | 用户 | 否 |
+| `!!command` | 用户 | 否，输出会被隐藏 |
+| `bash` tool | 代理 | 是 |
+
+如果需要代理分析输出，请让它自己执行命令：
+
+```text
+Run bun test and fix the real failures from the output.
+```
+
+---
+
+## 4. Project Memory tools
+
+`read_project_memory` 和 `write_project_memory` 只在 agent loop 内工作。
+
+示例 prompt：
+
+```text
+Read Project Memory, then suggest a plan. Do not change anything.
+```
+
+更新示例：
+
+```text
+Update Project Memory: add a convention that tests mirror src and are run with bun test.
+Do not save secrets.
+```
+
+---
+
+## 5. MCP tools
+
+MCP tools 会在 server 启动后出现：
+
+```text
+/mcp status
+/mcp start repo-metrics
+/mcp status
+```
+
+之后代理可以调用类似这样的 tool：
+
+```text
+mcp_repo_metrics_repo_summary
+```
+
+MCP 的 trust 来自 `.soba/mcp.json`，不是服务器发送的 metadata。
+
+---
+
+## 6. 如何为 tools 写 prompts
+
+好的 prompt：
+
+```text
+Check the project.
+First read package.json and tests, then run targeted bun test.
+If a test fails, fix only the cause of the failure.
+Do not make a git commit.
+```
+
+不好的 prompt：
+
+```text
+Do everything.
+```
+
+请说明清楚：
+
+- 哪些文件可以改；
+- 哪些验证命令必须执行；
+- 哪些动作禁止执行；
+- 什么时候应该停下来询问。
+
+## 下一步
+
+- [安全](/zh/docs/v0.6/security)
+- [MCP servers](/ru/docs/v0.6/mcp)
+- [Project Memory](/ru/docs/v0.6/project-memory)

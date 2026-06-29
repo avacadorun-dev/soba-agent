@@ -1,0 +1,269 @@
+---
+title: Providers and models
+description: Built-in DeepSeek, Moonshot Kimi, Alibaba Qwen, and OpenRouter providers, dynamic model discovery, and custom providers.
+---
+
+SOBA works with any OpenAI-compatible API. This guide explains how to use built-in providers, switch models, add custom providers, and diagnose common connection problems.
+
+**Important in v0.5.0:** models are no longer kept in hard-coded lists. SOBA discovers them dynamically through `GET /v1/models`, so new provider models can appear without a SOBA release.
+
+---
+
+## 1. Architecture
+
+SOBA uses a provider **registry**. It combines:
+
+- **Built-in providers**: four providers with known base URLs
+- **Custom providers**: any OpenAI-compatible API added by the user
+- **Dynamic model discovery**: model lists are fetched from provider APIs and cached in memory
+
+```
+┌──────────────────────────────────────────┐
+│              Registry                    │
+│                                          │
+│  ┌────────────────┐  ┌────────────────┐ │
+│  │ Built-in       │  │ Custom         │ │
+│  │ Providers (4)  │  │ Providers (∞)  │ │
+│  └────────────────┘  └────────────────┘ │
+│                                          │
+│  ┌────────────────────────────────────┐  │
+│  │ Dynamic Model Discovery             │  │
+│  │ GET /v1/models → in-memory cache    │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## 2. Built-in providers
+
+SOBA v0.5.0 ships with four built-in providers. All of them use the OpenAI-compatible adapter.
+
+| ID | Name | Base URL | API key env | Notes |
+|---|---|---|---|---|
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | V3, R1, Coder |
+| `kimi` | Moonshot Kimi | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | Kimi K2 is strong for code |
+| `alibaba` | Alibaba Qwen | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | Qwen3, Qwen-Coder, Singapore region |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | Meta-router for Claude, GPT, Gemini, Llama, and many more |
+
+### 2.1. Dynamic discovery
+
+On startup, SOBA calls `GET {baseUrl}/models` for the active provider. The result is cached in the current process. SOBA then chooses a suitable default model, with a preference for coding-oriented models.
+
+The cache lives only in memory. To refresh it, restart SOBA or open the TUI model picker with `F2` or `/model`.
+
+---
+
+## 3. Choosing a model
+
+### 3.1. List available models
+
+```bash
+soba provider list
+```
+
+The output groups providers and models by provider. The active model is marked with an asterisk.
+
+### 3.2. Select a model
+
+In the TUI, switch models with `F2` or `/model`. The selector shows providers in the left column and models for the highlighted provider in the right column. Search filters both provider and model names/ids; each model row includes context window, max output, streaming, and thinking badges when known. `Ctrl+M` remains a best-effort legacy alias, but many terminals encode it as Enter.
+
+Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select. Opening the selector refreshes built-in provider discovery, so it is also the quickest way to pick up newly published models during a running TUI session.
+
+For one run, pass a model through CLI or env:
+
+```bash
+# One CLI run
+soba --model deepseek-v4-flash "Check the project"
+
+# Environment variable
+export SOBA_MODEL="anthropic/claude-sonnet-4.6"
+```
+
+`soba provider use <id>` switches the active provider to its default model. For custom providers, the default model is set with `--default-model` or falls back to the first `--model`.
+
+### 3.3. Practical model choices
+
+This is a dated field guide, not a forever ranking. As of June 21, 2026, these are reasonable starting points. Before a large run, check `soba provider list`: aliases, prices, and limits move quickly.
+
+| Task | Suggested model | Why |
+|---|---|---|
+| Fast, affordable coding | `deepseek/deepseek-v4-flash` | Fast DeepSeek V4 model for everyday changes. Older `deepseek-chat` / `deepseek-reasoner` names are compatibility aliases |
+| Reasoning and heavy verification | `deepseek/deepseek-v4-pro` | Heavier DeepSeek V4 model when careful reasoning matters more than speed |
+| Best agentic code quality | `openrouter/openai/gpt-5.5` | Use it when a tool-heavy agent loop needs the highest quality: planning, edits, verification, and a careful final answer. The direct OpenAI model id is `gpt-5.5` |
+| Complex coding work | `openrouter/anthropic/claude-sonnet-4.6` | Strong for larger refactors, codebase navigation, and agentic work |
+| Long-horizon agent work | `openrouter/minimax/minimax-m3` | MiniMax M3 has a large context window and is useful for sustained tool-using tasks; the direct MiniMax model id is `MiniMax-M3` |
+| Kimi coding | `kimi/kimi-k2.7-code` | Current Kimi coding model; try `kimi-k2.7-code-highspeed` when speed matters |
+| Qwen for code | `openrouter/qwen/qwen3-coder` | A useful backup for agentic coding, tool use, and large repositories |
+| Free experiments | `openrouter/free` | OpenRouter picks an available free model; specific `:free` ids change often |
+| Local work | custom provider → Ollama | `http://localhost:11434/v1` |
+
+---
+
+## 4. Custom providers
+
+Any OpenAI-compatible API can be added as a custom provider.
+
+### 4.1. Add a provider
+
+```bash
+# Ollama, local and keyless
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048
+
+# Start local models with modest limits:
+# 8192 = contextWindow, 2048 = maxOutput.
+# 128000,8192 can hit laptop memory hard.
+
+# Groq
+soba provider add groq \
+  --base-url https://api.groq.com/openai/v1 \
+  --api-key-env GROQ_API_KEY \
+  --model llama-3.3-70b-versatile="Llama 3.3 70B",128000,8192
+
+# Together AI
+soba provider add together \
+  --base-url https://api.together.xyz/v1 \
+  --api-key-env TOGETHER_API_KEY \
+  --model meta-llama/Llama-3.3-70B-Instruct-Turbo="Llama 3.3 70B",128000,8192
+
+# Any self-hosted OpenAI-compatible API
+soba provider add my-api \
+  --base-url https://my-llm.company.com/v1 \
+  --api-key-env MY_LLM_KEY \
+  --model company-code-model="Company Code Model",128000,8192
+```
+
+### 4.2. `soba provider add` flags
+
+| Flag | Required | Description |
+|---|---|---|
+| `<id>` | Yes | Unique provider ID: letters, numbers, and dashes |
+| `--base-url <url>` | Yes | OpenAI-compatible API base URL |
+| `--api-key-env <VAR>` | No | Environment variable with the API key. If omitted, the provider is treated as keyless |
+| `--name <name>` | No | Display name |
+| `--model <spec>` | Yes | Model spec: `id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]`. Can be repeated |
+| `--default-model <id>` | No | Default model. If omitted, the first `--model` is used |
+| `--adapter <openai\|anthropic>` | No | Provider adapter. The runtime path currently targets OpenAI-compatible APIs |
+| `--from-file <path>` | No | Load provider definition from a JSON file |
+| `--set-active` | No | Make the provider active right after adding it |
+
+### 4.3. Manage custom providers
+
+```bash
+# Show provider definition
+soba provider show ollama
+
+# Make provider active
+soba provider use ollama
+
+# Remove custom provider
+soba provider remove ollama
+```
+
+There is no `update` command yet. To change URL or models, remove the custom provider and add it again.
+
+### 4.4. Storage
+
+Custom providers are stored in `registry.customProviders` in `~/.soba/config.json`:
+
+```json
+{
+  "registry": {
+    "activeProvider": "deepseek",
+    "activeModelId": "deepseek-v4-flash",
+    "customProviders": [
+      {
+        "id": "ollama",
+        "name": "Ollama (Local)",
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKeyEnv": "OLLAMA_API_KEY",
+        "adapter": "openai"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 5. CLI management
+
+Full `soba provider` command set:
+
+```bash
+# Help
+soba provider help
+
+# List providers and models
+soba provider list
+
+# Select active provider and its default model
+soba provider use deepseek
+
+# Add a custom provider
+soba provider add <id> --base-url <url> --model <spec> [--api-key-env <VAR>] [--name <name>]
+
+# Remove a custom provider
+soba provider remove <id>
+
+# Show provider definition
+soba provider show <id>
+```
+
+Provider and model management currently lives in CLI commands and the TUI model picker.
+
+---
+
+## 6. Authentication
+
+### 6.1. API key sources
+
+Priority:
+
+1. **Saved provider key** in `registry.providers.<providerId>.apiKey`, created by the first-time wizard for built-ins
+2. **Provider-specific environment variable**: `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `DASHSCOPE_API_KEY`, `OPENROUTER_API_KEY`
+3. **Legacy flat config**: `SOBA_API_KEY` or `apiKey`, kept as a fallback path
+
+For registry providers, prefer provider-specific env vars or saved provider keys.
+
+### 6.2. Custom providers
+
+With `--api-key-env MY_VAR`, SOBA reads the key from `process.env.MY_VAR`. If `--api-key-env` is omitted, the provider is considered keyless, which is handy for local OpenAI-compatible servers.
+
+---
+
+## 7. Diagnostics
+
+### 7.1. Check connection
+
+```bash
+# Direct API check
+curl -H "Authorization: Bearer $DEEPSEEK_API_KEY" https://api.deepseek.com/models
+
+# Check through SOBA
+soba provider list
+```
+
+### 7.2. Common problems
+
+| Problem | Cause | Fix |
+|---|---|---|
+| `401 Unauthorized` | Wrong API key | Check provider-specific env vars or saved provider key |
+| `404 Not Found` | Wrong base URL | Check `--base-url` or config |
+| `Model not found` | Model is not available from the provider | Check `soba provider list`, open `F2` / `/model`, or pass a valid `--model` |
+| `Context overflow` | Context window exceeded | Reduce `maxOutputTokens` or use compaction |
+| `429 Too Many Requests` | Provider rate limit | Wait or reduce request frequency |
+| Timeout | Provider is not responding | Check network or try another provider |
+
+### 7.3. Refresh model cache
+
+Models are cached in the current process. If a provider adds a new model, restart SOBA or open the `F2` / `/model` selector to run discovery again.
+
+### 7.4. Switch provider when needed
+
+```bash
+soba provider use openrouter
+soba --model meta-llama/llama-3.3-70b-instruct "Continue the task"
+```
