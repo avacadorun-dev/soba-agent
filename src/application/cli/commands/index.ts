@@ -5,7 +5,7 @@
  */
 
 import type { TrustController } from "../../../engine/permissions/trust-controller";
-import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TuiRenderer } from "../public";
+import type { AgentLoop, ContextManager, I18n, McpRuntimeControllerLike, McpRuntimeManager, OpenResponsesClient, PortableCapsuleServiceFactory, ProviderRegistry, RuntimeSessionHandle, SessionLifecycleService, SkillCommands, SkillManager, SlashCommandContext, SlashCommandRegistry, SobaConfig, ToolRegistry, TuiRenderer } from "../public";
 import {
   type CommandResult, handleSkillSlashCommand, isSkillSlashCommand, McpSecretStore, notify,
   parseRuntimeCommandInput,
@@ -47,6 +47,7 @@ export interface CommandContext {
   mcpSecretStore?: McpSecretStore;
   toolRegistry?: ToolRegistry;
   trustManager?: TrustController;
+  portableCapsuleServiceFactory?: PortableCapsuleServiceFactory;
   /** TUI slash command registry for dispatching TUI commands (Phase 2.5 A4). */
   tuiRegistry?: SlashCommandRegistry;
 }

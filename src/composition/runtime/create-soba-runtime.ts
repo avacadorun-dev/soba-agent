@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import type { PortableCapsuleServiceFactory } from "../../application/capsules/service";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import type { SkillCatalog } from "../../application/skills/catalog";
@@ -19,6 +20,7 @@ import type { ProviderRegistry } from "../../infrastructure/llm/providers/regist
 import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import type { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
 import type { McpSecretStore } from "../../infrastructure/mcp/secret-store";
+import { createFilesystemPortableCapsuleService } from "../../infrastructure/persistence/capsules/portable-capsule-storage";
 import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
@@ -65,6 +67,7 @@ export interface RuntimeCommandExecutorFactoryContext {
   toolRegistry: ToolRegistry;
   trustManager: TrustManager;
   getSession: () => SessionManager;
+  portableCapsuleServiceFactory: PortableCapsuleServiceFactory;
 }
 
 export interface SobaRuntimeComposition {
@@ -85,6 +88,7 @@ export interface SobaRuntimeComposition {
   mcpSecretStore: McpSecretStore;
   mcpRuntime: McpRuntimeController;
   mcpManager?: McpClientManager;
+  portableCapsuleServiceFactory: PortableCapsuleServiceFactory;
 }
 
 export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<SobaRuntimeComposition> {
@@ -177,6 +181,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
   }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, createProjectContextReader(), createProjectCommandFileReader(cwd));
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
+  const portableCapsuleServiceFactory = createFilesystemPortableCapsuleService;
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
   const commandExecutor = commandExecutorFactory?.({
     client,
@@ -194,6 +199,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     toolRegistry: tools,
     trustManager,
     getSession: () => runtime.getSessionManager(),
+    portableCapsuleServiceFactory,
   });
   runtime.setCommandExecutor(commandExecutor);
 
@@ -215,5 +221,6 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     mcpSecretStore,
     mcpRuntime,
     mcpManager,
+    portableCapsuleServiceFactory,
   };
 }

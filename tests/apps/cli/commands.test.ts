@@ -11,6 +11,7 @@ import type { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import type { McpClientManagerStatus, McpManagedServerStatus, McpRemoteAuthCommandResult } from "../../../src/infrastructure/mcp/client-manager";
 import { McpSecretStore } from "../../../src/infrastructure/mcp/secret-store";
 import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
+import { createFilesystemPortableCapsuleService } from "../../../src/infrastructure/persistence/capsules/portable-capsule-storage";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
 import { I18n } from "../../../src/shared/i18n/i18n";
@@ -63,6 +64,7 @@ describe("slash commands", () => {
       config: { ...DEFAULT_CONFIG },
       i18n: new I18n("en"),
       renderer: { emit: (event: { type: string; message?: string }) => output.push(event) },
+      portableCapsuleServiceFactory: createFilesystemPortableCapsuleService,
     } as unknown as CommandContext;
   }
 
