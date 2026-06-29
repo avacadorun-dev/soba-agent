@@ -26,6 +26,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -41,6 +44,9 @@ jobs:
 
       - name: Build npm bundle
         run: bun run build
+
+      - name: Changelog docs
+        run: bun run docs:changelog:check
 
       - name: Test
         run: bun test
@@ -70,6 +76,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -103,6 +111,15 @@ jobs:
       GH_REPO: ${{ github.repository }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
@@ -115,24 +132,7 @@ jobs:
           sha256sum soba-* > SHA256SUMS
 
       - name: Write release notes
-        run: |
-          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          SOBA Agent ${RELEASE_TAG}
-
-          Install from npm:
-
-          \`\`\`bash
-          npm install -g soba-agent
-          \`\`\`
-
-          Install with Bun:
-
-          \`\`\`bash
-          bun add -g soba-agent
-          \`\`\`
-
-          Standalone binaries and SHA256SUMS are attached to this release.
-          EOF
+        run: bun run scripts/generate-changelog.ts --release-notes "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
 
       - name: Publish GitHub release assets
         run: |
