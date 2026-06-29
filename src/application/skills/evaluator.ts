@@ -8,13 +8,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type { DraftSkill, EvalCase } from "./drafts";
 import { validateSkill } from "./validator";
 
 export interface EvaluatorOptions {
-  evalRunsPath: string;
+  storage: SkillEvaluationStorage;
   evaluatorModel?: string;
 }
 
@@ -106,20 +104,23 @@ export interface SkillFixtureEvalResult {
   failures: string[];
 }
 
+export interface SkillEvaluationStorage {
+  saveEvalRun(result: EvalResult): void;
+  getEvalRun(skillName: string, revisionId: string): EvalResult | null;
+  listEvalRuns(skillName: string): EvalResult[];
+  readSkillMarkdown(skillPath: string): string;
+}
+
 /**
  * Evaluates skills against test cases.
  */
 export class SkillEvaluator {
-  private readonly evalRunsPath: string;
+  private readonly storage: SkillEvaluationStorage;
   private readonly evaluatorModel: string;
 
   constructor(options: EvaluatorOptions) {
-    this.evalRunsPath = options.evalRunsPath;
+    this.storage = options.storage;
     this.evaluatorModel = options.evaluatorModel || "gpt-4";
-
-    if (!existsSync(this.evalRunsPath)) {
-      mkdirSync(this.evalRunsPath, { recursive: true });
-    }
   }
 
   /**
@@ -162,7 +163,7 @@ export class SkillEvaluator {
     };
 
     // Save eval run
-    this.saveEvalRun(evalResult);
+    this.storage.saveEvalRun(evalResult);
 
     // Check for regressions if baseline provided
     if (options?.baselineRevisionId) {
@@ -185,7 +186,7 @@ export class SkillEvaluator {
       failures.push(...validation.errors.map((error) => `invalid_skill:${error.code}`));
     }
 
-    const skillContent = readSkillContent(task.skillPath).toLowerCase();
+    const skillContent = this.storage.readSkillMarkdown(task.skillPath).toLowerCase();
     const traceText = buildTraceText(task.trace);
     const triggerPrecision = this.scoreTriggerPrecision(task, validation.frontmatter?.soba?.triggers ?? []);
     const processAdherence = scoreExpectedMarkers(traceText, task.expectedProcessMarkers);
@@ -367,9 +368,8 @@ export class SkillEvaluator {
     let output = "";
 
     // Mock: parse skill content to infer tool usage
-    const skillMdPath = join(draft.skillPath, "SKILL.md");
-    if (existsSync(skillMdPath)) {
-      const content = readFileSync(skillMdPath, "utf-8");
+    const content = this.storage.readSkillMarkdown(draft.skillPath);
+    if (content.length > 0) {
 
       // Detect tool mentions in skill
       const toolPatterns = ["bash", "read", "write", "edit"];
@@ -636,78 +636,18 @@ export class SkillEvaluator {
   }
 
   /**
-   * Save eval run to disk.
-   */
-  private saveEvalRun(result: EvalResult): void {
-    const skillEvalPath = join(this.evalRunsPath, result.skillName);
-    mkdirSync(skillEvalPath, { recursive: true });
-
-    const runPath = join(skillEvalPath, `${result.runId}.json`);
-    writeFileSync(runPath, JSON.stringify(result, null, 2), "utf-8");
-  }
-
-  /**
    * Get eval run from disk.
    */
   getEvalRun(skillName: string, revisionId: string): EvalResult | null {
-    const skillEvalPath = join(this.evalRunsPath, skillName);
-    if (!existsSync(skillEvalPath)) {
-      return null;
-    }
-
-    // Find eval run for revision
-    const files = readdirSync(skillEvalPath);
-    for (const file of files) {
-      if (file.includes(revisionId)) {
-        const runPath = join(skillEvalPath, file);
-        try {
-          return JSON.parse(readFileSync(runPath, "utf-8"));
-        } catch {
-          continue;
-        }
-      }
-    }
-
-    return null;
+    return this.storage.getEvalRun(skillName, revisionId);
   }
 
   /**
    * List all eval runs for a skill.
    */
   listEvalRuns(skillName: string): EvalResult[] {
-    const skillEvalPath = join(this.evalRunsPath, skillName);
-    if (!existsSync(skillEvalPath)) {
-      return [];
-    }
-
-    const runs: EvalResult[] = [];
-    const files = readdirSync(skillEvalPath);
-
-    for (const file of files) {
-      if (!file.endsWith(".json")) {
-        continue;
-      }
-
-      const runPath = join(skillEvalPath, file);
-      try {
-        const run = JSON.parse(readFileSync(runPath, "utf-8"));
-        runs.push(run);
-      } catch {
-        continue;
-      }
-    }
-
-    return runs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    return this.storage.listEvalRuns(skillName);
   }
-}
-
-function readSkillContent(skillPath: string): string {
-  const skillMdPath = join(skillPath, "SKILL.md");
-  if (!existsSync(skillMdPath)) {
-    return "";
-  }
-
-  return readFileSync(skillMdPath, "utf-8");
 }
 
 function buildTraceText(trace: SkillFixtureTrace): string {

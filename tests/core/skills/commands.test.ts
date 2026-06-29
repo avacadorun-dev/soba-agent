@@ -9,6 +9,7 @@ import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { RevisionStore } from "../../../src/application/skills/revisions";
 import { FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
+import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/persistence/skills/evaluation-storage";
 import { FilesystemRevisionStorage } from "../../../src/infrastructure/persistence/skills/revision-storage";
 import { FilesystemSkillFileOperations } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
@@ -37,7 +38,7 @@ describe("SkillCommands", () => {
 
     draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     revisionStore = new RevisionStore({ storage: new FilesystemRevisionStorage({ revisionsPath }) });
-    evaluator = new SkillEvaluator({ evalRunsPath });
+    evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
 
     const trustStore = new ProjectTrustStore({ sobaDir: testDir });
     const discovery = new SkillDiscovery({
