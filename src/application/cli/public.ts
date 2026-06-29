@@ -280,9 +280,10 @@ export type {
   DraftOperationResult,
   DraftOptions,
   DraftSkill,
+  DraftStorage,
   EvalCase,
 } from "../skills/drafts";
-export { DraftFilesystemFacade, DraftStore } from "../skills/drafts";
+export { DraftStore } from "../skills/drafts";
 export type {
   EvalOptions,
   EvalResult,

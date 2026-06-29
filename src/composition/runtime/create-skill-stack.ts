@@ -8,6 +8,7 @@ import { ProjectTrustStore } from "../../application/skills/project-trust-store"
 import { RevisionStore } from "../../application/skills/revisions";
 import { SkillManager } from "../../application/skills/skill-manager";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import { FilesystemDraftStorage } from "../../infrastructure/persistence/skills/draft-storage";
 import { FilesystemRevisionStorage } from "../../infrastructure/persistence/skills/revision-storage";
 import {
   FilesystemSkillFileOperations,
@@ -46,7 +47,7 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
     readSkillContent: readSkillContentFromDisk,
   });
   const skillCommands = new SkillCommands({
-    draftStore: new DraftStore({ draftsPath: join(sobaDir, "skill-drafts") }),
+    draftStore: new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath: join(sobaDir, "skill-drafts") }) }),
     revisionStore: new RevisionStore({
       storage: new FilesystemRevisionStorage({ revisionsPath: join(sobaDir, "skill-revisions") }),
     }),
