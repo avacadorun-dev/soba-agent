@@ -15,6 +15,7 @@ type ChangelogSection = {
   date?: string;
   previousTag?: string;
   tag?: string;
+  linkCommits: boolean;
   commits: Commit[];
 };
 
@@ -129,9 +130,15 @@ const args = process.argv.slice(2);
 const shouldCheck = args.includes("--check");
 const releaseNotesIndex = args.indexOf("--release-notes");
 const releaseNotesTag = releaseNotesIndex >= 0 ? args[releaseNotesIndex + 1] : undefined;
+const nextTagIndex = args.indexOf("--next-tag");
+const nextTag = nextTagIndex >= 0 ? args[nextTagIndex + 1] : undefined;
 
 if (releaseNotesIndex >= 0 && !releaseNotesTag) {
   throw new Error("Missing tag after --release-notes.");
+}
+
+if (nextTagIndex >= 0 && !nextTag) {
+  throw new Error("Missing tag after --next-tag.");
 }
 
 function runGit(args: string[]): string {
@@ -174,18 +181,25 @@ function commitsForRange(range: string): Commit[] {
 
   if (!output) return [];
 
-  return output.split("\n").map((line) => {
-    const [fullHash, shortHash, ...subjectParts] = line.split("\t");
+  return output
+    .split("\n")
+    .map((line) => {
+      const [fullHash, shortHash, ...subjectParts] = line.split("\t");
 
-    return {
-      fullHash,
-      shortHash,
-      subject: subjectParts.join("\t"),
-    };
-  });
+      return {
+        fullHash,
+        shortHash,
+        subject: subjectParts.join("\t"),
+      };
+    })
+    .filter((commit) => !isReleaseCommit(commit.subject));
 }
 
-function buildSections(): ChangelogSection[] {
+function isReleaseCommit(subject: string): boolean {
+  return /^(chore:\s*)?release:? v?\d+\.\d+\.\d+$/i.test(subject);
+}
+
+function buildSections(options: { nextTag?: string } = {}): ChangelogSection[] {
   const tags = releaseTags();
   const sections: ChangelogSection[] = [];
   const latestTag = tags.at(-1);
@@ -195,8 +209,11 @@ function buildSections(): ChangelogSection[] {
 
     if (unreleasedCommits.length > 0) {
       sections.push({
-        title: "Unreleased",
+        title: options.nextTag ?? "Unreleased",
+        tag: options.nextTag,
         previousTag: latestTag,
+        date: options.nextTag ? commitDate("HEAD") : undefined,
+        linkCommits: Boolean(options.nextTag),
         commits: unreleasedCommits,
       });
     }
@@ -211,6 +228,7 @@ function buildSections(): ChangelogSection[] {
       tag,
       previousTag,
       date: commitDate(tag),
+      linkCommits: true,
       commits: commitsForRange(previousTag ? `${previousTag}..${tag}` : tag),
     });
   }
@@ -295,7 +313,7 @@ function renderSectionBody(section: ChangelogSection, lang: Lang, repoUrl: strin
     lines.push(`### ${labels.categories[category]}`, "");
     for (const commit of commits) {
       const subject = escapeMarkdown(stripConventionalPrefix(commit.subject));
-      const hash = section.tag
+      const hash = section.linkCommits
         ? `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`
         : `\`${commit.shortHash}\``;
       lines.push(`- ${subject} (${hash})`);
@@ -394,7 +412,7 @@ function writeGeneratedFiles(expected: Record<string, string>): void {
 }
 
 const repoUrl = repositoryUrl();
-const sections = buildSections();
+const sections = buildSections({ nextTag });
 
 if (releaseNotesTag) {
   process.stdout.write(renderReleaseNotes(releaseNotesTag, sections, repoUrl));
