@@ -7,29 +7,23 @@ import type {
 } from "../../kernel/transcript/types";
 import { CompletionController } from "../completion/completion-controller";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
-import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
 import { VerificationController } from "../verification/verification-controller";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
 import { beginAgentTurn } from "./agent-turn-begin";
 import { prepareAgentTurnPromptContext } from "./agent-turn-prompt-context";
+import { handleAgentTurnResponseStage } from "./agent-turn-response-stage";
 import {
   buildDenialEphemeralMessages,
   createTurnStopEmitter,
   emitToolResultAndEnd,
 } from "./agent-turn-runner-events";
-import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { scheduleCheckpointCompactionForTurn } from "./checkpoint-compaction-scheduler";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
-import { decideResponseContinuation } from "./response-continuation-decision";
-import {
-  handleResponseStatus,
-  recordResponseUsage,
-} from "./response-lifecycle";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
 import { executeObservedToolBatch } from "./tool-batch-execution";
 import type { ToolExecutionObservationState } from "./tool-execution-observer";
@@ -250,93 +244,23 @@ export async function runAgentTurn(
         if (modelTurnExecution.action === "retry") continue;
         break;
       }
-      const {
-        response,
-        toolCalls,
-        assistantMessages,
-        systemPromptTokens,
-        toolSchemaTokens,
-      } = modelTurnExecution;
-      currentResponse = response;
-      // Record provider usage for context tracking
-      runtime.contextController.recordProviderUsage(
-        response,
-        `turn_${state.turnCount}`,
-      );
-      debug({
-        event: "loop/response",
-        turn: turnIndex,
+      const responseStage = handleAgentTurnResponseStage({
+        execution: modelTurnExecution,
+        runtime,
+        session: session,
+        allItems,
+        errors,
+        turnIndex,
+        turnCount: state.turnCount,
+        totalUsage: state.totalUsage,
         iteration,
-        responseId: response.id,
-        responseStatus: response.status,
-        toolCalls: toolCalls.length,
-        assistantMessages: assistantMessages.length,
+        continuationAttempts,
+        contextWindow,
         hasUsedTools,
         needsVerification,
         autonomousFollowUps,
-        textPreview: assistantMessages
-          .map(extractTextFromOutput)
-          .join(" ")
-          .slice(0, 100),
-        assistantPhases: assistantMessages.map(
-          (message) => message.phase ?? null,
-        ),
-        finishCalls: toolCalls.filter(
-          (toolCall) => toolCall.name === FINISH_TOOL_NAME,
-        ).length,
-      });
-      const responseStatus = handleResponseStatus({
-        response,
-        errors,
-        iteration,
         emit: (event) => emit(event),
-        emitStopReason: (reason, detail) => {
-          emitStopReason(
-            turnIndex,
-            iteration,
-            reason,
-            detail,
-            hasUsedTools,
-            autonomousFollowUps,
-          );
-        },
-        narrateBlocked: (message) => emitNarrationOnce("blocked", message),
-      });
-      if (responseStatus.action === "break") break;
-      const { shouldContinue } = responseStatus;
-      recordResponseUsage({
-        response,
-        totalUsage: state.totalUsage,
-        budgetTracker: runtime.budgetTracker,
-        contextController: runtime.contextController,
-        tokenBudget: runtime.options.tokenBudget,
-        contextWindow,
-        systemPromptTokens,
-        toolSchemaTokens,
-        turn: turnIndex,
-        emit: (event) => emit(event),
-      });
-      const {
-        appendAssistantMessagesToSession,
-        appendToolCallGroupToSession,
-        supersedeVisibleAssistantMessages,
-      } = createAssistantSessionRecorder({
-        session: session,
-        allItems,
-        assistantMessages,
-        emit: (event) => emit(event),
-      });
-      const continuationDecision = decideResponseContinuation({
-        shouldContinue,
-        toolCallsLength: toolCalls.length,
-        continuationAttempts,
-        maxContinuationAttempts: runtime.options.maxContinuationAttempts,
-        session: session,
-        allItems,
-        errors,
-        iteration,
-        appendAssistantMessagesToSession,
-        emit: (event) => emit(event),
+        debug: (data) => debug(data),
         emitStopReason: (reason, detail) => {
           emitStopReason(
             turnIndex,
@@ -351,13 +275,23 @@ export async function runAgentTurn(
           emitNarrationOnce(eventType, message, evidenceIds);
         },
       });
-      continuationAttempts = continuationDecision.continuationAttempts;
-      iteration = continuationDecision.iteration;
-      if (continuationDecision.action === "continue") continue;
-      if (continuationDecision.action === "break") break;
+      currentResponse = responseStage.response;
+      continuationAttempts = responseStage.continuationAttempts;
+      iteration = responseStage.iteration;
+      if (responseStage.action !== "ready") {
+        if (responseStage.action === "continue") continue;
+        break;
+      }
+      const {
+        appendAssistantMessagesToSession,
+        appendToolCallGroupToSession,
+        supersedeVisibleAssistantMessages,
+      } = responseStage.recorder;
+      const readyToolCalls = responseStage.toolCalls;
+      const readyAssistantMessages = responseStage.assistantMessages;
       const finishCall =
-        toolCalls.length === 1 && toolCalls[0].name === FINISH_TOOL_NAME
-          ? toolCalls[0]
+        readyToolCalls.length === 1 && readyToolCalls[0].name === FINISH_TOOL_NAME
+          ? readyToolCalls[0]
           : null;
       if (finishCall) {
         const finishDecision = await handleFinishCall({
@@ -401,9 +335,9 @@ export async function runAgentTurn(
         }
         break;
       }
-      if (toolCalls.length === 0) {
+      if (readyToolCalls.length === 0) {
         const textOnlyDecision = await decideTextOnlyResponse({
-          assistantMessages,
+          assistantMessages: readyAssistantMessages,
           session: session,
           allItems,
           errors,
@@ -446,13 +380,13 @@ export async function runAgentTurn(
       autonomousFollowUps = 0;
       // Store the complete assistant tool-call group before any tool outputs.
       // OpenAI-compatible APIs require: assistant(tool_calls...) → tool outputs...
-      appendToolCallGroupToSession(toolCalls);
-      const batchDecision = evaluateToolBatch(toolCalls);
+      appendToolCallGroupToSession(readyToolCalls);
+      const batchDecision = evaluateToolBatch(readyToolCalls);
       if (batchDecision.action === "reject") {
         hasUsedTools = true;
         const rejectedBatchResult = handleRejectedToolBatch({
           batchDecision,
-          toolCalls,
+          toolCalls: readyToolCalls,
           session: session,
           allItems,
           errors,
@@ -466,11 +400,11 @@ export async function runAgentTurn(
           emitStopReason: (reason, detail) => {
             emitStopReason(
               turnIndex,
-              iteration,
-              reason,
-              detail,
-              hasUsedTools,
-              autonomousFollowUps,
+            iteration,
+            reason,
+            detail,
+            hasUsedTools,
+            autonomousFollowUps,
             );
           },
           narrate: (eventType, message, evidenceIds = []) => {
@@ -495,7 +429,7 @@ export async function runAgentTurn(
         fixUntilGreenStop,
       };
       const toolBatchExecution = await executeObservedToolBatch({
-        toolCalls,
+        toolCalls: readyToolCalls,
         toolExecutor: runtime.toolExecutor,
         signal: abortController.signal,
         session: session,

@@ -46,6 +46,8 @@ describe("CI quality gate", () => {
       "bun install --frozen-lockfile",
       "bun run lint",
       "bunx tsc --noEmit",
+      "bun run check:boundaries",
+      "bun run docs:deps:check",
       "bun run build",
       "bun test",
     ]);
@@ -66,6 +68,8 @@ describe("CI quality gate", () => {
     const packageJson = readPackageJson();
 
     expect(packageJson.scripts?.lint).toBe("biome check .");
+    expect(packageJson.scripts?.["check:boundaries"]).toBe("bun run scripts/check-boundaries.ts");
+    expect(packageJson.scripts?.["docs:deps:check"]).toBe("bun run scripts/generate-dependency-graph.ts --check");
     expect(packageJson.scripts?.test).toBe("bun test");
     expect(packageJson.scripts?.build).toBe("bun run scripts/build.ts");
   });

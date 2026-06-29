@@ -28,6 +28,12 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
 
+      - name: Architecture boundaries
+        run: bun run check:boundaries
+
+      - name: Architecture dependency graph
+        run: bun run docs:deps:check
+
       - name: Build
         run: bun run build
 
