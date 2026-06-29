@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { parseInitCommandArgs, runInitCommand } from "../../../src/apps/cli/init-command";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { I18n } from "../../../src/shared/i18n/i18n";
 
 let tempDir: string;
@@ -43,8 +43,8 @@ describe("soba init command", () => {
       new I18n("en"),
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(projectRoot);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectRoot);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.join("\n")).toContain("Project trust: not trusted");
     expect(trustStore.isTrusted(identity)).toBe(false);
@@ -63,8 +63,8 @@ describe("soba init command", () => {
       new I18n("en"),
     );
 
-    const trustStore = new ProjectTrustStore({ sobaDir });
-    const identity = ProjectTrustStore.computeProjectIdentity(projectRoot);
+    const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+    const identity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectRoot);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.join("\n")).toContain("Project trust: approved");
     expect(trustStore.isTrusted(identity)).toBe(true);

@@ -1,4 +1,3 @@
-import { ProjectTrustStore } from "../skills/project-trust-store";
 import type { SkillManager } from "../skills/skill-manager";
 
 export type ProjectTrustCommandView =
@@ -32,8 +31,8 @@ export function executeProjectTrustCommand(input: {
     return { kind: "usage" };
   }
 
-  const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectPath);
   const trustStore = skillManager.trustStore;
+  const projectIdentity = trustStore.computeProjectIdentity(projectPath);
 
   switch (subcommand) {
     case "status": {

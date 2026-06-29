@@ -1,6 +1,6 @@
 import { type Accessor, batch, createSignal, type Setter } from "solid-js";
 import type { AgentEvent, TranslationKey } from "../../../../application/ui/public";
-import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, ProjectTrustStore, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
+import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
 import { registerModelCommand } from "../commands/model-command";
@@ -135,7 +135,7 @@ export class TuiStore {
     [this.model, this.setModel] = createSignal(options.agentLoop.getModel());
     [this.providerName, this.setProviderName] = createSignal(options.providerStore?.registry.getActiveProvider().name ?? "");
     const identity = options.trustStore
-      ? ProjectTrustStore.computeProjectIdentity(options.cwd)
+      ? options.trustStore.computeProjectIdentity(options.cwd)
       : null;
     [this.projectTrusted, this.setProjectTrusted] = createSignal(
       identity && options.trustStore ? options.trustStore.isTrusted(identity) : false,
@@ -315,7 +315,7 @@ export class TuiStore {
   /** Refresh project trust status from the trust store. */
   refreshProjectTrust(): void {
     const identity = this.options.trustStore
-      ? ProjectTrustStore.computeProjectIdentity(this.options.cwd)
+      ? this.options.trustStore.computeProjectIdentity(this.options.cwd)
       : null;
     this.setProjectTrusted(
       identity && this.options.trustStore ? this.options.trustStore.isTrusted(identity) : false,

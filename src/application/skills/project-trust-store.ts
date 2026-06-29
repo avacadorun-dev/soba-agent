@@ -7,19 +7,25 @@
  * Spec: internal-design-notes § Project Trust
  */
 
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import type { ProjectIdentity, ProjectTrustRecord } from "./types";
 
-const TRUST_STORE_FILENAME = "project-trust.json";
-
 export interface ProjectTrustStoreOptions {
-  sobaDir: string;
+  storage: ProjectTrustStorage;
+  identityResolver: ProjectIdentityResolver;
 }
 
-interface TrustStoreData {
+export interface TrustStoreData {
   version: 1;
   records: Record<string, ProjectTrustRecord>;
+}
+
+export interface ProjectTrustStorage {
+  load(): TrustStoreData;
+  save(data: TrustStoreData): void;
+}
+
+export interface ProjectIdentityResolver {
+  computeProjectIdentity(projectPath: string): ProjectIdentity;
 }
 
 /**
@@ -27,55 +33,21 @@ interface TrustStoreData {
  * Trust records are stored in ~/.soba/project-trust.json.
  */
 export class ProjectTrustStore {
-  private readonly storePath: string;
+  private readonly storage: ProjectTrustStorage;
+  private readonly identityResolver: ProjectIdentityResolver;
   private data: TrustStoreData;
 
   constructor(options: ProjectTrustStoreOptions) {
-    this.storePath = join(options.sobaDir, TRUST_STORE_FILENAME);
-    this.data = this.load();
+    this.storage = options.storage;
+    this.identityResolver = options.identityResolver;
+    this.data = this.storage.load();
   }
 
   /**
    * Compute canonical project identity from a given path.
-   * Uses git root if available, otherwise uses realpath of the path.
    */
-  static computeProjectIdentity(projectPath: string): ProjectIdentity {
-    const realPath = realpathSync(projectPath);
-    const gitCommonDir = this.findGitCommonDir(realPath);
-
-    if (gitCommonDir) {
-      return {
-        canonicalRoot: realpathSync(dirname(gitCommonDir)),
-        gitCommonDir,
-      };
-    }
-
-    return {
-      canonicalRoot: realPath,
-    };
-  }
-
-  /**
-   * Find .git directory by walking up from the given path.
-   */
-  private static findGitCommonDir(startPath: string): string | undefined {
-    let current = startPath;
-    const visited = new Set<string>();
-
-    while (!visited.has(current)) {
-      visited.add(current);
-      const gitDir = join(current, ".git");
-
-      if (existsSync(gitDir)) {
-        return gitDir;
-      }
-
-      const parent = dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-
-    return undefined;
+  computeProjectIdentity(projectPath: string): ProjectIdentity {
+    return this.identityResolver.computeProjectIdentity(projectPath);
   }
 
   /**
@@ -87,42 +59,6 @@ export class ProjectTrustStore {
       parts.push(identity.gitCommonDir);
     }
     return parts.join("|");
-  }
-
-  /**
-   * Load trust store from disk.
-   */
-  private load(): TrustStoreData {
-    if (!existsSync(this.storePath)) {
-      return { version: 1, records: {} };
-    }
-
-    try {
-      const content = readFileSync(this.storePath, "utf-8");
-      const parsed = JSON.parse(content);
-
-      if (parsed.version !== 1 || typeof parsed.records !== "object") {
-        console.warn(`Invalid trust store format, resetting: ${this.storePath}`);
-        return { version: 1, records: {} };
-      }
-
-      return parsed;
-    } catch (error) {
-      console.warn(`Failed to load trust store, resetting: ${this.storePath}`, error);
-      return { version: 1, records: {} };
-    }
-  }
-
-  /**
-   * Save trust store to disk.
-   */
-  private save(): void {
-    const dir = dirname(this.storePath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    writeFileSync(this.storePath, JSON.stringify(this.data, null, 2), "utf-8");
   }
 
   /**
@@ -153,7 +89,7 @@ export class ProjectTrustStore {
     };
 
     this.data.records[key] = record;
-    this.save();
+    this.storage.save(this.data);
 
     return record;
   }
@@ -168,7 +104,7 @@ export class ProjectTrustStore {
     }
 
     delete this.data.records[key];
-    this.save();
+    this.storage.save(this.data);
     return true;
   }
 
@@ -184,7 +120,7 @@ export class ProjectTrustStore {
     }
 
     record.skillsFingerprint = skillsFingerprint;
-    this.save();
+    this.storage.save(this.data);
     return true;
   }
 

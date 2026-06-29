@@ -1,4 +1,4 @@
-export { OpenResponsesClientProxy, ProviderRegistry } from "../../composition/ui/public";
+export { createFilesystemProjectTrustStore, OpenResponsesClientProxy, ProviderRegistry } from "../../composition/ui/public";
 export { AgentLoop } from "../../engine/turn/agent-loop";
 export type {
   AgentEvent,

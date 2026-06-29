@@ -19,10 +19,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
-import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
+import type { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { handleSkillSlashCommand, isSkillSlashCommand } from "../../../src/application/skills/slash-handler";
 import { buildSystemPrompt } from "../../../src/engine/prompt/system-prompt";
+import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 import type { ActivatedSkillRef } from "../../../src/kernel/transcript/types-v2";
 
@@ -70,7 +71,7 @@ Use this skill for testing purposes.
     writeFileSync(join(scriptDir, "helper.sh"), "#!/bin/bash\necho 'helper script'");
 
     // Initialize trust store and skill manager
-    trustStore = new ProjectTrustStore({ sobaDir });
+    trustStore = createFilesystemProjectTrustStore({ sobaDir });
 
     const discovery = new SkillDiscovery({
       projectPath: projectDir,
@@ -241,7 +242,7 @@ Use this skill for testing purposes.
   describe("trust revoke stops injection", () => {
     it("прекращает injection после trust revoke", () => {
       // Trust project
-      const projectIdentity = ProjectTrustStore.computeProjectIdentity(projectDir);
+      const projectIdentity = createFilesystemProjectTrustStore({ sobaDir }).computeProjectIdentity(projectDir);
       trustStore.approve(projectIdentity, "fingerprint");
 
       // Create project skill

@@ -8,6 +8,7 @@ export * from "../../infrastructure/mcp/secret-store";
 export * from "../../infrastructure/mcp/security";
 export { syncMcpToolsIntoRegistry } from "../../infrastructure/mcp/tool-registry-sync";
 export * from "../../infrastructure/persistence/sessions/session-manager";
+export { createFilesystemProjectTrustStore } from "../../infrastructure/persistence/skills/project-trust-storage";
 export * from "../../infrastructure/terminal/sound-notifier";
 export * from "../../ui/terminal/interactive/commands/registry";
 export * from "../../ui/terminal/interactive/commands/types";

@@ -28,6 +28,7 @@ export {
   bold,
   configureOpenTuiAssets,
   createDefaultMcpServerSecurity,
+  createFilesystemProjectTrustStore,
   createOpenResponsesClient,
   createRenderer,
   DEFAULT_MCP_MAX_OUTPUT_BYTES,

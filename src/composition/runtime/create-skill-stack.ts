@@ -4,12 +4,13 @@ import { SkillCommands } from "../../application/skills/commands";
 import { SkillDiscovery } from "../../application/skills/discovery";
 import { DraftStore } from "../../application/skills/drafts";
 import { SkillEvaluator } from "../../application/skills/evaluator";
-import { ProjectTrustStore } from "../../application/skills/project-trust-store";
+import type { ProjectTrustStore } from "../../application/skills/project-trust-store";
 import { RevisionStore } from "../../application/skills/revisions";
 import { SkillManager } from "../../application/skills/skill-manager";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import { FilesystemDraftStorage } from "../../infrastructure/persistence/skills/draft-storage";
 import { FilesystemSkillEvaluationStorage } from "../../infrastructure/persistence/skills/evaluation-storage";
+import { createFilesystemProjectTrustStore } from "../../infrastructure/persistence/skills/project-trust-storage";
 import { FilesystemRevisionStorage } from "../../infrastructure/persistence/skills/revision-storage";
 import {
   FilesystemSkillFileOperations,
@@ -33,7 +34,7 @@ export interface SkillStack {
 
 export async function createSkillStack(input: SkillStackInput): Promise<SkillStack> {
   const sobaDir = join(input.homeDir, ".soba");
-  const trustStore = new ProjectTrustStore({ sobaDir });
+  const trustStore = createFilesystemProjectTrustStore({ sobaDir });
   const skillDiscovery = new SkillDiscovery({
     projectPath: input.projectPath,
     userSkillsPath: join(sobaDir, "skills"),

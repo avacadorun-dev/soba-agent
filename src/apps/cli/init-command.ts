@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import type { I18n } from "../../application/cli/public";
-import { firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, ProjectTrustStore, SkillDiscovery, validateConfig } from "../../application/cli/public";
+import { createFilesystemProjectTrustStore, firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, SkillDiscovery, validateConfig } from "../../application/cli/public";
 
 export interface InitCommandOptions {
   yes: boolean;
@@ -145,8 +145,8 @@ async function setupProvider(
 }
 
 async function setupProjectTrust(options: RunInitCommandOptions & { cwd: string; sobaDir: string }): Promise<string> {
-  const trustStore = new ProjectTrustStore({ sobaDir: options.sobaDir });
-  const identity = ProjectTrustStore.computeProjectIdentity(options.cwd);
+  const trustStore = createFilesystemProjectTrustStore({ sobaDir: options.sobaDir });
+  const identity = trustStore.computeProjectIdentity(options.cwd);
   const discovery = new SkillDiscovery({
     projectPath: options.cwd,
     userSkillsPath: join(options.sobaDir, "skills"),
