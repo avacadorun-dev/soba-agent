@@ -10,6 +10,7 @@ import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy
 import { VerificationController } from "../verification/verification-controller";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
 import { beginAgentTurn } from "./agent-turn-begin";
+import { handleAgentTurnCompletionStage } from "./agent-turn-completion-stage";
 import { prepareAgentTurnPromptContext } from "./agent-turn-prompt-context";
 import { handleAgentTurnResponseStage } from "./agent-turn-response-stage";
 import {
@@ -18,12 +19,9 @@ import {
 } from "./agent-turn-runner-events";
 import { handleAgentTurnToolStage } from "./agent-turn-tool-stage";
 import { createAgentTurnVerificationStage } from "./agent-turn-verification-stage";
-import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
-import { decideTextOnlyResponse } from "./text-only-response-decision";
 import { completeAgentTurn } from "./turn-completion";
-import { FINISH_TOOL_NAME } from "./turn-helpers";
 import { evaluateTurnStopGuards } from "./turn-stop-guards";
 import type {
   AgentEvent,
@@ -265,105 +263,51 @@ export async function runAgentTurn(
         if (responseStage.action === "continue") continue;
         break;
       }
-      const {
-        appendAssistantMessagesToSession,
-        appendToolCallGroupToSession,
-        supersedeVisibleAssistantMessages,
-      } = responseStage.recorder;
-      const readyToolCalls = responseStage.toolCalls;
-      const readyAssistantMessages = responseStage.assistantMessages;
-      const finishCall =
-        readyToolCalls.length === 1 && readyToolCalls[0].name === FINISH_TOOL_NAME
-          ? readyToolCalls[0]
-          : null;
-      if (finishCall) {
-        const finishDecision = await handleFinishCall({
-          finishCall,
-          completionController,
-          evidenceLedger,
-          errors,
-          taskKind,
-          allowUnverifiedCompletion,
-          runAutoVerification: () => runAutoVerificationAt("finish"),
-          appendAssistantMessagesToSession,
-          session: session,
-          allItems,
-          turn: turnIndex,
-          iteration,
-          hasUsedTools,
-          needsVerification,
-          autonomousFollowUps,
-          verificationEvidenceCallIds,
-          successfulToolCallIds,
-          emit: (event) => emit(event),
-          flight: (data) => flight(data),
-          debug: (data) => debug(data),
-          emitStopReason: (reason, detail) => {
-            emitStopReason(
-              turnIndex,
-              iteration,
-              reason,
-              detail,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
-          },
-          narrate: (eventType, message, evidenceIds = []) => {
-            emitNarrationOnce(eventType, message, evidenceIds);
-          },
-        });
-        if (finishDecision === "continue") {
-          iteration++;
-          continue;
-        }
-        break;
-      }
-      if (readyToolCalls.length === 0) {
-        const textOnlyDecision = await decideTextOnlyResponse({
-          assistantMessages: readyAssistantMessages,
-          session: session,
-          allItems,
-          errors,
-          turn: turnIndex,
-          taskKind,
-          iteration,
-          autonomousFollowUps,
-          maxAutonomousFollowUps: runtime.options.maxAutonomousFollowUps,
-          ledgerNeedsVerification: () =>
-            evidenceLedger.getSummary().needsVerification,
-          getTurnState: () => ({
-            needsVerification,
-            hasMutatedFiles,
+      const completionStage = await handleAgentTurnCompletionStage({
+        responseStage,
+        completionController,
+        evidenceLedger,
+        errors,
+        taskKind,
+        allowUnverifiedCompletion,
+        runAutoVerification: runAutoVerificationAt,
+        session: session,
+        allItems,
+        turnIndex,
+        iteration,
+        hasUsedTools,
+        needsVerification,
+        hasMutatedFiles,
+        autonomousFollowUps,
+        maxAutonomousFollowUps: runtime.options.maxAutonomousFollowUps,
+        verificationEvidenceCallIds,
+        successfulToolCallIds,
+        emit: (event) => emit(event),
+        flight: (data) => flight(data),
+        debug: (data) => debug(data),
+        emitStopReason: (reason, detail) => {
+          emitStopReason(
+            turnIndex,
+            iteration,
+            reason,
+            detail,
             hasUsedTools,
-          }),
-          runAutoVerification: () => runAutoVerificationAt("text-only-stop"),
-          appendAssistantMessagesToSession,
-          supersedeVisibleAssistantMessages,
-          emit: (event) => emit(event),
-          debug: (data) => debug(data),
-          emitStopReason: (reason, detail) => {
-            emitStopReason(
-              turnIndex,
-              iteration,
-              reason,
-              detail,
-              hasUsedTools,
-              autonomousFollowUps,
-            );
-          },
-          narrate: (eventType, message, evidenceIds = []) => {
-            emitNarrationOnce(eventType, message, evidenceIds);
-          },
-        });
-        iteration = textOnlyDecision.iteration;
-        autonomousFollowUps = textOnlyDecision.autonomousFollowUps;
-        if (textOnlyDecision.action === "continue") continue;
+            autonomousFollowUps,
+          );
+        },
+        narrate: (eventType, message, evidenceIds = []) => {
+          emitNarrationOnce(eventType, message, evidenceIds);
+        },
+      });
+      iteration = completionStage.iteration;
+      autonomousFollowUps = completionStage.autonomousFollowUps;
+      if (completionStage.action !== "tool_calls") {
+        if (completionStage.action === "continue") continue;
         break;
       }
-      autonomousFollowUps = 0;
       const toolStage = await handleAgentTurnToolStage({
-        toolCalls: readyToolCalls,
-        appendToolCallGroupToSession,
+        toolCalls: completionStage.toolCalls,
+        appendToolCallGroupToSession: completionStage.appendToolCallGroupToSession,
         runtime,
         signal: abortController.signal,
         session: session,
