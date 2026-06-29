@@ -16,6 +16,11 @@ import {
   FilesystemSkillFileOperations,
   readSkillContentFromDisk,
 } from "../../infrastructure/persistence/skills/skill-file-operations";
+import {
+  computeSkillContentHashOnDisk,
+  FilesystemSkillValidationFilesystem,
+  validateSkillOnDisk,
+} from "../../infrastructure/persistence/skills/skill-validation-filesystem";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 
 export interface SkillStackInput {
@@ -35,11 +40,15 @@ export interface SkillStack {
 export async function createSkillStack(input: SkillStackInput): Promise<SkillStack> {
   const sobaDir = join(input.homeDir, ".soba");
   const trustStore = createFilesystemProjectTrustStore({ sobaDir });
+  const skillValidationFiles = new FilesystemSkillValidationFilesystem();
   const skillDiscovery = new SkillDiscovery({
     projectPath: input.projectPath,
     userSkillsPath: join(sobaDir, "skills"),
     bundledSkillsPath: process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills"),
     trustStore,
+    files: skillValidationFiles,
+    validateSkill: validateSkillOnDisk,
+    computeSkillContentHash: computeSkillContentHashOnDisk,
   });
   const skillCatalog = new SkillCatalog({ discovery: skillDiscovery });
   const skillManager = new SkillManager({
@@ -49,11 +58,17 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
     readSkillContent: readSkillContentFromDisk,
   });
   const skillCommands = new SkillCommands({
-    draftStore: new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath: join(sobaDir, "skill-drafts") }) }),
+    draftStore: new DraftStore({
+      storage: new FilesystemDraftStorage({ draftsPath: join(sobaDir, "skill-drafts") }),
+      validateSkill: validateSkillOnDisk,
+    }),
     revisionStore: new RevisionStore({
       storage: new FilesystemRevisionStorage({ revisionsPath: join(sobaDir, "skill-revisions") }),
     }),
-    evaluator: new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(sobaDir, "eval-runs") }) }),
+    evaluator: new SkillEvaluator({
+      storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(sobaDir, "eval-runs") }),
+      validateSkill: validateSkillOnDisk,
+    }),
     catalog: skillCatalog,
     files: new FilesystemSkillFileOperations(),
     userSkillsPath: join(sobaDir, "skills"),

@@ -12,6 +12,7 @@ import { FilesystemSkillEvaluationStorage } from "../../../src/infrastructure/pe
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { FilesystemRevisionStorage } from "../../../src/infrastructure/persistence/skills/revision-storage";
 import { FilesystemSkillFileOperations } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 describe("SkillCommands", () => {
   const testDir = join(process.cwd(), ".test-commands");
@@ -36,15 +37,18 @@ describe("SkillCommands", () => {
     mkdirSync(userSkillsPath, { recursive: true });
     mkdirSync(projectPath, { recursive: true });
 
-    draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
+    draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }), validateSkill: validateSkillOnDisk });
     revisionStore = new RevisionStore({ storage: new FilesystemRevisionStorage({ revisionsPath }) });
-    evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }) });
+    evaluator = new SkillEvaluator({ storage: new FilesystemSkillEvaluationStorage({ evalRunsPath }), validateSkill: validateSkillOnDisk });
 
     const trustStore = createFilesystemProjectTrustStore({ sobaDir: testDir });
     const discovery = new SkillDiscovery({
       projectPath,
       userSkillsPath,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     catalog = new SkillCatalog({ discovery });
 
@@ -314,6 +318,9 @@ description: Bundled skill
         userSkillsPath,
         bundledSkillsPath: bundledPath,
         trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
       }),
     });
     bundledCatalog.refresh();

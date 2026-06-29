@@ -90,6 +90,7 @@ export interface ValidationResult {
 
 export interface SkillValidationOptions {
   scope?: "project" | "user" | "bundled";
+  files?: import("./validator").SkillValidationFilesystem;
 }
 
 // ─── Activation ───

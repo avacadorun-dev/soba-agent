@@ -14,6 +14,7 @@ import { SkillDiscovery } from "../../../src/application/skills/discovery";
 import { SkillManager } from "../../../src/application/skills/skill-manager";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { readSkillContentFromDisk } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
+import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, validateSkillOnDisk } from "../../../src/infrastructure/persistence/skills/skill-validation-filesystem";
 
 describe("Skills CLI Integration", () => {
   let testDir: string;
@@ -108,6 +109,9 @@ Stop when the requested output is complete.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -135,6 +139,9 @@ Stop when the requested output is complete.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -176,6 +183,9 @@ This is a project skill.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -207,6 +217,9 @@ This is a project skill.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -278,6 +291,9 @@ This is a project skill.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -309,6 +325,9 @@ This is a project skill.
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
@@ -381,6 +400,9 @@ description: Project version
       userSkillsPath: userSkillsDir,
       bundledSkillsPath: bundledSkillsDir,
       trustStore,
+      files: new FilesystemSkillValidationFilesystem(),
+      validateSkill: validateSkillOnDisk,
+      computeSkillContentHash: computeSkillContentHashOnDisk,
     });
     const catalog = new SkillCatalog({ discovery });
     const skillManager = new SkillManager({
