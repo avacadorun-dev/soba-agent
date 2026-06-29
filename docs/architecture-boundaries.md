@@ -14,6 +14,7 @@ src/composition     concrete dependency wiring only
 src/apps            executable hosts and delivery entrypoints
 src/adapters        protocol adapters
 src/ui              terminal UI and rendering
+src/shared          pure shared helpers, constants, and types
 ```
 
 ## Dependency Rules
@@ -22,6 +23,20 @@ The executable boundary gate is `bun run check:boundaries`.
 
 ```ts
 const rules = [
+  {
+    from: "src/shared/**",
+    deny: [
+      "src/application/**",
+      "src/engine/**",
+      "src/infrastructure/**",
+      "src/apps/**",
+      "src/adapters/**",
+      "src/ui/**",
+      "node:",
+      "bun:",
+      "@opentui/",
+    ],
+  },
   {
     from: "src/kernel/**",
     deny: [
@@ -86,19 +101,21 @@ through public application API modules. They must not import `src/core`,
 
 1. Do not add a file to `kernel` if it imports `node:*`, `bun:*`, `fs`, `path`,
    `process`, `fetch`, OpenTUI, MCP, OpenResponses, or JSONL persistence.
-2. Do not add a file to `engine` if it imports `node:*`, `bun:*`, concrete
+2. Do not add a file to `shared` if it imports `node:*`, `bun:*`, `fs`, `path`,
+   `process`, OpenTUI, delivery layers, application, engine, or infrastructure.
+3. Do not add a file to `engine` if it imports `node:*`, `bun:*`, concrete
    persistence, local process/filesystem/network clients, OpenTUI, MCP, or
    provider implementations. Engine receives those capabilities through ports.
-3. Do not add feature code to `composition`. Composition creates objects and
+4. Do not add feature code to `composition`. Composition creates objects and
    wires dependencies.
-4. Do not import concrete infrastructure from `application`. Application uses
+5. Do not import concrete infrastructure from `application`. Application uses
    ports, services, and DTOs.
-5. Do not import `engine` from `apps`, `adapters`, or `ui`. Delivery layers work
+6. Do not import `engine` from `apps`, `adapters`, or `ui`. Delivery layers work
    through public application API.
-6. Do not add another broad manager without an explicit owner layer:
+7. Do not add another broad manager without an explicit owner layer:
    `KernelPolicy`, `EngineCoordinator`, `ApplicationService`,
    `InfrastructureStore`, or `CompositionFactory`.
-7. Do not add broad root barrel exports. Use context-level `public.ts` modules
+8. Do not add broad root barrel exports. Use context-level `public.ts` modules
    such as `src/kernel/tools/public.ts` or `src/application/runtime/public.ts`.
    The root `src/application/public.ts` may only re-export application/shared
    APIs; it must not be a migration facade over engine, kernel, infrastructure,

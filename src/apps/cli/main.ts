@@ -42,7 +42,16 @@ function resolveLang(cliLang?: Locale): Locale {
   if (cliLang && isLocale(cliLang)) return cliLang;
   const envLang = process.env.SOBA_LANG;
   if (envLang && isLocale(envLang)) return envLang;
-  return detectLocale();
+  return detectLocale(currentLocaleEnvironment());
+}
+
+function currentLocaleEnvironment() {
+  return {
+    SOBA_LANG: process.env.SOBA_LANG,
+    LC_ALL: process.env.LC_ALL,
+    LC_MESSAGES: process.env.LC_MESSAGES,
+    LANG: process.env.LANG,
+  };
 }
 
 function emitAcpCommandOutput(
@@ -557,7 +566,7 @@ async function main() {
 // ─── Entry ───
 
 main().catch((err) => {
-  const i18n = new I18n(detectLocale());
+  const i18n = new I18n(detectLocale(currentLocaleEnvironment()));
   console.error(i18n.t("cli.error.fatal", { message: err.message }));
   process.exit(1);
 });

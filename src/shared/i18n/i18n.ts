@@ -8,8 +8,6 @@
  * - Compile-time key safety via TranslationKey
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import enTranslations from "../../../locales/en.json";
 import ruTranslations from "../../../locales/ru.json";
 import zhTranslations from "../../../locales/zh.json";
@@ -17,55 +15,26 @@ import type { Locale, TranslationKey } from "./types";
 import { SUPPORTED_LOCALES } from "./types";
 
 /** Translations dictionary: flat key → localized string. */
-type Translations = Record<string, string>;
+export type Translations = Record<string, string>;
+export type TranslationLoader = (locale: Locale) => Translations;
+
+export interface LocaleEnvironment {
+  SOBA_LANG?: string;
+  LC_ALL?: string;
+  LC_MESSAGES?: string;
+  LANG?: string;
+}
+
+export interface I18nOptions {
+  loadTranslations?: TranslationLoader;
+  fallbackToBuiltin?: boolean;
+}
 
 const BUILTIN_TRANSLATIONS: Record<Locale, Translations> = {
   en: enTranslations,
   ru: ruTranslations,
   zh: zhTranslations,
 };
-
-/**
- * Resolve the path to locale files.
- * Priority: SOBA_LOCALES_DIR env → <package_root>/locales → <cwd>/locales
- */
-function resolveLocalesDir(): string {
-  if (process.env.SOBA_LOCALES_DIR) {
-    return process.env.SOBA_LOCALES_DIR;
-  }
-
-  const candidates = [
-    // Bundled CLI: <package_root>/dist/cli.js
-    join(import.meta.dir, "..", "locales"),
-    // Source execution: <package_root>/src/shared/i18n/i18n.ts
-    join(import.meta.dir, "..", "..", "..", "locales"),
-    // Development fallbacks
-    join(process.cwd(), "locales"),
-    join(process.cwd(), "..", "locales"),
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(join(candidate, "en.json"))) {
-      return candidate;
-    }
-  }
-
-  return candidates[0];
-}
-
-/** Load translations from a JSON file. Returns empty object on failure. */
-function loadTranslations(path: string): Translations {
-  try {
-    const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Translations;
-    }
-    return {};
-  } catch {
-    return {};
-  }
-}
 
 /** Interpolate {var} placeholders in a template string. */
 function interpolate(template: string, vars?: Record<string, string | number>): string {
@@ -84,12 +53,12 @@ function interpolate(template: string, vars?: Record<string, string | number>): 
  * 2. LANG / LC_ALL / LC_MESSAGES system locale
  * 3. Fallback to "en"
  */
-export function detectLocale(): Locale {
-  const sobaLang = process.env.SOBA_LANG;
+export function detectLocale(env: LocaleEnvironment = {}): Locale {
+  const sobaLang = env.SOBA_LANG;
   if (sobaLang && isLocale(sobaLang)) return sobaLang;
 
   // Parse LANG / LC_ALL / LC_MESSAGES (e.g., "ru_RU.UTF-8" → "ru")
-  const sysLocale = process.env.LC_ALL ?? process.env.LC_MESSAGES ?? process.env.LANG ?? "";
+  const sysLocale = env.LC_ALL ?? env.LC_MESSAGES ?? env.LANG ?? "";
   const langPart = sysLocale.split("_")[0]?.split(".")[0]?.toLowerCase();
   if (langPart && isLocale(langPart)) return langPart;
 
@@ -113,12 +82,12 @@ export function isLocale(value: string): value is Locale {
 export class I18n {
   private locale: Locale;
   private cache: Map<Locale, Translations> = new Map();
-  private readonly localesDir: string;
-  private readonly useBuiltinTranslations: boolean;
+  private readonly loadTranslations: TranslationLoader;
+  private readonly fallbackToBuiltin: boolean;
 
-  constructor(locale: Locale, localesDir?: string) {
-    this.localesDir = localesDir ?? resolveLocalesDir();
-    this.useBuiltinTranslations = localesDir === undefined;
+  constructor(locale: Locale, options: I18nOptions = {}) {
+    this.loadTranslations = options.loadTranslations ?? loadBuiltinTranslations;
+    this.fallbackToBuiltin = options.fallbackToBuiltin ?? options.loadTranslations === undefined;
     this.locale = locale;
     // Pre-load en (fallback) and current locale
     this.loadLocale("en");
@@ -176,13 +145,12 @@ export class I18n {
     return key;
   }
 
-  /** Load a locale from disk and cache it. */
+  /** Load a locale and cache it. */
   private loadLocale(locale: Locale): void {
-    const path = join(this.localesDir, `${locale}.json`);
-    const diskTranslations = loadTranslations(path);
+    const loadedTranslations = this.loadTranslations(locale);
     const translations =
-      Object.keys(diskTranslations).length > 0 || !this.useBuiltinTranslations
-        ? diskTranslations
+      Object.keys(loadedTranslations).length > 0 || !this.fallbackToBuiltin
+        ? loadedTranslations
         : BUILTIN_TRANSLATIONS[locale];
     this.cache.set(locale, translations);
   }
@@ -200,4 +168,8 @@ export class I18n {
 /** Reset the I18n singleton (no-op; kept for test compatibility). */
 export function resetI18n(): void {
   // Singleton factory was removed — no state to reset.
+}
+
+function loadBuiltinTranslations(locale: Locale): Translations {
+  return BUILTIN_TRANSLATIONS[locale];
 }
