@@ -8,11 +8,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 export interface ObserverOptions {
-  observationsPath: string;
+  store: WorkflowObservationStore;
   threshold?: number; // Number of repetitions before suggesting skill
 }
 
@@ -42,18 +40,25 @@ export interface ObservationConfig {
   salt?: string;
 }
 
+export interface WorkflowObservationStore {
+  readConfig(): ObservationConfig | null;
+  writeConfig(config: ObservationConfig): void;
+  readPatterns(): WorkflowPattern[];
+  writePatterns(patterns: WorkflowPattern[]): void;
+}
+
 /**
  * Observes user workflows and suggests skills based on patterns.
  */
 export class WorkflowObserver {
-  private readonly observationsPath: string;
+  private readonly store: WorkflowObservationStore;
   private readonly threshold: number;
   private readonly salt: string;
   private patterns: Map<string, WorkflowPattern> = new Map();
   private config: ObservationConfig;
 
   constructor(options: ObserverOptions) {
-    this.observationsPath = options.observationsPath;
+    this.store = options.store;
     this.threshold = options.threshold || 3;
     this.salt = this.generateSalt();
 
@@ -62,10 +67,6 @@ export class WorkflowObserver {
       threshold: this.threshold,
       salt: this.salt,
     };
-
-    if (!existsSync(this.observationsPath)) {
-      mkdirSync(this.observationsPath, { recursive: true });
-    }
 
     this.loadPatterns();
   }
@@ -219,28 +220,13 @@ export class WorkflowObserver {
    * Load patterns from disk.
    */
   private loadPatterns(): void {
-    const patternsPath = join(this.observationsPath, "patterns.json");
-    const configPath = join(this.observationsPath, "config.json");
-
-    if (existsSync(configPath)) {
-      try {
-        const data = JSON.parse(readFileSync(configPath, "utf-8"));
-        this.config = data;
-      } catch {
-        // Use default config
-      }
+    const config = this.store.readConfig();
+    if (config) {
+      this.config = config;
     }
 
-    if (existsSync(patternsPath)) {
-      try {
-        const data = JSON.parse(readFileSync(patternsPath, "utf-8"));
-        const patterns = data.patterns || [];
-        for (const pattern of patterns) {
-          this.patterns.set(pattern.patternId, pattern);
-        }
-      } catch {
-        // Start with empty patterns
-      }
+    for (const pattern of this.store.readPatterns()) {
+      this.patterns.set(pattern.patternId, pattern);
     }
   }
 
@@ -248,18 +234,13 @@ export class WorkflowObserver {
    * Save patterns to disk.
    */
   private savePatterns(): void {
-    const patternsPath = join(this.observationsPath, "patterns.json");
-    const data = {
-      patterns: Array.from(this.patterns.values()),
-    };
-    writeFileSync(patternsPath, JSON.stringify(data, null, 2), "utf-8");
+    this.store.writePatterns(Array.from(this.patterns.values()));
   }
 
   /**
    * Save configuration to disk.
    */
   private saveConfig(): void {
-    const configPath = join(this.observationsPath, "config.json");
-    writeFileSync(configPath, JSON.stringify(this.config, null, 2), "utf-8");
+    this.store.writeConfig(this.config);
   }
 }
