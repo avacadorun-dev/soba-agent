@@ -1,36 +1,3 @@
-export type {
-  McpSecretStoreOptions,
-  McpServerSecurity,
-  McpToolTrustRule,
-} from "../../composition/cli/public";
-export {
-  computeSkillContentHashOnDisk,
-  createFilesystemProjectTrustStore,
-  DEFAULT_MCP_MAX_OUTPUT_BYTES,
-  DEFAULT_MCP_TIMEOUT_MS,
-  FilesystemSkillValidationFilesystem,
-  findMostRecentSession,
-  getDefaultSessionDir,
-  getMcpConfigPath,
-  getProviderRegistryConfigPath,
-  listSessions,
-  loadMcpConfig,
-  McpClientManager,
-  McpClientManagerError,
-  McpConfigError,
-  McpRemoteSecurityError,
-  McpSecretStore,
-  McpSecretStoreError,
-  notify,
-  ProviderRegistry,
-  parseMcpConfig,
-  redactMcpSensitiveText,
-  SessionManager,
-  syncMcpToolsIntoRegistry,
-  validateMcpConfig,
-  validateSkillOnDisk,
-} from "../../composition/cli/public";
-export type { CompactionOutcome, ContextManagerConfig } from "../../engine/compaction/context-manager";
 export type { SessionEntry, SessionInfo } from "../../kernel/transcript/types";
 export type {
   ActivatedSkillRef,
@@ -159,13 +126,6 @@ export {
 } from "../commands/session";
 export type { SkillCommandView } from "../commands/skill";
 export { executeSkillCommand } from "../commands/skill";
-export {
-  firstTimeSetup,
-  loadConfig,
-  resolveCompactionConfig,
-  resolveSoundConfig,
-  validateConfig,
-} from "../config/config-loader";
 export type {
   SobaConfig,
   SoundConfig,

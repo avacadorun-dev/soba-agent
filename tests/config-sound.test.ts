@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfigFromEnv, loadConfigFromFile, resolveSoundConfig } from "../src/application/config/config-loader";
 import {
   DEFAULT_CONFIG,
   DEFAULT_SOUND_CONFIG,
@@ -23,6 +22,7 @@ import {
   isSoundRepeatMode,
   type SoundConfig,
 } from "../src/application/config/types";
+import { loadConfigFromEnv, loadConfigFromFile, resolveSoundConfig } from "../src/composition/config/config-loader";
 
 describe("SoundConfig defaults", () => {
   test("DEFAULT_SOUND_CONFIG имеет ожидаемые значения", () => {

@@ -2,7 +2,17 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import { computeSkillContentHashOnDisk, createFilesystemProjectTrustStore, FilesystemSkillValidationFilesystem, firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, SkillDiscovery, validateConfig, validateSkillOnDisk } from "../../application/cli/public";
+import { SkillDiscovery } from "../../application/cli/public";
+import {
+  computeSkillContentHashOnDisk,
+  createFilesystemProjectTrustStore,
+  FilesystemSkillValidationFilesystem,
+  getMcpConfigPath,
+  loadMcpConfig,
+  McpSecretStore,
+  validateSkillOnDisk,
+} from "../../composition/cli/public";
+import { firstTimeSetup, loadConfig, validateConfig } from "../../composition/config/config-loader";
 import type { I18n } from "../../shared/i18n/i18n";
 
 export interface InitCommandOptions {

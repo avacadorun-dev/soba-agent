@@ -14,17 +14,16 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
+import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/public";
+import { listSessions, redactMcpSensitiveText, SessionManager, syncMcpToolsIntoRegistry } from "../../composition/cli/public";
 import {
   firstTimeSetup,
-  listSessions,
   loadConfig,
   resolveCompactionConfig,
   resolveSoundConfig,
-  SessionManager,
   validateConfig,
-} from "../../application/cli/public";
-import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/public";
-import { createSobaRuntime } from "../../application/runtime/public";
+} from "../../composition/config/config-loader";
+import { createSobaRuntime } from "../../composition/runtime/create-soba-runtime";
 import { SoundNotifier } from "../../infrastructure/terminal/sound-notifier";
 import { detectLocale, I18n, isLocale } from "../../shared/i18n/i18n";
 import type { Locale } from "../../shared/i18n/types";
@@ -218,7 +217,7 @@ async function main() {
   // or the session manager — it only needs the ProviderRegistry.
   if (cliArgs.providerSubcommand !== undefined) {
     const { parseProviderCliArgs, runProviderCli } = await import("./provider-cli");
-    const { ProviderRegistry } = await import("../../application/cli/public");
+    const { ProviderRegistry } = await import("../../composition/cli/public");
     const persistedRegistryForProvider = await ProviderRegistry.loadFromFile();
     const providerRegistryForCli = new ProviderRegistry(persistedRegistryForProvider ?? undefined);
     const options = parseProviderCliArgs(cliArgs.providerSubArgs);
@@ -357,6 +356,8 @@ async function main() {
           toolRegistry: context.toolRegistry,
           trustManager: context.trustManager,
           portableCapsuleServiceFactory: context.portableCapsuleServiceFactory,
+          syncMcpToolsIntoRegistry,
+          redactMcpSensitiveText,
         });
       },
       providerRegistryConfigPath: configPath,
@@ -473,6 +474,7 @@ async function main() {
     const { InteractiveTUI } = await import("../../ui/terminal/interactive-tui");
     const { ProviderStore } = await import("../../ui/terminal/interactive/model/provider-store");
     const { slashCommandRegistry } = await import("../../ui/terminal/interactive/commands/registry");
+    const { notify } = await import("../../ui/terminal/interactive/lib/notification");
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
     const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({
@@ -516,6 +518,9 @@ async function main() {
           trustManager,
           portableCapsuleServiceFactory,
           tuiRegistry: slashCommandRegistry,
+          notify,
+          syncMcpToolsIntoRegistry,
+          redactMcpSensitiveText,
         }),
     });
 

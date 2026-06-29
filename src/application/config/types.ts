@@ -5,14 +5,14 @@
  * Phase 2: Adds compaction sub-config with defaults and invariant validation.
  */
 
-import type { CompactionConfig } from "../../engine/compaction/trigger-policy";
+import type { CompactionConfig } from "../../kernel/compaction/config";
 import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../providers/model-defaults";
 import type { ProviderRegistryState } from "../providers/types";
 
-export type { CompactionConfig } from "../../engine/compaction/trigger-policy";
+export type { CompactionConfig } from "../../kernel/compaction/config";
 
 export const TUI_THEME_NAMES = [
   "graphite",

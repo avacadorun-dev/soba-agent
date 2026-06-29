@@ -22,7 +22,6 @@ import type { SlashCommandFallbackRegistry } from "../../skills/slash-handler";
 import {
   handleSkillSlashCommand,
   isSkillSlashCommand,
-  notify,
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
   tryTuiRegistryFallback,
@@ -62,6 +61,13 @@ export interface CommandContext {
   toolRegistry?: ToolRegistry;
   trustManager?: TrustController;
   portableCapsuleServiceFactory?: PortableCapsuleServiceFactory;
+  notify?: (type: "info" | "success" | "warning" | "error", title: string, message: string) => void;
+  syncMcpToolsIntoRegistry?: (
+    registry: ToolRegistry,
+    manager: McpRuntimeManager,
+    options: { trustManager?: TrustController },
+  ) => Promise<unknown>;
+  redactMcpSensitiveText?: (text: string, security?: { env?: Record<string, string> }) => string;
   /** TUI slash command registry for dispatching TUI commands (Phase 2.5 A4). */
   tuiRegistry?: SlashCommandFallbackRegistry<SlashCommandContext>;
 }
@@ -137,7 +143,7 @@ export async function executeCommand(input: string, ctx: CommandContext): Promis
         timestamp: Date.now(),
         message: ctx.i18n.t("command.skill.activated", { name: result.activation?.name ?? input }),
       });
-      notify(
+      ctx.notify?.(
         "success",
         `Skill activated: ${result.activation?.name ?? input}`,
         `Revision ${result.activation?.revision ?? "?"}`,
