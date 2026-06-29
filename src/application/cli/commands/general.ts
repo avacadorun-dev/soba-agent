@@ -18,6 +18,7 @@ export async function handleCompact(args: string[], ctx: CommandContext): Promis
     contextWindow: ctx.config.contextWindow,
     i18n: ctx.i18n,
     contextManager: ctx.contextManager,
+    fallbackCompactor: ctx.fallbackCompactor,
   });
 
   for (const event of view.events) {

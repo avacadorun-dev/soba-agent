@@ -51,7 +51,6 @@ flowchart TD
   uiTerminal["src/ui/terminal"]
 
   adaptersAcp --> application
-  application --> engine
   application --> kernel
   application --> shared
   appsAcp --> adaptersAcp
@@ -94,8 +93,8 @@ flowchart TD
   adapters, UI, `node:`, `bun:`, or OpenTUI.
 - `src/engine` does not import application, infrastructure, apps, adapters, or
   UI.
-- `src/application` does not import composition, infrastructure, apps, adapters,
-  UI, or OpenTUI.
+- `src/application` does not import engine, composition, infrastructure, apps,
+  adapters, UI, or OpenTUI.
 - `src/infrastructure` does not import engine, composition, apps, or UI.
 - `src/adapters` does not import engine, infrastructure, composition, apps, or
   UI.
@@ -117,19 +116,13 @@ bun run check:boundaries
 
 ## Current Compromises
 
-- `src/application/public.ts` is still a broad migration facade. It keeps
-  delivery layers off internals, but should be narrowed into focused public
-  APIs as command/session/provider/skill/MCP services mature.
-- `src/engine/turn/agent-turn-runner.ts` owns the legacy turn orchestration. The
-  public `AgentLoop` shell is small, but the runner still carries the long
-  prompt/model/tool/verification pipeline.
+- `src/engine/turn/agent-turn-runner.ts` remains the main turn coordinator. The
+  public `AgentLoop` shell is small, and begin/prompt/event helpers are split
+  out, but the runner still carries the model/tool/verification pipeline.
 - Some tests still live under `tests/core/**` for historical continuity. Those
   test locations do not imply a production `src/core` namespace.
 
 ## Next Refactors
 
-1. Replace the broad `application/public.ts` facade with focused public modules.
-2. Continue splitting `engine/turn/agent-turn-runner.ts` into smaller turn-stage
+1. Continue splitting `engine/turn/agent-turn-runner.ts` into smaller turn-stage
    coordinators.
-3. Promote application-to-engine compact fallback into an explicit application
-   port.

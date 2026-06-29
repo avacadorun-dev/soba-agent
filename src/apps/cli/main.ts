@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
-import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/public";
+import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
 import { listSessions, redactMcpSensitiveText, SessionManager, syncMcpToolsIntoRegistry } from "../../composition/cli/public";
 import {
   firstTimeSetup,
@@ -356,6 +356,7 @@ async function main() {
           toolRegistry: context.toolRegistry,
           trustManager: context.trustManager,
           portableCapsuleServiceFactory: context.portableCapsuleServiceFactory,
+          fallbackCompactor: context.fallbackCompactor,
           syncMcpToolsIntoRegistry,
           redactMcpSensitiveText,
         });
@@ -451,6 +452,7 @@ async function main() {
     trustManager,
     mcpSecretStore,
     portableCapsuleServiceFactory,
+    fallbackCompactor,
   } = runtimeComposition;
   let activeSession: RuntimeSessionHandle = session;
 
@@ -517,6 +519,7 @@ async function main() {
           toolRegistry: tools,
           trustManager,
           portableCapsuleServiceFactory,
+          fallbackCompactor,
           tuiRegistry: slashCommandRegistry,
           notify,
           syncMcpToolsIntoRegistry,

@@ -66,6 +66,7 @@ const rules = [
   {
     from: "src/application/**",
     deny: [
+      "src/engine/**",
       "src/composition/**",
       "src/infrastructure/**",
       "src/apps/**",
@@ -123,18 +124,16 @@ must go through public application API modules. Delivery layers must not import
    provider implementations. Engine receives those capabilities through ports.
 4. Do not add feature code to `composition`. Composition creates objects and
    wires dependencies.
-5. Do not import concrete infrastructure from `application`. Application uses
-   ports, services, and DTOs.
+5. Do not import `engine` or concrete infrastructure from `application`.
+   Application uses ports, services, and DTOs.
 6. Do not import `engine` from `apps`, `adapters`, or `ui`. Delivery layers work
    through public application API.
 7. Do not add another broad manager without an explicit owner layer:
    `KernelPolicy`, `EngineCoordinator`, `ApplicationService`,
    `InfrastructureStore`, or `CompositionFactory`.
 8. Do not add broad root barrel exports. Use context-level `public.ts` modules
-   such as `src/kernel/tools/public.ts` or `src/application/runtime/public.ts`.
-   The root `src/application/public.ts` may only re-export application/shared
-   APIs; it must not be a migration facade over engine, kernel, infrastructure,
-   composition, apps, adapters, or UI.
+   such as `src/kernel/tools/public.ts`, `src/application/cli/public.ts`, or
+   `src/application/runtime/public.ts`.
 
 ## Migration Order
 

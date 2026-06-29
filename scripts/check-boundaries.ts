@@ -60,6 +60,7 @@ const rules: BoundaryRule[] = [
   {
     from: "src/application/**",
     deny: [
+      "src/engine/**",
       "src/composition/**",
       "src/infrastructure/**",
       "src/apps/**",
@@ -97,9 +98,7 @@ const rules: BoundaryRule[] = [
   },
 ];
 
-const publicApplicationImports = new Set([
-  "src/application/public",
-]);
+const publicApplicationImports = new Set<string>();
 
 function walkTypescriptFiles(root: string): string[] {
   const absoluteRoot = join(projectRoot, root);
@@ -194,7 +193,7 @@ function violatesPublicApplicationApi(resolved: string, allowedLocalRoot: string
 }
 
 function isPublicApplicationApi(resolved: string): boolean {
-  return publicApplicationImports.has(resolved) || /^src\/application\/(?:[^/]+\/)*public$/.test(resolved);
+  return publicApplicationImports.has(resolved) || /^src\/application\/(?:[^/]+\/)+public$/.test(resolved);
 }
 
 const violations: string[] = [];
@@ -205,6 +204,7 @@ if (existsSync(join(projectRoot, "src", "core"))) {
 
 const applicationPublicPath = join(projectRoot, "src", "application", "public.ts");
 if (existsSync(applicationPublicPath)) {
+  violations.push("src/application/public.ts exists (broad root application facade is retired)");
   for (const specifier of importSpecifiers(applicationPublicPath)) {
     const resolved = resolveProjectImport(applicationPublicPath, specifier);
     if (!resolved) continue;

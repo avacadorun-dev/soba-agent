@@ -1,4 +1,3 @@
-import { compact } from "../../engine/compaction/compaction";
 import type { OpenResponsesClient } from "../../kernel/model/model-gateway";
 import { estimateTokens } from "../../kernel/session/estimation";
 import type { RuntimeSessionHandle } from "../session-lifecycle";
@@ -40,6 +39,22 @@ export interface CompactContextManagerOutcome {
   } | null;
 }
 
+export interface CompactFallbackInput {
+  session: RuntimeSessionHandle;
+  client: OpenResponsesClient;
+  instructions: string | undefined;
+  keepRecentTokens: number;
+}
+
+export interface CompactFallbackOutcome {
+  tokensBefore: number;
+  tokensKept: number;
+}
+
+export interface CompactFallbackCompactorPort {
+  compact(input: CompactFallbackInput): Promise<CompactFallbackOutcome>;
+}
+
 export async function executeCompactCommand(input: {
   args: string[];
   session: RuntimeSessionHandle;
@@ -47,8 +62,9 @@ export async function executeCompactCommand(input: {
   contextWindow: number;
   i18n: CompactCommandI18n;
   contextManager?: CompactContextManagerPort;
+  fallbackCompactor?: CompactFallbackCompactorPort;
 }): Promise<CompactCommandView> {
-  const { args, session, client, contextWindow, i18n, contextManager } = input;
+  const { args, session, client, contextWindow, i18n, contextManager, fallbackCompactor } = input;
   const instructions = args.join(" ") || undefined;
   const tokens = estimateTokens(session.buildInput().items);
   const events: CompactCommandEvent[] = [];
@@ -71,7 +87,7 @@ export async function executeCompactCommand(input: {
     if (contextManager) {
       await runManagedCompaction({ contextManager, instructions, tokens, session, i18n, events });
     } else {
-      await runFallbackCompaction({ session, client, instructions, tokens, events });
+      await runFallbackCompaction({ fallbackCompactor, session, client, instructions, tokens, events });
     }
   } catch (error) {
     events.push({
@@ -150,15 +166,19 @@ async function runManagedCompaction(input: {
 }
 
 async function runFallbackCompaction(input: {
+  fallbackCompactor: CompactFallbackCompactorPort | undefined;
   session: RuntimeSessionHandle;
   client: OpenResponsesClient;
   instructions: string | undefined;
   tokens: number;
   events: CompactCommandEvent[];
 }): Promise<void> {
-  const { session, client, instructions, tokens, events } = input;
+  const { fallbackCompactor, session, client, instructions, tokens, events } = input;
+  if (!fallbackCompactor) {
+    throw new Error("Compact fallback is not configured");
+  }
   const keepRecentTokens = Math.min(8000, Math.floor(tokens * 0.5));
-  const result = await compact(session, client, { instructions, keepRecentTokens });
+  const result = await fallbackCompactor.compact({ session, client, instructions, keepRecentTokens });
   events.push({
     type: "compaction_done",
     timestamp: Date.now(),

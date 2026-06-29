@@ -1,43 +1,29 @@
-import type {
-  ItemParam,
-  ResponseResource,
-  Usage,
-} from "../../kernel/model/openresponses-types";
+import type { ResponseResource, Usage } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
-import type { ToolContext, ToolResult } from "../../kernel/tools/types";
+import type { ToolContext } from "../../kernel/tools/types";
 import type {
   DebugEntry,
   FlightRecordData,
-  ItemParam as SessionItemParam,
 } from "../../kernel/transcript/types";
 import { CompletionController } from "../completion/completion-controller";
-import { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
 import { VerificationController } from "../verification/verification-controller";
-import {
-  allowsUnverifiedCompletion,
-  inferTaskKindFromPrompt,
-} from "../verification/verification-policy";
-import {
-  buildDenialEphemeralMessages as buildDenialEphemeralMessagesForState,
-  turnStopDebugData,
-  turnStopReasonEvent,
-} from "./agent-loop-event-recording";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
+import { beginAgentTurn } from "./agent-turn-begin";
+import { prepareAgentTurnPromptContext } from "./agent-turn-prompt-context";
+import {
+  buildDenialEphemeralMessages,
+  createTurnStopEmitter,
+  emitToolResultAndEnd,
+} from "./agent-turn-runner-events";
 import { createAssistantSessionRecorder } from "./assistant-session-recorder";
 import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
 import { scheduleCheckpointCompactionForTurn } from "./checkpoint-compaction-scheduler";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
-import {
-  createWorkingNarration,
-  createWorkingNarrationGate,
-  isNonTrivialPrompt,
-  type WorkingNarrationEventType,
-} from "./narration";
 import { handleRejectedToolBatch } from "./rejected-tool-batch-handler";
 import { decideResponseContinuation } from "./response-continuation-decision";
 import {
@@ -52,18 +38,14 @@ import { completeAgentTurn } from "./turn-completion";
 import {
   autoVerifierTimeoutSeconds,
   checkpointEventToPlanState,
-  createUserItem,
   FINISH_TOOL_NAME,
   wantsFullVerification,
 } from "./turn-helpers";
-import { prepareTurnPrompt } from "./turn-prompt-preparation";
 import { evaluateTurnStopGuards } from "./turn-stop-guards";
 import type {
   AgentEvent,
-  AgentTurnError,
   AgentTurnResult,
   CheckpointWorkPlanState,
-  TurnStopReasonEvent,
 } from "./types";
 export interface AgentLoopState {
   totalUsage: Usage;
@@ -101,80 +83,36 @@ export async function runAgentTurn(
     debug,
     flight,
   } = input;
-  if (state.isProcessing) {
-    throw new Error("Agent is already processing a turn");
-  }
-  // Cancel any background compaction operation when starting a new turn
-  runtime.contextController.cancelBackgroundCompaction("new turn started");
-  state.isProcessing = true;
-  state.turnCount++;
-  state.denialCount = 0;
-  state.lastDeniedOperation = "";
-  const abortController = new AbortController();
-  setAbortController(abortController);
-  const emitStopReason = (
-    turn: number,
-    iteration: number,
-    reason: TurnStopReasonEvent["reason"],
-    detail: string,
-    hasUsedTools: boolean,
-    autonomousFollowUps: number,
-  ): void => {
-    const eventInput = {
-      turn,
-      iteration,
-      reason,
-      detail,
-      hasUsedTools,
-      autonomousFollowUps,
-    };
-    emit(turnStopReasonEvent(eventInput));
-    debug(turnStopDebugData(eventInput));
-  };
-  const turnIndex = state.turnCount;
-  const errors: AgentTurnError[] = [];
-  const allItems: ItemParam[] = [];
-  const evidenceLedger = new EvidenceLedger();
-  const taskKind = inferTaskKindFromPrompt(userText);
-  const allowUnverifiedCompletion = allowsUnverifiedCompletion(userText);
-  const emitNarrationOnce = createWorkingNarrationGate({
-    enabled: isNonTrivialPrompt(userText),
-    emit: (eventType, message, evidenceIds = []) =>
-      emitWorkingNarration(emit, eventType, message, evidenceIds),
-  });
-  // Emit turn start
-  emit({
-    type: "turn_start",
-    timestamp: Date.now(),
+  const emitStopReason = createTurnStopEmitter({ emit, debug });
+  const {
+    abortController,
     turnIndex,
-    userInput: userText,
+    errors,
+    allItems,
+    evidenceLedger,
+    taskKind,
+    allowUnverifiedCompletion,
+    emitNarrationOnce,
+  } = beginAgentTurn({
+    userText,
+    session,
+    state,
+    setAbortController,
+    emit,
+    debug,
   });
-  // Create and append user message
-  const userItem = createUserItem(userText);
-  session.appendItem(userItem as unknown as SessionItemParam);
-  allItems.push(userItem as unknown as ItemParam);
-  debug({
-    event: "loop/turn-start",
-    turn: turnIndex,
-    detail: userText.slice(0, 200),
-  });
+  runtime.contextController.cancelBackgroundCompaction("new turn started");
   try {
-    // Read AGENTS.md if present, then build system prompt
-    emitNarrationOnce(
-      "context_scan",
-      "Checking project instructions, available skills, and memory before choosing the next action.",
-    );
-    const preparedPrompt = await prepareTurnPrompt({
-      cwd: cwd,
+    const preparedPrompt = await prepareAgentTurnPromptContext({
+      cwd,
       userText,
-      selectedTools: runtime.tools.getNames(),
-      contextReader: runtime.projectContextReader,
-      skillManager: runtime.skillManager,
-      projectMemory: runtime.projectMemory,
-      modelConfig: runtime.client.getConfig(),
+      turnIndex,
+      taskKind,
+      runtime,
+      narrate: emitNarrationOnce,
+      flight,
     });
     const {
-      contextFiles,
       projectInstructions,
       systemPrompt,
       model,
@@ -183,29 +121,6 @@ export async function runAgentTurn(
       contextWindow,
       temperature,
     } = preparedPrompt;
-    emitNarrationOnce(
-      "observation",
-      contextFiles.length > 0
-        ? `Loaded project instructions from ${contextFiles.map((file) => file.path).join(", ")}.`
-        : "No project instruction file was found; using repository structure and targeted reads.",
-    );
-    flight({
-      kind: "prompt_snapshot",
-      turn: turnIndex,
-      payload: {
-        cwd: cwd,
-        userInput: userText,
-        taskKind,
-        model,
-        selectedTools: runtime.tools.getNames(),
-        contextFiles: contextFiles.map((file) => file.path),
-        systemPrompt,
-      },
-    });
-    emitNarrationOnce(
-      "plan",
-      "Proceeding in small steps: inspect relevant context, act with tools, then verify before completion.",
-    );
     // Main loop: continue until no more tool calls
     let currentResponse: ResponseResource | null = null;
     let iteration = 0;
@@ -678,53 +593,4 @@ export async function runAgentTurn(
     clearAbortController();
     state.isProcessing = false;
   }
-}
-function emitWorkingNarration(
-  emit: (event: AgentEvent) => void,
-  eventType: WorkingNarrationEventType,
-  message: string,
-  evidenceIds: string[] = [],
-): void {
-  const narration = createWorkingNarration({ eventType, message, evidenceIds });
-  emit({
-    type: "working_narration",
-    timestamp: Date.now(),
-    eventType: narration.eventType,
-    message: narration.message,
-    evidenceIds: narration.evidenceIds,
-  });
-}
-function buildDenialEphemeralMessages(state: AgentLoopState): Array<{
-  role: "developer";
-  content: string;
-}> {
-  return buildDenialEphemeralMessagesForState(
-    state.denialCount,
-    state.lastDeniedOperation,
-  );
-}
-function emitToolResultAndEnd(
-  emit: (event: AgentEvent) => void,
-  toolCall: {
-    call_id: string;
-    name: string;
-  },
-  result: ToolResult,
-  startTime: number,
-): void {
-  const durationMs = Date.now() - startTime;
-  emit({
-    type: "tool_call_result",
-    timestamp: Date.now(),
-    toolCallId: toolCall.call_id,
-    toolName: toolCall.name,
-    result,
-  });
-  emit({
-    type: "tool_call_end",
-    timestamp: Date.now(),
-    toolCallId: toolCall.call_id,
-    toolName: toolCall.name,
-    durationMs,
-  });
 }
