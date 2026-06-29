@@ -7,13 +7,11 @@
  * Spec: internal-design-notes § Drafts
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import type { SkillDiagnostic } from "./types";
 import { validateSkill } from "./validator";
 
 export interface DraftOptions {
-  draftsPath: string;
+  storage: DraftStorage;
 }
 
 export interface DraftSkill {
@@ -43,39 +41,35 @@ export interface DraftOperationResult {
   diagnostics: SkillDiagnostic[];
 }
 
+export interface DraftStorage {
+  createDraftDirectory(name: string): string;
+  writeSkillContent(draftPath: string, content: string): void;
+  writeEvalCases(draftPath: string, cases: EvalCase[]): void;
+  readDraft(draftId: string): DraftSkill | null;
+  listDraftIds(): string[];
+  deleteDraft(draftId: string): boolean;
+  writeDraft(draft: DraftSkill): void;
+}
+
 /**
  * Manages draft skills during creation and editing.
  */
 export class DraftStore {
-  private readonly draftsPath: string;
+  private readonly storage: DraftStorage;
 
   constructor(options: DraftOptions) {
-    this.draftsPath = options.draftsPath;
-    if (!existsSync(this.draftsPath)) {
-      mkdirSync(this.draftsPath, { recursive: true });
-    }
+    this.storage = options.storage;
   }
 
   /**
    * Create a new draft skill.
    */
   create(name: string, content: string, evalCases?: EvalCase[]): DraftOperationResult {
-    // Use skill name as directory name for validation compatibility
-    const draftPath = join(this.draftsPath, name);
+    const draftPath = this.storage.createDraftDirectory(name);
+    this.storage.writeSkillContent(draftPath, content);
 
-    // Create draft directory
-    mkdirSync(draftPath, { recursive: true });
-
-    // Write SKILL.md
-    const skillMdPath = join(draftPath, "SKILL.md");
-    writeFileSync(skillMdPath, content, "utf-8");
-
-    // Write eval cases if provided
     if (evalCases && evalCases.length > 0) {
-      const evalsDir = join(draftPath, "evals");
-      mkdirSync(evalsDir, { recursive: true });
-      const casesPath = join(evalsDir, "cases.json");
-      writeFileSync(casesPath, JSON.stringify({ cases: evalCases }, null, 2), "utf-8");
+      this.storage.writeEvalCases(draftPath, evalCases);
     }
 
     // Validate draft
@@ -98,7 +92,7 @@ export class DraftStore {
     };
 
     // Save draft metadata
-    this.saveDraftMetadata(draft);
+    this.storage.writeDraft(draft);
 
     return {
       success: true,
@@ -120,9 +114,7 @@ export class DraftStore {
       };
     }
 
-    // Update SKILL.md
-    const skillMdPath = join(draft.skillPath, "SKILL.md");
-    writeFileSync(skillMdPath, content, "utf-8");
+    this.storage.writeSkillContent(draft.skillPath, content);
 
     // Re-validate
     const validation = validateSkill(draft.skillPath);
@@ -132,7 +124,7 @@ export class DraftStore {
     draft.status = validation.valid ? "draft" : "invalid";
     draft.diagnostics = diagnostics;
 
-    this.saveDraftMetadata(draft);
+    this.storage.writeDraft(draft);
 
     return {
       success: true,
@@ -154,15 +146,12 @@ export class DraftStore {
       };
     }
 
-    const evalsDir = join(draft.skillPath, "evals");
-    mkdirSync(evalsDir, { recursive: true });
-    const casesPath = join(evalsDir, "cases.json");
-    writeFileSync(casesPath, JSON.stringify({ cases }, null, 2), "utf-8");
+    this.storage.writeEvalCases(draft.skillPath, cases);
 
     draft.evalCases = cases;
     draft.updatedAt = new Date().toISOString();
 
-    this.saveDraftMetadata(draft);
+    this.storage.writeDraft(draft);
 
     return {
       success: true,
@@ -175,38 +164,16 @@ export class DraftStore {
    * Get a draft by ID.
    */
   get(draftId: string): DraftSkill | null {
-    const draftPath = join(this.draftsPath, draftId);
-    const metadataPath = join(draftPath, ".draft.json");
-
-    if (!existsSync(metadataPath)) {
-      return null;
-    }
-
-    try {
-      const metadata = JSON.parse(readFileSync(metadataPath, "utf-8"));
-      return metadata as DraftSkill;
-    } catch {
-      return null;
-    }
+    return this.storage.readDraft(draftId);
   }
 
   /**
    * List all drafts.
    */
   list(): DraftSkill[] {
-    if (!existsSync(this.draftsPath)) {
-      return [];
-    }
-
     const drafts: DraftSkill[] = [];
-    const entries = readdirSync(this.draftsPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-
-      const draft = this.get(entry.name);
+    for (const draftId of this.storage.listDraftIds()) {
+      const draft = this.get(draftId);
       if (draft) {
         drafts.push(draft);
       }
@@ -219,94 +186,6 @@ export class DraftStore {
    * Delete a draft.
    */
   delete(draftId: string): boolean {
-    const draftPath = join(this.draftsPath, draftId);
-    if (!existsSync(draftPath)) {
-      return false;
-    }
-
-    rmSync(draftPath, { recursive: true, force: true });
-    return true;
-  }
-
-  /**
-   * Save draft metadata.
-   */
-  private saveDraftMetadata(draft: DraftSkill): void {
-    const metadataPath = join(draft.skillPath, ".draft.json");
-    writeFileSync(metadataPath, JSON.stringify(draft, null, 2), "utf-8");
-  }
-}
-
-/**
- * Isolated filesystem facade for draft operations.
- * Prevents access to files outside the draft directory.
- */
-export class DraftFilesystemFacade {
-  private readonly draftPath: string;
-
-  constructor(draftPath: string) {
-    this.draftPath = draftPath;
-  }
-
-  /**
-   * Read a file within the draft directory.
-   */
-  readFile(relativePath: string): string | null {
-    const fullPath = this.resolveSafe(relativePath);
-    if (!fullPath || !existsSync(fullPath)) {
-      return null;
-    }
-
-    const stat = statSync(fullPath);
-    if (!stat.isFile()) {
-      return null;
-    }
-
-    return readFileSync(fullPath, "utf-8");
-  }
-
-  /**
-   * Write a file within the draft directory.
-   */
-  writeFile(relativePath: string, content: string): boolean {
-    const fullPath = this.resolveSafe(relativePath);
-    if (!fullPath) {
-      return false;
-    }
-
-    try {
-      writeFileSync(fullPath, content, "utf-8");
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Check if a file exists within the draft directory.
-   */
-  exists(relativePath: string): boolean {
-    const fullPath = this.resolveSafe(relativePath);
-    return fullPath !== null && existsSync(fullPath);
-  }
-
-  /**
-   * Safely resolve a path within the draft directory.
-   * Returns null if the path would escape the draft directory.
-   */
-  private resolveSafe(relativePath: string): string | null {
-    // Prevent path traversal
-    if (relativePath.includes("..") || relativePath.startsWith("/")) {
-      return null;
-    }
-
-    const fullPath = join(this.draftPath, relativePath);
-
-    // Verify the resolved path is within the draft directory
-    if (!fullPath.startsWith(this.draftPath)) {
-      return null;
-    }
-
-    return fullPath;
+    return this.storage.deleteDraft(draftId);
   }
 }

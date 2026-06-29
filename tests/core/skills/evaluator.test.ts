@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DraftStore, type EvalCase } from "../../../src/application/skills/drafts";
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
+import { FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
 
 describe("SkillEvaluator", () => {
   const testDir = join(process.cwd(), ".test-evaluator");
@@ -87,7 +88,7 @@ Stop when the task is complete.
   }
 
   it("оценивает skill с eval cases", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -121,7 +122,7 @@ This skill uses bash to execute commands.
   });
 
   it("пропускает dangerous cases", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -163,7 +164,7 @@ description: Test skill
   });
 
   it("сохраняет detailed eval run", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -195,7 +196,7 @@ description: Test skill
   });
 
   it("вычисляет pass rate", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -234,7 +235,7 @@ Uses bash tool.
   });
 
   it("проверяет tool intent matchers", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -266,7 +267,7 @@ Uses bash tool.
   });
 
   it("выполняет safety check", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -295,7 +296,7 @@ description: Test skill
   });
 
   it("обнаруживает semantic regression", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -327,7 +328,7 @@ description: Test skill
   });
 
   it("обнаруживает safety regression и не позволяет override", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -362,7 +363,7 @@ description: Test skill
   });
 
   it("требует --override-metrics для metric regression", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -397,7 +398,7 @@ description: Test skill
   });
 
   it("список eval runs для skill", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -430,7 +431,7 @@ description: Test skill
   });
 
   it("rebaseline выполняет повторную оценку", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---
@@ -461,7 +462,7 @@ description: Test skill
   });
 
   it("выбрасывает ошибку при отсутствии eval cases", async () => {
-    const draftStore = new DraftStore({ draftsPath });
+    const draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const evaluator = new SkillEvaluator({ evalRunsPath });
 
     const content = `---

@@ -8,6 +8,7 @@ import { DraftStore } from "../../../src/application/skills/drafts";
 import { SkillEvaluator } from "../../../src/application/skills/evaluator";
 import { ProjectTrustStore } from "../../../src/application/skills/project-trust-store";
 import { RevisionStore } from "../../../src/application/skills/revisions";
+import { FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
 import { FilesystemRevisionStorage } from "../../../src/infrastructure/persistence/skills/revision-storage";
 import { FilesystemSkillFileOperations } from "../../../src/infrastructure/persistence/skills/skill-file-operations";
 
@@ -34,7 +35,7 @@ describe("SkillCommands", () => {
     mkdirSync(userSkillsPath, { recursive: true });
     mkdirSync(projectPath, { recursive: true });
 
-    draftStore = new DraftStore({ draftsPath });
+    draftStore = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     revisionStore = new RevisionStore({ storage: new FilesystemRevisionStorage({ revisionsPath }) });
     evaluator = new SkillEvaluator({ evalRunsPath });
 

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DraftFilesystemFacade, DraftStore, type EvalCase } from "../../../src/application/skills/drafts";
+import { DraftStore, type EvalCase } from "../../../src/application/skills/drafts";
+import { DraftFilesystemFacade, FilesystemDraftStorage } from "../../../src/infrastructure/persistence/skills/draft-storage";
 
 describe("DraftStore", () => {
   const testDir = join(process.cwd(), ".test-drafts");
@@ -21,7 +22,7 @@ describe("DraftStore", () => {
   });
 
   it("создаёт новый draft с валидным содержимым", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: test-skill
@@ -43,7 +44,7 @@ This is a test skill.
   });
 
   it("создаёт draft с eval cases", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: test-skill
@@ -78,7 +79,7 @@ description: Test skill with eval cases
   });
 
   it("помечает draft как invalid при ошибках валидации", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: invalid-name
@@ -97,7 +98,7 @@ description: Test skill
   });
 
   it("обновляет существующий draft", async () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content1 = `---
 name: test-skill
@@ -135,7 +136,7 @@ Updated content.
   });
 
   it("обновляет eval cases для draft", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: test-skill
@@ -168,13 +169,13 @@ description: Test skill
   });
 
   it("возвращает null при получении несуществующего draft", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
     const draft = store.get("non-existent-draft");
     expect(draft).toBeNull();
   });
 
   it("получает draft по ID", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: test-skill
@@ -192,7 +193,7 @@ description: Test skill
   });
 
   it("список drafts отсортирован по updatedAt", async () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: skill-1
@@ -226,7 +227,7 @@ description: Skill 2
   });
 
   it("удаляет draft", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: test-skill
@@ -244,7 +245,7 @@ description: Test skill
   });
 
   it("draft изолирован от основного каталога", () => {
-    const store = new DraftStore({ draftsPath });
+    const store = new DraftStore({ storage: new FilesystemDraftStorage({ draftsPath }) });
 
     const content = `---
 name: isolated-skill
