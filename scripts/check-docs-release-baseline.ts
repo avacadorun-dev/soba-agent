@@ -10,6 +10,7 @@ const scanRoots = [
 ];
 
 const legacyReleasePattern = /\bv0\.[0-5](?:\.(?:\d+|x))?\b|\b0\.[45]\.(?:\d+|x)\b/g;
+const changelogPattern = /(^|\/)changelog\.(en|ru|zh)\.mdx$/;
 
 function collectFiles(relativePath: string): string[] {
   const absolutePath = join(projectRoot, relativePath);
@@ -37,6 +38,8 @@ function collectFiles(relativePath: string): string[] {
 const violations: string[] = [];
 
 for (const file of scanRoots.flatMap(collectFiles)) {
+  if (changelogPattern.test(file)) continue;
+
   const content = readFileSync(join(projectRoot, file), "utf8");
   const lines = content.split("\n");
 

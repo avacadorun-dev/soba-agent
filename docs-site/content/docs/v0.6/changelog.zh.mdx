@@ -15,6 +15,7 @@ Local range: `v0.6.0..HEAD`
 
 ### Documentation
 
+- keep complete changelog history
 - make v0.6 documentation baseline
 - add versioned documentation snapshots
 
@@ -22,6 +23,229 @@ Local range: `v0.6.0..HEAD`
 
 2026-06-29 发布为 `v0.6.0`。
 
-[Compare](https://github.com/avacadorun-dev/soba-agent/releases/tag/v0.6.0)
+[Compare](https://github.com/avacadorun-dev/soba-agent/compare/v0.5.1...v0.6.0)
 
-此范围内没有提交。
+### Fixed
+
+- avoid unreleased changelog commit links ([e1233d0](https://github.com/avacadorun-dev/soba-agent/commit/e1233d09c41d450e267179154cf4d038e88e3117))
+- stop read-only question finish loops ([f02eb36](https://github.com/avacadorun-dev/soba-agent/commit/f02eb365006f67f0d582e2086d8304e5e08daec8))
+
+### Changed
+
+- extract turn completion stage ([ef34d1c](https://github.com/avacadorun-dev/soba-agent/commit/ef34d1c6643449dfcf878bbfe2a5e3b4b26f299a))
+- extract turn verification stage ([498f35b](https://github.com/avacadorun-dev/soba-agent/commit/498f35bebeb20641ca0887a1cd69d8a87f7a0b30))
+- extract turn tool stage ([1afcf4a](https://github.com/avacadorun-dev/soba-agent/commit/1afcf4a9c87c83393933906c702a868860d643cf))
+- extract turn response stage ([1163cc9](https://github.com/avacadorun-dev/soba-agent/commit/1163cc9122ca19006b3df0e216c9af4f95ab1319))
+- seal application engine boundary ([f8a7062](https://github.com/avacadorun-dev/soba-agent/commit/f8a7062f24f11f45484e2c95c560c9d38ba7b284))
+- extract legacy agent turn runner ([084f714](https://github.com/avacadorun-dev/soba-agent/commit/084f714141bad6e5b4c8898f2fc78d77e6608540))
+- move shared runtime contracts to kernel ([3e552fd](https://github.com/avacadorun-dev/soba-agent/commit/3e552fd545e0cfb7cb91cceb1937f03f4350ca40))
+- seal application public facades ([088bce9](https://github.com/avacadorun-dev/soba-agent/commit/088bce95c4c35515d9967550a926b4012a58e9ff))
+- extract agent loop runtime wiring ([0bf6e6c](https://github.com/avacadorun-dev/soba-agent/commit/0bf6e6c22a12c00970af25c59cd58f91a9363428))
+- narrow application facade boundaries ([37a67ee](https://github.com/avacadorun-dev/soba-agent/commit/37a67eeeb6816b9c32ec5a42748e168899279ad4))
+- Make shared i18n runtime independent ([437d568](https://github.com/avacadorun-dev/soba-agent/commit/437d56886db9fec5e28d3cd150d012959af3e3d6))
+- Inject portable sanitization environment context ([47d0813](https://github.com/avacadorun-dev/soba-agent/commit/47d08133e04e512845cd77bf67a982252b8a248b))
+- Extract skill validation filesystem to infrastructure ([1f8e857](https://github.com/avacadorun-dev/soba-agent/commit/1f8e85719e22bc82b7ee40ff44dde015c573b4b6))
+- Extract project trust storage to infrastructure ([2a99505](https://github.com/avacadorun-dev/soba-agent/commit/2a9950592d387e244da8e2e41afdb33d96a4ec79))
+- Extract skill evaluation storage to infrastructure ([99618d9](https://github.com/avacadorun-dev/soba-agent/commit/99618d9e9f17663649f719d5984cc14e10cfcdce))
+- Extract portable capsule storage to infrastructure ([272cacd](https://github.com/avacadorun-dev/soba-agent/commit/272cacd1d916685d9155b8c12cf1083c6e4b9c51))
+- Extract draft storage to infrastructure ([77baa0b](https://github.com/avacadorun-dev/soba-agent/commit/77baa0b93083dff6d1122528b682e5a4286a49a8))
+- Extract revision storage to infrastructure ([8219997](https://github.com/avacadorun-dev/soba-agent/commit/8219997b2f8cd122f229ec3e1492ddaa241e4829))
+- Extract workflow observation storage ([282eada](https://github.com/avacadorun-dev/soba-agent/commit/282eada736d6aa8fbc36fcc49e2fee7ad9c1a65f))
+- Remove node path dependency from trust manager ([6f38437](https://github.com/avacadorun-dev/soba-agent/commit/6f384379f6b3214c7df5cab09eb20aca610d933e))
+- Make CLI capsule exports explicit ([0ab59e4](https://github.com/avacadorun-dev/soba-agent/commit/0ab59e462787688e3b604de91b5cb0f0792b985c))
+- Narrow CLI and UI public facades ([442782b](https://github.com/avacadorun-dev/soba-agent/commit/442782b366bc7e41a112c784ab555cbda6b01a71))
+- Inject skill content reader from infrastructure ([1ba4b4f](https://github.com/avacadorun-dev/soba-agent/commit/1ba4b4f3e4a91a2549497e7a1d86dfabb51dac92))
+- Extract skill file operations to infrastructure ([b90d116](https://github.com/avacadorun-dev/soba-agent/commit/b90d11620d9734634b4822ca8917be9eb2ce3819))
+- Narrow root application public facade ([b969c78](https://github.com/avacadorun-dev/soba-agent/commit/b969c78ef40ddcb3619d776c40173dc06e8d8647))
+- Enforce engine independence from application ([69a1ebd](https://github.com/avacadorun-dev/soba-agent/commit/69a1ebd7a56596438053cfeea19d3b19f602a28e))
+- Introduce engine ports for trust and skills ([f49a6f8](https://github.com/avacadorun-dev/soba-agent/commit/f49a6f885ab68646609814fef5adef1d42e50763))
+- Move CLI slash commands into application layer ([b3b59c8](https://github.com/avacadorun-dev/soba-agent/commit/b3b59c87db7922029d7c9d8c598a58782e7f1fff))
+- Move skill command dispatch ([e588ece](https://github.com/avacadorun-dev/soba-agent/commit/e588ece5d31da90535e373836fcb2d0eb5754a96))
+- Extract working narration gate ([75541fe](https://github.com/avacadorun-dev/soba-agent/commit/75541fe5122040b8cfd73471c49dc747a949ad64))
+- Extract checkpoint compaction scheduling ([a66396d](https://github.com/avacadorun-dev/soba-agent/commit/a66396d44956a3159282b24c947d11495d98a4d9))
+- Extract agent turn completion ([a9f6959](https://github.com/avacadorun-dev/soba-agent/commit/a9f69598a6ff453f0867cdf9f5161b0d2924d005))
+- Extract agent loop event bus ([85214f3](https://github.com/avacadorun-dev/soba-agent/commit/85214f35e42d06d688b9f4c135e575f80dbc3c02))
+- Move compact command use case ([8117553](https://github.com/avacadorun-dev/soba-agent/commit/8117553864e7f3a13fc9190b4ba650bb4e69d460))
+- Move mcp command use case ([b82ae19](https://github.com/avacadorun-dev/soba-agent/commit/b82ae198abaee008e1adf2b928ef4dbaf3f9e42f))
+- Move capsule command use case ([be58b7e](https://github.com/avacadorun-dev/soba-agent/commit/be58b7e844785311665e5c815f48c08f539b3588))
+- Wire skill commands through composition ([bb066e4](https://github.com/avacadorun-dev/soba-agent/commit/bb066e450d37e2cd2dac87a0a4fc8d32971b416d))
+- Move permissions command use case ([ea31923](https://github.com/avacadorun-dev/soba-agent/commit/ea31923e572ca2e9e4cf37a1a1c112e3629d7dc8))
+- Move project trust command use case ([4b95597](https://github.com/avacadorun-dev/soba-agent/commit/4b95597c0efddc52764ba3ccf18134a40e78a0d9))
+- Extract auto compact command decision ([29ec508](https://github.com/avacadorun-dev/soba-agent/commit/29ec50820e49109b22e6aef97893f58f7f0dfb8c))
+- Extract general command views ([ad31c4b](https://github.com/avacadorun-dev/soba-agent/commit/ad31c4b22c07105bb1020880057284ed785b23d2))
+- Move rewind command use case ([960d017](https://github.com/avacadorun-dev/soba-agent/commit/960d0179c34e4dc8170515afe08a13668b6a5a29))
+- Move sessions command use cases ([bd72d3f](https://github.com/avacadorun-dev/soba-agent/commit/bd72d3f1d77a43aff982116cf5be4561f3ab4d0f))
+- Extract session command views ([71c471c](https://github.com/avacadorun-dev/soba-agent/commit/71c471c9b13679e7d22d1c20c96ca3d530d188e7))
+- Extract observed tool batch execution ([4e7ab78](https://github.com/avacadorun-dev/soba-agent/commit/4e7ab78ac0e8db80dad0425e7118973c0f2763ac))
+- Move assistant supersede recording ([3c8b96c](https://github.com/avacadorun-dev/soba-agent/commit/3c8b96c95026ee03950b67b208abba97304f9e33))
+- Extract response continuation decision ([48979ec](https://github.com/avacadorun-dev/soba-agent/commit/48979ecfbf7495172603965083e78d13189b55e5))
+- Extract text-only turn decision ([5ec6205](https://github.com/avacadorun-dev/soba-agent/commit/5ec6205e08d9e0cc3109d7be382cc76044954e70))
+- Extract tool iteration decision ([ee83a1e](https://github.com/avacadorun-dev/soba-agent/commit/ee83a1eff96e7e238bb315994cf63d2fa036ffec))
+- Extract tool execution observation ([017c8be](https://github.com/avacadorun-dev/soba-agent/commit/017c8bede695e5f32509b576283d49b528d5d9fe))
+- Extract tool call session recording ([0f70b86](https://github.com/avacadorun-dev/soba-agent/commit/0f70b86f5a534a07bf68bf020a08084a5eb293ae))
+- Extract model turn execution ([d2179ed](https://github.com/avacadorun-dev/soba-agent/commit/d2179ed94870a2e4770370a469112da0896209ae))
+- Extract turn stop guards ([406f395](https://github.com/avacadorun-dev/soba-agent/commit/406f3959486875d051b445ed0b27f1e92eaa0fa8))
+- Extract response lifecycle handling ([d636953](https://github.com/avacadorun-dev/soba-agent/commit/d636953d0b77ecd8138e271049c59b03a98a5d91))
+- Extract finish call handling ([0070923](https://github.com/avacadorun-dev/soba-agent/commit/0070923c09186c0ba6af0f6b0fba4be74486bcec))
+- Extract turn prompt preparation ([7d077bf](https://github.com/avacadorun-dev/soba-agent/commit/7d077bff00ec040b5be02c52a93ecf8d69550c2c))
+- Extract auto verification opportunity ([8a8c2f9](https://github.com/avacadorun-dev/soba-agent/commit/8a8c2f97e5d0a87d09a6389574fa27e019289ceb))
+- Extract runtime adapter from factory ([4f5eb2d](https://github.com/avacadorun-dev/soba-agent/commit/4f5eb2d5b377ac05edcc779429959345648052f5))
+- Extract runtime skill stack ([10c1b36](https://github.com/avacadorun-dev/soba-agent/commit/10c1b363f20923de8777640d15a5fb2d816b8373))
+- Extract runtime MCP stack ([86a74be](https://github.com/avacadorun-dev/soba-agent/commit/86a74be3b6cb07cf51fe48d368831b24b6a5be2c))
+- Extract runtime provider stack ([7f0026a](https://github.com/avacadorun-dev/soba-agent/commit/7f0026a742f576b12560b2cc6c335aab3d97d5d0))
+- Extract runtime tool stack ([7f4c7ab](https://github.com/avacadorun-dev/soba-agent/commit/7f4c7abbb8e559104c736c08130f1119d27575e1))
+- Extract project file runtime wiring ([2ae653b](https://github.com/avacadorun-dev/soba-agent/commit/2ae653b094b01615cb5d91942d7f80aed28b8900))
+- Split general CLI commands ([41c4d12](https://github.com/avacadorun-dev/soba-agent/commit/41c4d12be65656be030fe97ba8a38cd5436b3c85))
+- Split skill CLI commands ([af41323](https://github.com/avacadorun-dev/soba-agent/commit/af4132322ec434194b1d8493c7310258b7c65f29))
+- Split session CLI commands ([f75b47e](https://github.com/avacadorun-dev/soba-agent/commit/f75b47e7f9bf675de47b770bd0049137860d6a96))
+- Split capsule CLI commands ([5525c17](https://github.com/avacadorun-dev/soba-agent/commit/5525c17656c5d54d9b7d03675c6fe48bde7555d9))
+- Split MCP CLI commands ([9ef1ad6](https://github.com/avacadorun-dev/soba-agent/commit/9ef1ad6efbaf6f68000fa348d24b428dba82468d))
+- Extract agent loop event builders ([36cdacb](https://github.com/avacadorun-dev/soba-agent/commit/36cdacbcdc7d99d6bc56f42b3bd712196757d29b))
+- Extract turn helpers from agent loop ([9383f10](https://github.com/avacadorun-dev/soba-agent/commit/9383f10601fd81dc000bb8171d7b7da48c9fb030))
+- Move project memory persistence to infrastructure ([61e5145](https://github.com/avacadorun-dev/soba-agent/commit/61e5145551859ac40d32d6f633ec57c65bffd8e8))
+- Inject project command file access ([03b5a92](https://github.com/avacadorun-dev/soba-agent/commit/03b5a924c84bf78d249ddfffeb4aeeaa6bd4dcdf))
+- Remove crypto dependency from tool executor ([79c324a](https://github.com/avacadorun-dev/soba-agent/commit/79c324ac216d261e24ff433ca9ad0b5342f886ec))
+- Remove filesystem read from system prompt ([309e752](https://github.com/avacadorun-dev/soba-agent/commit/309e752c73fb68dfd032b6b54d49ba41e4c7d182))
+- Inject project context into agent loop ([6e411e1](https://github.com/avacadorun-dev/soba-agent/commit/6e411e1c43957a0d4bd4588c412791f9183db780))
+- Catch CommonJS boundary imports ([07c360e](https://github.com/avacadorun-dev/soba-agent/commit/07c360e2f671f37907cddb0933c94dd27b984e30))
+- Route delivery layers through application APIs ([773ffca](https://github.com/avacadorun-dev/soba-agent/commit/773ffca318e4ecab4d73e246afc1a51fabaac00f))
+- Enforce application infrastructure boundary ([4831e2e](https://github.com/avacadorun-dev/soba-agent/commit/4831e2efc901e2a20e3727e3a7ea5387d93cfc04))
+- Move config bootstrap to composition ([812bb09](https://github.com/avacadorun-dev/soba-agent/commit/812bb09a16fe7283ec574558d52de31133ee78ff))
+- Move MCP runtime controller to infrastructure ([c801f8a](https://github.com/avacadorun-dev/soba-agent/commit/c801f8ad215fb1726777d2a34acd3fa2e50d5495))
+- Move session lifecycle persistence to infrastructure ([f985cd3](https://github.com/avacadorun-dev/soba-agent/commit/f985cd34b2ef6554aa52eb1f943a3d00489a706b))
+- Decouple capsule service from session manager ([b6534ef](https://github.com/avacadorun-dev/soba-agent/commit/b6534ef55989ede588bfd384e6b7a15cc5beaffa))
+- Move provider contracts out of infrastructure ([f9685cf](https://github.com/avacadorun-dev/soba-agent/commit/f9685cfb614f8227c68263566da9a773df575ff5))
+- Split application public entrypoints ([47863d3](https://github.com/avacadorun-dev/soba-agent/commit/47863d3de0454c4c000d0fdf998e1959d327ef0e))
+- Retire core namespace ([2a9c23f](https://github.com/avacadorun-dev/soba-agent/commit/2a9c23fcc3f5bcf90cf97be0001a49e4f3017e5b))
+- Refactor architecture boundaries ([5a3437c](https://github.com/avacadorun-dev/soba-agent/commit/5a3437c7ea40f6f94e902bf3ce0461da2ba66779))
+
+### Documentation
+
+- generate changelog from release tags ([bdcb1d3](https://github.com/avacadorun-dev/soba-agent/commit/bdcb1d3ade717b715c2e1b0add00143bf1bed7b3))
+
+### Maintenance
+
+- generate architecture dependency graph ([a188e4b](https://github.com/avacadorun-dev/soba-agent/commit/a188e4b43449ec986f9bd43130c502be3281d6be))
+
+## v0.5.1
+
+2026-06-28 发布为 `v0.5.1`。
+
+[Compare](https://github.com/avacadorun-dev/soba-agent/compare/v0.4.4...v0.5.1)
+
+### Added
+
+- add v0.5 evidence workflow ([f0acc7e](https://github.com/avacadorun-dev/soba-agent/commit/f0acc7e2d7520daf9d3cbc3361e018440400edaa))
+- improve ACP tool and command updates ([ba85c94](https://github.com/avacadorun-dev/soba-agent/commit/ba85c94e94a563a27937ebacc6c6762e3fad1a39))
+- expose ACP provider and model selectors ([4b82313](https://github.com/avacadorun-dev/soba-agent/commit/4b823139c12163443ab2bef614b0f6aec6876374))
+- add ACP client capability delegation ([0dd2eaf](https://github.com/avacadorun-dev/soba-agent/commit/0dd2eaf4118347d3d0eb0b89def2dd0663ce9abf))
+- add ACP tool content and permission mapping ([cec0b61](https://github.com/avacadorun-dev/soba-agent/commit/cec0b613fe531f18b31a5209251e3bf73f19c152))
+- add ACP lifecycle and prompt mapping ([db4b574](https://github.com/avacadorun-dev/soba-agent/commit/db4b57456652fe9fb4a2e7767b29e065cc2829eb))
+- add ACP protocol server foundation ([b90dfce](https://github.com/avacadorun-dev/soba-agent/commit/b90dfceb72e16f9d6c945b9698a8914f55fa9df7))
+
+### Fixed
+
+- enable ACP streaming by default ([9f9a216](https://github.com/avacadorun-dev/soba-agent/commit/9f9a216c506d6aea56e71b0acedd19460135fe52))
+- persist ACP runtime sessions ([386544d](https://github.com/avacadorun-dev/soba-agent/commit/386544db599e9179556b399bdb08104be96ff18d))
+- refresh ACP model selectors ([e51ac8d](https://github.com/avacadorun-dev/soba-agent/commit/e51ac8d77982dedf170e73ff7fec95e232732ef3))
+- prefer registry provider config ([956ec7d](https://github.com/avacadorun-dev/soba-agent/commit/956ec7da4f0ae021abaf877851f64dc87a4be43a))
+- support ACP session resume aliases ([5e08711](https://github.com/avacadorun-dev/soba-agent/commit/5e08711d896032814d9bbcd8fb3c0d12efe68ce9))
+- fallback to configured provider credentials ([ea396d4](https://github.com/avacadorun-dev/soba-agent/commit/ea396d4c0dfecb838ce19c102e2e257d830e3001))
+- stop advertising unsupported ACP resume ([23202a2](https://github.com/avacadorun-dev/soba-agent/commit/23202a2fa8deb4652858a2806b7480cba6d7d885))
+- pass flat API key into provider runtime ([9a9b193](https://github.com/avacadorun-dev/soba-agent/commit/9a9b193844c7fec30457fbf51743d45bc206c392))
+- emit ACP schema session updates ([6d57042](https://github.com/avacadorun-dev/soba-agent/commit/6d5704238c1c284fb941de0c18abc03955d7c0db))
+- surface ACP runtime errors without refusal stop reason ([73832aa](https://github.com/avacadorun-dev/soba-agent/commit/73832aa0d6ab0eb68700a3b84916cac9b7650a28))
+- advertise ACP load and resume capabilities ([756652d](https://github.com/avacadorun-dev/soba-agent/commit/756652d7d189a41c78117fa243813df8aeb4ff7e))
+- map ACP stop reasons to protocol enum ([4b56739](https://github.com/avacadorun-dev/soba-agent/commit/4b5673988914cb7e5728df034a33a8e256968790))
+- keep ACP session new on active runtime session ([236bbac](https://github.com/avacadorun-dev/soba-agent/commit/236bbac96646c32d75989b3d0e5388da851d19e1))
+
+### Changed
+
+- Fix CI typecheck strictness ([c81b728](https://github.com/avacadorun-dev/soba-agent/commit/c81b728b91b2083cdba8d8bff79fe54a72ca0b95))
+- Update docs favicon assets ([bb73636](https://github.com/avacadorun-dev/soba-agent/commit/bb73636bed78956df9c2a01300f2fb6454093f80))
+- Add provider app attribution headers ([4a6337b](https://github.com/avacadorun-dev/soba-agent/commit/4a6337b54795048c8cae6c85cd0cecee49226cab))
+- Suppress superseded final prose before finish ([88410fe](https://github.com/avacadorun-dev/soba-agent/commit/88410feef2a9659ea8cb09170e416c7cd11db6c7))
+- Harden completion and verification behavior ([8773c4d](https://github.com/avacadorun-dev/soba-agent/commit/8773c4da4232dba501673cd5028346ec4a611633))
+- Improve tool guidance and verification evidence ([691c7a5](https://github.com/avacadorun-dev/soba-agent/commit/691c7a5b96d84dd459923844aa9d022c97799ec1))
+- organize architecture layers ([580899d](https://github.com/avacadorun-dev/soba-agent/commit/580899dc933bd49cb4f02d1968789622e9863a6c))
+- add command service boundary ([9670cee](https://github.com/avacadorun-dev/soba-agent/commit/9670cee644077cae0eadb3c26870cb1bad63f86e))
+- extract context controller ([ad92544](https://github.com/avacadorun-dev/soba-agent/commit/ad92544399777b70e62743237a4975e7cbdc9e86))
+- extract completion and verification controllers ([0ebbf97](https://github.com/avacadorun-dev/soba-agent/commit/0ebbf9716a715e31f6891a8c161f34446da76a63))
+- extract permission broker ([44fb8a1](https://github.com/avacadorun-dev/soba-agent/commit/44fb8a195422c28091f70f1d5f3b7dfc2350b995))
+- extract runtime and execution boundaries ([e9e2d5f](https://github.com/avacadorun-dev/soba-agent/commit/e9e2d5f563709ed315a99c33e1c5f8c7142cac05))
+- Refine Russian landing copy ([af54ff8](https://github.com/avacadorun-dev/soba-agent/commit/af54ff8958da564c114d9a98350e1fa33fded44f))
+- Update docs site for v0.4.4 ([77dd1dd](https://github.com/avacadorun-dev/soba-agent/commit/77dd1dd29c0e87b85d44afa1ff933ee453f3b41d))
+- Update docs site version to v0.4.4 ([66b8579](https://github.com/avacadorun-dev/soba-agent/commit/66b8579fac9253de826472985a78f6cb99449d23))
+
+### Documentation
+
+- update v0.5 documentation ([af6086d](https://github.com/avacadorun-dev/soba-agent/commit/af6086d4794b88d2cbd8fac20b53749157cfa5a3))
+
+### Tests
+
+- add post-ACP architecture gate ([2bef11d](https://github.com/avacadorun-dev/soba-agent/commit/2bef11d343b390dfd80e937a92b2ed182313ff18))
+- add clean architecture pre-gate ([acccadd](https://github.com/avacadorun-dev/soba-agent/commit/acccadd3ab23b4f489ab4e8cdb233a144e1451b9))
+
+### Maintenance
+
+- add project skills ([4c70441](https://github.com/avacadorun-dev/soba-agent/commit/4c70441a886092ebb760eba4b421670b8e173349))
+- bump release version to 0.5.0 ([6510cd6](https://github.com/avacadorun-dev/soba-agent/commit/6510cd6ec0d3606f746ba6018fa17a116e927c1b))
+
+## v0.4.4
+
+2026-06-26 发布为 `v0.4.4`。
+
+[Compare](https://github.com/avacadorun-dev/soba-agent/compare/v0.4.2...v0.4.4)
+
+### Changed
+
+- Add SOBA bowl favicon ([f7f180d](https://github.com/avacadorun-dev/soba-agent/commit/f7f180db61a201a4ec67869d5e5df7de1f19baea))
+- Add SOBA brand assets to docs site ([f56f953](https://github.com/avacadorun-dev/soba-agent/commit/f56f9536a7b607f3e7fadae3426f4ae07af775f6))
+
+## v0.4.2
+
+2026-06-22 发布为 `v0.4.2`。
+
+[Compare](https://github.com/avacadorun-dev/soba-agent/compare/v0.4.1...v0.4.2)
+
+### Added
+
+- add landing seo metadata ([6ff7c46](https://github.com/avacadorun-dev/soba-agent/commit/6ff7c46da62daf4d848116869b5989828badd9df))
+
+### Fixed
+
+- accept finish-intent final text ([30b7521](https://github.com/avacadorun-dev/soba-agent/commit/30b7521e619419403ed7a0de571c3c8e6663a7b3))
+- refresh localized sidebar ([d7619cd](https://github.com/avacadorun-dev/soba-agent/commit/d7619cd66183c7f51f58dc1d4b0bf4a3fabfd472))
+- remove old version badges ([583b50b](https://github.com/avacadorun-dev/soba-agent/commit/583b50b9da0dde3d6ee23da663bc646c3c9c94a3))
+- make docs navigation static ([f315d03](https://github.com/avacadorun-dev/soba-agent/commit/f315d03f547bdc4873bcbc15fd9809c21b2a3060))
+
+### Documentation
+
+- refresh model recommendations ([1e91e1a](https://github.com/avacadorun-dev/soba-agent/commit/1e91e1a68ade56867cf6392c591089cd3a6e388b))
+- remove manual table of contents blocks ([07f0eb5](https://github.com/avacadorun-dev/soba-agent/commit/07f0eb55d1ee6a423adf3dd9d312494656902bb9))
+- rewrite russian roadmap copy ([30b2830](https://github.com/avacadorun-dev/soba-agent/commit/30b28303e4af449177c8df749ec3d0d009640fd7))
+- use safer ollama model limits ([473846d](https://github.com/avacadorun-dev/soba-agent/commit/473846d336f79e01377c95c74e135f3c38d50f58))
+- add github links and translate user guides ([e4bf18a](https://github.com/avacadorun-dev/soba-agent/commit/e4bf18af86be0c72b0a189b2b6cb967a1070600d))
+- translate first docs pages ([15dfbca](https://github.com/avacadorun-dev/soba-agent/commit/15dfbcabb02fad0bcda06217af55e7693e641c12))
+- make Russian landing copy warmer ([f2c28cb](https://github.com/avacadorun-dev/soba-agent/commit/f2c28cbcc808d4613a76c2d21c41d5aa1425939c))
+- soften Russian docs wording ([d1a7df9](https://github.com/avacadorun-dev/soba-agent/commit/d1a7df9c22e6e69377599dd7f1820414355ec5a4))
+- configure soba-agent.dev domain ([5d7a6a2](https://github.com/avacadorun-dev/soba-agent/commit/5d7a6a2b438de55431f3f0ddbc49df379eebaa67))
+- document pages deployment ([cb82907](https://github.com/avacadorun-dev/soba-agent/commit/cb82907d70fab7129dc69b730f699c6fc22e1bd7))
+
+### Maintenance
+
+- deploy docs site to pages ([17915f0](https://github.com/avacadorun-dev/soba-agent/commit/17915f0573e06fe32a4d80c2eb0378792d782acd))
+
+## v0.4.1
+
+2026-06-21 发布为 `v0.4.1`。
+
+[Compare](https://github.com/avacadorun-dev/soba-agent/releases/tag/v0.4.1)
+
+### Maintenance
+
+- pass repository to release publishing ([bd57205](https://github.com/avacadorun-dev/soba-agent/commit/bd57205ba7d4eda284190e25bdea3384aecbcf04))
+- remove design assets ([af9e8df](https://github.com/avacadorun-dev/soba-agent/commit/af9e8dfcd90f89c5d7217fc6dd270dc01e14d147))
+- build binaries on native runners ([2579a2f](https://github.com/avacadorun-dev/soba-agent/commit/2579a2ffcb0b19de416237718b69f22c001b6d86))
+- build before running CLI tests ([0f95f15](https://github.com/avacadorun-dev/soba-agent/commit/0f95f15441186b994ecaa76bd7ef4e2ef08491f8))
+- prepare public release ([5d88783](https://github.com/avacadorun-dev/soba-agent/commit/5d887837404ab3f9c10611bf067803dc799aef53))
