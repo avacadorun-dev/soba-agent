@@ -103,7 +103,7 @@ const stages = [
   },
   {
     icon: Workflow,
-    release: "v0.5",
+    release: "v0.6",
     state: { en: "Next", ru: "Следом", zh: "下一步" },
     title: {
       en: "Visible proof",

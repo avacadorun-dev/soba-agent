@@ -47,7 +47,7 @@ const pagesByLang: Record<SupportedLang, DocsPage[]> = {
     {
       slug: "walkthrough-building-a-project",
       path: "walkthrough-building-a-project.ru.mdx",
-      title: "Проект шаг за шагом: v0.5 workflow",
+      title: "Проект шаг за шагом: v0.6 workflow",
     },
   ],
   zh: [

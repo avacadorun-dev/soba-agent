@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.4.1"
+        description: "Release tag, for example v0.6.0"
         required: true
         type: string
 
@@ -50,6 +50,9 @@ jobs:
 
       - name: Versioned docs snapshot
         run: bun run docs:version:check
+
+      - name: Docs release baseline
+        run: bun run docs:release-baseline:check
 
       - name: Test
         run: bun test

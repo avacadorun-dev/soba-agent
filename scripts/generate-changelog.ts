@@ -42,6 +42,8 @@ const outputFiles: Record<Lang, string> = {
   zh: "docs-site/content/docs/changelog.zh.mdx",
 };
 
+const documentationBaselineTag = "v0.6.0";
+
 const categoryOrder: Category[] = [
   "added",
   "fixed",
@@ -172,6 +174,33 @@ function releaseTags(): string[] {
   return output ? output.split("\n").filter(Boolean) : [];
 }
 
+function versionParts(tag: string): [number, number, number] | undefined {
+  const match = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return;
+
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = versionParts(left);
+  const rightParts = versionParts(right);
+
+  if (!leftParts || !rightParts) {
+    return left.localeCompare(right);
+  }
+
+  for (let index = 0; index < leftParts.length; index++) {
+    const delta = leftParts[index] - rightParts[index];
+    if (delta !== 0) return delta;
+  }
+
+  return 0;
+}
+
+function documentationTags(): string[] {
+  return releaseTags().filter((tag) => compareVersions(tag, documentationBaselineTag) >= 0);
+}
+
 function commitDate(ref: string): string {
   return runGit(["log", "-1", "--format=%cs", ref]);
 }
@@ -200,7 +229,7 @@ function isReleaseCommit(subject: string): boolean {
 }
 
 function buildSections(options: { nextTag?: string } = {}): ChangelogSection[] {
-  const tags = releaseTags();
+  const tags = documentationTags();
   const sections: ChangelogSection[] = [];
   const latestTag = tags.at(-1);
 
@@ -229,7 +258,7 @@ function buildSections(options: { nextTag?: string } = {}): ChangelogSection[] {
       previousTag,
       date: commitDate(tag),
       linkCommits: true,
-      commits: commitsForRange(previousTag ? `${previousTag}..${tag}` : tag),
+      commits: previousTag ? commitsForRange(`${previousTag}..${tag}`) : [],
     });
   }
 
@@ -313,10 +342,12 @@ function renderSectionBody(section: ChangelogSection, lang: Lang, repoUrl: strin
     lines.push(`### ${labels.categories[category]}`, "");
     for (const commit of commits) {
       const subject = escapeMarkdown(stripConventionalPrefix(commit.subject));
-      const hash = section.linkCommits
-        ? `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`
-        : `\`${commit.shortHash}\``;
-      lines.push(`- ${subject} (${hash})`);
+      if (section.linkCommits) {
+        const hash = `[${commit.shortHash}](${repoUrl}/commit/${commit.fullHash})`;
+        lines.push(`- ${subject} (${hash})`);
+      } else {
+        lines.push(`- ${subject}`);
+      }
     }
     lines.push("");
   }
