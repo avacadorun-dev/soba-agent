@@ -92,10 +92,12 @@ const rules = [
 ```
 
 For `allowOnlyPublicApplicationApi`, delivery layers may import their own
-delivery concerns and `src/shared/**`, but every cross-layer dependency must go
-through public application API modules. They must not import `src/core`,
-`src/kernel`, `src/engine`, `src/infrastructure`, `src/adapters`,
-`src/apps`, `src/ui`, or `src/composition` directly.
+delivery concerns and `src/shared/**`; executable ACP host code may import the
+ACP protocol adapter, and the CLI host may import terminal UI and terminal
+integration modules it launches directly. Every other cross-layer dependency
+must go through public application API modules. Delivery layers must not import
+`src/core`, `src/kernel`, `src/engine`, broad `src/infrastructure`, or
+`src/composition` directly.
 
 ## Laws
 

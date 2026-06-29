@@ -12,10 +12,19 @@
  */
 
 import { batch, createSignal } from "solid-js";
-import type { ModelDefinition, OpenResponsesClientProxy, ProviderDefinition, TranslationKey } from "../../../../application/ui/public";
+import type {
+  ModelDefinition,
+  ProviderDefinition,
+  RuntimeModelChangeSource,
+  RuntimeProviderCatalog,
+  TranslationKey,
+} from "../../../../application/ui/public";
 import { 
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-  DEFAULT_SYNTHETIC_MAX_OUTPUT,findBuiltinProvider, I18n, ProviderRegistry } from "../../../../application/ui/public";
+  DEFAULT_SYNTHETIC_MAX_OUTPUT,
+  findBuiltinProvider,
+  I18n,
+} from "../../../../application/ui/public";
 import type { NotificationStore } from "./notification-store";
 
 export type ModelSelectorModel = ModelDefinition & {
@@ -43,8 +52,8 @@ export interface ModelSelectorEntry {
 }
 
 export interface ProviderStoreOptions {
-  registry: ProviderRegistry;
-  proxy: OpenResponsesClientProxy;
+  registry: RuntimeProviderCatalog;
+  proxy: RuntimeModelChangeSource;
   i18n?: I18n;
   /** Optional notification store for test-connection results (Phase 2.5 B1d). */
   notificationStore?: NotificationStore;
@@ -56,8 +65,8 @@ export type ModelSelectorStatus =
   | { kind: "failed"; providerId: string; modelId: string; message: string };
 
 export class ProviderStore {
-  readonly registry: ProviderRegistry;
-  readonly proxy: OpenResponsesClientProxy;
+  readonly registry: RuntimeProviderCatalog;
+  readonly proxy: RuntimeModelChangeSource;
   private readonly i18n: I18n;
   private notificationStore?: NotificationStore;
   // Detached change handler returned by proxy.onChange; called from dispose().

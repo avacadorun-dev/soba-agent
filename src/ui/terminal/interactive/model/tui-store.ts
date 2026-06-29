@@ -1,5 +1,5 @@
 import { type Accessor, batch, createSignal, type Setter } from "solid-js";
-import type { AgentEvent, TranslationKey } from "../../../../application/ui/public";
+import type { RuntimeEvent, TranslationKey } from "../../../../application/ui/public";
 import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
@@ -41,7 +41,7 @@ export class TuiStore {
   readonly fileTree: Accessor<string[]>;
   private readonly setFileTree: Setter<string[]>;
   readonly changes: Accessor<ChangeStat[]>;
-  readonly confirmation: Accessor<Extract<AgentEvent, { type: "dangerous_confirmation" }> | null>;
+  readonly confirmation: Accessor<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   readonly inputValue: Accessor<string>;
   readonly lastAssistantText: Accessor<string>;
   readonly isProcessing: Accessor<boolean>;
@@ -72,7 +72,7 @@ export class TuiStore {
   private readonly setUsedTokens: Setter<number>;
   private readonly setEffectiveContextTokens: Setter<number>;
   private readonly setChanges: Setter<ChangeStat[]>;
-  private readonly setConfirmation: Setter<Extract<AgentEvent, { type: "dangerous_confirmation" }> | null>;
+  private readonly setConfirmation: Setter<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   private readonly _toolSummaries = new Map<string, string>();
   private readonly _toolDetails = new Map<string, string[]>();
   private readonly setInputValue: Setter<string>;
@@ -125,7 +125,7 @@ export class TuiStore {
     [this.fileTree, this.setFileTree] = createSignal<string[]>(buildFileTree(options.cwd));
     [this.changes, this.setChanges] = createSignal<ChangeStat[]>(readChangeStats(options.cwd));
     [this.confirmation, this.setConfirmation] = createSignal<Extract<
-      AgentEvent,
+      RuntimeEvent,
       { type: "dangerous_confirmation" }
     > | null>(null);
     [this.inputValue, this.setInputValue] = createSignal("");
@@ -547,7 +547,7 @@ export class TuiStore {
     await this.runNextQueued();
   }
 
-  onAgentEvent(event: AgentEvent): void {
+  onAgentEvent(event: RuntimeEvent): void {
     switch (event.type) {
       case "turn_start":
         this.add({ type: "user", content: event.userInput });

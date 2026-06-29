@@ -12,29 +12,31 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
-import type { AcpClientRequester, ApprovalDecision, Locale, RuntimeEvent, RuntimeSessionHandle, SobaConfig } from "../../application/cli/public";
 import {
-  APP_VERSION,
-  createRenderer,
-  detectLocale,
   firstTimeSetup,
-  I18n,
-  initTheme,
-  isLocale,
   listSessions,
   loadConfig,
   resolveCompactionConfig,
   resolveSoundConfig,
   SessionManager,
-  SoundNotifier,
-  setColorDisabled,
   validateConfig,
 } from "../../application/cli/public";
+import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/public";
 import { createSobaRuntime } from "../../application/runtime/public";
+import { SoundNotifier } from "../../infrastructure/terminal/sound-notifier";
+import { detectLocale, I18n, isLocale } from "../../shared/i18n/i18n";
+import type { Locale } from "../../shared/i18n/types";
+import { APP_VERSION } from "../../shared/version";
+import { setColorDisabled } from "../../ui/terminal/output/colors";
+import { createRenderer } from "../../ui/terminal/output/renderer";
+import { initTheme } from "../../ui/terminal/output/theme";
 import { parseArgs, printHelp } from "./args";
 
 const VERSION = APP_VERSION;
+
+type ApprovalDecision = "deny" | "once" | "session" | "repo" | "full";
 
 // ─── Helpers ───
 
@@ -285,7 +287,7 @@ async function main() {
   if (cliArgs.soundVolume !== undefined) soundCli.volume = cliArgs.soundVolume;
   if (cliArgs.soundRepeat) soundCli.repeatMode = "repeat";
   if (Object.keys(soundCli).length > 0) {
-    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<import("../../application/cli/public").SoundConfig>;
+    cliOverrides.sound = { ...cliOverrides.sound, ...soundCli } as Partial<SoundConfig>;
   }
 
   const configPath = process.env.SOBA_CONFIG_PATH;
@@ -315,7 +317,7 @@ async function main() {
 
     const cwd = process.cwd();
     const session = SessionManager.create(cwd);
-    const { AcpClientToolDelegation } = await import("../../application/cli/public");
+    const { AcpClientToolDelegation } = await import("../../adapters/acp/client-delegation");
     let acpRequestClient: AcpClientRequester | undefined;
     const acpToolDelegation = new AcpClientToolDelegation(() => acpRequestClient);
     const runtimeComposition = await createSobaRuntime({
@@ -349,7 +351,6 @@ async function main() {
           skillManager: context.skillManager,
           skillCommands: context.skillCommands,
           agentLoop: context.agentLoop,
-          registry: context.providerRegistry,
           mcpRuntime: context.mcpRuntime,
           mcpManager: context.mcpManager,
           mcpSecretStore: context.mcpSecretStore,
@@ -360,7 +361,7 @@ async function main() {
       },
       providerRegistryConfigPath: configPath,
     });
-    const { runAcpServer } = await import("../../application/acp/public");
+    const { runAcpServer } = await import("../acp/server");
     await runAcpServer({
       runtime: runtimeComposition.runtime,
       cwd,
@@ -467,9 +468,11 @@ async function main() {
 
   // Interactive REPL mode — full-screen TUI (pi-agent style)
   if (interactive) {
-    const { configureOpenTuiAssets } = await import("../../application/cli/public");
+    const { configureOpenTuiAssets } = await import("../../ui/terminal/open-tui-assets");
     configureOpenTuiAssets();
-    const { InteractiveTUI, ProviderStore, slashCommandRegistry } = await import("../../application/cli/public");
+    const { InteractiveTUI } = await import("../../ui/terminal/interactive-tui");
+    const { ProviderStore } = await import("../../ui/terminal/interactive/model/provider-store");
+    const { slashCommandRegistry } = await import("../../ui/terminal/interactive/commands/registry");
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
     const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({
@@ -506,7 +509,6 @@ async function main() {
           skillManager,
           skillCommands,
           agentLoop: loop,
-          registry: providerRegistry,
           mcpRuntime,
           mcpManager,
           mcpSecretStore,

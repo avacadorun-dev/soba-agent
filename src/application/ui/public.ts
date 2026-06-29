@@ -1,11 +1,6 @@
-export { createFilesystemProjectTrustStore, OpenResponsesClientProxy, ProviderRegistry } from "../../composition/ui/public";
-export { AgentLoop } from "../../engine/turn/agent-loop";
-export type {
-  AgentEvent,
-  AgentState,
-  AgentTurnError,
-  AgentTurnResult,
-} from "../../engine/turn/types";
+import type { ModelDefinition, ProviderDefinition, TestResult } from "../providers/public";
+import type { PermissionMode } from "../trust/trust-manager";
+
 export { CURRENT_SESSION_VERSION } from "../../kernel/session/version";
 export type { SessionInfo } from "../../kernel/transcript/types";
 export { detectLocale, I18n, isLocale, resetI18n } from "../../shared/i18n/i18n";
@@ -45,6 +40,7 @@ export {
 export type {
   ModelDefinition,
   ProviderDefinition,
+  TestResult,
 } from "../providers/public";
 export {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
@@ -84,3 +80,73 @@ export type {
   Unsubscribe,
   UserTurnInput,
 } from "../types";
+
+export interface RuntimeAgentTrustController {
+  getPermissionMode(): PermissionMode;
+  setPermissionMode(mode: PermissionMode): void;
+  clearSessionApprovals(): void;
+}
+
+export interface RuntimeAgentSessionView {
+  isPersisted(): boolean;
+  getSessionId(): string;
+}
+
+export interface RuntimeAgentContextDebugInfo {
+  source: "provider_usage" | "estimated";
+  safetyReserveTokens: number;
+  maxOutputTokens: number;
+  contextWindow: number;
+  hardLimit: number;
+  effectiveTokens: number;
+}
+
+export interface RuntimeAgentContextView {
+  getDebugInfo(): RuntimeAgentContextDebugInfo;
+}
+
+export interface RuntimeAgentHandle {
+  getTrustManager?(): RuntimeAgentTrustController;
+  getModel(): string;
+  getSessionManager(): RuntimeAgentSessionView;
+  getContextManager(): RuntimeAgentContextView | undefined;
+  abortActiveTool(): boolean;
+  abort(): void;
+  runTurn(userText: string): Promise<unknown>;
+  runShellCommand(command: string, silent?: boolean): Promise<unknown>;
+}
+
+export interface RuntimeModelChange {
+  providerId: string;
+  modelId: string;
+  previous: { providerId: string; modelId: string };
+}
+
+export type RuntimeModelChangeHandler = (info: RuntimeModelChange) => void;
+
+export interface RuntimeModelChangeSource {
+  onChange(handler: RuntimeModelChangeHandler): () => void;
+  notifyChange(): boolean;
+}
+
+export type RuntimeModelDiscoveryStatus =
+  | { kind: "loaded" }
+  | { kind: "pending" }
+  | { kind: "failed"; message: string };
+
+export interface RuntimeProviderCatalog {
+  getActiveProvider(): ProviderDefinition;
+  getActiveModel(): ModelDefinition;
+  getAllProviders(): ProviderDefinition[];
+  getModelsFor(providerId: string): ModelDefinition[];
+  getModelDiscoveryStatus(providerId: string): RuntimeModelDiscoveryStatus;
+  getProvider(providerId: string): ProviderDefinition | undefined;
+  getModel(providerId: string, modelId: string): ModelDefinition | undefined;
+  switchModel(providerId: string, modelId: string): unknown;
+  refreshBuiltinModels(onUpdate?: () => void): Promise<void>;
+  testConnection(
+    providerId: string,
+    modelId: string,
+    options?: { signal?: AbortSignal; apiKey?: string; baseUrl?: string },
+  ): Promise<TestResult>;
+}

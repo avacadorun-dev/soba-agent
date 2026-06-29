@@ -2,8 +2,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import type { I18n } from "../../application/cli/public";
 import { computeSkillContentHashOnDisk, createFilesystemProjectTrustStore, FilesystemSkillValidationFilesystem, firstTimeSetup, getMcpConfigPath, loadConfig, loadMcpConfig, McpSecretStore, SkillDiscovery, validateConfig, validateSkillOnDisk } from "../../application/cli/public";
+import type { I18n } from "../../shared/i18n/i18n";
 
 export interface InitCommandOptions {
   yes: boolean;

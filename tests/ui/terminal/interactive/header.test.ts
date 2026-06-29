@@ -7,7 +7,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProjectTrustStore } from "../../../../src/application/skills/project-trust-store";
-import type { AgentLoop } from "../../../../src/engine/turn/agent-loop";
+import type { RuntimeAgentHandle } from "../../../../src/application/ui/public";
 import { createFilesystemProjectTrustStore } from "../../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../../src/ui/terminal/interactive/model/types";
@@ -20,7 +20,7 @@ function createStore(
   const agentLoop = {
     getModel: () => "test-model",
     runTurn: async () => {},
-  } as unknown as AgentLoop;
+  } as unknown as RuntimeAgentHandle;
   const options: InteractiveTUIOptions = {
     cwd,
     tokenBudget: 10_000,

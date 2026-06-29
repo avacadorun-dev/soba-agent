@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Node, Project, SyntaxKind } from "ts-morph";
 
 interface BoundaryRule {
   from: string;
@@ -8,6 +9,12 @@ interface BoundaryRule {
 }
 
 const projectRoot = process.cwd();
+const project = new Project({
+  tsConfigFilePath: existsSync(join(projectRoot, "tsconfig.json"))
+    ? join(projectRoot, "tsconfig.json")
+    : undefined,
+  skipAddingFilesFromTsConfig: true,
+});
 
 const rules: BoundaryRule[] = [
   {
@@ -101,14 +108,35 @@ function walkTypescriptFiles(root: string): string[] {
   return files;
 }
 
-function importSpecifiers(source: string): string[] {
+function importSpecifiers(file: string): string[] {
+  const sourceFile = project.addSourceFileAtPathIfExists(file);
+  if (!sourceFile) return [];
+
   const specifiers: string[] = [];
-  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?["']([^"']+)["']/g;
-  const dynamicImportRe = /import\(\s*["']([^"']+)["']\s*\)/g;
-  const requireRe = /require\(\s*["']([^"']+)["']\s*\)/g;
-  for (const match of source.matchAll(importRe)) specifiers.push(match[1]);
-  for (const match of source.matchAll(dynamicImportRe)) specifiers.push(match[1]);
-  for (const match of source.matchAll(requireRe)) specifiers.push(match[1]);
+  for (const declaration of sourceFile.getImportDeclarations()) {
+    specifiers.push(declaration.getModuleSpecifierValue());
+  }
+  for (const declaration of sourceFile.getExportDeclarations()) {
+    const specifier = declaration.getModuleSpecifierValue();
+    if (specifier) specifiers.push(specifier);
+  }
+
+  sourceFile.forEachDescendant((node) => {
+    if (!Node.isCallExpression(node)) return;
+    const expression = node.getExpression();
+    const firstArg = node.getArguments()[0];
+    if (!firstArg || !(Node.isStringLiteral(firstArg) || Node.isNoSubstitutionTemplateLiteral(firstArg))) {
+      return;
+    }
+    if (expression.getKind() === SyntaxKind.ImportKeyword) {
+      specifiers.push(firstArg.getLiteralText());
+      return;
+    }
+    if (Node.isIdentifier(expression) && expression.getText() === "require") {
+      specifiers.push(firstArg.getLiteralText());
+    }
+  });
+
   return specifiers;
 }
 
@@ -137,6 +165,9 @@ function matchesPattern(resolved: string, pattern: string): boolean {
 function violatesPublicApplicationApi(resolved: string, allowedLocalRoot: string): boolean {
   if (!resolved.startsWith("src/")) return false;
   if (resolved.startsWith(`${allowedLocalRoot}/`)) return false;
+  if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/adapters/acp/")) return false;
+  if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/ui/terminal/")) return false;
+  if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/infrastructure/terminal/")) return false;
   if (resolved.startsWith("src/shared/")) return false;
   if (!resolved.startsWith("src/application/")) return true;
   return !isPublicApplicationApi(resolved);
@@ -154,8 +185,7 @@ if (existsSync(join(projectRoot, "src", "core"))) {
 
 const applicationPublicPath = join(projectRoot, "src", "application", "public.ts");
 if (existsSync(applicationPublicPath)) {
-  const source = readFileSync(applicationPublicPath, "utf8");
-  for (const specifier of importSpecifiers(source)) {
+  for (const specifier of importSpecifiers(applicationPublicPath)) {
     const resolved = resolveProjectImport(applicationPublicPath, specifier);
     if (!resolved) continue;
     if (
@@ -172,10 +202,32 @@ if (existsSync(applicationPublicPath)) {
   }
 }
 
+const strictApplicationPublicPaths = [
+  "src/application/acp/public.ts",
+  "src/application/ui/public.ts",
+];
+for (const publicPath of strictApplicationPublicPaths) {
+  const absolutePublicPath = join(projectRoot, publicPath);
+  if (!existsSync(absolutePublicPath)) continue;
+  for (const specifier of importSpecifiers(absolutePublicPath)) {
+    const resolved = resolveProjectImport(absolutePublicPath, specifier);
+    if (!resolved) continue;
+    if (
+      resolved.startsWith("src/composition/") ||
+      resolved.startsWith("src/engine/") ||
+      resolved.startsWith("src/infrastructure/") ||
+      resolved.startsWith("src/apps/") ||
+      resolved.startsWith("src/adapters/") ||
+      resolved.startsWith("src/ui/")
+    ) {
+      violations.push(`${publicPath} -> ${specifier} (public API must not re-export concrete layers)`);
+    }
+  }
+}
+
 for (const rule of rules) {
   for (const file of walkTypescriptFiles(rootFromGlob(rule.from))) {
-    const source = readFileSync(file, "utf8");
-    for (const specifier of importSpecifiers(source)) {
+    for (const specifier of importSpecifiers(file)) {
       const resolved = resolveProjectImport(file, specifier);
       if (!resolved) continue;
 
