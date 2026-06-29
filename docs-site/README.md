@@ -64,5 +64,12 @@ bun run docs:changelog
 bun run docs:changelog:check
 ```
 
+Before creating a release tag, render the future version section into the release commit:
+
+```bash
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z
+bun run scripts/generate-changelog.ts --next-tag vX.Y.Z --check
+```
+
 CI and the release workflow run the check variant. GitHub release notes are generated with
 `bun run scripts/generate-changelog.ts --release-notes "$RELEASE_TAG"`.
