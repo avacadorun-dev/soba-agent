@@ -1,4 +1,4 @@
-import type { TrustController, TrustLevel } from "../../engine/permissions/trust-controller";
+import type { TrustController, TrustLevel } from "../../kernel/permissions/trust";
 import { assertValidHeaderName, McpAuthConfigError } from "./auth";
 import { MCP_SESSION_ID_HEADER } from "./http-session";
 import type { McpTrustMode } from "./types";

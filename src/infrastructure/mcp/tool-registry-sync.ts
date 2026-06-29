@@ -1,4 +1,4 @@
-import type { TrustController } from "../../engine/permissions/trust-controller";
+import type { TrustController } from "../../kernel/permissions/trust";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { McpManagedServerStatus } from "./client-manager";
 import { applyMcpToolTrustRules, createDefaultMcpServerSecurity, type McpToolTrustRule } from "./security";

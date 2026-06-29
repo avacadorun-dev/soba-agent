@@ -4,15 +4,15 @@
  * Commands are prefixed with "/" and processed before sending to the LLM.
  */
 
-import type { ContextManager } from "../../../engine/compaction/context-manager";
-import type { TrustController } from "../../../engine/permissions/trust-controller";
-import type { AgentLoop } from "../../../engine/turn/agent-loop";
 import type { OpenResponsesClient } from "../../../kernel/model/model-gateway";
+import type { TrustController } from "../../../kernel/permissions/trust";
 import type { ToolRegistry } from "../../../kernel/tools/tool-registry";
 import type { I18n } from "../../../shared/i18n/i18n";
 import type { PortableCapsuleServiceFactory } from "../../capsules";
 import type { CommandResult, RuntimeCommandMetadata } from "../../command-service";
+import type { CompactContextManagerPort } from "../../commands/compact";
 import type { McpSecretStoreLike } from "../../commands/mcp";
+import type { SessionContextSnapshotView } from "../../commands/session";
 import type { SobaConfig } from "../../config/types";
 import type { McpRuntimeControllerLike, McpRuntimeManager } from "../../mcp-runtime-controller";
 import type { RuntimeSessionHandle, SessionLifecycleService } from "../../session-lifecycle";
@@ -50,11 +50,11 @@ export interface CommandContext {
   config: SobaConfig;
   i18n: I18n;
   renderer: CommandRenderer;
-  contextManager?: ContextManager;
+  contextManager?: CommandContextManagerPort;
   autoCompactOverride?: { enabled: boolean };
   skillManager?: SkillManager;
   skillCommands?: SkillCommands;
-  agentLoop?: AgentLoop;
+  agentLoop?: CommandAgentPort;
   mcpRuntime?: McpRuntimeControllerLike;
   mcpManager?: McpRuntimeManager;
   mcpSecretStore?: McpSecretStoreLike;
@@ -74,6 +74,27 @@ export interface CommandContext {
 
 interface CommandRenderer {
   emit(event: { type: string; timestamp?: number; [key: string]: unknown }): void;
+}
+
+export interface CommandAgentPort {
+  getTrustManager(): TrustController;
+  setSessionManager(session: RuntimeSessionHandle): void;
+  getAutoCompactOverride(): { enabled: boolean } | undefined;
+  setAutoCompactOverride(override: { enabled: boolean }): void;
+}
+
+export interface CommandContextPolicyPort {
+  getConfig(): { auto: boolean };
+  setAuto(enabled: boolean): void;
+}
+
+export interface CommandContextManagerPort extends CompactContextManagerPort {
+  getSnapshot(
+    systemPromptTokens: number,
+    toolSchemaTokens: number,
+    requestFingerprint: string,
+  ): SessionContextSnapshotView;
+  getPolicy(): CommandContextPolicyPort;
 }
 
 interface SlashCommandContext {

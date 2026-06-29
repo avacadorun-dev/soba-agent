@@ -16,9 +16,13 @@ import { spawn } from "node:child_process";
 import { accessSync, constants, existsSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import type { SoundConfig } from "../../application/config/types";
-import { type AgentEvent } from "../../engine/turn/types";
 
 export type PlaySoundFn = (filePath: string) => void;
+
+export interface SoundNotifierEvent {
+  type: string;
+  reason?: string;
+}
 
 /** Resolve audio files directory relative to the module or binary location */
 export function getAudioDir(): string {
@@ -107,7 +111,7 @@ export class SoundNotifier {
   }
 
   /** Handle an agent event and play the appropriate sound if enabled */
-  handleEvent(event: AgentEvent): void {
+  handleEvent(event: SoundNotifierEvent): void {
     if (!this.config.enabled) return;
 
     let soundFile: string | null = null;
