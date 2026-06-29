@@ -646,7 +646,10 @@ function capsuleMatchesFilters(capsule: MemoryCapsule, filters: CapsuleListFilte
 }
 
 function sanitizeMemoryText(text: string): string {
-  return sanitizePortableText(text).replace(/\$\{ENV:([A-Z_][A-Z0-9_]*)\}/g, "[REDACTED:env_placeholder]");
+  return sanitizePortableText(text, { homeDirectory: process.env.HOME ?? null }).replace(
+    /\$\{ENV:([A-Z_][A-Z0-9_]*)\}/g,
+    "[REDACTED:env_placeholder]",
+  );
 }
 
 function truncateString(text: string, maxBytes: number): { text: string; truncated: boolean } {

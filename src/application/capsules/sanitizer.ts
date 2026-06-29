@@ -25,6 +25,11 @@ interface RedactionState {
   nextByCategory: Map<RedactionCategory, number>;
 }
 
+export interface PortableCapsuleSanitizationOptions {
+  now?: Date;
+  homeDirectory?: string | null;
+}
+
 const PRIVATE_KEY_PATTERN = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g;
 const CREDENTIAL_URL_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^/\s@]+)@/gi;
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/g;
@@ -78,14 +83,19 @@ const REDACTION_RULES: RedactionRule[] = [
   },
 ];
 
-export function sanitizePortableCapsule(capsule: PortableCapsule, now = new Date()): PortableCapsule {
+export function sanitizePortableCapsule(
+  capsule: PortableCapsule,
+  options: Date | PortableCapsuleSanitizationOptions = {},
+): PortableCapsule {
+  const normalizedOptions = normalizeSanitizationOptions(options);
+  const now = normalizedOptions.now;
   const state: RedactionState = {
     markers: new Map(),
     counts: new Map(),
     nextByCategory: new Map(),
   };
   const input = { ...capsule, sanitation: emptySanitationReport(now) };
-  const sanitized = sanitizeUnknown(input, state, getHomeDirectory()) as PortableCapsule;
+  const sanitized = sanitizeUnknown(input, state, normalizeHomeDirectory(normalizedOptions.homeDirectory)) as PortableCapsule;
   const report: PortableCapsuleSanitationReport = {
     checkedAt: now.toISOString(),
     redactions: Array.from(state.counts.entries())
@@ -100,13 +110,13 @@ export function sanitizePortableCapsule(capsule: PortableCapsule, now = new Date
   };
 }
 
-export function sanitizePortableText(text: string): string {
+export function sanitizePortableText(text: string, options: Pick<PortableCapsuleSanitizationOptions, "homeDirectory"> = {}): string {
   const state: RedactionState = {
     markers: new Map(),
     counts: new Map(),
     nextByCategory: new Map(),
   };
-  return sanitizeString(text, state, getHomeDirectory());
+  return sanitizeString(text, state, normalizeHomeDirectory(options.homeDirectory));
 }
 
 export function detectPotentialSecret(text: string): boolean {
@@ -180,8 +190,20 @@ function incrementCount(category: RedactionCategory, state: RedactionState): voi
   state.counts.set(category, (state.counts.get(category) ?? 0) + 1);
 }
 
-function getHomeDirectory(): string | null {
-  const home = process.env.HOME;
+function normalizeSanitizationOptions(options: Date | PortableCapsuleSanitizationOptions): Required<PortableCapsuleSanitizationOptions> {
+  if (options instanceof Date) {
+    return {
+      now: options,
+      homeDirectory: null,
+    };
+  }
+  return {
+    now: options.now ?? new Date(),
+    homeDirectory: options.homeDirectory ?? null,
+  };
+}
+
+function normalizeHomeDirectory(home: string | null | undefined): string | null {
   if (!home || home === "/") return null;
   return home;
 }

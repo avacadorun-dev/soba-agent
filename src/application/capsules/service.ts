@@ -42,6 +42,7 @@ export class PortableCapsuleServiceError extends Error {
 
 export interface PortableCapsuleServiceOptions {
   storage: PortableCapsuleStorage;
+  homeDirectory?: string | null;
 }
 
 export interface PortableCapsuleWriteResult {
@@ -94,9 +95,11 @@ export type PortableCapsuleServiceFactory = (session: PortableCapsuleSession & {
 
 export class PortableCapsuleService {
   private readonly storage: PortableCapsuleStorage;
+  private readonly homeDirectory: string | null;
 
   constructor(options: PortableCapsuleServiceOptions) {
     this.storage = options.storage;
+    this.homeDirectory = options.homeDirectory ?? null;
   }
 
   getCapsulesDir(): string {
@@ -105,7 +108,7 @@ export class PortableCapsuleService {
 
   createFromSession(session: PortableCapsuleSession, options: PortableCapsuleCreateOptions = {}): PortableCapsuleWriteResult {
     const checkpoint = resolveCheckpoint(session, options.checkpointIdOrPrefix);
-    const capsule = buildPortableCapsuleFromCheckpoint(checkpoint, options);
+    const capsule = buildPortableCapsuleFromCheckpoint(checkpoint, this.withPrivacyContext(options));
     return this.writeCapsule(capsule, options.destinationPath);
   }
 
@@ -115,12 +118,12 @@ export class PortableCapsuleService {
     options: PortableCapsuleExportOptions,
   ): PortableCapsuleWriteResult {
     const checkpoint = resolveCheckpoint(session, checkpointIdOrPrefix);
-    const capsule = buildPortableCapsuleFromCheckpoint(checkpoint, options);
+    const capsule = buildPortableCapsuleFromCheckpoint(checkpoint, this.withPrivacyContext(options));
     return this.writeCapsule(capsule, options.destinationPath);
   }
 
   writeCapsule(capsule: PortableCapsule, destinationPath?: string): PortableCapsuleWriteResult {
-    const validation = validatePortableCapsule(capsule);
+    const validation = validatePortableCapsule(capsule, { homeDirectory: this.homeDirectory });
     if (!validation.valid) {
       throw new PortableCapsuleServiceError("invalid_capsule", "Portable capsule validation failed", validation.errors);
     }
@@ -151,7 +154,7 @@ export class PortableCapsuleService {
 
     try {
       const decoded = decodePortableCapsuleMarkdown(loadedFile.content);
-      const validation = validatePortableCapsule(decoded.capsule);
+      const validation = validatePortableCapsule(decoded.capsule, { homeDirectory: this.homeDirectory });
       if (!validation.valid) {
         throw new PortableCapsuleServiceError(
           "invalid_capsule",
@@ -207,6 +210,13 @@ export class PortableCapsuleService {
 
   private resolveInputFilePath(path: string): string {
     return this.storage.resolveInputFilePath(path);
+  }
+
+  private withPrivacyContext<T extends PortableCapsuleCreationOptions>(options: T): T {
+    return {
+      ...options,
+      homeDirectory: options.homeDirectory ?? this.homeDirectory,
+    };
   }
 }
 

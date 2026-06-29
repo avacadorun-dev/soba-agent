@@ -130,6 +130,7 @@ export interface PortableCapsuleCreationOptions {
   archetype?: PortableCapsuleArchetype;
   integrationPlan?: PortableCapsuleIntegrationStep[];
   verbatimPayloads?: Array<Omit<PortableCapsuleVerbatimPayload, "checksum"> | PortableCapsuleVerbatimPayload>;
+  homeDirectory?: string | null;
 }
 
 export interface PortableCapsuleDecodeResult {

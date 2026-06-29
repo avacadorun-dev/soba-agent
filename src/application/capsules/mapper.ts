@@ -52,7 +52,10 @@ export function buildPortableCapsuleFromCheckpoint(
     },
   };
 
-  return sanitizePortableCapsule(capsule, new Date(capsule.createdAt));
+  return sanitizePortableCapsule(capsule, {
+    now: new Date(capsule.createdAt),
+    homeDirectory: options.homeDirectory,
+  });
 }
 
 function buildDispatchSummary(state: PortableContextState): string {
