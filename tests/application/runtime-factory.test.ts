@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SobaConfig } from "../../src/application/config/types";
 import type { ProviderRegistryState } from "../../src/application/providers/types";
-import { createSobaRuntime } from "../../src/application/runtime/public";
+import { createSobaRuntime } from "../../src/composition/runtime/create-soba-runtime";
 import { DEFAULT_COMPACTION_CONFIG } from "../../src/engine/compaction/trigger-policy";
 import { SessionManager } from "../../src/infrastructure/persistence/sessions/session-manager";
 import type { ResponseResource, StreamingEvent } from "../../src/kernel/model/openresponses-types";

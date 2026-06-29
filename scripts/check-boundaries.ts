@@ -60,6 +60,7 @@ const rules: BoundaryRule[] = [
   {
     from: "src/application/**",
     deny: [
+      "src/composition/**",
       "src/infrastructure/**",
       "src/apps/**",
       "src/adapters/**",
@@ -106,6 +107,12 @@ function walkTypescriptFiles(root: string): string[] {
   };
   visit(absoluteRoot);
   return files;
+}
+
+function applicationPublicFacadePaths(): string[] {
+  return walkTypescriptFiles("src/application")
+    .map((file) => normalizeProjectPath(relative(projectRoot, file)))
+    .filter((file) => file.endsWith("/public") || file === "src/application/public");
 }
 
 function importSpecifiers(file: string): string[] {
@@ -165,6 +172,7 @@ function matchesPattern(resolved: string, pattern: string): boolean {
 function violatesPublicApplicationApi(resolved: string, allowedLocalRoot: string): boolean {
   if (!resolved.startsWith("src/")) return false;
   if (resolved.startsWith(`${allowedLocalRoot}/`)) return false;
+  if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/composition/")) return false;
   if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/adapters/acp/")) return false;
   if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/ui/terminal/")) return false;
   if (allowedLocalRoot === "src/apps" && resolved.startsWith("src/infrastructure/terminal/")) return false;
@@ -202,10 +210,9 @@ if (existsSync(applicationPublicPath)) {
   }
 }
 
-const strictApplicationPublicPaths = [
-  "src/application/acp/public.ts",
-  "src/application/ui/public.ts",
-];
+const strictApplicationPublicPaths = applicationPublicFacadePaths()
+  .filter((publicPath) => publicPath !== "src/application/public")
+  .map((publicPath) => `${publicPath}.ts`);
 for (const publicPath of strictApplicationPublicPaths) {
   const absolutePublicPath = join(projectRoot, publicPath);
   if (!existsSync(absolutePublicPath)) continue;

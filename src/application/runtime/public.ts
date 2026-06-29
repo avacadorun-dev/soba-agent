@@ -1,6 +1,22 @@
 export type {
-  RuntimeCommandExecutorFactoryContext,
-  RuntimeFactoryInput,
-  SobaRuntimeComposition,
-} from "../../composition/runtime/create-soba-runtime";
-export { createSobaRuntime } from "../../composition/runtime/create-soba-runtime";
+  CreateSessionInput,
+  ListSessionsInput,
+  LoadSessionInput,
+  OpenSessionInput,
+  ResumeSessionInput,
+  RuntimeCommandExecutionInput,
+  RuntimeCommandExecutor,
+  RuntimeContentBlock,
+  RuntimeEvent,
+  RuntimeEventListener,
+  RuntimeSessionConfigOption,
+  RuntimeSessionInfo,
+  RuntimeSessionSnapshot,
+  RuntimeSource,
+  SetSessionConfigInput,
+  SetSessionModeInput,
+  SobaRuntime,
+  TurnResult,
+  Unsubscribe,
+  UserTurnInput,
+} from "../types";

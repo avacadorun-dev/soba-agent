@@ -1,9 +1,5 @@
 import type { CommandResult, McpRuntimeManager } from "../public";
-import {
-  executeMcpCommand,
-  redactMcpSensitiveText,
-  syncMcpToolsIntoRegistry,
-} from "../public";
+import { executeMcpCommand } from "../public";
 import type { CommandContext } from "./index";
 
 export async function handleMcp(args: string[], ctx: CommandContext): Promise<CommandResult> {
@@ -13,7 +9,7 @@ export async function handleMcp(args: string[], ctx: CommandContext): Promise<Co
     manager: ctx.mcpManager,
     secretStore: ctx.mcpSecretStore,
     syncRegistry: createMcpRegistrySync(ctx),
-    redactError: redactMcpCommandError,
+    redactError: (input) => redactMcpCommandError(ctx, input),
   });
 
   ctx.renderer.emit({
@@ -26,22 +22,23 @@ export async function handleMcp(args: string[], ctx: CommandContext): Promise<Co
 }
 
 function createMcpRegistrySync(ctx: CommandContext): ((manager: McpRuntimeManager) => Promise<void>) | undefined {
-  if (!ctx.toolRegistry) {
+  if (!ctx.toolRegistry || !ctx.syncMcpToolsIntoRegistry) {
     return undefined;
   }
 
   return async (manager) => {
-    await syncMcpToolsIntoRegistry(ctx.toolRegistry!, manager, {
+    await ctx.syncMcpToolsIntoRegistry!(ctx.toolRegistry!, manager, {
       trustManager: ctx.trustManager ?? ctx.agentLoop?.getTrustManager(),
     });
   };
 }
 
-function redactMcpCommandError(input: {
+function redactMcpCommandError(ctx: CommandContext, input: {
   serverId?: string;
   message: string;
   manager?: McpRuntimeManager;
 }): string {
+  const redactMcpSensitiveText = ctx.redactMcpSensitiveText ?? ((text: string) => text);
   if (!input.serverId || !input.manager) {
     return redactMcpSensitiveText(input.message);
   }

@@ -9,7 +9,7 @@ import { type CommandContext, executeCommand } from "../../../src/apps/cli/comma
 import type { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import type { McpClientManagerStatus, McpManagedServerStatus, McpRemoteAuthCommandResult } from "../../../src/infrastructure/mcp/client-manager";
 import { McpSecretStore } from "../../../src/infrastructure/mcp/secret-store";
-import type { McpServerSecurity } from "../../../src/infrastructure/mcp/security";
+import { type McpServerSecurity, redactMcpSensitiveText } from "../../../src/infrastructure/mcp/security";
 import { createFilesystemPortableCapsuleService } from "../../../src/infrastructure/persistence/capsules/portable-capsule-storage";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
@@ -65,6 +65,7 @@ describe("slash commands", () => {
       i18n: new I18n("en"),
       renderer: { emit: (event: { type: string; message?: string }) => output.push(event) },
       portableCapsuleServiceFactory: createFilesystemPortableCapsuleService,
+      redactMcpSensitiveText,
     } as unknown as CommandContext;
   }
 

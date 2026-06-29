@@ -22,16 +22,16 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  _resetDeprecationWarningsForTests,
-  loadConfig,
-  loadConfigFromFile,
-  saveConfigToFile,
-} from "../src/application/config/config-loader";
-import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../src/application/providers/model-defaults";
 import type { ModelDefinition } from "../src/application/providers/types";
+import {
+  _resetDeprecationWarningsForTests,
+  loadConfig,
+  loadConfigFromFile,
+  saveConfigToFile,
+} from "../src/composition/config/config-loader";
 import { ProviderRegistry } from "../src/infrastructure/llm/providers/registry";
 
 let tmpDir: string;
