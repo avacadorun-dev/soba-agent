@@ -11,6 +11,20 @@ const projectRoot = process.cwd();
 
 const rules: BoundaryRule[] = [
   {
+    from: "src/shared/**",
+    deny: [
+      "src/application/**",
+      "src/engine/**",
+      "src/infrastructure/**",
+      "src/apps/**",
+      "src/adapters/**",
+      "src/ui/**",
+      "node:",
+      "bun:",
+      "@opentui/",
+    ],
+  },
+  {
     from: "src/kernel/**",
     deny: [
       "src/application/**",
