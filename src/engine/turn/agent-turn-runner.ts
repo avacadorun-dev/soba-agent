@@ -17,17 +17,13 @@ import {
   createTurnStopEmitter,
 } from "./agent-turn-runner-events";
 import { handleAgentTurnToolStage } from "./agent-turn-tool-stage";
-import { runAutoVerificationOpportunity } from "./auto-verification-opportunity";
+import { createAgentTurnVerificationStage } from "./agent-turn-verification-stage";
 import { handleFinishCall } from "./finish-call-handler";
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import { decideTextOnlyResponse } from "./text-only-response-decision";
 import { completeAgentTurn } from "./turn-completion";
-import {
-  autoVerifierTimeoutSeconds,
-  FINISH_TOOL_NAME,
-  wantsFullVerification,
-} from "./turn-helpers";
+import { FINISH_TOOL_NAME } from "./turn-helpers";
 import { evaluateTurnStopGuards } from "./turn-stop-guards";
 import type {
   AgentEvent,
@@ -119,47 +115,41 @@ export async function runAgentTurn(
     let checkpointState: CheckpointWorkPlanState | undefined;
     const successfulToolCallIds = new Set<string>();
     const verificationEvidenceCallIds = new Set<string>();
-    const includeFullGate =
-      wantsFullVerification(userText) || taskKind === "release_task";
     const loopGuard = new LoopGuard(runtime.options);
     const completionController = new CompletionController();
     const verificationController = new VerificationController();
     let recoveryReflectionDraft: RecoveryReflectionDraft | null = null;
+    const verificationStage = createAgentTurnVerificationStage({
+      cwd,
+      taskText: userText,
+      taskKind,
+      turnIndex,
+      runtime,
+      verificationController,
+      evidenceLedger,
+      session,
+      allItems,
+      errors,
+      successfulToolCallIds,
+      verificationEvidenceCallIds,
+      signal: abortController.signal,
+      projectInstructions,
+      createToolContext: () => createToolContext(),
+      emit: (event) => emit(event),
+      debug: (data) => debug(data),
+      narrate: (message, evidenceIds = []) => {
+        emitNarrationOnce("verification", message, evidenceIds);
+      },
+    });
     const runAutoVerificationAt = async (
       opportunity: string,
     ): Promise<boolean> => {
-      const autoVerification = await runAutoVerificationOpportunity({
+      const autoVerification = await verificationStage.run({
         opportunity,
-        cwd: cwd,
-        turn: turnIndex,
         iteration,
-        taskKind,
-        ledger: evidenceLedger,
-        verificationController,
-        tools: runtime.tools,
-        createToolContext: () => createToolContext(),
-        trustManager: runtime.trustManager,
-        projectInstructions,
-        projectFiles: runtime.projectCommandFiles,
-        includeFullGate,
-        includeReleaseGate: taskKind === "release_task",
-        timeoutSeconds: autoVerifierTimeoutSeconds(
-          runtime.options.bashMaxTimeoutSeconds,
-        ),
-        signal: abortController.signal,
-        session: session,
-        allItems,
-        errors,
-        successfulToolCallIds,
-        verificationEvidenceCallIds,
-        emit: (event) => emit(event),
-        debug: (data) => debug(data),
-        narrate: (message, evidenceIds = []) => {
-          emitNarrationOnce("verification", message, evidenceIds);
-        },
       });
       if (!autoVerification.didExecute) return false;
-      hasUsedTools = true;
+      hasUsedTools = hasUsedTools || autoVerification.usedTools;
       needsVerification = autoVerification.needsVerification;
       hasMutatedFiles = autoVerification.hasMutatedFiles;
       return true;
