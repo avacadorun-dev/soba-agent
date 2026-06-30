@@ -36,7 +36,7 @@ describe("FilesystemEvidenceProofStorage", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "soba-proof-latest-"));
     const evidenceDir = join(projectRoot, ".soba", "evidence");
     const storage = new FilesystemEvidenceProofStorage({ projectRoot });
-    storage.saveEvidenceBundle({
+    const oldReceipt = storage.saveEvidenceBundle({
       version: 1,
       sessionId: "old",
       turnId: "turn_1",
@@ -44,8 +44,10 @@ describe("FilesystemEvidenceProofStorage", () => {
     });
     const latestPath = join(evidenceDir, "manual-latest.soba-proof.json");
     writeFileSync(latestPath, JSON.stringify({ version: 1, sessionId: "latest", turnId: "turn_2" }), "utf-8");
-    const now = new Date("2026-06-30T12:00:00.000Z");
-    utimesSync(latestPath, now, now);
+    const oldTime = new Date("2026-06-30T10:00:00.000Z");
+    const latestTime = new Date("2026-06-30T12:00:00.000Z");
+    utimesSync(oldReceipt.path, oldTime, oldTime);
+    utimesSync(latestPath, latestTime, latestTime);
 
     const latest = storage.readLatestEvidenceBundle();
 

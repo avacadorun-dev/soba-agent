@@ -90,6 +90,10 @@ export interface CliArgs {
   verify: boolean;
   /** Raw argv slice after the `verify` token. */
   verifyArgs: string[];
+  /** Explain one claim from a persisted SOBA proof bundle and exit. */
+  explainClaim: boolean;
+  /** Raw argv slice after the `explain-claim` token. */
+  explainClaimArgs: string[];
   /**
    * `soba provider <sub> ...` sub-route. When this is defined, the binary
    * dispatches into the provider-cli module and skips agent setup. The
@@ -130,6 +134,8 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   proveArgs: [],
   verify: false,
   verifyArgs: [],
+  explainClaim: false,
+  explainClaimArgs: [],
   providerSubArgs: [],
 };
 
@@ -357,6 +363,11 @@ export function parseArgs(argv: string[]): CliArgs {
       case "verify":
         args.verify = true;
         args.verifyArgs = argv.slice(i + 1);
+        return args;
+
+      case "explain-claim":
+        args.explainClaim = true;
+        args.explainClaimArgs = argv.slice(i + 1);
         return args;
 
       case "acp":

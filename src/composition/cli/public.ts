@@ -24,5 +24,6 @@ export * from "../../ui/terminal/open-tui-assets";
 export * from "../../ui/terminal/output/colors";
 export * from "../../ui/terminal/output/renderer";
 export * from "../../ui/terminal/output/theme";
+export * from "./explain-claim-command";
 export * from "./prove-command";
 export * from "./verify-command";

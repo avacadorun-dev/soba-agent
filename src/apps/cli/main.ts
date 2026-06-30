@@ -18,6 +18,7 @@ import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from
 import {
   listSessions,
   redactMcpSensitiveText,
+  runFilesystemExplainClaimCommand,
   runFilesystemProveCommand,
   runFilesystemVerifyCommand,
   SessionManager,
@@ -281,6 +282,17 @@ async function main() {
   if (cliArgs.verify) {
     const result = runFilesystemVerifyCommand({
       args: cliArgs.verifyArgs,
+      projectRoot: process.cwd(),
+    });
+    if (result.stream === "stdout") process.stdout.write(result.output);
+    else process.stderr.write(result.output);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
+  if (cliArgs.explainClaim) {
+    const result = runFilesystemExplainClaimCommand({
+      args: cliArgs.explainClaimArgs,
       projectRoot: process.cwd(),
     });
     if (result.stream === "stdout") process.stdout.write(result.output);

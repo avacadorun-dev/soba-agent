@@ -100,8 +100,10 @@ Agent accepted finish 后，proof bundles 会保存到 `.soba/evidence/*.soba-pr
 | `soba verify` | 校验最新 proof bundle 的结构和内部引用 |
 | `soba verify --format json` | 以 JSON 输出校验问题 |
 | `soba verify <path>` | 校验指定的 `.soba-proof.json` 文件 |
+| `soba explain-claim <claim>` | 展开最新 proof 中某个 claim 的 evidence 引用 |
+| `soba explain-claim <claim> --proof <path>` | 展开指定 `.soba-proof.json` 文件中的某个 claim |
 
-`soba prove` 和 `soba verify` 不启动 agent runtime，也不需要 provider credentials。
+`soba prove`、`soba verify` 和 `soba explain-claim` 不启动 agent runtime，也不需要 provider credentials。
 
 ---
 
@@ -159,6 +161,7 @@ soba --version
 soba --help
 soba prove --last
 soba verify --last
+soba explain-claim claim_1 --last
 soba provider list
 soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
 ```

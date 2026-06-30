@@ -100,8 +100,10 @@ Current proof bundles include a compact evidence index, finish claims, changed f
 | `soba verify` | Validate the latest proof bundle structure and internal references |
 | `soba verify --format json` | Print verification issues as JSON |
 | `soba verify <path>` | Validate a specific `.soba-proof.json` file |
+| `soba explain-claim <claim>` | Explain one claim from the latest proof with expanded evidence references |
+| `soba explain-claim <claim> --proof <path>` | Explain one claim from a specific `.soba-proof.json` file |
 
-`soba prove` and `soba verify` do not start the agent runtime and do not require provider credentials.
+`soba prove`, `soba verify`, and `soba explain-claim` do not start the agent runtime and do not require provider credentials.
 
 ---
 
@@ -159,6 +161,7 @@ soba --version
 soba --help
 soba prove --last
 soba verify --last
+soba explain-claim claim_1 --last
 soba provider list
 soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
 ```
