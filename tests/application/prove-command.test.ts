@@ -57,6 +57,14 @@ describe("prove command", () => {
           approvalValue: "bun test",
           description: "bash: bun test",
           reason: "safe test command",
+          alternatives: [
+            {
+              id: "run_without_delete",
+              title: "Run the non-destructive part only",
+              reason: "Try without deleting files first.",
+              command: "bun test",
+            },
+          ],
         },
       ],
       risks: [],
@@ -83,7 +91,7 @@ describe("prove command", () => {
     expect(rendered).toContain("Status: verified");
     expect(rendered).toContain("Claims: Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(rendered).toContain("bun test passed exit=0 duration=42ms digest=sha256:abc123");
-    expect(rendered).toContain("Permissions: bash: bun test auto trust=safe reason=safe test command");
+    expect(rendered).toContain("Permissions: bash: bun test auto trust=safe reason=safe test command alternatives=1");
   });
 
   test("renders explicit proof path as markdown", () => {
@@ -100,7 +108,7 @@ describe("prove command", () => {
     expect(rendered).toContain("- Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(rendered).toContain("- Tests passed (bun test)");
     expect(rendered).toContain("## Permissions");
-    expect(rendered).toContain("- bash: bun test auto trust=safe reason=safe test command");
+    expect(rendered).toContain("- bash: bun test auto trust=safe reason=safe test command alternatives=1");
   });
 
   test("renders json with proofPath", () => {

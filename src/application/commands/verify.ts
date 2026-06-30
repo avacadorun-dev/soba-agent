@@ -498,6 +498,23 @@ function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): vo
     if (approval.reason !== undefined && typeof approval.reason !== "string") {
       addError(issues, "invalid_approval_reason", `${path}.reason`, "Expected reason to be a string.");
     }
+    validateApprovalAlternatives(approval.alternatives, `${path}.alternatives`, issues);
+  });
+}
+
+function validateApprovalAlternatives(value: unknown, path: string, issues: ProofVerificationIssue[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    addError(issues, "invalid_approval_alternatives", path, "Expected alternatives to be an array.");
+    return;
+  }
+  forEachRecord(value, path, issues, (alternative, alternativePath) => {
+    requireNonEmptyString(alternative, "id", `${alternativePath}.id`, issues);
+    requireNonEmptyString(alternative, "title", `${alternativePath}.title`, issues);
+    requireNonEmptyString(alternative, "reason", `${alternativePath}.reason`, issues);
+    if (alternative.command !== undefined && typeof alternative.command !== "string") {
+      addError(issues, "invalid_approval_alternative_command", `${alternativePath}.command`, "Expected command to be a string.");
+    }
   });
 }
 

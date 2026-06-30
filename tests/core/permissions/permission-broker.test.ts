@@ -73,6 +73,81 @@ describe("PermissionBroker", () => {
     });
   });
 
+  test("suggests least-privilege alternatives for split destructive commands", async () => {
+    let requestSeen: PermissionRequest | undefined;
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+      requestPermission: async (request) => {
+        requestSeen = request;
+        return "deny";
+      },
+    });
+
+    const result = await broker.authorizeToolCall(toolCall("bash", '{"command":"rm -rf dist && bun run build"}'), {
+      command: "rm -rf dist && bun run build",
+    });
+
+    expect(requestSeen?.alternatives).toEqual([
+      {
+        id: "scoped_repo_cleanup",
+        title: "Split into scoped repo cleanup",
+        reason: "Approve deleting only the repo-local target separately before running the remaining command.",
+        command: "rm -rf -- ./dist",
+      },
+      {
+        id: "run_without_delete",
+        title: "Run the non-destructive part only",
+        reason: "Try the requested follow-up command without deleting files first.",
+        command: "bun run build",
+      },
+    ]);
+    expect(result.receipt.alternatives).toEqual(requestSeen?.alternatives);
+  });
+
+  test("suggests scoped cleanup for equivalent rm force-recursive flag order", async () => {
+    let requestSeen: PermissionRequest | undefined;
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+      requestPermission: async (request) => {
+        requestSeen = request;
+        return "deny";
+      },
+    });
+
+    await broker.authorizeToolCall(toolCall("bash", '{"command":"rm -fr build && bun test"}'), {
+      command: "rm -fr build && bun test",
+    });
+
+    expect(requestSeen?.alternatives?.[0]).toMatchObject({
+      id: "scoped_repo_cleanup",
+      command: "rm -rf -- ./build",
+    });
+    expect(requestSeen?.alternatives?.[1]).toMatchObject({
+      id: "run_without_delete",
+      command: "bun test",
+    });
+  });
+
+  test("suggests manual alternatives for remote git pushes", async () => {
+    let requestSeen: PermissionRequest | undefined;
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+      requestPermission: async (request) => {
+        requestSeen = request;
+        return "deny";
+      },
+    });
+
+    await broker.authorizeToolCall(toolCall("bash", '{"command":"git push origin feature"}'), {
+      command: "git push origin feature",
+    });
+
+    expect(requestSeen?.alternatives?.map((alternative) => alternative.id)).toEqual([
+      "local_commit_only",
+      "show_push_command",
+    ]);
+  });
+
   test("redacts sensitive non-bash arguments in permission receipts", async () => {
     const broker = new PermissionBroker({
       trustManager: new TrustManager({ repoRoot: "/repo" }),

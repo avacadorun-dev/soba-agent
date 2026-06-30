@@ -60,6 +60,10 @@ dangerous 动作在 `repo` 模式下仍然需要确认。
 `full` 会在当前会话结束前关闭重复的 dangerous 确认。只应在你愿意让代理运行 `curl` 或 `git push` 等外部命令的
 环境中使用。
 
+对于 dangerous 命令，SOBA 还会记录 permission receipts。当 SOBA 能推断出更安全路径时，确认提示和 proof
+receipt 会包含 least-privilege alternatives，例如把 `rm -rf dist && bun run build` 拆成 scoped repo cleanup
+和单独的非破坏性 build 命令。
+
 Project skills 有单独的 trust boundary：
 
 ```text

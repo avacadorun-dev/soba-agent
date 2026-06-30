@@ -1,6 +1,13 @@
 export type TrustLevel = "safe" | "normal" | "dangerous";
 export type PermissionMode = "ask" | "repo" | "full";
 
+export interface PermissionAlternative {
+  id: string;
+  title: string;
+  reason: string;
+  command?: string;
+}
+
 export interface TrustRule {
   pattern: string;
   level: TrustLevel;

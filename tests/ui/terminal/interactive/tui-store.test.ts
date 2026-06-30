@@ -315,12 +315,24 @@ describe("OpenTUI Solid store", () => {
         description: "rm file",
         level: "dangerous",
         reason: "destructive",
+        alternatives: [
+          {
+            id: "run_without_delete",
+            title: "Run without delete",
+            reason: "Try safer command first.",
+            command: "bun run build",
+          },
+        ],
         resolve: (value: "deny" | "once" | "session" | "repo" | "full") => {
           decision = value;
         },
       }),
     );
 
+    expect(store.confirmation()?.alternatives?.[0]).toMatchObject({
+      id: "run_without_delete",
+      command: "bun run build",
+    });
     await store.submit("y");
     expect(decision!).toBe("once");
     expect(store.confirmation()).toBeNull();

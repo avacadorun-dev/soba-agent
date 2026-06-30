@@ -90,6 +90,14 @@ describe("verify command", () => {
           approvalValue: "bun test",
           description: "bash: bun test",
           reason: "safe test command",
+          alternatives: [
+            {
+              id: "run_without_delete",
+              title: "Run the non-destructive part only",
+              reason: "Try without deleting files first.",
+              command: "bun test",
+            },
+          ],
         },
       ],
       risks: [],
@@ -190,6 +198,7 @@ describe("verify command", () => {
             approved: "yes",
             trustLevel: "risky",
             approvalKind: "scope",
+            alternatives: [{ id: "", title: "", reason: "", command: 1 }],
           },
         ],
       },
@@ -202,6 +211,10 @@ describe("verify command", () => {
         "invalid_approval_approved",
         "invalid_approval_trust_level",
         "invalid_approval_kind",
+        "missing_id",
+        "missing_title",
+        "missing_reason",
+        "invalid_approval_alternative_command",
       ]),
     );
   });

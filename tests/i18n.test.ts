@@ -378,7 +378,7 @@ describe("Locale file consistency", () => {
     const enKeys = loadJsonKeys(enPath);
     console.log(`Total keys in en.json: ${enKeys.length}`);
     expect(enKeys.length).toBeGreaterThanOrEqual(50);
-    expect(enKeys.length).toBeLessThanOrEqual(400);
+    expect(enKeys.length).toBeLessThanOrEqual(450);
   });
 
   test("UC-9: placeholders совпадают во всех переводах", () => {

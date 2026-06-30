@@ -88,7 +88,7 @@ This page lists the SOBA Agent v0.6.x CLI surface available from the console.
 
 Proof bundles are persisted in `.soba/evidence/*.soba-proof.json` after accepted agent finishes.
 Current proof bundles include a compact evidence index, finish claims, changed files, checks, commands, permission receipts, risks, and review actions.
-Permission receipts record each executed tool call's trust level, approval kind, approval value, decision, and reason; `auto` means SOBA's trust policy allowed the call without prompting.
+Permission receipts record each executed tool call's trust level, approval kind, approval value, decision, reason, and safer alternatives when SOBA can suggest a least-privilege rewrite; `auto` means SOBA's trust policy allowed the call without prompting.
 `soba verify` validates the proof schema and checks that supported claim references point at known evidence, command, check, file mutation, or risk IDs.
 
 | Command | Purpose |

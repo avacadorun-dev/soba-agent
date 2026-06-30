@@ -203,6 +203,14 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
               description: "rm -rf dist",
               level: "dangerous",
               reason: "Deletes files",
+              alternatives: [
+                {
+                  id: "scoped_repo_cleanup",
+                  title: "Split into scoped repo cleanup",
+                  reason: "Approve deleting only ./dist.",
+                  command: "rm -rf -- ./dist",
+                },
+              ],
               resolve: (decision) => {
                 state.permissionDecision = decision;
                 resolve();
@@ -1055,6 +1063,14 @@ describe("ACP stdio server foundation", () => {
             description: "rm -rf dist",
             reason: "Deletes files",
             level: "dangerous",
+            alternatives: [
+              {
+                id: "scoped_repo_cleanup",
+                title: "Split into scoped repo cleanup",
+                reason: "Approve deleting only ./dist.",
+                command: "rm -rf -- ./dist",
+              },
+            ],
           },
           _meta: {
             tool_name: "bash",
@@ -1062,6 +1078,14 @@ describe("ACP stdio server foundation", () => {
               toolName: "bash",
               kind: "execute",
               command: "rm -rf dist",
+              alternatives: [
+                {
+                  id: "scoped_repo_cleanup",
+                  title: "Split into scoped repo cleanup",
+                  reason: "Approve deleting only ./dist.",
+                  command: "rm -rf -- ./dist",
+                },
+              ],
             },
           },
         },

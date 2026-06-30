@@ -85,6 +85,7 @@ export async function executeObservedToolBatch(
       approvalValue: execution.permission.approvalValue,
       description: execution.permission.description,
       reason: execution.permission.reason,
+      alternatives: execution.permission.alternatives,
     });
 
     const observation = observeToolExecutionResult({

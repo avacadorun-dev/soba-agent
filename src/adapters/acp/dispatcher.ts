@@ -413,6 +413,7 @@ export class AcpDispatcher {
         description: event.description,
         reason: event.reason,
         level: event.level,
+        alternatives: event.alternatives,
       };
       const response = await this.requestClient("session/request_permission", {
         sessionId,
@@ -833,6 +834,7 @@ function toolMeta(
     entryCount: numberField(details, "entryCount"),
     matchCount: numberField(details, "matchCount"),
     durationMs: numberField(extra, "durationMs"),
+    alternatives: jsonValueFromUnknown(args?.alternatives),
     evidence: toolEvidenceMeta(toolName, args, result, extra),
   });
   return {

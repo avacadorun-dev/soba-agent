@@ -60,6 +60,10 @@ repository. Network, privileged, and external dangerous actions still ask for co
 `full` disables repeated dangerous confirmations until the end of the current session. Use it only in environments where
 you are comfortable letting the agent run external commands such as `curl` or `git push`.
 
+For dangerous commands, SOBA also records permission receipts. When it can infer a safer path, the confirmation prompt
+and proof receipt include least-privilege alternatives, such as splitting `rm -rf dist && bun run build` into a scoped
+repo cleanup plus a separate non-destructive build command.
+
 Project skills have a separate trust boundary:
 
 ```text

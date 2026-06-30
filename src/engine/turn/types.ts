@@ -5,6 +5,7 @@
  */
 
 import type { ItemParam, ResponseResource, Usage } from "../../kernel/model/openresponses-types";
+import type { PermissionAlternative } from "../../kernel/permissions/trust";
 import type { ToolResult } from "../../kernel/tools/types";
 import type { EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import type { WorkingNarrationEventType } from "./narration";
@@ -145,6 +146,8 @@ export interface DangerousConfirmationEvent extends BaseAgentEvent {
   level: "dangerous";
   /** Human-readable reason */
   reason: string;
+  /** Safer least-privilege alternatives suggested by the permission broker. */
+  alternatives?: PermissionAlternative[];
   /** Resolve with the selected approval scope. */
   resolve: (decision: ApprovalDecision) => void;
 }

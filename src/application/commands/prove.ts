@@ -287,9 +287,11 @@ function formatApproval(approval: Record<string, unknown>): string {
   const trustLevel = stringField(approval, "trustLevel", "");
   const target = stringField(approval, "description", stringField(approval, "approvalValue", stringField(approval, "toolName", "unknown")));
   const reason = stringField(approval, "reason", "");
+  const alternatives = arrayField(approval.alternatives);
   const parts = [target, decision];
   if (trustLevel) parts.push(`trust=${trustLevel}`);
   if (reason) parts.push(`reason=${reason}`);
+  if (alternatives.length > 0) parts.push(`alternatives=${alternatives.length}`);
   return parts.join(" ");
 }
 

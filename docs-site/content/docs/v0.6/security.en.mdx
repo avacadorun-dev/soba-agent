@@ -79,6 +79,10 @@ When the agent calls a dangerous command, the user sees a prompt with these choi
 | **repo** (r) | Enable repo mode |
 | **full** (f) | Enable full session mode for all dangerous operations |
 
+The prompt can also show safer alternatives. SOBA currently suggests least-privilege rewrites for common risky patterns,
+including destructive cleanup chained with a build command and remote `git push`. These alternatives are written into
+the proof permission receipt so later `soba prove` and `soba verify` output can show what was approved or denied.
+
 ---
 
 ## 5. Direct shell commands (`!`)

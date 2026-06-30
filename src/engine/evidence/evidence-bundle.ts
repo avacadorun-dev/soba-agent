@@ -1,3 +1,4 @@
+import type { PermissionAlternative } from "../../kernel/permissions/trust";
 import type { FinishCriterion } from "../completion/completion-gate";
 import type { VerificationKind } from "../verification/verification-policy";
 import type { DiffReviewActionRecord } from "./diff-review";
@@ -63,6 +64,7 @@ export interface EvidenceApproval {
   approvalValue?: string;
   description?: string;
   reason?: string;
+  alternatives?: PermissionAlternative[];
 }
 
 export type EvidenceRiskKind =
@@ -663,7 +665,8 @@ function formatApprovals(approvals: EvidenceApproval[]): string {
     .map((approval) => {
       const target = approval.description ?? approval.approvalValue ?? approval.toolName ?? approval.toolCallId;
       const trust = approval.trustLevel ? ` trust=${approval.trustLevel}` : "";
-      return `${target} ${approval.decision}${trust}`;
+      const alternatives = approval.alternatives?.length ? ` alternatives=${approval.alternatives.length}` : "";
+      return `${target} ${approval.decision}${trust}${alternatives}`;
     })
     .join("; ") + (approvals.length > 6 ? `; ...${approvals.length - 6} more` : "");
 }

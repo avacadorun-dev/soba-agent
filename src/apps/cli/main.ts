@@ -44,6 +44,7 @@ import { parseArgs, printHelp } from "./args";
 const VERSION = APP_VERSION;
 
 type ApprovalDecision = "deny" | "once" | "session" | "repo" | "full";
+type PermissionAlternatives = Extract<RuntimeEvent, { type: "dangerous_confirmation" }>["alternatives"];
 
 // ─── Helpers ───
 
@@ -113,6 +114,7 @@ async function handleDangerousConfirmation(
   _toolName: string,
   description: string,
   reason: string,
+  alternatives: PermissionAlternatives,
   resolve: (decision: ApprovalDecision) => void,
 ): Promise<void> {
   const rl = createInterface({
@@ -120,8 +122,9 @@ async function handleDangerousConfirmation(
     output: process.stdout,
   });
 
+  const alternativesText = formatPermissionAlternatives(i18n, alternatives);
   const answer = await new Promise<string>((res) => {
-    rl.question(`\n${i18n.t("cli.confirm.dangerous", { description, reason })}`, (a) => {
+    rl.question(`\n${i18n.t("cli.confirm.dangerous", { description, reason })}${alternativesText}`, (a) => {
       rl.close();
       res(a.trim().toLowerCase());
     });
@@ -143,6 +146,17 @@ async function handleDangerousConfirmation(
     console.log(`   ${i18n.t("tui.info.denied")}.\n`);
   }
   resolve(decision);
+}
+
+function formatPermissionAlternatives(i18n: I18n, alternatives: PermissionAlternatives): string {
+  if (!alternatives || alternatives.length === 0) return "";
+  const lines = [`\n   ${i18n.t("cli.confirm.alternatives")}`];
+  for (const [index, alternative] of alternatives.entries()) {
+    const command = alternative.command ? ` (${alternative.command})` : "";
+    lines.push(`   ${index + 1}. ${alternative.title}${command} — ${alternative.reason}`);
+  }
+  lines.push("   ");
+  return lines.join("\n");
 }
 
 /**
@@ -586,7 +600,7 @@ async function main() {
   // Handle dangerous operation confirmation in print mode
   runtime.onEvent((event) => {
     if (event.type === "dangerous_confirmation") {
-      handleDangerousConfirmation(i18n, event.toolName, event.description, event.reason, event.resolve);
+      handleDangerousConfirmation(i18n, event.toolName, event.description, event.reason, event.alternatives, event.resolve);
     }
   });
 

@@ -78,6 +78,10 @@ Git：`git status`, `git log`, `git diff`, `git branch`
 | **repo** (r) | 启用 repo 模式 |
 | **full** (f) | 为所有 dangerous 操作启用完整会话模式 |
 
+确认提示也可以显示更安全的 alternatives。SOBA 当前会为常见风险模式建议 least-privilege rewrites，包括与 build
+命令串联的 destructive cleanup，以及远程 `git push`。这些 alternatives 会写入 proof permission receipt，
+这样之后 `soba prove` 和 `soba verify` 可以显示实际批准或拒绝的内容。
+
 ---
 
 ## 5. Direct shell 命令（`!`）

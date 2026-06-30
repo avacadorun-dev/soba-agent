@@ -93,6 +93,7 @@ export function TrustDialog(props: {
 
   const commandText = () => confirmation()?.description ?? "";
   const reasonText = () => confirmation()?.reason ?? "";
+  const alternatives = createMemo(() => confirmation()?.alternatives?.slice(0, 2) ?? []);
 
   return (
     <Show when={isOpen()}>
@@ -128,6 +129,23 @@ export function TrustDialog(props: {
             {reasonText()}
           </text>
         </box>
+
+        <Show when={alternatives().length > 0}>
+          <box height={1} />
+          <box height={1} style={{ paddingLeft: 2, paddingRight: 2 }}>
+            <text fg={theme().warning} wrapMode="none" truncate>
+              {props.store.l("tui.trust.alternatives")}
+            </text>
+          </box>
+          {alternatives().map((alternative, index) => (
+            <box height={1} style={{ paddingLeft: 2, paddingRight: 2 }}>
+              <text fg={theme().muted} wrapMode="none" truncate>
+                {index + 1}. {alternative.title}
+                {alternative.command ? `: ${alternative.command}` : ""}
+              </text>
+            </box>
+          ))}
+        </Show>
 
         {/* Spacer */}
         <box height={1} />

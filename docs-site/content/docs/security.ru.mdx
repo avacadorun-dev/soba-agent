@@ -80,6 +80,11 @@ Git: `git status`, `git log`, `git diff`, `git branch`
 | **repo** (r) | Включить repo-режим |
 | **full** (f) | Включить полный session-режим для всех dangerous-операций |
 
+Запрос также может показывать более безопасные alternatives. SOBA сейчас предлагает least-privilege rewrites для
+частых risky-паттернов: destructive cleanup, связанный с build-командой, и remote `git push`. Эти alternatives
+записываются в proof permission receipt, чтобы потом `soba prove` и `soba verify` показывали, что именно было
+разрешено или отклонено.
+
 ---
 
 ## 5. Прямые shell-команды (`!`)

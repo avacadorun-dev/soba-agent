@@ -60,6 +60,10 @@ Server/tool IDs нормализуются до OpenAI-compatible function names
 `full` отключает повторные dangerous-подтверждения до конца текущей сессии. Используйте его только для окружений, где
 вы готовы доверить агенту внешние команды вроде `curl` или `git push`.
 
+Для dangerous-команд SOBA также записывает permission receipts. Когда можно вывести более безопасный путь, confirmation
+prompt и proof receipt показывают least-privilege alternatives, например split `rm -rf dist && bun run build` на
+scoped repo cleanup и отдельную недеструктивную build-команду.
+
 Project skills управляются отдельной trust boundary:
 
 ```text

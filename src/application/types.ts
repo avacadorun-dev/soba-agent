@@ -1,4 +1,5 @@
 import type { ItemParam, ResponseResource, Usage } from "../kernel/model/openresponses-types";
+import type { PermissionAlternative } from "../kernel/permissions/trust";
 import type { ToolResult } from "../kernel/tools/types";
 import type { SessionInfo } from "../kernel/transcript/types";
 import type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
@@ -122,6 +123,7 @@ export interface RuntimeDangerousConfirmationEvent extends BaseRuntimeEvent {
   description: string;
   level: "dangerous";
   reason: string;
+  alternatives?: PermissionAlternative[];
   resolve: (decision: RuntimeApprovalDecision) => void;
 }
 
