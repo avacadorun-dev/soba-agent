@@ -87,6 +87,8 @@ description: Режимы запуска SOBA, top-level флаги, provider su
 ## 3. Proof-команды
 
 Proof bundles сохраняются в `.soba/evidence/*.soba-proof.json` после accepted finish агента.
+Текущие proof bundles включают компактный evidence index, finish claims, измененные файлы, checks, commands, risks и review actions.
+`soba verify` проверяет schema proof и контролирует, что ссылки supported claims указывают на известные evidence, command, check, file mutation или risk IDs.
 
 | Команда | Назначение |
 |---|---|

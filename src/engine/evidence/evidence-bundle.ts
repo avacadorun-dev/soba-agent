@@ -1,7 +1,8 @@
+import type { FinishCriterion } from "../completion/completion-gate";
 import type { VerificationKind } from "../verification/verification-policy";
 import type { DiffReviewActionRecord } from "./diff-review";
 import type { EvidenceDiffSummary } from "./diff-summary";
-import type { EvidenceEntry, EvidenceLedgerSummary } from "./evidence-ledger";
+import type { EvidenceEntry, EvidenceKind, EvidenceLedgerSummary, EvidenceStatus } from "./evidence-ledger";
 
 export type EvidenceBundleStatus = "verified" | "partially_verified" | "unverified" | "blocked";
 
@@ -73,12 +74,38 @@ export interface EvidenceRisk {
   evidenceIds: string[];
 }
 
+export interface EvidenceReference {
+  id: string;
+  kind: EvidenceKind;
+  status: EvidenceStatus;
+  summary: string;
+  timestamp: number;
+  toolCallId?: string;
+  toolName?: string;
+  command?: string;
+  verificationKind?: VerificationKind;
+  files?: string[];
+  mutationIds?: string[];
+  resolves?: string[];
+}
+
+export type EvidenceClaimStatus = "supported" | "unsupported" | "unverified";
+
+export interface EvidenceClaim {
+  id: string;
+  claim: string;
+  status: EvidenceClaimStatus;
+  evidenceIds: string[];
+}
+
 export interface EvidenceBundle {
   version: 1;
   sessionId: string;
   turnId: string;
   status: EvidenceBundleStatus;
   summary: string;
+  evidence: EvidenceReference[];
+  claims: EvidenceClaim[];
   changedFiles: EvidenceChangedFile[];
   commands: EvidenceCommandRun[];
   checks: EvidenceCheck[];
@@ -103,6 +130,7 @@ export interface BuildEvidenceBundleInput {
   completionStatus: "completed" | "completed_with_unverified_changes" | "blocked";
   summary: string;
   ledger: EvidenceLedgerSummary;
+  criteria?: FinishCriterion[];
   changedFiles?: EvidenceChangedFile[];
   commands?: EvidenceCommandRun[];
   approvals?: EvidenceApproval[];
@@ -117,6 +145,8 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
   const changedFiles = mergeChangedFiles(changedFilesFromLedger(input.ledger.entries), input.changedFiles ?? []);
   const risks = buildRisks(input.ledger, checks, changedFiles);
   const status = decideBundleStatus(input.completionStatus, input.ledger, checks, risks);
+  const evidence = evidenceReferencesFromLedger(input.ledger.entries);
+  const claims = buildClaims(input.criteria ?? [], evidence, commands, checks, changedFiles, risks);
 
   return {
     version: 1,
@@ -124,6 +154,8 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
     turnId: input.turnId,
     status,
     summary: input.summary,
+    evidence,
+    claims,
     changedFiles,
     commands,
     checks,
@@ -142,6 +174,9 @@ export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
   if (bundle.diff) {
     lines.push(`- Diff: ${formatDiffSummary(bundle.diff)}`);
   }
+  if (bundle.claims.length > 0) {
+    lines.push(`- Claims: ${formatClaims(bundle.claims)}`);
+  }
   lines.push(`- Checks: ${formatChecks(bundle.checks, bundle.commands)}`);
   lines.push(`- Risks: ${formatRisks(bundle.risks)}`);
   if (bundle.reviewActions.length > 0) {
@@ -149,6 +184,51 @@ export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
   }
 
   return lines.join("\n");
+}
+
+function evidenceReferencesFromLedger(entries: EvidenceEntry[]): EvidenceReference[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    kind: entry.kind,
+    status: entry.status,
+    summary: entry.summary,
+    timestamp: entry.timestamp,
+    toolCallId: entry.toolCallId,
+    toolName: entry.toolName,
+    command: entry.command,
+    verificationKind: entry.verificationKind,
+    files: entry.files?.slice(),
+    mutationIds: entry.mutationIds?.slice(),
+    resolves: entry.resolves?.slice(),
+  }));
+}
+
+function buildClaims(
+  criteria: FinishCriterion[],
+  evidence: EvidenceReference[],
+  commands: EvidenceCommandRun[],
+  checks: EvidenceCheck[],
+  changedFiles: EvidenceChangedFile[],
+  risks: EvidenceRisk[],
+): EvidenceClaim[] {
+  const knownEvidenceIds = new Set([
+    ...evidence.map((entry) => entry.id),
+    ...commands.map((command) => command.id),
+    ...checks.map((check) => check.id),
+    ...changedFiles.flatMap((file) => file.mutationIds),
+    ...risks.map((risk) => risk.id),
+  ]);
+
+  return criteria.map((criterion, index) => {
+    const evidenceIds = unique(criterion.evidenceIds ?? []);
+    const unknownEvidenceIds = evidenceIds.filter((id) => !knownEvidenceIds.has(id));
+    return {
+      id: `claim_${index + 1}`,
+      claim: criterion.criterion,
+      status: unknownEvidenceIds.length > 0 ? "unsupported" : evidenceIds.length > 0 ? "supported" : "unverified",
+      evidenceIds,
+    };
+  });
 }
 
 function commandsFromLedger(entries: EvidenceEntry[]): EvidenceCommandRun[] {
@@ -566,6 +646,16 @@ function formatRisks(risks: EvidenceRisk[]): string {
     .slice(0, 6)
     .map((risk) => risk.message)
     .join("; ") + (risks.length > 6 ? `; ...${risks.length - 6} more` : "");
+}
+
+function formatClaims(claims: EvidenceClaim[]): string {
+  return claims
+    .slice(0, 6)
+    .map((claim) => {
+      const refs = claim.evidenceIds.length > 0 ? ` (${claim.evidenceIds.join(", ")})` : "";
+      return `${claim.claim} ${claim.status}${refs}`;
+    })
+    .join("; ") + (claims.length > 6 ? `; ...${claims.length - 6} more` : "");
 }
 
 function formatDiffSummary(diff: EvidenceDiffSummary): string {

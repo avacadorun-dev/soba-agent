@@ -141,6 +141,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     turnId: `turn_${input.turn}`,
     completionStatus: finishRequest.status,
     summary: finishRequest.summary,
+    criteria: finishRequest.criteria,
     ledger: input.evidenceLedger.getSummary(),
   });
   let proofPath: string | undefined;

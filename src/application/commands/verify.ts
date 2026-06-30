@@ -26,6 +26,8 @@ export interface ProofVerificationResult {
   summary: {
     errors: number;
     warnings: number;
+    evidence: number;
+    claims: number;
     changedFiles: number;
     commands: number;
     checks: number;
@@ -59,6 +61,19 @@ const COMMAND_STATUSES = new Set(["passed", "failed", "skipped", "running", "unk
 const CHECK_STATUSES = new Set(["passed", "failed", "skipped", "not_run", "not_required"]);
 const APPROVAL_DECISIONS = new Set(["deny", "once", "session", "repo", "full"]);
 const RISK_SEVERITIES = new Set(["info", "warning", "error"]);
+const EVIDENCE_KINDS = new Set([
+  "inspect",
+  "search",
+  "mutation",
+  "diagnostic",
+  "verification",
+  "checkpoint",
+  "reflection",
+  "recovery_attempt",
+  "finish_attempt",
+]);
+const EVIDENCE_STATUSES = new Set(["success", "failure", "active", "resolved", "unverified", "rejected"]);
+const CLAIM_STATUSES = new Set(["supported", "unsupported", "unverified"]);
 const SHA256_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 export function executeVerifyCommand(input: {
@@ -110,11 +125,13 @@ export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerifica
   const bundle = proof.bundle;
 
   validateTopLevel(bundle, issues);
+  const evidenceIds = validateEvidenceIndex(bundle.evidence, issues);
   validateChangedFiles(bundle.changedFiles, issues);
   const commandIds = validateCommands(bundle.commands, issues);
-  validateChecks(bundle.checks, commandIds, issues);
+  const checkIds = validateChecks(bundle.checks, commandIds, issues);
   validateApprovals(bundle.approvals, issues);
-  validateRisks(bundle.risks, issues);
+  const riskIds = validateRisks(bundle.risks, issues);
+  validateClaims(bundle.claims, knownEvidenceIds(bundle, evidenceIds, commandIds, checkIds, riskIds), issues);
   validateStatusConsistency(bundle, issues);
 
   const errors = issues.filter((issue) => issue.severity === "error").length;
@@ -127,6 +144,8 @@ export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerifica
     summary: {
       errors,
       warnings,
+      evidence: arrayLength(bundle.evidence),
+      claims: arrayLength(bundle.claims),
       changedFiles: arrayLength(bundle.changedFiles),
       commands: arrayLength(bundle.commands),
       checks: arrayLength(bundle.checks),
@@ -220,6 +239,8 @@ function renderVerificationText(verification: ProofVerificationResult): string {
     `Result: ${verification.result}`,
     `Errors: ${verification.summary.errors}`,
     `Warnings: ${verification.summary.warnings}`,
+    `Evidence: ${verification.summary.evidence}`,
+    `Claims: ${verification.summary.claims}`,
     `Changed files: ${verification.summary.changedFiles}`,
     `Commands: ${verification.summary.commands}`,
     `Checks: ${verification.summary.checks}`,
@@ -243,6 +264,8 @@ function renderVerificationMarkdown(verification: ProofVerificationResult): stri
     `- Result: \`${verification.result}\``,
     `- Errors: ${verification.summary.errors}`,
     `- Warnings: ${verification.summary.warnings}`,
+    `- Evidence: ${verification.summary.evidence}`,
+    `- Claims: ${verification.summary.claims}`,
     `- Changed files: ${verification.summary.changedFiles}`,
     `- Commands: ${verification.summary.commands}`,
     `- Checks: ${verification.summary.checks}`,
@@ -288,6 +311,8 @@ function validateTopLevel(bundle: Record<string, unknown>, issues: ProofVerifica
   if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) {
     addError(issues, "invalid_created_at", "$.createdAt", "Expected a parseable timestamp string.");
   }
+  requireOptionalArray(bundle.evidence, "$.evidence", "missing_evidence_index", "Proof has no evidence index; generated proofs should include one.", issues);
+  requireOptionalArray(bundle.claims, "$.claims", "missing_claims", "Proof has no claim mapping; generated proofs should include claims.", issues);
   requireArray(bundle.changedFiles, "$.changedFiles", issues);
   requireArray(bundle.commands, "$.commands", issues);
   requireArray(bundle.checks, "$.checks", issues);
@@ -297,6 +322,51 @@ function validateTopLevel(bundle: Record<string, unknown>, issues: ProofVerifica
   if (bundle.diff !== undefined && !isRecord(bundle.diff)) {
     addError(issues, "invalid_diff", "$.diff", "Expected diff to be an object when present.");
   }
+}
+
+function validateEvidenceIndex(value: unknown, issues: ProofVerificationIssue[]): Set<string> {
+  const ids = new Set<string>();
+  forEachRecord(value, "$.evidence", issues, (entry, path) => {
+    const id = stringField(entry.id);
+    if (!id) {
+      addError(issues, "missing_evidence_id", `${path}.id`, "Expected a non-empty evidence id.");
+    } else if (ids.has(id)) {
+      addError(issues, "duplicate_evidence_id", `${path}.id`, `Duplicate evidence id "${id}".`);
+    } else {
+      ids.add(id);
+    }
+    const kind = entry.kind;
+    if (typeof kind !== "string" || !EVIDENCE_KINDS.has(kind)) {
+      addError(issues, "invalid_evidence_kind", `${path}.kind`, "Expected a known evidence kind.");
+    }
+    const status = entry.status;
+    if (typeof status !== "string" || !EVIDENCE_STATUSES.has(status)) {
+      addError(issues, "invalid_evidence_status", `${path}.status`, "Expected a known evidence status.");
+    }
+    requireNonEmptyString(entry, "summary", `${path}.summary`, issues);
+    if (!isNonNegativeNumber(entry.timestamp)) {
+      addError(issues, "invalid_evidence_timestamp", `${path}.timestamp`, "Expected a non-negative timestamp number.");
+    }
+    if (entry.toolCallId !== undefined && typeof entry.toolCallId !== "string") {
+      addError(issues, "invalid_evidence_tool_call_id", `${path}.toolCallId`, "Expected toolCallId to be a string.");
+    }
+    if (entry.toolName !== undefined && typeof entry.toolName !== "string") {
+      addError(issues, "invalid_evidence_tool_name", `${path}.toolName`, "Expected toolName to be a string.");
+    }
+    if (entry.command !== undefined && typeof entry.command !== "string") {
+      addError(issues, "invalid_evidence_command", `${path}.command`, "Expected command to be a string.");
+    }
+    if (entry.files !== undefined && !isStringArray(entry.files)) {
+      addError(issues, "invalid_evidence_files", `${path}.files`, "Expected an array of strings.");
+    }
+    if (entry.mutationIds !== undefined && !isStringArray(entry.mutationIds)) {
+      addError(issues, "invalid_evidence_mutation_ids", `${path}.mutationIds`, "Expected an array of strings.");
+    }
+    if (entry.resolves !== undefined && !isStringArray(entry.resolves)) {
+      addError(issues, "invalid_evidence_resolves", `${path}.resolves`, "Expected an array of strings.");
+    }
+  });
+  return ids;
 }
 
 function validateChangedFiles(value: unknown, issues: ProofVerificationIssue[]): void {
@@ -366,7 +436,7 @@ function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set
   return ids;
 }
 
-function validateChecks(value: unknown, commandIds: Set<string>, issues: ProofVerificationIssue[]): void {
+function validateChecks(value: unknown, commandIds: Set<string>, issues: ProofVerificationIssue[]): Set<string> {
   const ids = new Set<string>();
   forEachRecord(value, "$.checks", issues, (check, path) => {
     const id = stringField(check.id);
@@ -387,6 +457,7 @@ function validateChecks(value: unknown, commandIds: Set<string>, issues: ProofVe
       addError(issues, "unknown_check_command", `${path}.commandId`, `No command with id "${commandId}" exists.`);
     }
   });
+  return ids;
 }
 
 function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): void {
@@ -402,9 +473,17 @@ function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): vo
   });
 }
 
-function validateRisks(value: unknown, issues: ProofVerificationIssue[]): void {
+function validateRisks(value: unknown, issues: ProofVerificationIssue[]): Set<string> {
+  const ids = new Set<string>();
   forEachRecord(value, "$.risks", issues, (risk, path) => {
-    requireNonEmptyString(risk, "id", `${path}.id`, issues);
+    const id = stringField(risk.id);
+    if (!id) {
+      addError(issues, "missing_risk_id", `${path}.id`, "Expected a non-empty risk id.");
+    } else if (ids.has(id)) {
+      addError(issues, "duplicate_risk_id", `${path}.id`, `Duplicate risk id "${id}".`);
+    } else {
+      ids.add(id);
+    }
     requireNonEmptyString(risk, "kind", `${path}.kind`, issues);
     requireNonEmptyString(risk, "message", `${path}.message`, issues);
     const severity = risk.severity;
@@ -415,6 +494,45 @@ function validateRisks(value: unknown, issues: ProofVerificationIssue[]): void {
       addError(issues, "invalid_risk_evidence_ids", `${path}.evidenceIds`, "Expected an array of strings.");
     }
   });
+  return ids;
+}
+
+function validateClaims(value: unknown, knownIds: Set<string>, issues: ProofVerificationIssue[]): void {
+  const ids = new Set<string>();
+  forEachRecord(value, "$.claims", issues, (claim, path) => {
+    const id = stringField(claim.id);
+    if (!id) {
+      addError(issues, "missing_claim_id", `${path}.id`, "Expected a non-empty claim id.");
+    } else if (ids.has(id)) {
+      addError(issues, "duplicate_claim_id", `${path}.id`, `Duplicate claim id "${id}".`);
+    } else {
+      ids.add(id);
+    }
+    requireNonEmptyString(claim, "claim", `${path}.claim`, issues);
+    const status = claim.status;
+    if (typeof status !== "string" || !CLAIM_STATUSES.has(status)) {
+      addError(issues, "invalid_claim_status", `${path}.status`, "Expected supported, unsupported, or unverified.");
+    }
+    if (!isStringArray(claim.evidenceIds)) {
+      addError(issues, "invalid_claim_evidence_ids", `${path}.evidenceIds`, "Expected an array of strings.");
+      return;
+    }
+    const unknownIds = claim.evidenceIds.filter((evidenceId) => !knownIds.has(evidenceId));
+    if (unknownIds.length > 0) {
+      addError(
+        issues,
+        "unknown_claim_evidence",
+        `${path}.evidenceIds`,
+        `Claim references unknown evidence id(s): ${unknownIds.join(", ")}.`,
+      );
+    }
+    if (status === "supported" && claim.evidenceIds.length === 0) {
+      addError(issues, "supported_claim_without_evidence", `${path}.evidenceIds`, "Supported claims must reference evidence.");
+    }
+    if (status !== "supported") {
+      addWarning(issues, "claim_not_supported", `${path}.status`, `Claim "${id || "unknown"}" is ${status || "unknown"}.`);
+    }
+  });
 }
 
 function validateStatusConsistency(bundle: Record<string, unknown>, issues: ProofVerificationIssue[]): void {
@@ -423,6 +541,7 @@ function validateStatusConsistency(bundle: Record<string, unknown>, issues: Proo
   const commands = recordArray(bundle.commands);
   const risks = recordArray(bundle.risks);
   const changedFiles = recordArray(bundle.changedFiles);
+  const claims = recordArray(bundle.claims);
 
   if (status === "verified") {
     if (risks.length > 0) {
@@ -433,6 +552,9 @@ function validateStatusConsistency(bundle: Record<string, unknown>, issues: Proo
     }
     if (changedFiles.length > 0 && checks.length === 0) {
       addWarning(issues, "verified_without_checks", "$.checks", "Proof changed files but records no checks.");
+    }
+    if (claims.some((claim) => stringField(claim.status) === "unsupported")) {
+      addWarning(issues, "verified_with_unsupported_claims", "$.claims", "Proof is marked verified but includes unsupported claims.");
     }
   }
 
@@ -459,6 +581,22 @@ function validateStatusConsistency(bundle: Record<string, unknown>, issues: Proo
   });
 }
 
+function knownEvidenceIds(
+  bundle: Record<string, unknown>,
+  evidenceIds: Set<string>,
+  commandIds: Set<string>,
+  checkIds: Set<string>,
+  riskIds: Set<string>,
+): Set<string> {
+  return new Set([
+    ...evidenceIds,
+    ...commandIds,
+    ...checkIds,
+    ...riskIds,
+    ...recordArray(bundle.changedFiles).flatMap((file) => isStringArray(file.mutationIds) ? file.mutationIds : []),
+  ]);
+}
+
 function requireNonEmptyString(
   record: Record<string, unknown>,
   key: string,
@@ -474,6 +612,20 @@ function requireArray(value: unknown, path: string, issues: ProofVerificationIss
   if (!Array.isArray(value)) {
     addError(issues, "invalid_array", path, "Expected an array.");
   }
+}
+
+function requireOptionalArray(
+  value: unknown,
+  path: string,
+  missingCode: string,
+  missingMessage: string,
+  issues: ProofVerificationIssue[],
+): void {
+  if (value === undefined) {
+    addWarning(issues, missingCode, path, missingMessage);
+    return;
+  }
+  requireArray(value, path, issues);
 }
 
 function forEachRecord(

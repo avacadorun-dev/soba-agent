@@ -87,6 +87,8 @@ This page lists the SOBA Agent v0.6.x CLI surface available from the console.
 ## 3. Proof commands
 
 Proof bundles are persisted in `.soba/evidence/*.soba-proof.json` after accepted agent finishes.
+Current proof bundles include a compact evidence index, finish claims, changed files, checks, commands, risks, and review actions.
+`soba verify` validates the proof schema and checks that supported claim references point at known evidence, command, check, file mutation, or risk IDs.
 
 | Command | Purpose |
 |---|---|

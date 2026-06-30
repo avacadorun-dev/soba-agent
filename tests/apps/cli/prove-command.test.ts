@@ -20,6 +20,25 @@ describe("soba prove CLI", () => {
           turnId: "turn_1",
           status: "verified",
           summary: "CLI proof rendered.",
+          evidence: [
+            {
+              id: "ev_verification_cli",
+              kind: "verification",
+              status: "success",
+              summary: "Verification command passed: bun test",
+              timestamp: 1,
+              toolCallId: "bash_1",
+              command: "bun test",
+            },
+          ],
+          claims: [
+            {
+              id: "claim_1",
+              claim: "CLI proof rendered",
+              status: "supported",
+              evidenceIds: ["ev_verification_cli"],
+            },
+          ],
           changedFiles: [],
           commands: [{ id: "cmd_1", command: "bun test", status: "passed", exitCode: 0 }],
           checks: [{ label: "Tests", status: "passed", commandId: "cmd_1" }],
@@ -41,6 +60,7 @@ describe("soba prove CLI", () => {
       expect(stderr).toBe("");
       expect(stdout).toContain("# SOBA Proof");
       expect(stdout).toContain("CLI proof rendered.");
+      expect(stdout).toContain("CLI proof rendered supported (ev_verification_cli)");
       expect(stdout).toContain("Tests passed (bun test)");
     } finally {
       rmSync(cwd, { recursive: true, force: true });

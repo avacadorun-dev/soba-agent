@@ -157,6 +157,7 @@ function renderProofText(proof: EvidenceProofDocument): string {
     `Turn: ${stringField(bundle, "turnId", "unknown")}`,
     `Created: ${stringField(bundle, "createdAt", "unknown")}`,
     `Changed files: ${formatChangedFiles(bundle.changedFiles)}`,
+    `Claims: ${formatClaims(bundle.claims)}`,
     `Checks: ${formatChecks(bundle.checks, bundle.commands)}`,
     `Commands: ${formatCommands(bundle.commands)}`,
     `Risks: ${formatRisks(bundle.risks)}`,
@@ -177,6 +178,9 @@ function renderProofMarkdown(proof: EvidenceProofDocument): string {
     "",
     "## Changed Files",
     markdownList(bundle.changedFiles, formatChangedFile),
+    "",
+    "## Claims",
+    markdownList(bundle.claims, formatClaim),
     "",
     "## Checks",
     markdownList(bundle.checks, (check) => formatCheck(check, bundle.commands)),
@@ -212,6 +216,20 @@ function formatChangedFile(file: Record<string, unknown>): string {
   const removed = numberField(file, "removed");
   const stats = added !== undefined || removed !== undefined ? ` (+${added ?? 0}/-${removed ?? 0})` : "";
   return operation === "unknown" ? `${path}${stats}` : `${operation} ${path}${stats}`;
+}
+
+function formatClaims(value: unknown): string {
+  const claims = arrayField(value);
+  if (claims.length === 0) return "none recorded";
+  return claims.map(formatClaim).join(", ");
+}
+
+function formatClaim(claim: Record<string, unknown>): string {
+  const text = stringField(claim, "claim", "unnamed claim");
+  const status = stringField(claim, "status", "unknown");
+  const evidenceIds = stringArrayField(claim.evidenceIds);
+  const refs = evidenceIds.length > 0 ? ` (${evidenceIds.join(", ")})` : "";
+  return `${text} ${status}${refs}`;
 }
 
 function formatChecks(value: unknown, commandsValue: unknown): string {
@@ -276,6 +294,10 @@ function markdownList(value: unknown, formatter: (record: Record<string, unknown
 function numberField(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

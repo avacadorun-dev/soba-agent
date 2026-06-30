@@ -40,6 +40,7 @@ describe("Evidence Bundle builder", () => {
       turnId: "turn_1",
       completionStatus: "completed",
       summary: "Patched app and verified tests.",
+      criteria: [{ criterion: "App patch is covered by tests", evidenceIds: ["ev_verification_bash_1"] }],
       ledger: summary(entries, { hasCodeMutations: true }),
       now: () => NOW,
     });
@@ -73,7 +74,59 @@ describe("Evidence Bundle builder", () => {
       },
     ]);
     expect(bundle.checks).toMatchObject([{ label: "Tests", status: "passed", verificationKind: "test" }]);
+    expect(bundle.evidence).toMatchObject([
+      {
+        id: "ev_mutation_edit_1",
+        kind: "mutation",
+        status: "success",
+        files: ["src/app.ts"],
+      },
+      {
+        id: "ev_verification_bash_1",
+        kind: "verification",
+        status: "success",
+        command: "bun test",
+      },
+    ]);
+    expect(bundle.claims).toEqual([
+      {
+        id: "claim_1",
+        claim: "App patch is covered by tests",
+        status: "supported",
+        evidenceIds: ["ev_verification_bash_1"],
+      },
+    ]);
     expect(bundle.risks).toEqual([]);
+  });
+
+  test("marks criteria without known evidence as unsupported or unverified claims", () => {
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_claims",
+      completionStatus: "completed_with_unverified_changes",
+      summary: "Recorded criteria.",
+      criteria: [
+        { criterion: "Known mutation exists", evidenceIds: ["ev_mutation_edit_1"] },
+        { criterion: "Missing evidence exists", evidenceIds: ["ev_missing"] },
+        { criterion: "No explicit evidence" },
+      ],
+      ledger: summary([
+        mutationEntry({
+          id: "ev_mutation_edit_1",
+          status: "unverified",
+          toolCallId: "edit_1",
+          toolName: "edit",
+          files: ["src/app.ts"],
+        }),
+      ], {
+        hasCodeMutations: true,
+        unverifiedMutationIds: ["ev_mutation_edit_1"],
+        unverifiedCodeMutationIds: ["ev_mutation_edit_1"],
+      }),
+      now: () => NOW,
+    });
+
+    expect(bundle.claims.map((claim) => claim.status)).toEqual(["supported", "unsupported", "unverified"]);
   });
 
   test("marks code mutations without verification as unverified", () => {

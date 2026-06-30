@@ -18,6 +18,38 @@ describe("verify command", () => {
       turnId: "turn_1",
       status: "verified",
       summary: "Implemented proof verification.",
+      evidence: [
+        {
+          id: "ev_mutation_1",
+          kind: "mutation",
+          status: "success",
+          summary: "edit changed project files: src/app.ts",
+          timestamp: 1,
+          toolCallId: "edit_1",
+          toolName: "edit",
+          files: ["src/app.ts"],
+          resolves: ["cmd_1"],
+        },
+        {
+          id: "ev_verification_1",
+          kind: "verification",
+          status: "success",
+          summary: "Verification command passed: bun test",
+          timestamp: 2,
+          toolCallId: "bash_1",
+          toolName: "bash",
+          command: "bun test",
+          mutationIds: ["ev_mutation_1"],
+        },
+      ],
+      claims: [
+        {
+          id: "claim_1",
+          claim: "Proof verification is implemented",
+          status: "supported",
+          evidenceIds: ["ev_verification_1"],
+        },
+      ],
       changedFiles: [
         {
           path: "src/app.ts",
@@ -72,6 +104,7 @@ describe("verify command", () => {
     expect(rendered).toContain("SOBA Proof Verification");
     expect(rendered).toContain("Result: valid");
     expect(rendered).toContain("Errors: 0");
+    expect(rendered).toContain("Claims: 1");
   });
 
   test("renders invalid proof as json with issue details", () => {
@@ -110,6 +143,41 @@ describe("verify command", () => {
 
     expect(result.valid).toBe(false);
     expect(result.issues.map((issue) => issue.code)).toContain("passed_check_without_passed_command");
+  });
+
+  test("rejects supported claims that reference missing evidence", () => {
+    const result = verifyEvidenceProof({
+      ...proof,
+      bundle: {
+        ...proof.bundle,
+        claims: [
+          {
+            id: "claim_1",
+            claim: "Broken claim",
+            status: "supported",
+            evidenceIds: ["ev_missing"],
+          },
+        ],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.code)).toContain("unknown_claim_evidence");
+  });
+
+  test("keeps legacy proofs valid with migration warnings", () => {
+    const result = verifyEvidenceProof({
+      ...proof,
+      bundle: {
+        ...proof.bundle,
+        evidence: undefined,
+        claims: undefined,
+      },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.result).toBe("valid_with_warnings");
+    expect(result.issues.map((issue) => issue.code)).toEqual(["missing_evidence_index", "missing_claims"]);
   });
 
   test("keeps warnings separate from invalid errors", () => {

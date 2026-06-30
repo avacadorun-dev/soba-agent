@@ -21,6 +21,25 @@ describe("soba verify CLI", () => {
           turnId: "turn_1",
           status: "verified",
           summary: "CLI proof verified.",
+          evidence: [
+            {
+              id: "ev_verification_cli",
+              kind: "verification",
+              status: "success",
+              summary: "Verification command passed: bun test",
+              timestamp: 1,
+              toolCallId: "bash_1",
+              command: "bun test",
+            },
+          ],
+          claims: [
+            {
+              id: "claim_1",
+              claim: "CLI proof verified",
+              status: "supported",
+              evidenceIds: ["ev_verification_cli"],
+            },
+          ],
           changedFiles: [],
           commands: [{ id: "cmd_1", command: "bun test", status: "passed", exitCode: 0, outputDigest: DIGEST }],
           checks: [{ id: "check_1", label: "Tests", status: "passed", commandId: "cmd_1" }],
@@ -45,6 +64,7 @@ describe("soba verify CLI", () => {
       expect(stdout).toContain("# SOBA Proof Verification");
       expect(stdout).toContain("`valid`");
       expect(stdout).toContain("Errors: 0");
+      expect(stdout).toContain("Claims: 1");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -62,6 +82,25 @@ describe("soba verify CLI", () => {
           turnId: "turn_1",
           status: "verified",
           summary: "Invalid CLI proof.",
+          evidence: [
+            {
+              id: "ev_verification_cli",
+              kind: "verification",
+              status: "success",
+              summary: "Verification command passed: bun test",
+              timestamp: 1,
+              toolCallId: "bash_1",
+              command: "bun test",
+            },
+          ],
+          claims: [
+            {
+              id: "claim_1",
+              claim: "Invalid CLI proof",
+              status: "supported",
+              evidenceIds: ["ev_verification_cli"],
+            },
+          ],
           changedFiles: [],
           commands: [{ id: "cmd_1", command: "bun test", status: "failed", exitCode: 1, outputDigest: DIGEST }],
           checks: [{ id: "check_1", label: "Tests", status: "passed", commandId: "cmd_1" }],

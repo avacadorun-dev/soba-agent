@@ -15,6 +15,25 @@ describe("prove command", () => {
       turnId: "turn_1",
       status: "verified",
       summary: "Implemented proof persistence.",
+      evidence: [
+        {
+          id: "ev_verification_bash_1",
+          kind: "verification",
+          status: "success",
+          summary: "Verification command passed: bun test",
+          timestamp: 1,
+          toolCallId: "bash_1",
+          command: "bun test",
+        },
+      ],
+      claims: [
+        {
+          id: "claim_1",
+          claim: "Proof persistence is implemented",
+          status: "supported",
+          evidenceIds: ["ev_verification_bash_1"],
+        },
+      ],
       changedFiles: [{ path: "src/app.ts", operation: "modified", added: 3, removed: 1 }],
       commands: [
         {
@@ -48,6 +67,7 @@ describe("prove command", () => {
     const rendered = renderProveCommandView(view);
     expect(rendered).toContain("SOBA Proof");
     expect(rendered).toContain("Status: verified");
+    expect(rendered).toContain("Claims: Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(rendered).toContain("bun test passed exit=0 duration=42ms digest=sha256:abc123");
   });
 
@@ -61,6 +81,7 @@ describe("prove command", () => {
     });
 
     expect(renderProveCommandView(view)).toContain("# SOBA Proof");
+    expect(renderProveCommandView(view)).toContain("- Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(renderProveCommandView(view)).toContain("- Tests passed (bun test)");
   });
 
