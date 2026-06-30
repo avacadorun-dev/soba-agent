@@ -2,6 +2,7 @@ import type { FunctionCallField, ItemParam, MessageField } from "../../kernel/mo
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { DebugEntry, FlightRecordData } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
+import type { EvidenceProofSink } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { TaskKind } from "../verification/verification-policy";
 import type { AgentTurnResponseStageResult } from "./agent-turn-response-stage";
@@ -46,6 +47,7 @@ export async function handleAgentTurnCompletionStage(input: {
   maxAutonomousFollowUps: number;
   verificationEvidenceCallIds: Set<string>;
   successfulToolCallIds: Set<string>;
+  evidenceProofSink?: EvidenceProofSink;
   emit(event: AgentEvent): void;
   flight(data: Omit<FlightRecordData, "version">): void;
   debug(data: DebugEntry["data"]): void;
@@ -71,6 +73,7 @@ export async function handleAgentTurnCompletionStage(input: {
     maxAutonomousFollowUps,
     verificationEvidenceCallIds,
     successfulToolCallIds,
+    evidenceProofSink,
     emit,
     flight,
     debug,
@@ -103,6 +106,7 @@ export async function handleAgentTurnCompletionStage(input: {
       autonomousFollowUps,
       verificationEvidenceCallIds,
       successfulToolCallIds,
+      evidenceProofSink,
       emit,
       flight,
       debug,

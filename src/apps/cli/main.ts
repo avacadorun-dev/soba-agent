@@ -15,7 +15,14 @@ import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
 import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
-import { listSessions, redactMcpSensitiveText, SessionManager, syncMcpToolsIntoRegistry } from "../../composition/cli/public";
+import {
+  listSessions,
+  redactMcpSensitiveText,
+  runFilesystemProveCommand,
+  runFilesystemVerifyCommand,
+  SessionManager,
+  syncMcpToolsIntoRegistry,
+} from "../../composition/cli/public";
 import {
   firstTimeSetup,
   loadConfig,
@@ -252,6 +259,28 @@ async function main() {
     );
     for (const line of result.stdout) console.log(line);
     for (const line of result.stderr) console.error(line);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
+  if (cliArgs.prove) {
+    const result = runFilesystemProveCommand({
+      args: cliArgs.proveArgs,
+      projectRoot: process.cwd(),
+    });
+    if (result.stream === "stdout") process.stdout.write(result.output);
+    else process.stderr.write(result.output);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
+  if (cliArgs.verify) {
+    const result = runFilesystemVerifyCommand({
+      args: cliArgs.verifyArgs,
+      projectRoot: process.cwd(),
+    });
+    if (result.stream === "stdout") process.stdout.write(result.output);
+    else process.stderr.write(result.output);
     if (result.exitCode !== 0) process.exit(result.exitCode);
     return;
   }

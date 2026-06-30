@@ -199,6 +199,9 @@ async function executeVerificationCommand(
     output: result.content.map((content) => content.text).join("\n"),
     iteration: options.iteration ?? 0,
     verificationKind: verificationKindForCommandKind(kind),
+    durationMs,
+    cwd: options.toolContext.cwd,
+    details: result.details,
   });
 
   return { call, result, durationMs };

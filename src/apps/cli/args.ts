@@ -82,6 +82,14 @@ export interface CliArgs {
   init: boolean;
   /** Raw argv slice after the `init` token. */
   initArgs: string[];
+  /** Render persisted SOBA proof bundles and exit. */
+  prove: boolean;
+  /** Raw argv slice after the `prove` token. */
+  proveArgs: string[];
+  /** Verify persisted SOBA proof bundles and exit. */
+  verify: boolean;
+  /** Raw argv slice after the `verify` token. */
+  verifyArgs: string[];
   /**
    * `soba provider <sub> ...` sub-route. When this is defined, the binary
    * dispatches into the provider-cli module and skips agent setup. The
@@ -118,6 +126,10 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   acp: false,
   init: false,
   initArgs: [],
+  prove: false,
+  proveArgs: [],
+  verify: false,
+  verifyArgs: [],
   providerSubArgs: [],
 };
 
@@ -335,6 +347,16 @@ export function parseArgs(argv: string[]): CliArgs {
       case "init":
         args.init = true;
         args.initArgs = argv.slice(i + 1);
+        return args;
+
+      case "prove":
+        args.prove = true;
+        args.proveArgs = argv.slice(i + 1);
+        return args;
+
+      case "verify":
+        args.verify = true;
+        args.verifyArgs = argv.slice(i + 1);
         return args;
 
       case "acp":

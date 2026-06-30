@@ -8,7 +8,7 @@ import type {
 } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
 import { acknowledgeErrors } from "../completion/completion-gate";
-import { buildEvidenceBundle, formatEvidenceBundleForHandoff } from "../evidence";
+import { buildEvidenceBundle, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import type { TaskKind } from "../verification/verification-policy";
@@ -40,6 +40,7 @@ export interface FinishCallHandlerInput {
   autonomousFollowUps: number;
   verificationEvidenceCallIds: Set<string>;
   successfulToolCallIds: Set<string>;
+  evidenceProofSink?: EvidenceProofSink;
   emit: (event: AgentEvent) => void;
   flight: (data: Omit<FlightRecordData, "version">) => void;
   debug: (data: DebugEntry["data"]) => void;
@@ -142,6 +143,23 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     summary: finishRequest.summary,
     ledger: input.evidenceLedger.getSummary(),
   });
+  let proofPath: string | undefined;
+  if (input.evidenceProofSink) {
+    try {
+      proofPath = (await input.evidenceProofSink.saveEvidenceBundle(evidenceBundle)).path;
+    } catch (error) {
+      input.flight({
+        kind: "runtime_event",
+        turn: input.turn,
+        iteration: input.iteration,
+        payload: {
+          event: "evidence_proof_persist_failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+  const evidenceFlightPayload = proofPath ? { ...evidenceBundle, proofPath } : evidenceBundle;
   if (evidenceBundle.diff) {
     input.flight({
       kind: "diff_summary",
@@ -154,7 +172,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     kind: "evidence_bundle",
     turn: input.turn,
     iteration: input.iteration,
-    payload: evidenceBundle,
+    payload: evidenceFlightPayload,
   });
   input.flight({
     kind: "completion_decision",

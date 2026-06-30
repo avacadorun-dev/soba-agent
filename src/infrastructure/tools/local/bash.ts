@@ -9,6 +9,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, mkdirSync, mkdtempSync, openSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { commandErrorInfo, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
@@ -394,6 +395,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
       if (error) {
         outputText += `\n[${error.code}: ${error.nextAction}]`;
       }
+      const outputDigest = `sha256:${createHash("sha256").update(outputText).digest("hex")}`;
 
       return {
         content: [{ type: "text", text: outputText || "(no output)" }],
@@ -409,6 +411,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
           timeoutSeconds: timeout.seconds,
           maxTimeoutSeconds: timeout.maxSeconds,
           tempPath: result.tempPath,
+          outputDigest,
         },
       };
     } catch (error) {

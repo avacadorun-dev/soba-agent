@@ -7,6 +7,7 @@ import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
 import { ContextController } from "../context/context-controller";
+import type { EvidenceProofSink } from "../evidence";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import {
   createDangerousConfirmationAdapter,
@@ -37,6 +38,7 @@ export interface AgentLoopRuntimeInput {
   skillManager?: SkillSource;
   autoCompactOverride?: { enabled: boolean };
   projectMemory?: ProjectMemorySource;
+  evidenceProofSink?: EvidenceProofSink;
   projectContextReader?: ProjectContextReader;
   projectCommandFiles?: ProjectCommandFileReader;
   createToolContext: () => ToolContext;
@@ -54,6 +56,7 @@ export interface AgentLoopRuntimeServices {
   contextController: ContextController;
   skillManager: SkillSource | undefined;
   projectMemory: ProjectMemorySource | undefined;
+  evidenceProofSink: EvidenceProofSink | undefined;
   projectContextReader: ProjectContextReader | undefined;
   projectCommandFiles: ProjectCommandFileReader | undefined;
   eventBus: AgentLoopEventBus;
@@ -110,6 +113,7 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     contextController,
     skillManager: input.skillManager,
     projectMemory: input.projectMemory,
+    evidenceProofSink: input.evidenceProofSink,
     projectContextReader: input.projectContextReader,
     projectCommandFiles: input.projectCommandFiles,
     eventBus,

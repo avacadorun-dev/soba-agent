@@ -38,6 +38,7 @@ export interface EvidenceCommandRun {
   exitCode?: number | null;
   cwd?: string;
   outputPreview?: string;
+  outputDigest?: string;
 }
 
 export type EvidenceCheckStatus = "passed" | "failed" | "skipped" | "not_run" | "not_required";
@@ -86,6 +87,14 @@ export interface EvidenceBundle {
   diff?: EvidenceDiffSummary;
   reviewActions: DiffReviewActionRecord[];
   createdAt: string;
+}
+
+export interface EvidenceProofReceipt {
+  path: string;
+}
+
+export interface EvidenceProofSink {
+  saveEvidenceBundle(bundle: EvidenceBundle): EvidenceProofReceipt | Promise<EvidenceProofReceipt>;
 }
 
 export interface BuildEvidenceBundleInput {
@@ -152,6 +161,11 @@ function commandsFromLedger(entries: EvidenceEntry[]): EvidenceCommandRun[] {
         status: commandStatusFromEntry(entry),
         verificationKind: entry.verificationKind,
         toolCallId: entry.toolCallId,
+        durationMs: entry.durationMs,
+        exitCode: entry.exitCode,
+        cwd: entry.cwd,
+        outputPreview: entry.outputPreview,
+        outputDigest: entry.outputDigest,
       },
     ];
   });

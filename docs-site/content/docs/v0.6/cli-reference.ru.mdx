@@ -84,7 +84,26 @@ description: Режимы запуска SOBA, top-level флаги, provider su
 
 ---
 
-## 3. Provider subcommands
+## 3. Proof-команды
+
+Proof bundles сохраняются в `.soba/evidence/*.soba-proof.json` после accepted finish агента.
+
+| Команда | Назначение |
+|---|---|
+| `soba prove` | Показать последний proof bundle для текущего проекта |
+| `soba prove --last` | Явно показать последний proof bundle |
+| `soba prove --format markdown` | Вывести последний proof как Markdown |
+| `soba prove --format json` | Вывести последний proof как JSON с `proofPath` |
+| `soba prove <path>` | Показать конкретный `.soba-proof.json` файл |
+| `soba verify` | Проверить структуру и внутренние ссылки последнего proof bundle |
+| `soba verify --format json` | Вывести найденные ошибки проверки как JSON |
+| `soba verify <path>` | Проверить конкретный `.soba-proof.json` файл |
+
+`soba prove` и `soba verify` не запускают agent runtime и не требуют credentials провайдера.
+
+---
+
+## 4. Provider subcommands
 
 Provider registry управляется через sub-route `soba provider`.
 
@@ -131,11 +150,13 @@ soba provider add ollama \
 
 ---
 
-## 4. Практические команды проверки
+## 5. Практические команды проверки
 
 ```bash
 soba --version
 soba --help
+soba prove --last
+soba verify --last
 soba provider list
 soba --no-session --max-agent-iterations 1 "Ответь одним словом: ok"
 ```
@@ -148,7 +169,7 @@ soba -i --lang ru --theme graphite
 
 ---
 
-## 5. Direct shell в TUI
+## 6. Direct shell в TUI
 
 В интерактивном режиме shell-команды можно запускать напрямую:
 

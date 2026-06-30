@@ -27,6 +27,11 @@ describe("Evidence Bundle builder", () => {
         command: "bun test",
         verificationKind: "test",
         mutationIds: ["ev_mutation_edit_1"],
+        durationMs: 4210,
+        exitCode: 0,
+        cwd: "/repo",
+        outputPreview: "tests passed",
+        outputDigest: "sha256:abc123",
       }),
     ];
 
@@ -55,7 +60,18 @@ describe("Evidence Bundle builder", () => {
         mutationIds: ["ev_mutation_edit_1"],
       },
     ]);
-    expect(bundle.commands).toMatchObject([{ command: "bun test", status: "passed", verificationKind: "test" }]);
+    expect(bundle.commands).toMatchObject([
+      {
+        command: "bun test",
+        status: "passed",
+        verificationKind: "test",
+        durationMs: 4210,
+        exitCode: 0,
+        cwd: "/repo",
+        outputPreview: "tests passed",
+        outputDigest: "sha256:abc123",
+      },
+    ]);
     expect(bundle.checks).toMatchObject([{ label: "Tests", status: "passed", verificationKind: "test" }]);
     expect(bundle.risks).toEqual([]);
   });

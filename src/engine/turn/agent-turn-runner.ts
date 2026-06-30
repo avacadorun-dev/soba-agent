@@ -283,6 +283,7 @@ export async function runAgentTurn(
         maxAutonomousFollowUps: runtime.options.maxAutonomousFollowUps,
         verificationEvidenceCallIds,
         successfulToolCallIds,
+        evidenceProofSink: runtime.evidenceProofSink,
         emit: (event) => emit(event),
         flight: (data) => flight(data),
         debug: (data) => debug(data),

@@ -88,6 +88,9 @@ export function observeToolExecutionResult(
       isError: true,
       output: extractToolResultText(result),
       iteration: input.iteration,
+      durationMs: execution.durationMs,
+      cwd: execution.cwd,
+      details: result.details,
     });
     appendToolOutput(input);
     return { outcome: toolOutcome(toolCall, result) };
@@ -108,6 +111,9 @@ export function observeToolExecutionResult(
     isError: result.isError,
     output: extractToolResultText(result),
     iteration: input.iteration,
+    durationMs: execution.durationMs,
+    cwd: execution.cwd,
+    details: result.details,
   });
 
   const checkpointEvent = observeCheckpoint(input);

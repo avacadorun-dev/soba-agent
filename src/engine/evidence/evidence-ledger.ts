@@ -34,6 +34,11 @@ export interface EvidenceEntry {
   toolName?: string;
   command?: string;
   verificationKind?: VerificationKind;
+  durationMs?: number;
+  exitCode?: number | null;
+  cwd?: string;
+  outputPreview?: string;
+  outputDigest?: string;
   files?: string[];
   mutationIds?: string[];
   resolves?: string[];
@@ -48,6 +53,9 @@ export interface EvidenceToolOutcome {
   output: string;
   iteration: number;
   verificationKind?: VerificationKind;
+  durationMs?: number;
+  cwd?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface VerificationCommandNotice {
@@ -86,6 +94,7 @@ export interface EvidenceLedgerSummary {
 
 const INSPECT_TOOL_NAMES = new Set(["read", "ls"]);
 const MUTATION_TOOL_NAMES = new Set(["write", "edit"]);
+const OUTPUT_PREVIEW_MAX_CHARS = 2_000;
 
 export class EvidenceLedger {
   private readonly entries: EvidenceEntry[] = [];
@@ -137,6 +146,7 @@ export class EvidenceLedger {
           command,
           verificationKind: "diff_inspection",
           iteration: outcome.iteration,
+          ...commandEvidenceFields(outcome),
           summary: `Inspected project diff with: ${command}`,
         });
       }
@@ -150,6 +160,7 @@ export class EvidenceLedger {
           toolName: outcome.toolName,
           command,
           iteration: outcome.iteration,
+          ...commandEvidenceFields(outcome),
           summary: `Searched project with: ${command}`,
         });
       }
@@ -385,6 +396,7 @@ export class EvidenceLedger {
       toolName: outcome.toolName,
       command: outcome.toolName === "bash" ? readCommand(outcome.arguments) : undefined,
       iteration: outcome.iteration,
+      ...(outcome.toolName === "bash" ? commandEvidenceFields(outcome) : {}),
       summary: `${outcome.toolName} failed: ${outcome.output.slice(0, 160)}`,
     });
   }
@@ -420,6 +432,7 @@ export class EvidenceLedger {
       mutationIds,
       resolves: diagnosticIds,
       iteration: outcome.iteration,
+      ...commandEvidenceFields(outcome),
       summary: `Verification command passed: ${command}`,
     });
   }
@@ -439,6 +452,7 @@ export class EvidenceLedger {
       command,
       verificationKind,
       iteration: outcome.iteration,
+      ...commandEvidenceFields(outcome),
       summary: `Verification command failed: ${command}`,
     });
   }
@@ -515,6 +529,38 @@ function isSearchCommand(command: string): boolean {
 
 function verificationKindForOutcome(outcome: EvidenceToolOutcome, command: string): VerificationKind | null {
   return outcome.verificationKind ?? verificationKindFromCommand(command);
+}
+
+function commandEvidenceFields(outcome: EvidenceToolOutcome): Pick<
+  EvidenceEntry,
+  "durationMs" | "exitCode" | "cwd" | "outputPreview" | "outputDigest"
+> {
+  const exitCode = readExitCode(outcome.details);
+  const outputDigest = readStringDetail(outcome.details, "outputDigest");
+  return {
+    durationMs: outcome.durationMs,
+    exitCode,
+    cwd: outcome.cwd,
+    outputPreview: previewOutput(outcome.output),
+    outputDigest,
+  };
+}
+
+function readExitCode(details: Record<string, unknown> | undefined): number | null | undefined {
+  if (!details || !("exitCode" in details)) return undefined;
+  return details.exitCode === null || typeof details.exitCode === "number" ? details.exitCode : undefined;
+}
+
+function readStringDetail(details: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = details?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function previewOutput(output: string): string | undefined {
+  const trimmed = output.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length <= OUTPUT_PREVIEW_MAX_CHARS) return trimmed;
+  return `${trimmed.slice(0, OUTPUT_PREVIEW_MAX_CHARS)}\n[Evidence output preview truncated]`;
 }
 
 export function isVerificationCommand(command: string): boolean {

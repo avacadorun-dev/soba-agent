@@ -1500,6 +1500,57 @@ describe("AgentLoop", () => {
     expect(JSON.stringify(records)).toContain("[REDACTED]");
   });
 
+  test("persists accepted finish evidence through the configured proof sink", async () => {
+    const client = makeClient([
+      makeToolCallResponse("event-tool", '{"input":"x"}'),
+      makeFinishResponse("Done"),
+    ]);
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("event-tool"));
+    const savedBundles: unknown[] = [];
+    const proofSink = {
+      saveEvidenceBundle: mock(async (bundle: unknown) => {
+        savedBundles.push(bundle);
+        return { path: "/test/.soba/evidence/proof.soba-proof.json" };
+      }),
+    };
+    const loop = new AgentLoop(
+      client,
+      session,
+      tools,
+      "/test",
+      { emitEvents: false },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      proofSink,
+    );
+
+    await loop.runTurn("Use tool");
+
+    expect(proofSink.saveEvidenceBundle).toHaveBeenCalledTimes(1);
+    expect(savedBundles).toHaveLength(1);
+    expect(savedBundles[0]).toMatchObject({
+      version: 1,
+      sessionId: session.getSessionId(),
+      turnId: "turn_1",
+      summary: "Done",
+    });
+    const evidenceRecord = session
+      .getFlightRecords()
+      .find((record) => record.data.kind === "evidence_bundle");
+    expect(evidenceRecord?.data.payload).toMatchObject({
+      proofPath: "/test/.soba/evidence/proof.soba-proof.json",
+    });
+  });
+
   test("не эмитит события при emitEvents: false", async () => {
     const client = makeClient([makeTextResponse("Silent response")]);
     const session = SessionManager.inMemory("/test");

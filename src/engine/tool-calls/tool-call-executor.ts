@@ -18,6 +18,8 @@ export interface ToolExecutionResult {
   parsedArgs: Record<string, unknown>;
   result: ToolResult;
   startTime: number;
+  durationMs: number;
+  cwd: string;
   denied?: {
     description: string;
     reason: string;
@@ -70,6 +72,7 @@ export class ToolCallExecutor {
   async executeToolCall(toolCall: FunctionCallField, turnSignal?: AbortSignal): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     const parsedArgs = safeParseArgs(toolCall.arguments);
+    const context = this.toolContext();
 
     this.emit({
       type: "tool_call_start",
@@ -94,6 +97,8 @@ export class ToolCallExecutor {
         parsedArgs,
         result,
         startTime,
+        durationMs: Date.now() - startTime,
+        cwd: context.cwd,
         denied: {
           description: permissionDecision.description,
           reason: permissionDecision.reason,
@@ -111,7 +116,7 @@ export class ToolCallExecutor {
         fingerprint: `validation:tool_not_registered:${toolCall.name}`,
       });
       this.emitToolResultAndEnd(toolCall, result, startTime);
-      return { toolCall, parsedArgs, result, startTime };
+      return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
     }
 
     let preparedArgs: Record<string, unknown>;
@@ -126,12 +131,12 @@ export class ToolCallExecutor {
         fingerprint: `validation:tool_invalid_arguments:${toolCall.name}`,
       });
       this.emitToolResultAndEnd(toolCall, result, startTime);
-      return { toolCall, parsedArgs, result, startTime };
+      return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
     }
 
     let result: ToolResult;
     try {
-      result = await this.executeRegisteredTool(tool, preparedArgs, turnSignal);
+      result = await this.executeRegisteredTool(tool, preparedArgs, context, turnSignal);
     } catch (error) {
       result = createToolErrorResult({
         code: "tool_execution_failed",
@@ -143,7 +148,7 @@ export class ToolCallExecutor {
     }
 
     this.emitToolResultAndEnd(toolCall, result, startTime);
-    return { toolCall, parsedArgs, result, startTime };
+    return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
   }
 
   async runDirectShellCommand(command: string, silent = false): Promise<ToolResult> {
@@ -203,6 +208,7 @@ export class ToolCallExecutor {
   private async executeRegisteredTool(
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
     args: Record<string, unknown>,
+    context: ToolContext,
     turnSignal?: AbortSignal,
   ): Promise<ToolResult> {
     const toolAbortController = new AbortController();
@@ -214,7 +220,7 @@ export class ToolCallExecutor {
       turnSignal?.addEventListener("abort", abortToolWithTurn, { once: true });
     }
     try {
-      return await tool.execute(args, this.toolContext(), toolAbortController.signal);
+      return await tool.execute(args, context, toolAbortController.signal);
     } finally {
       turnSignal?.removeEventListener("abort", abortToolWithTurn);
       this.activeToolAbortControllers.delete(toolAbortController);

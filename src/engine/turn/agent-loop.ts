@@ -19,6 +19,7 @@ import type {
 import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
+import type { EvidenceProofSink } from "../evidence";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import type { TrustController } from "../permissions/trust-controller";
 import type { ProjectCommandFileReader } from "../verification/types";
@@ -76,6 +77,7 @@ export class AgentLoop {
     projectMemory?: ProjectMemorySource,
     projectContextReader?: ProjectContextReader,
     projectCommandFiles?: ProjectCommandFileReader,
+    evidenceProofSink?: EvidenceProofSink,
   ) {
     this.session = session;
     this.cwd = cwd;
@@ -94,6 +96,7 @@ export class AgentLoop {
       projectMemory,
       projectContextReader,
       projectCommandFiles,
+      evidenceProofSink,
       createToolContext: () => this.createToolContext(),
       flight: (data) => this.flight(data),
     });

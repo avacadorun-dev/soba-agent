@@ -26,6 +26,7 @@ describe("bash tool", () => {
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain("hello");
+    expect(result.details?.outputDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
   test("возвращает stdout и stderr", async () => {

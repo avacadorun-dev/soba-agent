@@ -34,6 +34,22 @@ describe("CLI adaptive loop options", () => {
     expect(args.prompt).toBeUndefined();
   });
 
+  test("распознаёт top-level prove и отдаёт его флаги отдельному parser", () => {
+    const args = parseArgs(["prove", "--last", "--format", "markdown"]);
+
+    expect(args.prove).toBe(true);
+    expect(args.proveArgs).toEqual(["--last", "--format", "markdown"]);
+    expect(args.prompt).toBeUndefined();
+  });
+
+  test("распознаёт top-level verify и отдаёт его флаги отдельному parser", () => {
+    const args = parseArgs(["verify", ".soba/evidence/proof.soba-proof.json", "--format", "json"]);
+
+    expect(args.verify).toBe(true);
+    expect(args.verifyArgs).toEqual([".soba/evidence/proof.soba-proof.json", "--format", "json"]);
+    expect(args.prompt).toBeUndefined();
+  });
+
   test("принимает только известные темы и отклоняет неизвестные", () => {
     expect(parseArgs(["--theme", "aurora"]).theme).toBe("aurora");
     // Unknown theme should error out

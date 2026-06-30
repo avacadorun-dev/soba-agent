@@ -22,6 +22,7 @@ import type { McpClientManager } from "../../infrastructure/mcp/client-manager";
 import type { McpRuntimeController } from "../../infrastructure/mcp/runtime-controller";
 import type { McpSecretStore } from "../../infrastructure/mcp/secret-store";
 import { createFilesystemPortableCapsuleService } from "../../infrastructure/persistence/capsules/portable-capsule-storage";
+import { FilesystemEvidenceProofStorage } from "../../infrastructure/persistence/evidence/proof-storage";
 import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
@@ -128,6 +129,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
 
   const projectMemory = new ProjectMemory({ projectRoot: cwd });
   projectMemory.initialize();
+  const evidenceProofStorage = new FilesystemEvidenceProofStorage({ projectRoot: cwd });
 
   const homeDir = homedir();
   const trustManager = new TrustManager();
@@ -174,16 +176,32 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   });
 
   const useStreaming = noStream ? false : stream || interactive;
-  const agentLoop = new AgentLoop(client, session, tools, cwd, {
-    emitEvents: true,
-    tokenBudget,
-    stream: useStreaming,
-    debug,
-    maxAgentIterations: config.maxAgentIterations,
-    maxStalledIterations: config.maxStalledIterations,
-    maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
-    bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
-  }, trustManager, undefined, contextManager, backgroundScheduler, skillManager, { enabled: compactionConfig.auto }, projectMemory, createProjectContextReader(), createProjectCommandFileReader(cwd));
+  const agentLoop = new AgentLoop(
+    client,
+    session,
+    tools,
+    cwd,
+    {
+      emitEvents: true,
+      tokenBudget,
+      stream: useStreaming,
+      debug,
+      maxAgentIterations: config.maxAgentIterations,
+      maxStalledIterations: config.maxStalledIterations,
+      maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
+      bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
+    },
+    trustManager,
+    undefined,
+    contextManager,
+    backgroundScheduler,
+    skillManager,
+    { enabled: compactionConfig.auto },
+    projectMemory,
+    createProjectContextReader(),
+    createProjectCommandFileReader(cwd),
+    evidenceProofStorage,
+  );
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const portableCapsuleServiceFactory = createFilesystemPortableCapsuleService;
   const fallbackCompactor = new EngineCompactFallbackCompactor();

@@ -84,7 +84,26 @@ This page lists the SOBA Agent v0.6.x CLI surface available from the console.
 
 ---
 
-## 3. Provider subcommands
+## 3. Proof commands
+
+Proof bundles are persisted in `.soba/evidence/*.soba-proof.json` after accepted agent finishes.
+
+| Command | Purpose |
+|---|---|
+| `soba prove` | Show the latest proof bundle for the current project |
+| `soba prove --last` | Explicitly show the latest proof bundle |
+| `soba prove --format markdown` | Render the latest proof as Markdown |
+| `soba prove --format json` | Print the latest proof as JSON with `proofPath` |
+| `soba prove <path>` | Show a specific `.soba-proof.json` file |
+| `soba verify` | Validate the latest proof bundle structure and internal references |
+| `soba verify --format json` | Print verification issues as JSON |
+| `soba verify <path>` | Validate a specific `.soba-proof.json` file |
+
+`soba prove` and `soba verify` do not start the agent runtime and do not require provider credentials.
+
+---
+
+## 4. Provider subcommands
 
 The provider registry is managed through the `soba provider` sub-route.
 
@@ -131,11 +150,13 @@ soba provider add ollama \
 
 ---
 
-## 4. Practical check commands
+## 5. Practical check commands
 
 ```bash
 soba --version
 soba --help
+soba prove --last
+soba verify --last
 soba provider list
 soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
 ```
@@ -148,7 +169,7 @@ soba -i --lang en --theme graphite
 
 ---
 
-## 5. Direct shell in the TUI
+## 6. Direct shell in the TUI
 
 In interactive mode, shell commands can be run directly:
 
