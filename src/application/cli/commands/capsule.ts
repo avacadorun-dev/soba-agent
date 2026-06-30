@@ -3,13 +3,30 @@ import { executeCapsuleCommand } from "../public";
 import type { CommandContext } from "./index";
 
 export function handleCapsule(args: string[], ctx: CommandContext): CommandResult {
+  const emittedCreateStart = emitCapsuleCreateStart(ctx, args);
   const view = executeCapsuleCommand({
     args,
     session: ctx.session,
     createPortableCapsuleService: ctx.portableCapsuleServiceFactory,
+    projectMemory: ctx.projectMemory,
   });
   renderCapsuleCommandView(ctx, view);
+  if (emittedCreateStart) {
+    ctx.renderer.emit({ type: "capsule_create_done", timestamp: Date.now() });
+  }
   return view.kind === "loaded" ? { handled: false, prompt: view.prompt } : { handled: true };
+}
+
+function emitCapsuleCreateStart(ctx: CommandContext, args: string[]): boolean {
+  const subcommand = args[0]?.toLowerCase();
+  const objective = args.slice(1).join(" ").trim();
+  if (subcommand !== "create" || objective.length === 0) return false;
+  ctx.renderer.emit({
+    type: "capsule_create_start",
+    timestamp: Date.now(),
+    message: ctx.i18n.t("command.capsule.create.start"),
+  });
+  return true;
 }
 
 function renderCapsuleCommandView(ctx: CommandContext, view: CapsuleCommandView): void {

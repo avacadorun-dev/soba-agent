@@ -11,6 +11,7 @@ import type { McpClientManagerStatus, McpManagedServerStatus, McpRemoteAuthComma
 import { McpSecretStore } from "../../../src/infrastructure/mcp/secret-store";
 import { type McpServerSecurity, redactMcpSensitiveText } from "../../../src/infrastructure/mcp/security";
 import { createFilesystemPortableCapsuleService } from "../../../src/infrastructure/persistence/capsules/portable-capsule-storage";
+import { ProjectMemory } from "../../../src/infrastructure/persistence/memory/project-memory";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
 import { createFilesystemProjectTrustStore } from "../../../src/infrastructure/persistence/skills/project-trust-storage";
 import type { ContextCapsuleEntry } from "../../../src/kernel/transcript/types-v2";
@@ -58,6 +59,7 @@ describe("slash commands", () => {
   function makeCommandContext(
     session: SessionManager,
     output: Array<{ type: string; message?: string }>,
+    projectMemory?: ProjectMemory,
   ): CommandContext {
     return {
       session,
@@ -65,6 +67,7 @@ describe("slash commands", () => {
       i18n: new I18n("en"),
       renderer: { emit: (event: { type: string; message?: string }) => output.push(event) },
       portableCapsuleServiceFactory: createFilesystemPortableCapsuleService,
+      projectMemory,
       redactMcpSensitiveText,
     } as unknown as CommandContext;
   }
@@ -230,15 +233,52 @@ describe("slash commands", () => {
     try {
       const session = SessionManager.inMemory(tempDir);
       appendCapsuleCheckpoint(session, "ck_222222222222");
+      const memory = new ProjectMemory({ projectRoot: tempDir });
+      memory.initialize();
       const output: Array<{ type: string; message?: string }> = [];
 
-      await executeCommand('/capsule create "Передать auth work"', makeCommandContext(session, output));
+      await executeCommand('/capsule create "Передать auth work"', makeCommandContext(session, output, memory));
 
-      const message = output[0]?.message ?? "";
+      const message = output[1]?.message ?? "";
       const path = message.match(/Path: (.+)$/m)?.[1];
-      expect(output[0]?.type).toBe("info");
+      expect(output.map((event) => event.type)).toEqual(["capsule_create_start", "info", "capsule_create_done"]);
+      expect(output[0]?.message).toContain("Creating portable capsule");
       expect(message).toContain("Portable capsule created");
       expect(path).toContain(join(".soba", "capsules"));
+      expect(path ? existsSync(path) : false).toBe(true);
+      expect(memory.getStores().capsules.readIndexFile()).toMatchObject({
+        capsuleCount: 1,
+        capsules: [
+          {
+            id: "mem_ck_222222222222",
+            tags: expect.arrayContaining(["context-capsule", "checkpoint"]),
+          },
+        ],
+      });
+      expect(memory.getStores().capsules.get("mem_ck_222222222222").context.sessionId).toBe(session.getSessionId());
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("/capsule create succeeds when project memory mirror fails", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "soba-capsule-command-memory-fail-"));
+    try {
+      const session = SessionManager.inMemory(tempDir);
+      appendCapsuleCheckpoint(session, "ck_222222222223");
+      const output: Array<{ type: string; message?: string }> = [];
+      const context = makeCommandContext(session, output, {
+        addCapsule: () => {
+          throw new Error("memory unavailable");
+        },
+      } as unknown as ProjectMemory);
+
+      await executeCommand('/capsule create "Передать auth work"', context);
+
+      const message = output[1]?.message ?? "";
+      const path = message.match(/Path: (.+)$/m)?.[1];
+      expect(output.map((event) => event.type)).toEqual(["capsule_create_start", "info", "capsule_create_done"]);
+      expect(message).toContain("Portable capsule created");
       expect(path ? existsSync(path) : false).toBe(true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });

@@ -311,6 +311,7 @@
   "command.capsule.empty": "未找到胶囊",
   "command.capsule.error": "胶囊错误：{error}",
   "command.capsule.create.success": "已创建便携胶囊：{id}，来源 {checkpointId}\n路径：{path}",
+  "command.capsule.create.start": "正在创建便携胶囊...",
   "command.capsule.create.usage": "用法：/capsule create <目标>",
   "command.capsule.export.success": "已导出便携胶囊：{id}，来源 {checkpointId}\n路径：{path}",
   "command.capsule.export.usage": "用法：/capsule export <检查点-id> <path.capsule.md>",

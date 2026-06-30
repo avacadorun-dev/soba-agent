@@ -4,6 +4,7 @@
  * Commands are prefixed with "/" and processed before sending to the LLM.
  */
 
+import type { ContextCapsuleMemorySink } from "../../../kernel/memory/context-capsule";
 import type { OpenResponsesClient } from "../../../kernel/model/model-gateway";
 import type { TrustController } from "../../../kernel/permissions/trust";
 import type { ToolRegistry } from "../../../kernel/tools/tool-registry";
@@ -62,6 +63,7 @@ export interface CommandContext {
   toolRegistry?: ToolRegistry;
   trustManager?: TrustController;
   portableCapsuleServiceFactory?: PortableCapsuleServiceFactory;
+  projectMemory?: ContextCapsuleMemorySink;
   notify?: (type: "info" | "success" | "warning" | "error", title: string, message: string) => void;
   syncMcpToolsIntoRegistry?: (
     registry: ToolRegistry,

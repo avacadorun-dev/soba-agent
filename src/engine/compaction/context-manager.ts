@@ -17,6 +17,7 @@
  * Spec: internal-design-notes
  */
 
+import { type ContextCapsuleMemorySink, contextCapsuleToMemoryInput } from "../../kernel/memory/context-capsule";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { ItemParam } from "../../kernel/transcript/types";
 import type {
@@ -42,6 +43,7 @@ export interface ContextManagerConfig {
   provider: ProviderIdentity;
   capabilities: ProviderCapabilities;
   generatorConfig: CapsuleGeneratorConfig;
+  memory?: ContextCapsuleMemorySink;
 }
 
 export interface CompactionOutcome {
@@ -95,6 +97,7 @@ export class ContextManager {
   private _provider: ProviderIdentity;
   private _capabilities: ProviderCapabilities;
   private _config: ContextManagerConfig;
+  private _memory?: ContextCapsuleMemorySink;
   /** Cached last snapshot for reactive sidebar access (set via getSnapshot). */
   private _lastSnapshot: ContextSnapshot | null = null;
 
@@ -110,6 +113,7 @@ export class ContextManager {
     this._generator = new CapsuleGenerator(config.generatorConfig);
     this._provider = config.provider;
     this._capabilities = config.capabilities;
+    this._memory = config.memory;
   }
 
   // ─── Pre-inference check ───
@@ -594,7 +598,8 @@ export class ContextManager {
       metrics: result.draft.metrics,
     };
 
-    this._session.appendContextCapsule(capsuleEntry);
+    const entryId = this._session.appendContextCapsule(capsuleEntry);
+    this._writeMemoryMirror(entryId);
 
     return {
       compacted: true,
@@ -608,5 +613,18 @@ export class ContextManager {
         ? `Compaction completed using ${result.strategyUsed} strategy`
         : `Compaction completed with warnings: ${result.validation.warnings.map((w) => w.message).join("; ")}`,
     };
+  }
+
+  private _writeMemoryMirror(entryId: string): void {
+    if (!this._memory) return;
+    const entry = this._session
+      .getEntries()
+      .find((candidate): candidate is ContextCapsuleEntry => candidate.id === entryId && isContextCapsuleEntry(candidate));
+    if (!entry) return;
+    try {
+      this._memory.addCapsule(contextCapsuleToMemoryInput(entry, this._session.getSessionId()));
+    } catch {
+      // Memory mirrors are advisory; a storage failure must not invalidate the session capsule.
+    }
   }
 }

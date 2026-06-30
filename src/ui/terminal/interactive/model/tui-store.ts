@@ -1059,6 +1059,10 @@ export class TuiStore {
   private onCommandOutput(event: { type: string; [key: string]: unknown }): void {
     if (event.type === "error") this.add({ type: "error", content: String(event.message) });
     if (event.type === "info") this.add({ type: "info", content: String(event.message) });
+    if (event.type === "capsule_create_start") {
+      this.add({ type: "info", content: String(event.message) });
+      this.setStatus(this.l("command.capsule.create.start"));
+    }
     if (event.type === "language_changed") {
       this.setLocaleRevision((revision) => revision + 1);
       this.add({ type: "info", content: String(event.message) });
@@ -1086,6 +1090,7 @@ export class TuiStore {
       });
       this.setStatus(this.l("tui.status.idle"));
     }
+    if (event.type === "capsule_create_done") this.setStatus(this.l("tui.status.idle"));
   }
 
   private startNoodle(): void {

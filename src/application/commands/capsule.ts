@@ -1,3 +1,4 @@
+import { type ContextCapsuleMemorySink, contextCapsuleToMemoryInput } from "../../kernel/memory/context-capsule";
 import type { ContextCapsuleEntry } from "../../kernel/transcript/types-v2";
 import { isContextCapsuleEntry } from "../../kernel/transcript/types-v2";
 import { PortableCapsuleServiceError, type PortableCapsuleServiceFactory } from "../capsules/service";
@@ -25,12 +26,13 @@ export function executeCapsuleCommand(input: {
   args: string[];
   session: RuntimeSessionHandle;
   createPortableCapsuleService?: PortableCapsuleServiceFactory;
+  projectMemory?: ContextCapsuleMemorySink;
 }): CapsuleCommandView {
-  const { args, session, createPortableCapsuleService } = input;
+  const { args, session, createPortableCapsuleService, projectMemory } = input;
   const subcommand = args[0]?.toLowerCase();
 
   if (subcommand === "create") {
-    return createCapsule(args.slice(1), session, createPortableCapsuleService);
+    return createCapsule(args.slice(1), session, createPortableCapsuleService, projectMemory);
   }
   if (subcommand === "export") {
     return exportCapsule(args.slice(1), session, createPortableCapsuleService);
@@ -64,6 +66,7 @@ function createCapsule(
   args: string[],
   session: RuntimeSessionHandle,
   createPortableCapsuleService?: PortableCapsuleServiceFactory,
+  projectMemory?: ContextCapsuleMemorySink,
 ): CapsuleCommandView {
   const objective = stripWrappingQuotes(args.join(" ").trim());
   if (!objective) {
@@ -75,14 +78,31 @@ function createCapsule(
 
   try {
     const result = createPortableCapsuleService(session).createFromSession(session, { objective });
+    const checkpointId = result.capsule.provenance.checkpointId ?? "";
+    writeMemoryMirror(session, checkpointId, projectMemory);
     return {
       kind: "created",
       id: result.capsule.id,
-      checkpointId: result.capsule.provenance.checkpointId ?? "",
+      checkpointId,
       path: result.path,
     };
   } catch (error) {
     return capsuleErrorView(error);
+  }
+}
+
+function writeMemoryMirror(
+  session: RuntimeSessionHandle,
+  checkpointId: string,
+  projectMemory?: ContextCapsuleMemorySink,
+): void {
+  if (!projectMemory || !checkpointId) return;
+  const capsule = getCapsuleEntries(session).find((entry) => entry.checkpointId === checkpointId);
+  if (!capsule) return;
+  try {
+    projectMemory.addCapsule(contextCapsuleToMemoryInput(capsule, session.getSessionId()));
+  } catch {
+    // Memory mirrors are advisory; portable capsule creation must remain authoritative.
   }
 }
 

@@ -119,9 +119,13 @@ export class ContextController {
     return recoveryResult;
   }
 
-  recordProviderUsage(response: ResponseResource, requestFingerprint: string): void {
+  recordProviderUsage(
+    response: ResponseResource,
+    requestFingerprint: string,
+    measuredThroughEntryId: string | null = null,
+  ): void {
     if (!this.contextManager || !response.usage) return;
-    this.contextManager.recordProviderUsage(response.usage.input_tokens, null, requestFingerprint);
+    this.contextManager.recordProviderUsage(response.usage.input_tokens, measuredThroughEntryId, requestFingerprint);
   }
 
   getEffectiveContextTokens(metrics: ContextRequestMetrics): number | undefined {

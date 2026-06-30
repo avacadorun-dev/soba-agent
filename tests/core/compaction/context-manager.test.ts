@@ -18,6 +18,7 @@ import { ContextManager, type ContextManagerConfig } from "../../../src/engine/c
 import type { ModelInvoker } from "../../../src/engine/compaction/strategies/portable-only";
 import { DEFAULT_COMPACTION_CONFIG } from "../../../src/engine/compaction/trigger-policy";
 import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import type { MemoryCapsuleInput } from "../../../src/kernel/memory/types";
 import type { ItemParam } from "../../../src/kernel/transcript/types";
 import type { ProviderCapabilities, ProviderIdentity } from "../../../src/kernel/transcript/types-v2";
 
@@ -356,6 +357,39 @@ describe("ContextManager", () => {
       expect(capsules[0].trigger).toBe("user_request");
       expect(capsules[0].portableState.goal).toBeDefined();
       expect(capsules[0].checkpointId).toMatch(/^ck_[0-9a-f]{12}$/);
+    });
+
+    it("зеркалит созданную context capsule в project memory", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 500);
+      const memoryWrites: MemoryCapsuleInput[] = [];
+
+      const config = makeConfig({
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 100,
+        },
+        memory: {
+          addCapsule: (input) => {
+            memoryWrites.push(input);
+          },
+        },
+      });
+
+      const manager = new ContextManager(session, config);
+      const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
+
+      expect(outcome.compacted).toBe(true);
+      expect(memoryWrites).toHaveLength(1);
+      expect(memoryWrites[0]).toMatchObject({
+        id: `mem_${outcome.checkpointId}`,
+        type: "discovery",
+        context: {
+          sessionId: session.getSessionId(),
+        },
+        tags: expect.arrayContaining(["context-capsule", "checkpoint", "user_request"]),
+      });
+      expect(memoryWrites[0]?.detail).toContain(`Checkpoint: ${outcome.checkpointId}`);
     });
   });
 

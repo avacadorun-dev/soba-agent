@@ -73,7 +73,7 @@ export function handleAgentTurnResponseStage(input: {
   } = input;
   const { response, toolCalls, assistantMessages, systemPromptTokens, toolSchemaTokens } = execution;
 
-  runtime.contextController.recordProviderUsage(response, `turn_${turnCount}`);
+  runtime.contextController.recordProviderUsage(response, `turn_${turnCount}`, session.getLeafId());
   debug({
     event: "loop/response",
     turn: turnIndex,

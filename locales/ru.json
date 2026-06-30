@@ -311,6 +311,7 @@
   "command.capsule.empty": "Капсулы не найдены",
   "command.capsule.error": "Ошибка капсулы: {error}",
   "command.capsule.create.success": "Portable capsule создана: {id} из {checkpointId}\nПуть: {path}",
+  "command.capsule.create.start": "Создаю portable capsule...",
   "command.capsule.create.usage": "Использование: /capsule create <цель>",
   "command.capsule.export.success": "Portable capsule экспортирована: {id} из {checkpointId}\nПуть: {path}",
   "command.capsule.export.usage": "Использование: /capsule export <id-чекпоинта> <path.capsule.md>",

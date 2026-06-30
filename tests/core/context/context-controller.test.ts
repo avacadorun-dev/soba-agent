@@ -77,10 +77,10 @@ describe("ContextController", () => {
     });
     const controller = new ContextController({ contextManager: manager });
 
-    controller.recordProviderUsage(makeResponse(777), "turn_1");
+    controller.recordProviderUsage(makeResponse(777), "turn_1", "entry_1");
     const effectiveTokens = controller.getEffectiveContextTokens(makeMetrics("ctx"));
 
-    expect(manager.recordProviderUsage).toHaveBeenCalledWith(777, null, "turn_1");
+    expect(manager.recordProviderUsage).toHaveBeenCalledWith(777, "entry_1", "turn_1");
     expect(effectiveTokens).toBe(1234);
   });
 

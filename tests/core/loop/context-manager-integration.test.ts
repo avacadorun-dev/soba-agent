@@ -336,4 +336,32 @@ describe("ContextManager integration with AgentLoop", () => {
     const snapshot = contextManager.getSnapshot(0, 0, "test-fingerprint");
     expect(snapshot.effectiveTokens).toBeGreaterThan(0);
   });
+
+  test("provider usage watermark is measured through the request leaf", async () => {
+    const session = SessionManager.inMemory("/test");
+    const client = createMockClient();
+    const tools = new ToolRegistry();
+    tools.register(readTool);
+    const contextManager = createTestContextManager(session);
+
+    const loop = new AgentLoop(
+      client,
+      session,
+      tools,
+      "/test",
+      { emitEvents: true },
+      undefined,
+      undefined,
+      contextManager,
+    );
+
+    await loop.runTurn(`Large prompt ${"x".repeat(20_000)}`);
+
+    const snapshot = contextManager.getSnapshot(0, 0, "turn_1");
+    expect(snapshot.source).toBe("provider_usage");
+    expect(snapshot.providerInputTokens).toBe(1000);
+    expect(snapshot.watermark?.measuredThroughEntryId).not.toBeNull();
+    expect(snapshot.estimatedTrailingTokens).toBeLessThan(100);
+    expect(snapshot.effectiveTokens).toBeLessThan(1100);
+  });
 });

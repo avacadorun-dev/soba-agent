@@ -87,6 +87,10 @@ function commandOutputText(event: { type: string; message?: unknown; [key: strin
     return `Compaction started${tokensBefore}.`;
   }
 
+  if (event.type === "capsule_create_start") {
+    return "Creating portable capsule.";
+  }
+
   if (event.type === "compaction_done") {
     const before = typeof event.tokensBefore === "number" ? event.tokensBefore : undefined;
     const after = typeof event.tokensAfter === "number" ? event.tokensAfter : undefined;
@@ -385,6 +389,7 @@ async function main() {
           toolRegistry: context.toolRegistry,
           trustManager: context.trustManager,
           portableCapsuleServiceFactory: context.portableCapsuleServiceFactory,
+          projectMemory: context.projectMemory,
           fallbackCompactor: context.fallbackCompactor,
           syncMcpToolsIntoRegistry,
           redactMcpSensitiveText,
@@ -475,6 +480,7 @@ async function main() {
     skillManager,
     skillCommands,
     trustStore,
+    projectMemory,
     sessionLifecycle,
     mcpRuntime,
     mcpManager,
@@ -548,6 +554,7 @@ async function main() {
           toolRegistry: tools,
           trustManager,
           portableCapsuleServiceFactory,
+          projectMemory,
           fallbackCompactor,
           tuiRegistry: slashCommandRegistry,
           notify,

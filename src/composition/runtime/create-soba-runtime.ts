@@ -69,6 +69,7 @@ export interface RuntimeCommandExecutorFactoryContext {
   mcpSecretStore: McpSecretStore;
   toolRegistry: ToolRegistry;
   trustManager: TrustManager;
+  projectMemory: ProjectMemory;
   getSession: () => SessionManager;
   portableCapsuleServiceFactory: PortableCapsuleServiceFactory;
   fallbackCompactor: CompactFallbackCompactorPort;
@@ -148,6 +149,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     maxOutputTokens: config.maxOutputTokens,
     provider: providerIdentity,
     capabilities: providerCapabilities,
+    memory: projectMemory,
     generatorConfig: {
       modelInvoker: {
         invoke: async (prompt: string, _signal: AbortSignal): Promise<string> => {
@@ -221,6 +223,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     mcpSecretStore,
     toolRegistry: tools,
     trustManager,
+    projectMemory,
     getSession: () => runtime.getSessionManager(),
     portableCapsuleServiceFactory,
     fallbackCompactor,
