@@ -1180,6 +1180,82 @@ describe("AgentLoop", () => {
     expect(events.some((event) => event.type === "turn_stop_reason" && event.reason === "aborted")).toBe(true);
   });
 
+  test("transient socket error during streaming model turn is retried", async () => {
+    const finalResponse = makeTextResponse("Recovered");
+    const client = {
+      ...makeClient([finalResponse]),
+      classifyError: mock((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return message.includes("socket") ? "transient" : "unknown";
+      }),
+      createStream: mock(async function* () {
+        yield {
+          type: "response.created" as const,
+          response: { ...finalResponse, output: [], status: "in_progress" },
+        };
+
+        if (client.createStream.mock.calls.length === 1) {
+          yield {
+            type: "response.output_item.added" as const,
+            output_index: 0,
+            item: {
+              type: "message" as const,
+              id: "msg_partial",
+              status: "in_progress",
+              role: "assistant",
+              content: [],
+            },
+          };
+          yield {
+            type: "response.output_text.delta" as const,
+            item_id: "msg_partial",
+            output_index: 0,
+            content_index: 0,
+            delta: "Part",
+          };
+          throw new Error("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()");
+        }
+
+        yield {
+          type: "response.output_item.added" as const,
+          output_index: 0,
+          item: {
+            type: "message" as const,
+            id: "msg_recovered",
+            status: "in_progress",
+            role: "assistant",
+            content: [],
+          },
+        };
+        yield {
+          type: "response.output_text.delta" as const,
+          item_id: "msg_recovered",
+          output_index: 0,
+          content_index: 0,
+          delta: "Recovered",
+        };
+        yield {
+          type: "response.output_item.done" as const,
+          output_index: 0,
+          item: finalResponse.output[0],
+        };
+        yield { type: "response.completed" as const, response: finalResponse };
+      }),
+    };
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    const loop = new AgentLoop(client, session, tools, "/test", { emitEvents: true, stream: true });
+    const events: AgentEvent[] = [];
+    loop.onEvent((event) => events.push(event));
+
+    const result = await loop.runTurn("Recover from stream drop");
+
+    expect(client.createStream).toHaveBeenCalledTimes(2);
+    expect(result.errors.some((error) => error.type === "api_error")).toBe(false);
+    expect(result.response.status).toBe("completed");
+    expect(events.some((event) => event.type === "turn_stop_reason" && event.reason === "api-error")).toBe(false);
+  });
+
   // ── Adaptive loop guard ──
 
   test("аварийный maxAgentIterations останавливает цикл", async () => {

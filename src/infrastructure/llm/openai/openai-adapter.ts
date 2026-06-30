@@ -1250,6 +1250,17 @@ export function classifyOpenAIError(error: unknown): ProviderErrorKind {
   if (msg.includes("timeout") || msg.includes("timed out")) {
     return "timeout";
   }
+  if (
+    msg.includes("fetch") ||
+    msg.includes("network") ||
+    msg.includes("socket") ||
+    msg.includes("connection") ||
+    msg.includes("econnreset") ||
+    msg.includes("econnrefused") ||
+    msg.includes("enotfound")
+  ) {
+    return "transient";
+  }
   if (msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("server error")) {
     return "transient";
   }

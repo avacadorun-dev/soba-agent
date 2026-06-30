@@ -151,6 +151,11 @@ describe("classifyOpenAIError / OpenAIAdapter.classifyError", () => {
   });
 
   // transient
+  test("classifies socket connection closures as transient", () => {
+    const err = new Error("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()");
+    expect(classifyOpenAIError(err)).toBe("transient");
+  });
+
   test("classifies 500 status as transient", () => {
     const err = { status: 500, code: "", message: "internal server error", type: "" };
     expect(classifyOpenAIError(err)).toBe("transient");
