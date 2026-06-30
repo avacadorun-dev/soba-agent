@@ -40,7 +40,7 @@ jobs:
         run: bun run lint
 
       - name: Typecheck
-        run: bunx tsc --noEmit
+        run: bun run typecheck
 
       - name: Build npm bundle
         run: bun run build

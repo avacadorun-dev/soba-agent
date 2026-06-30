@@ -28,7 +28,7 @@ jobs:
         run: bun run lint
 
       - name: Typecheck
-        run: bunx tsc --noEmit
+        run: bun run typecheck
 
       - name: Architecture boundaries
         run: bun run check:boundaries

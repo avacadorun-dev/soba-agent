@@ -41,6 +41,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "typecheck": "bunx tsc --noEmit --pretty false",
     "smoke:diagnostics": "bun run scripts/smoke-diagnostics.ts",
     "smoke:terminal-bench": "bun run scripts/smoke-diagnostics.ts --profile terminal-bench",
     "test": "bun test",

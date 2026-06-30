@@ -71,6 +71,12 @@ describe("verification policy", () => {
     expect(verificationKindFromCommand("grep test src/app.ts")).toBeNull();
     expect(verificationKindFromCommand("pwd && ls -la")).toBeNull();
     expect(verificationKindFromCommand("echo ok")).toBeNull();
+    expect(verificationKindFromCommand("chi")).toBeNull();
+    expect(
+      verificationKindFromCommand(
+        ". ├── main.go # app entry └── handlers/ └── handlers_test.go # end-to-end tests",
+      ),
+    ).toBeNull();
     expect(verificationKindFromCommand("npm install")).toBeNull();
     expect(verificationKindFromCommand("uv add fastapi")).toBeNull();
   });

@@ -152,7 +152,7 @@ Before this refactor is complete, all of these must pass:
 
 ```bash
 bun run lint
-bunx tsc --noEmit
+bun run typecheck
 bun test
 bun run build
 bun run check:boundaries

@@ -52,7 +52,7 @@ chmod +x "./soba-linux-x64-v${VERSION}"
 
 ```bash
 bun run lint
-bunx tsc --noEmit
+bun run typecheck
 bun test
 bun run build
 ```

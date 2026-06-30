@@ -142,6 +142,7 @@ export function allowsUnverifiedCompletion(prompt: string): boolean {
 export function verificationKindFromCommand(command: string): VerificationKind | null {
   const normalized = normalizeWhitespace(command).toLowerCase();
   if (isNonVerificationProbeCommand(normalized)) return null;
+  if (isClearlyNotShellExecution(command, normalized)) return null;
   if (/\bgit\s+(diff|show|status)\b/.test(normalized)) return "diff_inspection";
   if (/\b(tsc|typecheck|pyright|mypy)\b/.test(normalized)) return "typecheck";
   if (/\b(biome|lint)\b/.test(normalized) || /\bruff\s+(check|format\s+--check)\b/.test(normalized)) return "lint";
@@ -149,6 +150,52 @@ export function verificationKindFromCommand(command: string): VerificationKind |
   if (/\bbuild\b/.test(normalized)) return "build";
   if (/\b(run|start|dev)\b/.test(normalized)) return "run";
   return "run";
+}
+
+function isClearlyNotShellExecution(command: string, normalized: string): boolean {
+  if (/[\u2500-\u257f]/u.test(command)) return true;
+
+  const firstToken = normalized.split(/\s+/)[0] ?? "";
+  if (firstToken === "." || firstToken === "..") return true;
+  if (!normalized.includes(" ") && !isKnownVerificationExecutable(firstToken) && !/^(?:\.{1,2}\/|~\/|[a-z]:\\)/i.test(command)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isKnownVerificationExecutable(name: string): boolean {
+  return [
+    "bun",
+    "bunx",
+    "npm",
+    "npx",
+    "pnpm",
+    "yarn",
+    "make",
+    "cmake",
+    "zig",
+    "cargo",
+    "go",
+    "dotnet",
+    "mvn",
+    "gradle",
+    "swift",
+    "xcodebuild",
+    "biome",
+    "eslint",
+    "prettier",
+    "ruff",
+    "pytest",
+    "vitest",
+    "jest",
+    "mocha",
+    "ava",
+    "test",
+    "tsc",
+    "pyright",
+    "mypy",
+  ].includes(name);
 }
 
 export function isNonVerificationProbeCommand(command: string): boolean {

@@ -45,7 +45,7 @@ describe("CI quality gate", () => {
     expect(extractRunCommands(workflow)).toEqual([
       "bun install --frozen-lockfile",
       "bun run lint",
-      "bunx tsc --noEmit",
+      "bun run typecheck",
       "bun run check:boundaries",
       "bun run docs:deps:check",
       "bun run docs:changelog:check",
@@ -71,6 +71,7 @@ describe("CI quality gate", () => {
     const packageJson = readPackageJson();
 
     expect(packageJson.scripts?.lint).toBe("biome check .");
+    expect(packageJson.scripts?.typecheck).toBe("bunx tsc --noEmit --pretty false");
     expect(packageJson.scripts?.["check:boundaries"]).toBe("bun run scripts/check-boundaries.ts");
     expect(packageJson.scripts?.["docs:deps:check"]).toBe("bun run scripts/generate-dependency-graph.ts --check");
     expect(packageJson.scripts?.["docs:changelog"]).toBe("bun run scripts/generate-changelog.ts");

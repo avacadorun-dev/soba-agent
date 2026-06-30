@@ -18,7 +18,7 @@ describe("project command detector", () => {
 
     expect(firstCommand(commands, "test")).toBe("bun test");
     expect(firstCommand(commands, "lint")).toBe("bun run lint");
-    expect(firstCommand(commands, "typecheck")).toBe("bunx tsc --noEmit");
+    expect(firstCommand(commands, "typecheck")).toBe("bun run typecheck");
     expect(firstCommand(commands, "build")).toBe("bun run build");
     expect(commands.deadCode).toEqual([]);
     expect(allSelectedCommands(commands).some((command) => /(?:npm|eslint|prettier)/i.test(command))).toBe(false);
@@ -148,6 +148,34 @@ describe("project command detector", () => {
       expect(commands.run).toEqual([]);
       expect(commands.test).toEqual([]);
       expect(commands.build).toEqual([]);
+    });
+  });
+
+  test("README prose and project trees are not selected as verification commands", async () => {
+    await withFixture(async (cwd) => {
+      const commands = await detectProjectCommands({
+        cwd,
+        projectFiles: testProjectFiles(cwd),
+        projectInstructions: [
+          [
+            "The API uses `chi` for routing.",
+            "Project layout:",
+            "```",
+            ".",
+            "|-- main.go",
+            "|-- go.mod",
+            "`-- internal/",
+            "    |-- openapi_test.go # spec validity tests",
+            "    `-- handlers_test.go # end-to-end tests via httptest",
+            "```",
+          ].join("\n"),
+        ],
+      });
+
+      expect(allSelectedCommands(commands)).not.toContain("chi");
+      expect(allSelectedCommands(commands).some((command) => command.includes("handlers_test.go"))).toBe(false);
+      expect(commands.test).toEqual([]);
+      expect(commands.run).toEqual([]);
     });
   });
 

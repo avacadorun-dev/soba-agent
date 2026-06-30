@@ -220,8 +220,8 @@ function extractCommands(instruction: string): string[] {
   const backtickPattern = /`([^`]+)`/g;
   let match = backtickPattern.exec(instruction);
   while (match) {
-    const command = match[1];
-    if (command) commands.push(command);
+    const command = cleanExtractedCommand(match[1] ?? "");
+    if (looksLikeBacktickShellCommand(command) && !commands.includes(command)) commands.push(command);
     match = backtickPattern.exec(instruction);
   }
 
@@ -287,6 +287,60 @@ function looksLikeShellInstructionCommand(command: string): boolean {
   if (/\s\/[A-Za-z][\w:-]*/.test(command)) return true;
   if (/(?:^|\s)[^\s]+\.[A-Za-z0-9]{1,8}(?:\s|$)/.test(command)) return true;
   return false;
+}
+
+function looksLikeBacktickShellCommand(command: string): boolean {
+  const normalized = normalizeWhitespace(command).toLowerCase();
+  if (!normalized || isNonVerificationInstructionCommand(normalized)) return false;
+  if (normalized.includes("\n")) return false;
+  if (/[\u2500-\u257f]/u.test(command)) return false;
+  if (/^(?:\.{0,2}\/|~\/|[a-z]:\\)/i.test(command)) return true;
+  if (/(?:&&|\|\|)/.test(command)) return true;
+
+  const firstToken = normalized.split(/\s+/)[0] ?? "";
+  if (!isKnownShellExecutable(firstToken)) return false;
+
+  return (
+    /\b(?:test|tests|verify|check|build|compile|lint|typecheck|type-check|ci)\b/.test(normalized) ||
+    /\s-{1,2}[A-Za-z0-9][\w-]*/.test(command) ||
+    /\s\/[A-Za-z][\w:-]*/.test(command) ||
+    /\s\.(?:\s|$)/.test(command)
+  );
+}
+
+function isKnownShellExecutable(name: string): boolean {
+  return (
+    [
+      "bun",
+      "bunx",
+      "npm",
+      "npx",
+      "pnpm",
+      "yarn",
+      "make",
+      "cmake",
+      "zig",
+      "cargo",
+      "go",
+      "dotnet",
+      "mvn",
+      "gradle",
+      "swift",
+      "xcodebuild",
+      "biome",
+      "eslint",
+      "prettier",
+      "ruff",
+      "pytest",
+      "vitest",
+      "jest",
+      "mocha",
+      "ava",
+      "tsc",
+      "pyright",
+      "mypy",
+    ].includes(name)
+  );
 }
 
 function commandPriority(command: ProjectCommand): number {
