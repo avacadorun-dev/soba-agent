@@ -13,8 +13,8 @@ export interface OpenResponsesClientConfig {
 }
 
 export interface OpenResponsesClient {
-  create(params: CreateResponseParams): Promise<ResponseResource>;
-  createStream(params: CreateResponseParams): AsyncIterable<StreamingEvent>;
+  create(params: CreateResponseParams, options?: { signal?: AbortSignal }): Promise<ResponseResource>;
+  createStream(params: CreateResponseParams, options?: { signal?: AbortSignal }): AsyncIterable<StreamingEvent>;
   compact(params: CompactResponseParams): Promise<CompactResource>;
   getProviderIdentity(): ProviderIdentity;
   getProviderCapabilities(): ProviderCapabilities;

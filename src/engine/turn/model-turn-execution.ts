@@ -46,6 +46,7 @@ export async function executeModelTurn(input: {
   tokenBudget: number;
   contextWindow: number;
   errors: AgentTurnError[];
+  signal?: AbortSignal;
   emit: (event: AgentEvent) => void;
   emitStopReason: (
     reason: TurnStopReasonEvent["reason"],
@@ -86,6 +87,10 @@ export async function executeModelTurn(input: {
     emit: input.emit,
   });
 
+  if (input.signal?.aborted) {
+    return stopForCancellation(input, systemPromptTokens, toolSchemaTokens);
+  }
+
   if (!checkResult.canProceed) {
     input.emit({ type: "thinking", timestamp: Date.now(), active: false });
     const errorMsg = checkResult.error || "Cannot proceed: context exceeds hard limit even after compaction";
@@ -103,6 +108,7 @@ export async function executeModelTurn(input: {
   try {
     const modelTurn = await new ModelTurnRunner(input.client, {
       stream: input.stream,
+      signal: input.signal,
       emit: input.emit,
     }).run(request);
     input.emit({ type: "thinking", timestamp: Date.now(), active: false });
@@ -116,6 +122,10 @@ export async function executeModelTurn(input: {
     };
   } catch (error) {
     input.emit({ type: "thinking", timestamp: Date.now(), active: false });
+
+    if (input.signal?.aborted) {
+      return stopForCancellation(input, systemPromptTokens, toolSchemaTokens);
+    }
 
     const errorType = typeof input.client.classifyError === "function"
       ? input.client.classifyError(error)
@@ -143,6 +153,21 @@ export async function executeModelTurn(input: {
     input.emitStopReason("api-error", message);
     return { action: "break", systemPromptTokens, toolSchemaTokens };
   }
+}
+
+function stopForCancellation(
+  input: {
+    errors: AgentTurnError[];
+    iteration: number;
+    emitStopReason: (reason: TurnStopReasonEvent["reason"], detail: string) => void;
+  },
+  systemPromptTokens: number,
+  toolSchemaTokens: number,
+): ModelTurnExecutionResult {
+  const message = "Operation cancelled by user";
+  input.errors.push(createTurnError("cancelled", message, input.iteration));
+  input.emitStopReason("aborted", message);
+  return { action: "break", systemPromptTokens, toolSchemaTokens };
 }
 
 function emitContextUsageUpdate(input: {

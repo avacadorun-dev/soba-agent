@@ -208,6 +208,7 @@ export async function runAgentTurn(
         tokenBudget: runtime.options.tokenBudget,
         contextWindow,
         errors,
+        signal: abortController.signal,
         emit: (event) => emit(event),
         emitStopReason: (reason, detail) => {
           emitStopReason(

@@ -94,14 +94,14 @@ export class OpenResponsesClientProxy implements OpenResponsesClient {
 
   // ─── OpenResponsesClient methods ───
 
-  public async create(params: CreateResponseParams): Promise<ResponseResource> {
-    return this.delegate().create(params);
+  public async create(params: CreateResponseParams, options?: { signal?: AbortSignal }): Promise<ResponseResource> {
+    return this.delegate().create(params, options);
   }
 
-  public async *createStream(params: CreateResponseParams): AsyncIterable<StreamingEvent> {
+  public async *createStream(params: CreateResponseParams, options?: { signal?: AbortSignal }): AsyncIterable<StreamingEvent> {
     // Delegating an async generator requires `yield*` to preserve errors
     // and stream lifecycle.
-    yield* this.delegate().createStream(params);
+    yield* this.delegate().createStream(params, options);
   }
 
   public async compact(params: CompactResponseParams): Promise<CompactResource> {

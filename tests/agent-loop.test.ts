@@ -1143,6 +1143,43 @@ describe("AgentLoop", () => {
     expect(thinkingStates).toEqual([true, false]);
   });
 
+  test("пользовательская отмена во время модельного запроса не становится api_error", async () => {
+    let started!: () => void;
+    let signalWasPassed = false;
+    const modelRequestStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const client: OpenResponsesClient = {
+      ...makeClient([makeTextResponse("unused")]),
+      create: mock(async (_params, options) => {
+        started();
+        signalWasPassed = options?.signal instanceof AbortSignal;
+        if (!options?.signal) throw new Error("missing abort signal");
+        await new Promise<void>((resolve) => {
+          options.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        throw new Error("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()");
+      }),
+    };
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    const loop = new AgentLoop(client, session, tools, "/test", { emitEvents: true });
+    const events: AgentEvent[] = [];
+    loop.onEvent((event) => events.push(event));
+
+    const activeTurn = loop.runTurn("Cancel this request");
+    await modelRequestStarted;
+    loop.abort();
+    const result = await activeTurn;
+
+    expect(signalWasPassed).toBe(true);
+    expect(result.errors.some((error) => error.type === "api_error")).toBe(false);
+    expect(result.errors.some((error) => error.type === "cancelled")).toBe(true);
+    expect(events.some((event) => event.type === "turn_error")).toBe(false);
+    expect(events.some((event) => event.type === "turn_stop_reason" && event.reason === "api-error")).toBe(false);
+    expect(events.some((event) => event.type === "turn_stop_reason" && event.reason === "aborted")).toBe(true);
+  });
+
   // ── Adaptive loop guard ──
 
   test("аварийный maxAgentIterations останавливает цикл", async () => {

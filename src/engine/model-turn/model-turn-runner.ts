@@ -10,6 +10,7 @@ import type { AgentEvent } from "../turn/types";
 
 export interface ModelTurnRunnerOptions {
   stream: boolean;
+  signal?: AbortSignal;
   emit?: (event: AgentEvent) => void;
   now?: () => number;
 }
@@ -30,12 +31,14 @@ export function extractTextFromOutput(item: MessageField): string {
 export class ModelTurnRunner {
   private readonly client: OpenResponsesClient;
   private readonly stream: boolean;
+  private readonly signal?: AbortSignal;
   private readonly emit?: (event: AgentEvent) => void;
   private readonly now: () => number;
 
   constructor(client: OpenResponsesClient, options: ModelTurnRunnerOptions) {
     this.client = client;
     this.stream = options.stream;
+    this.signal = options.signal;
     this.emit = options.emit;
     this.now = options.now ?? Date.now;
   }
@@ -59,7 +62,7 @@ export class ModelTurnRunner {
     assistantMessages: MessageField[],
     toolCalls: FunctionCallField[],
   ): Promise<ResponseResource> {
-    const response = await this.client.create(request);
+    const response = await this.client.create(request, { signal: this.signal });
     for (const item of response.output) {
       if (item.type === "function_call") {
         toolCalls.push(item as FunctionCallField);
@@ -92,7 +95,7 @@ export class ModelTurnRunner {
     const currentFcArgs: Map<number, { id: string; name: string; args: string }> = new Map();
     const currentReasoning = new Map<string, string>();
 
-    for await (const event of this.client.createStream(request)) {
+    for await (const event of this.client.createStream(request, { signal: this.signal })) {
       switch (event.type) {
         case "response.created":
           finalResponse = event.response;

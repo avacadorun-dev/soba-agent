@@ -52,14 +52,14 @@ export interface OpenResponsesClient {
    * Sends the items + instructions to the LLM and returns
    * a ResponseResource containing the output items.
    */
-  create(params: CreateResponseParams): Promise<ResponseResource>;
+  create(params: CreateResponseParams, options?: { signal?: AbortSignal }): Promise<ResponseResource>;
 
   /**
    * Create a response with SSE streaming.
    *
    * Returns an async iterable of StreamingEvents.
    */
-  createStream(params: CreateResponseParams): AsyncIterable<StreamingEvent>;
+  createStream(params: CreateResponseParams, options?: { signal?: AbortSignal }): AsyncIterable<StreamingEvent>;
 
   /**
    * Compact context using the OpenResponses compact endpoint
@@ -149,7 +149,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     if (partial.temperature !== undefined) this.config.temperature = partial.temperature;
   }
 
-  async create(params: CreateResponseParams): Promise<ResponseResource> {
+  async create(params: CreateResponseParams, options: { signal?: AbortSignal } = {}): Promise<ResponseResource> {
     // Convert to provider-specific request
     const request = this.adapter.convertRequest(
       { ...params, stream: false },
@@ -157,13 +157,13 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     );
 
     // Send to provider
-    const response = await this.sendRequest(request);
+    const response = await this.sendRequest(request, { signal: options.signal });
 
     // Convert response back to OpenResponses format
     return this.adapter.convertResponse(response, this.getProviderConfig());
   }
 
-  async *createStream(params: CreateResponseParams): AsyncIterable<StreamingEvent> {
+  async *createStream(params: CreateResponseParams, options: { signal?: AbortSignal } = {}): AsyncIterable<StreamingEvent> {
     const adapter = this.adapter as OpenAIAdapter;
 
     const request = this.adapter.convertRequest(
@@ -185,7 +185,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
           method: "POST",
           headers: this.getRequestHeaders(),
           body: JSON.stringify(request),
-          signal: AbortSignal.timeout(300000),
+          signal: signalWithTimeout(options.signal, 300000),
         });
 
         if (!response.ok) {
@@ -269,9 +269,10 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
 
         return;
       } catch (error) {
+        if (options.signal?.aborted) throw error;
         if (!hasYieldedEvents && attempt < retries && this.isNetworkError(error)) {
           const delay = baseDelay * 2 ** attempt;
-          await Bun.sleep(delay);
+          await sleepWithAbort(delay, options.signal);
           continue;
         }
         throw error;
@@ -303,10 +304,11 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
    */
   private async sendRequest(
     request: Record<string, unknown>,
-    retries = 3,
-    baseDelay = 1000,
+    options: { signal?: AbortSignal; retries?: number; baseDelay?: number } = {},
   ): Promise<Record<string, unknown>> {
     const url = `${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const retries = options.retries ?? 3;
+    const baseDelay = options.baseDelay ?? 1000;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -314,7 +316,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
           method: "POST",
           headers: this.getRequestHeaders(),
           body: JSON.stringify(request),
-          signal: AbortSignal.timeout(120000),
+          signal: signalWithTimeout(options.signal, 120000),
         });
 
         // Rate limiting or server error → retry
@@ -322,7 +324,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
           const delay = baseDelay * 2 ** attempt;
           const retryAfter = response.headers.get("retry-after");
           const waitMs = retryAfter ? Number.parseInt(retryAfter, 10) * 1000 : delay;
-          await Bun.sleep(waitMs);
+          await sleepWithAbort(waitMs, options.signal);
           continue;
         }
 
@@ -335,9 +337,10 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
         const text = await response.text();
         return { error: { status: response.status, message: text } };
       } catch (error) {
+        if (options.signal?.aborted) throw error;
         if (attempt < retries && this.isNetworkError(error)) {
           const delay = baseDelay * 2 ** attempt;
-          await Bun.sleep(delay);
+          await sleepWithAbort(delay, options.signal);
           continue;
         }
         throw error;
@@ -380,6 +383,39 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       model: this.config.model,
     };
   }
+}
+
+function signalWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!signal) return timeoutSignal;
+  const abortSignalAny = (AbortSignal as typeof AbortSignal & {
+    any?: (signals: AbortSignal[]) => AbortSignal;
+  }).any;
+  if (abortSignalAny) return abortSignalAny([signal, timeoutSignal]);
+  if (signal.aborted) return signal;
+
+  const controller = new AbortController();
+  const abort = () => {
+    if (!controller.signal.aborted) controller.abort();
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  timeoutSignal.addEventListener("abort", abort, { once: true });
+  return controller.signal;
+}
+
+async function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) {
+    await Bun.sleep(ms);
+    return;
+  }
+  if (signal.aborted) throw new Error("Operation cancelled by user");
+
+  await Promise.race([
+    Bun.sleep(ms),
+    new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(new Error("Operation cancelled by user")), { once: true });
+    }),
+  ]);
 }
 
 /**
