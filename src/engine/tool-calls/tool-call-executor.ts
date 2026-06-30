@@ -2,7 +2,7 @@ import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import { createToolErrorResult } from "../../kernel/tools/errors";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
-import type { PermissionBroker } from "../permissions/permission-broker";
+import type { PermissionBroker, PermissionDecisionReceipt } from "../permissions/permission-broker";
 import type { AgentEvent } from "../turn/types";
 
 export interface ToolCallExecutorOptions {
@@ -20,6 +20,7 @@ export interface ToolExecutionResult {
   startTime: number;
   durationMs: number;
   cwd: string;
+  permission: PermissionDecisionReceipt;
   denied?: {
     description: string;
     reason: string;
@@ -99,6 +100,7 @@ export class ToolCallExecutor {
         startTime,
         durationMs: Date.now() - startTime,
         cwd: context.cwd,
+        permission: permissionDecision.receipt,
         denied: {
           description: permissionDecision.description,
           reason: permissionDecision.reason,
@@ -116,7 +118,15 @@ export class ToolCallExecutor {
         fingerprint: `validation:tool_not_registered:${toolCall.name}`,
       });
       this.emitToolResultAndEnd(toolCall, result, startTime);
-      return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
+      return {
+        toolCall,
+        parsedArgs,
+        result,
+        startTime,
+        durationMs: Date.now() - startTime,
+        cwd: context.cwd,
+        permission: permissionDecision.receipt,
+      };
     }
 
     let preparedArgs: Record<string, unknown>;
@@ -131,7 +141,15 @@ export class ToolCallExecutor {
         fingerprint: `validation:tool_invalid_arguments:${toolCall.name}`,
       });
       this.emitToolResultAndEnd(toolCall, result, startTime);
-      return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
+      return {
+        toolCall,
+        parsedArgs,
+        result,
+        startTime,
+        durationMs: Date.now() - startTime,
+        cwd: context.cwd,
+        permission: permissionDecision.receipt,
+      };
     }
 
     let result: ToolResult;
@@ -148,7 +166,15 @@ export class ToolCallExecutor {
     }
 
     this.emitToolResultAndEnd(toolCall, result, startTime);
-    return { toolCall, parsedArgs, result, startTime, durationMs: Date.now() - startTime, cwd: context.cwd };
+    return {
+      toolCall,
+      parsedArgs,
+      result,
+      startTime,
+      durationMs: Date.now() - startTime,
+      cwd: context.cwd,
+      permission: permissionDecision.receipt,
+    };
   }
 
   async runDirectShellCommand(command: string, silent = false): Promise<ToolResult> {

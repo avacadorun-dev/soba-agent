@@ -8,7 +8,7 @@ import type {
 } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
 import { acknowledgeErrors } from "../completion/completion-gate";
-import { buildEvidenceBundle, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
+import { buildEvidenceBundle, type EvidenceApproval, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import type { TaskKind } from "../verification/verification-policy";
@@ -40,6 +40,7 @@ export interface FinishCallHandlerInput {
   autonomousFollowUps: number;
   verificationEvidenceCallIds: Set<string>;
   successfulToolCallIds: Set<string>;
+  approvalReceipts: EvidenceApproval[];
   evidenceProofSink?: EvidenceProofSink;
   emit: (event: AgentEvent) => void;
   flight: (data: Omit<FlightRecordData, "version">) => void;
@@ -143,6 +144,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     summary: finishRequest.summary,
     criteria: finishRequest.criteria,
     ledger: input.evidenceLedger.getSummary(),
+    approvals: input.approvalReceipts,
   });
   let proofPath: string | undefined;
   if (input.evidenceProofSink) {

@@ -1,13 +1,17 @@
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
+import { redactSecrets } from "../../kernel/tools/errors";
 import type { ApprovalDecision, DangerousConfirmationEvent } from "../turn/types";
-import type { TrustController } from "./trust-controller";
+import type { TrustCheckResult, TrustController } from "./trust-controller";
+
+const SECRET_KEY_PATTERN = /(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password)/i;
 
 export interface PermissionRequest {
   toolName: string;
   toolCallId: string;
   description: string;
   reason: string;
-  level: "dangerous";
+  level: "safe" | "normal" | "dangerous";
+  trustLevel: "safe" | "normal" | "dangerous";
   approvalKind: "command" | "tool";
   approvalValue: string;
 }
@@ -20,8 +24,20 @@ export interface PermissionBrokerOptions {
 }
 
 export type PermissionDecision =
-  | { approved: true; decision: Exclude<ApprovalDecision, "deny"> }
-  | { approved: false; decision: "deny"; description: string; reason: string };
+  | { approved: true; decision: "auto" | Exclude<ApprovalDecision, "deny">; receipt: PermissionDecisionReceipt }
+  | { approved: false; decision: "deny"; description: string; reason: string; receipt: PermissionDecisionReceipt };
+
+export interface PermissionDecisionReceipt {
+  toolCallId: string;
+  toolName: string;
+  decision: "auto" | ApprovalDecision;
+  approved: boolean;
+  trustLevel: "safe" | "normal" | "dangerous";
+  approvalKind: "command" | "tool";
+  approvalValue: string;
+  description: string;
+  reason: string;
+}
 
 export interface DangerousConfirmationAdapterOptions {
   hasListeners: () => boolean;
@@ -46,11 +62,15 @@ export class PermissionBroker {
         ? this.trustManager.checkCommand(parsedArgs.command)
         : this.trustManager.checkTool(toolCall.name);
 
+    const request = this.buildRequest(toolCall, parsedArgs, trustCheck);
     if (!trustCheck.needsConfirmation) {
-      return { approved: true, decision: "once" };
+      return {
+        approved: true,
+        decision: "auto",
+        receipt: this.receipt(request, "auto", true),
+      };
     }
 
-    const request = this.buildRequest(toolCall, parsedArgs, trustCheck.reason);
     const decision = this.requestPermission ? await this.requestPermission(request) : "deny";
     this.applyDecision(decision, request);
 
@@ -60,31 +80,51 @@ export class PermissionBroker {
         decision,
         description: request.description,
         reason: request.reason,
+        receipt: this.receipt(request, decision, false),
       };
     }
 
-    return { approved: true, decision };
+    return { approved: true, decision, receipt: this.receipt(request, decision, true) };
   }
 
   private buildRequest(
     toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
     parsedArgs: Record<string, unknown>,
-    reason: string,
+    trustCheck: TrustCheckResult,
   ): PermissionRequest {
     const command = typeof parsedArgs.command === "string" ? parsedArgs.command : undefined;
     const isBashCommand = toolCall.name === "bash" && command !== undefined;
     const description = isBashCommand
       ? `bash: ${command}`
-      : `${toolCall.name}(${toolCall.arguments.slice(0, 200)})`;
+      : `${toolCall.name}(${formatPermissionArguments(parsedArgs)})`;
 
     return {
       toolName: toolCall.name,
       toolCallId: toolCall.call_id,
       description,
-      reason,
-      level: "dangerous",
+      reason: trustCheck.reason,
+      level: trustCheck.level,
       approvalKind: isBashCommand ? "command" : "tool",
       approvalValue: isBashCommand ? command : toolCall.name,
+      trustLevel: trustCheck.level,
+    };
+  }
+
+  private receipt(
+    request: PermissionRequest,
+    decision: PermissionDecisionReceipt["decision"],
+    approved: boolean,
+  ): PermissionDecisionReceipt {
+    return {
+      toolCallId: request.toolCallId,
+      toolName: request.toolName,
+      decision,
+      approved,
+      trustLevel: request.trustLevel,
+      approvalKind: request.approvalKind,
+      approvalValue: request.approvalValue,
+      description: request.description,
+      reason: request.reason,
     };
   }
 
@@ -95,6 +135,31 @@ export class PermissionBroker {
       this.trustManager.setPermissionMode(decision);
     }
   }
+}
+
+function formatPermissionArguments(args: Record<string, unknown>): string {
+  return truncate(redactSecrets(JSON.stringify(redactPermissionValue(args, 0))), 200);
+}
+
+function redactPermissionValue(value: unknown, depth: number): unknown {
+  if (depth > 8) return "[REDACTED]";
+  if (Array.isArray(value)) return value.map((item) => redactPermissionValue(item, depth + 1));
+  if (typeof value === "string") return redactSecrets(value);
+  if (!isRecord(value)) return value;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    redacted[key] = SECRET_KEY_PATTERN.test(key) ? "[REDACTED]" : redactPermissionValue(field, depth + 1);
+  }
+  return redacted;
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function createDangerousConfirmationAdapter(
@@ -112,7 +177,7 @@ export function createDangerousConfirmationAdapter(
         toolName: request.toolName,
         toolCallId: request.toolCallId,
         description: request.description,
-        level: request.level,
+        level: "dangerous",
         reason: request.reason,
         resolve,
       });

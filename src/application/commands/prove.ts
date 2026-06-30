@@ -160,6 +160,7 @@ function renderProofText(proof: EvidenceProofDocument): string {
     `Claims: ${formatClaims(bundle.claims)}`,
     `Checks: ${formatChecks(bundle.checks, bundle.commands)}`,
     `Commands: ${formatCommands(bundle.commands)}`,
+    `Permissions: ${formatApprovals(bundle.approvals)}`,
     `Risks: ${formatRisks(bundle.risks)}`,
   ].join("\n");
 }
@@ -187,6 +188,9 @@ function renderProofMarkdown(proof: EvidenceProofDocument): string {
     "",
     "## Commands",
     markdownList(bundle.commands, formatCommand),
+    "",
+    "## Permissions",
+    markdownList(bundle.approvals, formatApproval),
     "",
     "## Risks",
     markdownList(bundle.risks, formatRisk),
@@ -269,6 +273,23 @@ function formatCommand(command: Record<string, unknown>): string {
   if (exitCode !== undefined) parts.push(`exit=${exitCode}`);
   if (durationMs !== undefined) parts.push(`duration=${durationMs}ms`);
   if (digest) parts.push(`digest=${digest}`);
+  return parts.join(" ");
+}
+
+function formatApprovals(value: unknown): string {
+  const approvals = arrayField(value);
+  if (approvals.length === 0) return "none recorded";
+  return approvals.map(formatApproval).join(", ");
+}
+
+function formatApproval(approval: Record<string, unknown>): string {
+  const decision = stringField(approval, "decision", "unknown");
+  const trustLevel = stringField(approval, "trustLevel", "");
+  const target = stringField(approval, "description", stringField(approval, "approvalValue", stringField(approval, "toolName", "unknown")));
+  const reason = stringField(approval, "reason", "");
+  const parts = [target, decision];
+  if (trustLevel) parts.push(`trust=${trustLevel}`);
+  if (reason) parts.push(`reason=${reason}`);
   return parts.join(" ");
 }
 

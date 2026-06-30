@@ -31,6 +31,17 @@ describe("PermissionBroker", () => {
     });
 
     expect(result.approved).toBe(true);
+    expect(result.decision).toBe("auto");
+    expect(result.receipt).toMatchObject({
+      toolCallId: "call_bash",
+      toolName: "bash",
+      decision: "auto",
+      approved: true,
+      trustLevel: "safe",
+      approvalKind: "command",
+      approvalValue: "git status",
+      description: "bash: git status",
+    });
     expect(requested).toBe(false);
   });
 
@@ -43,12 +54,39 @@ describe("PermissionBroker", () => {
       command: "rm -rf node_modules",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       approved: false,
       decision: "deny",
       description: "bash: rm -rf node_modules",
       reason: '"rm -rf node_modules" may cause data loss or security risk',
+      receipt: {
+        toolCallId: "call_bash",
+        toolName: "bash",
+        decision: "deny",
+        approved: false,
+        trustLevel: "dangerous",
+        approvalKind: "command",
+        approvalValue: "rm -rf node_modules",
+        description: "bash: rm -rf node_modules",
+        reason: '"rm -rf node_modules" may cause data loss or security risk',
+      },
     });
+  });
+
+  test("redacts sensitive non-bash arguments in permission receipts", async () => {
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+    });
+
+    const result = await broker.authorizeToolCall(toolCall("deploy", '{"apiKey":"sk-secret","input":"x"}'), {
+      apiKey: "sk-secret",
+      input: "x",
+    });
+
+    expect(result.approved).toBe(true);
+    expect(result.receipt.description).toContain('"apiKey":"[REDACTED]"');
+    expect(result.receipt.description).toContain('"input":"x"');
+    expect(result.receipt.description).not.toContain("sk-secret");
   });
 
   test("session approval skips the same dangerous command later in the session", async () => {
@@ -67,8 +105,28 @@ describe("PermissionBroker", () => {
     const first = await broker.authorizeToolCall(call, args);
     const second = await broker.authorizeToolCall(call, args);
 
-    expect(first).toEqual({ approved: true, decision: "session" });
-    expect(second).toEqual({ approved: true, decision: "once" });
+    expect(first).toMatchObject({
+      approved: true,
+      decision: "session",
+      receipt: {
+        decision: "session",
+        approved: true,
+        trustLevel: "dangerous",
+        approvalKind: "command",
+        approvalValue: "rm -rf node_modules",
+      },
+    });
+    expect(second).toMatchObject({
+      approved: true,
+      decision: "auto",
+      receipt: {
+        decision: "auto",
+        approved: true,
+        trustLevel: "dangerous",
+        approvalKind: "command",
+        approvalValue: "rm -rf node_modules",
+      },
+    });
     expect(requests).toBe(1);
   });
 
@@ -103,6 +161,7 @@ describe("PermissionBroker", () => {
           description: event.description,
           reason: event.reason,
           level: event.level,
+          trustLevel: "dangerous",
           approvalKind: "command",
           approvalValue: "rm -rf node_modules",
         });
@@ -116,6 +175,7 @@ describe("PermissionBroker", () => {
       description: "bash: rm -rf node_modules",
       reason: "dangerous",
       level: "dangerous",
+      trustLevel: "dangerous",
       approvalKind: "command",
       approvalValue: "rm -rf node_modules",
     });
@@ -139,6 +199,7 @@ describe("PermissionBroker", () => {
       description: "bash: rm -rf node_modules",
       reason: "dangerous",
       level: "dangerous",
+      trustLevel: "dangerous",
       approvalKind: "command",
       approvalValue: "rm -rf node_modules",
     });

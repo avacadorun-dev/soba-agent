@@ -481,11 +481,24 @@ describe("Evidence Bundle builder", () => {
           mutationIds: ["ev_mutation_edit_1"],
         },
       ],
+      approvals: [
+        {
+          toolCallId: "bash_1",
+          toolName: "bash",
+          decision: "auto",
+          approved: true,
+          trustLevel: "safe",
+          approvalKind: "command",
+          approvalValue: "bun test",
+          description: "bash: bun test",
+          reason: "safe test command",
+        },
+      ],
       now: () => NOW,
     });
 
     expect(formatEvidenceBundleForHandoff(bundle)).toBe(
-      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Checks: Tests passed (bun test)\n- Risks: none",
+      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Checks: Tests passed (bun test)\n- Permissions: bash: bun test auto trust=safe\n- Risks: none",
     );
   });
 

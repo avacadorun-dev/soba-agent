@@ -46,7 +46,21 @@ describe("prove command", () => {
         },
       ],
       checks: [{ label: "Tests", status: "passed", commandId: "cmd_bash_1" }],
+      approvals: [
+        {
+          toolCallId: "bash_1",
+          toolName: "bash",
+          decision: "auto",
+          approved: true,
+          trustLevel: "safe",
+          approvalKind: "command",
+          approvalValue: "bun test",
+          description: "bash: bun test",
+          reason: "safe test command",
+        },
+      ],
       risks: [],
+      reviewActions: [],
       createdAt: "2026-06-30T10:20:30.000Z",
     },
   };
@@ -69,6 +83,7 @@ describe("prove command", () => {
     expect(rendered).toContain("Status: verified");
     expect(rendered).toContain("Claims: Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(rendered).toContain("bun test passed exit=0 duration=42ms digest=sha256:abc123");
+    expect(rendered).toContain("Permissions: bash: bun test auto trust=safe reason=safe test command");
   });
 
   test("renders explicit proof path as markdown", () => {
@@ -80,9 +95,12 @@ describe("prove command", () => {
       },
     });
 
-    expect(renderProveCommandView(view)).toContain("# SOBA Proof");
-    expect(renderProveCommandView(view)).toContain("- Proof persistence is implemented supported (ev_verification_bash_1)");
-    expect(renderProveCommandView(view)).toContain("- Tests passed (bun test)");
+    const rendered = renderProveCommandView(view);
+    expect(rendered).toContain("# SOBA Proof");
+    expect(rendered).toContain("- Proof persistence is implemented supported (ev_verification_bash_1)");
+    expect(rendered).toContain("- Tests passed (bun test)");
+    expect(rendered).toContain("## Permissions");
+    expect(rendered).toContain("- bash: bun test auto trust=safe reason=safe test command");
   });
 
   test("renders json with proofPath", () => {

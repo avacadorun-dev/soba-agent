@@ -1,6 +1,7 @@
 import type { FunctionCallField, ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { DebugEntry } from "../../kernel/transcript/types";
+import type { EvidenceApproval } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { evaluateToolBatch } from "../tool-calls/tool-batch-guard";
@@ -52,6 +53,7 @@ export async function handleAgentTurnToolStage(input: {
   errors: AgentTurnError[];
   successfulToolCallIds: Set<string>;
   verificationEvidenceCallIds: Set<string>;
+  approvalReceipts: EvidenceApproval[];
   evidenceLedger: EvidenceLedger;
   verificationController: VerificationController;
   loopGuard: LoopGuard;
@@ -125,6 +127,7 @@ export async function handleAgentTurnToolStage(input: {
     errors: input.errors,
     successfulToolCallIds: input.successfulToolCallIds,
     verificationEvidenceCallIds: input.verificationEvidenceCallIds,
+    approvalReceipts: input.approvalReceipts,
     evidenceLedger: input.evidenceLedger,
     verificationController: input.verificationController,
     skillManager: input.runtime.skillManager,

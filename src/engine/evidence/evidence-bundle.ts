@@ -55,7 +55,13 @@ export interface EvidenceCheck {
 
 export interface EvidenceApproval {
   toolCallId: string;
-  decision: "deny" | "once" | "session" | "repo" | "full";
+  toolName?: string;
+  decision: "auto" | "deny" | "once" | "session" | "repo" | "full";
+  approved?: boolean;
+  trustLevel?: "safe" | "normal" | "dangerous";
+  approvalKind?: "command" | "tool";
+  approvalValue?: string;
+  description?: string;
   reason?: string;
 }
 
@@ -178,6 +184,9 @@ export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
     lines.push(`- Claims: ${formatClaims(bundle.claims)}`);
   }
   lines.push(`- Checks: ${formatChecks(bundle.checks, bundle.commands)}`);
+  if (bundle.approvals.length > 0) {
+    lines.push(`- Permissions: ${formatApprovals(bundle.approvals)}`);
+  }
   lines.push(`- Risks: ${formatRisks(bundle.risks)}`);
   if (bundle.reviewActions.length > 0) {
     lines.push(`- Review: ${formatReviewActions(bundle.reviewActions)}`);
@@ -646,6 +655,17 @@ function formatRisks(risks: EvidenceRisk[]): string {
     .slice(0, 6)
     .map((risk) => risk.message)
     .join("; ") + (risks.length > 6 ? `; ...${risks.length - 6} more` : "");
+}
+
+function formatApprovals(approvals: EvidenceApproval[]): string {
+  return approvals
+    .slice(0, 6)
+    .map((approval) => {
+      const target = approval.description ?? approval.approvalValue ?? approval.toolName ?? approval.toolCallId;
+      const trust = approval.trustLevel ? ` trust=${approval.trustLevel}` : "";
+      return `${target} ${approval.decision}${trust}`;
+    })
+    .join("; ") + (approvals.length > 6 ? `; ...${approvals.length - 6} more` : "");
 }
 
 function formatClaims(claims: EvidenceClaim[]): string {

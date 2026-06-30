@@ -31,6 +31,7 @@ export interface ProofVerificationResult {
     changedFiles: number;
     commands: number;
     checks: number;
+    approvals: number;
     risks: number;
   };
   issues: ProofVerificationIssue[];
@@ -59,7 +60,9 @@ const BUNDLE_STATUSES = new Set(["verified", "partially_verified", "unverified",
 const CHANGED_FILE_OPERATIONS = new Set(["created", "modified", "deleted", "renamed", "unknown"]);
 const COMMAND_STATUSES = new Set(["passed", "failed", "skipped", "running", "unknown"]);
 const CHECK_STATUSES = new Set(["passed", "failed", "skipped", "not_run", "not_required"]);
-const APPROVAL_DECISIONS = new Set(["deny", "once", "session", "repo", "full"]);
+const APPROVAL_DECISIONS = new Set(["auto", "deny", "once", "session", "repo", "full"]);
+const APPROVAL_TRUST_LEVELS = new Set(["safe", "normal", "dangerous"]);
+const APPROVAL_KINDS = new Set(["command", "tool"]);
 const RISK_SEVERITIES = new Set(["info", "warning", "error"]);
 const EVIDENCE_KINDS = new Set([
   "inspect",
@@ -149,6 +152,7 @@ export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerifica
       changedFiles: arrayLength(bundle.changedFiles),
       commands: arrayLength(bundle.commands),
       checks: arrayLength(bundle.checks),
+      approvals: arrayLength(bundle.approvals),
       risks: arrayLength(bundle.risks),
     },
     issues,
@@ -244,6 +248,7 @@ function renderVerificationText(verification: ProofVerificationResult): string {
     `Changed files: ${verification.summary.changedFiles}`,
     `Commands: ${verification.summary.commands}`,
     `Checks: ${verification.summary.checks}`,
+    `Permissions: ${verification.summary.approvals}`,
     `Risks: ${verification.summary.risks}`,
   ];
 
@@ -269,6 +274,7 @@ function renderVerificationMarkdown(verification: ProofVerificationResult): stri
     `- Changed files: ${verification.summary.changedFiles}`,
     `- Commands: ${verification.summary.commands}`,
     `- Checks: ${verification.summary.checks}`,
+    `- Permissions: ${verification.summary.approvals}`,
     `- Risks: ${verification.summary.risks}`,
     "",
     "## Errors",
@@ -463,9 +469,31 @@ function validateChecks(value: unknown, commandIds: Set<string>, issues: ProofVe
 function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): void {
   forEachRecord(value, "$.approvals", issues, (approval, path) => {
     requireNonEmptyString(approval, "toolCallId", `${path}.toolCallId`, issues);
+    if (approval.toolName !== undefined && typeof approval.toolName !== "string") {
+      addError(issues, "invalid_approval_tool_name", `${path}.toolName`, "Expected toolName to be a string.");
+    }
     const decision = approval.decision;
     if (typeof decision !== "string" || !APPROVAL_DECISIONS.has(decision)) {
-      addError(issues, "invalid_approval_decision", `${path}.decision`, "Expected deny, once, session, repo, or full.");
+      addError(issues, "invalid_approval_decision", `${path}.decision`, "Expected auto, deny, once, session, repo, or full.");
+    }
+    if (approval.approved !== undefined && typeof approval.approved !== "boolean") {
+      addError(issues, "invalid_approval_approved", `${path}.approved`, "Expected approved to be a boolean.");
+    }
+    if (approval.trustLevel !== undefined) {
+      if (typeof approval.trustLevel !== "string" || !APPROVAL_TRUST_LEVELS.has(approval.trustLevel)) {
+        addError(issues, "invalid_approval_trust_level", `${path}.trustLevel`, "Expected safe, normal, or dangerous.");
+      }
+    }
+    if (approval.approvalKind !== undefined) {
+      if (typeof approval.approvalKind !== "string" || !APPROVAL_KINDS.has(approval.approvalKind)) {
+        addError(issues, "invalid_approval_kind", `${path}.approvalKind`, "Expected command or tool.");
+      }
+    }
+    if (approval.approvalValue !== undefined && typeof approval.approvalValue !== "string") {
+      addError(issues, "invalid_approval_value", `${path}.approvalValue`, "Expected approvalValue to be a string.");
+    }
+    if (approval.description !== undefined && typeof approval.description !== "string") {
+      addError(issues, "invalid_approval_description", `${path}.description`, "Expected description to be a string.");
     }
     if (approval.reason !== undefined && typeof approval.reason !== "string") {
       addError(issues, "invalid_approval_reason", `${path}.reason`, "Expected reason to be a string.");

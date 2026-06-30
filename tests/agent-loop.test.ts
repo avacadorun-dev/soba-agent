@@ -1542,6 +1542,17 @@ describe("AgentLoop", () => {
       sessionId: session.getSessionId(),
       turnId: "turn_1",
       summary: "Done",
+      approvals: [
+        {
+          toolCallId: "call_1",
+          toolName: "event-tool",
+          decision: "auto",
+          approved: true,
+          trustLevel: "normal",
+          approvalKind: "tool",
+          approvalValue: "event-tool",
+        },
+      ],
     });
     const evidenceRecord = session
       .getFlightRecords()

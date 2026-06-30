@@ -6,6 +6,7 @@ import type {
   FlightRecordData,
 } from "../../kernel/transcript/types";
 import { CompletionController } from "../completion/completion-controller";
+import type { EvidenceApproval } from "../evidence";
 import type { RecoveryReflectionDraft } from "../memory/reflection-memory-policy";
 import { VerificationController } from "../verification/verification-controller";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
@@ -113,6 +114,7 @@ export async function runAgentTurn(
     let checkpointState: CheckpointWorkPlanState | undefined;
     const successfulToolCallIds = new Set<string>();
     const verificationEvidenceCallIds = new Set<string>();
+    const approvalReceipts: EvidenceApproval[] = [];
     const loopGuard = new LoopGuard(runtime.options);
     const completionController = new CompletionController();
     const verificationController = new VerificationController();
@@ -283,6 +285,7 @@ export async function runAgentTurn(
         maxAutonomousFollowUps: runtime.options.maxAutonomousFollowUps,
         verificationEvidenceCallIds,
         successfulToolCallIds,
+        approvalReceipts,
         evidenceProofSink: runtime.evidenceProofSink,
         emit: (event) => emit(event),
         flight: (data) => flight(data),
@@ -317,6 +320,7 @@ export async function runAgentTurn(
         errors,
         successfulToolCallIds,
         verificationEvidenceCallIds,
+        approvalReceipts,
         evidenceLedger,
         verificationController,
         loopGuard,

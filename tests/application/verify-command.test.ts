@@ -79,7 +79,19 @@ describe("verify command", () => {
           commandId: "cmd_1",
         },
       ],
-      approvals: [],
+      approvals: [
+        {
+          toolCallId: "bash_1",
+          toolName: "bash",
+          decision: "auto",
+          approved: true,
+          trustLevel: "safe",
+          approvalKind: "command",
+          approvalValue: "bun test",
+          description: "bash: bun test",
+          reason: "safe test command",
+        },
+      ],
       risks: [],
       reviewActions: [],
       createdAt: "2026-06-30T10:20:30.000Z",
@@ -105,6 +117,7 @@ describe("verify command", () => {
     expect(rendered).toContain("Result: valid");
     expect(rendered).toContain("Errors: 0");
     expect(rendered).toContain("Claims: 1");
+    expect(rendered).toContain("Permissions: 1");
   });
 
   test("renders invalid proof as json with issue details", () => {
@@ -163,6 +176,34 @@ describe("verify command", () => {
 
     expect(result.valid).toBe(false);
     expect(result.issues.map((issue) => issue.code)).toContain("unknown_claim_evidence");
+  });
+
+  test("rejects malformed approval receipts", () => {
+    const result = verifyEvidenceProof({
+      ...proof,
+      bundle: {
+        ...proof.bundle,
+        approvals: [
+          {
+            toolCallId: "bash_1",
+            decision: "maybe",
+            approved: "yes",
+            trustLevel: "risky",
+            approvalKind: "scope",
+          },
+        ],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        "invalid_approval_decision",
+        "invalid_approval_approved",
+        "invalid_approval_trust_level",
+        "invalid_approval_kind",
+      ]),
+    );
   });
 
   test("keeps legacy proofs valid with migration warnings", () => {

@@ -1,6 +1,7 @@
 import type { FunctionCallField, ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { CheckpointEvent } from "../../kernel/tools/checkpoint";
+import type { EvidenceApproval } from "../evidence";
 import { type EvidenceLedger, isVerificationCommand } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import type { ToolCallExecutor } from "../tool-calls/tool-call-executor";
@@ -27,6 +28,7 @@ export interface ToolBatchExecutionInput {
   errors: AgentTurnError[];
   successfulToolCallIds: Set<string>;
   verificationEvidenceCallIds: Set<string>;
+  approvalReceipts: EvidenceApproval[];
   evidenceLedger: EvidenceLedger;
   verificationController: VerificationController;
   skillManager: SkillSource | undefined;
@@ -73,6 +75,17 @@ export async function executeObservedToolBatch(
       ? parallelReadOnlyExecutions[toolCallIndex]
       : await input.toolExecutor.executeToolCall(toolCall, input.signal);
     if (!execution) continue;
+    input.approvalReceipts.push({
+      toolCallId: execution.permission.toolCallId,
+      toolName: execution.permission.toolName,
+      decision: execution.permission.decision,
+      approved: execution.permission.approved,
+      trustLevel: execution.permission.trustLevel,
+      approvalKind: execution.permission.approvalKind,
+      approvalValue: execution.permission.approvalValue,
+      description: execution.permission.description,
+      reason: execution.permission.reason,
+    });
 
     const observation = observeToolExecutionResult({
       toolCall,

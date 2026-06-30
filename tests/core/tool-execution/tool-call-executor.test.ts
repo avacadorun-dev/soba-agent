@@ -74,6 +74,16 @@ describe("ToolCallExecutor", () => {
     expect(executed).toBe(false);
     expect(result.result.isError).toBe(true);
     expect(result.result.error?.code).toBe("tool_invalid_arguments");
+    expect(result.permission).toMatchObject({
+      toolCallId: "call_strict",
+      toolName: "strict",
+      decision: "auto",
+      approved: true,
+      trustLevel: "normal",
+      approvalKind: "tool",
+      approvalValue: "strict",
+      description: 'strict({"input":"bad"})',
+    });
     expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
   });
 
@@ -95,6 +105,16 @@ describe("ToolCallExecutor", () => {
 
     expect(executed).toBe(false);
     expect(result.denied?.description).toBe("bash: rm -rf node_modules");
+    expect(result.permission).toMatchObject({
+      toolCallId: "call_bash",
+      toolName: "bash",
+      decision: "deny",
+      approved: false,
+      trustLevel: "dangerous",
+      approvalKind: "command",
+      approvalValue: "rm -rf node_modules",
+      description: "bash: rm -rf node_modules",
+    });
     expect(result.result.error?.code).toBe("trust_confirmation_denied");
     expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
   });
