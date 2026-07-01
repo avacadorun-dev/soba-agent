@@ -101,7 +101,7 @@ export const RUNTIME_COMMANDS = [
     id: "skill",
     name: "/skill",
     descriptionKey: "command.description.skill",
-    usage: "/skill list|new|edit|eval|promote|history|rollback|rm",
+    usage: "/skill list|new|edit|eval|bench|trace|promote|history|rollback|rm",
     surfaces: ["print", "tui", "acp"],
   },
   {

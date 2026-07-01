@@ -119,6 +119,9 @@ soba -r
 | `/skill list` | Показать доступные скилы (bundled, user, project) |
 | `/skill new` | Создать новый скил |
 | `/skill edit <name>` | Редактировать существующий скил |
+| `/skill eval <name>` | Запустить deterministic eval cases для draft skill |
+| `/skill bench <name>` | Показать агрегированное качество eval и common failures |
+| `/skill trace <name>` | Показать последние eval runs и failed cases |
 | `/skill remove <name>` | Удалить скил |
 | `/skill:<name>` | Активировать скил (через двоеточие) |
 
@@ -281,7 +284,8 @@ permissions   queue
 ```
 /skill        # Tab →
 /skill list    /skill new     /skill edit
-/skill eval   /skill remove   /skill:
+/skill eval    /skill bench   /skill trace
+/skill remove  /skill:
 ```
 
 ---

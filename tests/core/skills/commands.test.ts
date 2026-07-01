@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { executeSkillCommand } from "../../../src/application/commands/skill";
 import { SkillCatalog } from "../../../src/application/skills/catalog";
 import { SkillCommands } from "../../../src/application/skills/commands";
 import { SkillDiscovery } from "../../../src/application/skills/discovery";
@@ -393,5 +394,134 @@ description: Bundled skill
 
     // Should complete without throwing
     expect(result.message).toContain("Evaluation complete");
+  });
+
+  it("bench агрегирует сохранённые eval runs", async () => {
+    const content = `---
+name: bench-skill
+description: Bench skill
+---
+
+# Bench Skill
+
+Uses bash tool.
+`;
+    draftStore.create("bench-skill", content, [
+      {
+        id: "case-pass",
+        description: "Passes when bash is expected",
+        input: "run check",
+        expectedTools: ["bash"],
+      },
+    ]);
+    await commands.eval("bench-skill");
+
+    const result = await commands.bench("bench-skill");
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("Skill bench for 'bench-skill'");
+    expect(result.message).toContain("Runs: 1");
+    expect(result.message).toContain("Success rate: 100.0%");
+    expect(result.message).toContain("Common failures: none");
+    expect(result.data).toMatchObject({
+      skillName: "bench-skill",
+      runs: 1,
+      successRate: 1,
+    });
+  });
+
+  it("bench показывает common failures для неуспешных eval runs", async () => {
+    const content = `---
+name: failing-skill
+description: Failing skill
+---
+
+# Failing Skill
+
+Uses bash tool.
+`;
+    draftStore.create("failing-skill", content, [
+      {
+        id: "case-fail",
+        description: "Fails when read is expected",
+        input: "read context",
+        expectedTools: ["read"],
+      },
+    ]);
+    await commands.eval("failing-skill");
+
+    const result = await commands.bench("failing-skill");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("Latest run:");
+    expect(result.message).toContain("Common failures: Expected tool 'read' was not called (1)");
+  });
+
+  it("trace показывает последние eval runs и case failures", async () => {
+    const content = `---
+name: trace-skill
+description: Trace skill
+---
+
+# Trace Skill
+
+Uses bash tool.
+`;
+    draftStore.create("trace-skill", content, [
+      {
+        id: "case-fail",
+        description: "Fails when read is expected",
+        input: "read context",
+        expectedTools: ["read"],
+      },
+    ]);
+    await commands.eval("trace-skill");
+
+    const result = await commands.trace("trace-skill", { limit: 1 });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("Skill trace for 'trace-skill' (last 1)");
+    expect(result.message).toContain("case-fail: Expected tool 'read' was not called");
+  });
+
+  it("bench и trace сообщают, когда eval runs отсутствуют", async () => {
+    const bench = await commands.bench("missing-skill");
+    const trace = await commands.trace("missing-skill");
+
+    expect(bench.success).toBe(false);
+    expect(bench.message).toContain("No eval runs found");
+    expect(trace.success).toBe(false);
+    expect(trace.message).toContain("No eval runs found");
+  });
+
+  it("executeSkillCommand маршрутизирует bench и валидирует trace --last", async () => {
+    const content = `---
+name: routed-skill
+description: Routed skill
+---
+
+# Routed Skill
+
+Uses bash tool.
+`;
+    draftStore.create("routed-skill", content, [
+      {
+        id: "case-pass",
+        description: "Passes when bash is expected",
+        input: "run check",
+        expectedTools: ["bash"],
+      },
+    ]);
+    await commands.eval("routed-skill");
+
+    const bench = await executeSkillCommand({ args: ["bench", "routed-skill"], commands });
+    const invalidTrace = await executeSkillCommand({ args: ["trace", "routed-skill", "--last=bad"], commands });
+
+    expect(bench).toMatchObject({
+      kind: "result",
+      level: "info",
+    });
+    expect(bench.kind === "result" ? bench.message : "").toContain("Skill bench for 'routed-skill'");
+    expect(invalidTrace).toEqual({ kind: "usage", usageKey: "command.skill.traceUsage" });
   });
 });

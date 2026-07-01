@@ -77,6 +77,28 @@ export async function executeSkillCommand(input: {
       break;
     }
 
+    case "bench": {
+      const name = args[1];
+      if (!name) {
+        return { kind: "usage", usageKey: "command.skill.benchUsage" };
+      }
+      result = await commands.bench(name);
+      break;
+    }
+
+    case "trace": {
+      const name = args[1];
+      if (!name) {
+        return { kind: "usage", usageKey: "command.skill.traceUsage" };
+      }
+      const limit = parseLastFlag(args.slice(2));
+      if (limit === undefined) {
+        return { kind: "usage", usageKey: "command.skill.traceUsage" };
+      }
+      result = await commands.trace(name, { limit });
+      break;
+    }
+
     case "rollback": {
       const name = args[1];
       const revisionId = args[2];
@@ -106,4 +128,33 @@ export async function executeSkillCommand(input: {
     level: result.success ? "info" : "error",
     message: result.message,
   };
+}
+
+function parseLastFlag(args: string[]): number | undefined {
+  let limit = 10;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--last") {
+      const parsed = parsePositiveInteger(args[index + 1]);
+      if (parsed === undefined) return undefined;
+      limit = parsed;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--last=")) {
+      const parsed = parsePositiveInteger(arg.slice("--last=".length));
+      if (parsed === undefined) return undefined;
+      limit = parsed;
+      continue;
+    }
+    return undefined;
+  }
+  return limit;
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 50) return undefined;
+  return parsed;
 }

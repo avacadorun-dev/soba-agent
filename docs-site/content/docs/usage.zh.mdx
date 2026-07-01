@@ -113,6 +113,9 @@ soba -r
 | `/skill list` | 显示可用的 bundled、user、project skills |
 | `/skill new` | 创建新 skill |
 | `/skill edit <name>` | 编辑已有 skill |
+| `/skill eval <name>` | 为 draft skill 运行 deterministic eval cases |
+| `/skill bench <name>` | 显示 eval 聚合表现和 common failures |
+| `/skill trace <name>` | 显示最近的 eval runs 和 failed cases |
 | `/skill remove <name>` | 删除 skill |
 | `/skill:<name>` | 用冒号形式激活 skill |
 
@@ -271,7 +274,8 @@ permissions   queue
 ```
 /skill        # Tab →
 /skill list    /skill new     /skill edit
-/skill eval   /skill remove   /skill:
+/skill eval    /skill bench   /skill trace
+/skill remove  /skill:
 ```
 
 ---

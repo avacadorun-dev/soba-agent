@@ -7,7 +7,7 @@
 
 import type { SkillCatalog } from "./catalog";
 import type { DraftStore, EvalCase } from "./drafts";
-import type { EvalOptions, SkillEvaluator } from "./evaluator";
+import type { EvalOptions, EvalResult, SkillEvaluator } from "./evaluator";
 import type { RevisionStore } from "./revisions";
 
 export interface SkillFileOperations {
@@ -296,6 +296,72 @@ Provide examples of how to invoke this skill.
   }
 
   /**
+   * /skill bench <name> - Show aggregate eval performance for a skill.
+   */
+  async bench(name: string): Promise<SkillCommandResult> {
+    const runs = this.evaluator.listEvalRuns(name);
+    if (runs.length === 0) {
+      return {
+        success: false,
+        message: `No eval runs found for skill '${name}'. Run /skill eval ${name} first.`,
+        data: { skillName: name, runs: [] },
+      };
+    }
+
+    const summary = summarizeEvalRuns(name, runs);
+    const lines = [
+      `Skill bench for '${name}':`,
+      `  Runs: ${summary.runs}`,
+      `  Success rate: ${(summary.successRate * 100).toFixed(1)}%`,
+      `  Median pass rate: ${(summary.medianPassRate * 100).toFixed(1)}%`,
+      `  Median cases per run: ${summary.medianCases}`,
+      `  Latest run: ${summary.latestRunId} (${summary.latestStatus}, ${(summary.latestPassRate * 100).toFixed(1)}%)`,
+      `  Common failures: ${summary.commonFailures.length > 0 ? summary.commonFailures.map((failure) => `${failure.reason} (${failure.count})`).join("; ") : "none"}`,
+    ];
+
+    return {
+      success: summary.latestStatus === "pass",
+      message: lines.join("\n"),
+      data: summary,
+    };
+  }
+
+  /**
+   * /skill trace <name> [--last n] - Show recent eval runs and case outcomes.
+   */
+  async trace(name: string, options: { limit?: number } = {}): Promise<SkillCommandResult> {
+    const limit = options.limit ?? 10;
+    const runs = this.evaluator.listEvalRuns(name).slice(0, limit);
+    if (runs.length === 0) {
+      return {
+        success: false,
+        message: `No eval runs found for skill '${name}'. Run /skill eval ${name} first.`,
+        data: { skillName: name, runs: [] },
+      };
+    }
+
+    const lines = [`Skill trace for '${name}' (last ${runs.length}):`];
+    for (const run of runs) {
+      const status = run.summary.failed === 0 ? "pass" : "fail";
+      lines.push(`  ${run.runId} ${status} ${run.timestamp} passRate=${(run.summary.passRate * 100).toFixed(1)}% cases=${run.summary.total}`);
+      const failedCases = run.cases.filter((testCase) => testCase.status === "fail");
+      if (failedCases.length === 0) {
+        lines.push("    failures: none");
+      } else {
+        for (const testCase of failedCases) {
+          lines.push(`    ${testCase.caseId}: ${testCase.reason ?? "failed"}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: lines.join("\n"),
+      data: { skillName: name, runs },
+    };
+  }
+
+  /**
    * /skill rollback <name> <revision-id> - Rollback to a previous revision
    */
   async rollback(name: string, revisionId: string): Promise<SkillCommandResult> {
@@ -389,4 +455,64 @@ Provide examples of how to invoke this skill.
       data: skills,
     };
   }
+}
+
+interface SkillBenchSummary {
+  skillName: string;
+  runs: number;
+  successRate: number;
+  medianPassRate: number;
+  medianCases: number;
+  latestRunId: string;
+  latestStatus: "pass" | "fail";
+  latestPassRate: number;
+  commonFailures: Array<{ reason: string; count: number }>;
+}
+
+function summarizeEvalRuns(skillName: string, runs: EvalResult[]): SkillBenchSummary {
+  const sortedRuns = [...runs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const passingRuns = sortedRuns.filter((run) => run.summary.failed === 0).length;
+  const latest = sortedRuns[0];
+
+  return {
+    skillName,
+    runs: sortedRuns.length,
+    successRate: passingRuns / sortedRuns.length,
+    medianPassRate: median(sortedRuns.map((run) => run.summary.passRate)),
+    medianCases: median(sortedRuns.map((run) => run.summary.total)),
+    latestRunId: latest.runId,
+    latestStatus: latest.summary.failed === 0 ? "pass" : "fail",
+    latestPassRate: latest.summary.passRate,
+    commonFailures: commonFailures(sortedRuns),
+  };
+}
+
+function commonFailures(runs: EvalResult[]): Array<{ reason: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const run of runs) {
+    for (const testCase of run.cases) {
+      if (testCase.status !== "fail") {
+        continue;
+      }
+      const reason = testCase.reason ?? "failed";
+      counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+    .slice(0, 3);
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+  return (sorted[middle - 1] + sorted[middle]) / 2;
 }

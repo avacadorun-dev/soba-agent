@@ -113,6 +113,9 @@ All slash commands start with `/`. Command names are case-insensitive.
 | `/skill list` | Show available bundled, user, and project skills |
 | `/skill new` | Create a new skill |
 | `/skill edit <name>` | Edit an existing skill |
+| `/skill eval <name>` | Run deterministic eval cases for a draft skill |
+| `/skill bench <name>` | Show aggregate eval performance and common failures |
+| `/skill trace <name>` | Show recent eval runs and failed cases |
 | `/skill remove <name>` | Remove a skill |
 | `/skill:<name>` | Activate a skill with the colon form |
 
@@ -271,7 +274,8 @@ After a command that supports subcommands:
 ```
 /skill        # Tab →
 /skill list    /skill new     /skill edit
-/skill eval   /skill remove   /skill:
+/skill eval    /skill bench   /skill trace
+/skill remove  /skill:
 ```
 
 ---
