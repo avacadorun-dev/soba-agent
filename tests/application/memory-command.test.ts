@@ -44,6 +44,68 @@ describe("memory command", () => {
     });
   });
 
+  test("renders clean memory staleness report", () => {
+    const view = executeMemoryCommand({
+      args: ["stale"],
+      memory: memorySource({ doctor: () => report({ status: "healthy" }) }),
+    });
+
+    expect(view.kind).toBe("stale");
+    expect(memoryCommandExitCode(view)).toBe(0);
+    const rendered = renderMemoryCommandView(view);
+    expect(rendered).toContain("SOBA Memory Staleness");
+    expect(rendered).toContain("Clean: yes");
+    expect(rendered).toContain("No stale or broken memory capsules found.");
+  });
+
+  test("renders stale memory capsules as json and exits non-zero", () => {
+    const view = executeMemoryCommand({
+      args: ["stale", "--format=json"],
+      memory: memorySource({ doctor: () => report({ status: "stale" }) }),
+    });
+
+    expect(memoryCommandExitCode(view)).toBe(1);
+    expect(JSON.parse(renderMemoryCommandView(view))).toMatchObject({
+      clean: false,
+      summary: {
+        staleCapsules: 1,
+        issues: 1,
+      },
+      capsules: [
+        {
+          id: "cap-1",
+          sourceState: "stale",
+          issues: [
+            {
+              code: "capsule_source_newer",
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("verifies healthy memory and rejects stale memory", () => {
+    const healthy = executeMemoryCommand({
+      args: ["verify", "--format=json"],
+      memory: memorySource({ doctor: () => report({ status: "healthy" }) }),
+    });
+    const stale = executeMemoryCommand({
+      args: ["verify"],
+      memory: memorySource({ doctor: () => report({ status: "stale" }) }),
+    });
+
+    expect(memoryCommandExitCode(healthy)).toBe(0);
+    expect(JSON.parse(renderMemoryCommandView(healthy))).toMatchObject({
+      status: "healthy",
+      verified: true,
+    });
+    expect(memoryCommandExitCode(stale)).toBe(1);
+    expect(renderMemoryCommandView(stale)).toContain("SOBA Memory Verification");
+    expect(renderMemoryCommandView(stale)).toContain("Verified: no");
+    expect(renderMemoryCommandView(stale)).toContain("capsule_source_newer");
+  });
+
   test("rejects missing or invalid subcommands", () => {
     const missing = executeMemoryCommand({
       args: [],

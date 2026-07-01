@@ -118,13 +118,18 @@ Project Memory 保存在 `.soba/memory/`。`soba memory doctor` 会检查 persis
 | `soba memory doctor` | 检查当前项目的 Project Memory 健康状态 |
 | `soba memory doctor --format json` | 以 JSON 输出报告，便于 CI 或脚本使用 |
 | `soba memory doctor --format markdown` | 以 Markdown 渲染报告 |
+| `soba memory stale` | 只显示 stale 或 broken memory capsules 及相关 issues |
+| `soba memory stale --format json` | 以 JSON 输出 stale/broken memory receipts，便于 CI 或脚本使用 |
+| `soba memory verify` | 用紧凑的 CI-friendly 报告校验 Project Memory 健康状态 |
 | `soba memory explain <query>` | 解释相关 memory capsules、source receipts 和 doctor issues |
 | `soba memory explain <query> --format json` | 以 JSON 输出解释，便于脚本使用 |
 
 只有状态为 `healthy` 时 exit code 才是 `0`。Stale 或 broken memory 会返回 `1`，并把报告写入 stderr。
+对于 `soba memory stale`，只有没有 stale 或 broken capsules 且没有 memory doctor issues 时 exit code 才是 `0`。
+对于 `soba memory verify`，只有 verification report 为 `verified: true` 时 exit code 才是 `0`。
 对于 `soba memory explain`，只有找到至少一个可安全使用的 capsule 时 exit code 才是 `0`；stale、broken 或没有匹配时返回 `1`。
 
-`soba memory doctor` 和 `soba memory explain` 不启动 agent runtime，也不需要 provider credentials。
+`soba memory doctor`、`soba memory stale`、`soba memory verify` 和 `soba memory explain` 不启动 agent runtime，也不需要 provider credentials。
 
 ---
 

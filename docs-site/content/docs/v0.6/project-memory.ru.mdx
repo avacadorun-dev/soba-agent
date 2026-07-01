@@ -161,6 +161,10 @@ SOBA должен использовать `write_project_memory`. Для про
 soba memory doctor
 soba memory doctor --format json
 soba memory doctor --format markdown
+soba memory stale
+soba memory stale --format json
+soba memory verify
+soba memory verify --format json
 soba memory explain "provider registry"
 soba memory explain "provider registry" --format json
 ```
@@ -177,6 +181,13 @@ Exit code равен `0` только при статусе `healthy`. Если 
 отчёт в stderr, чтобы её можно было использовать в CI.
 
 Команда не запускает agent runtime и не требует provider credentials.
+
+`soba memory stale` показывает только stale или broken capsules и связанные issues. Это короткий actionable report для CI
+или pre-merge checks, когда полный doctor report слишком подробный. Exit code равен `0` только если нет stale/broken
+capsules и нет memory doctor issues.
+
+`soba memory verify` даёт компактный verification report с полем `verified`. Exit code равен `0` только при
+`verified: true`, то есть когда Project Memory находится в healthy-состоянии без issues.
 
 `soba memory explain <query>` использует relevance scoring capsules и объединяет результат с `memory doctor`: показывает
 summary, tags, score, source receipt и issues для найденных capsules. Если найденный факт stale или broken, команда пишет
