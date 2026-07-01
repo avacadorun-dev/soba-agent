@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type {
   CapsuleRelevanceQuery,
@@ -12,6 +12,7 @@ import type {
   MemoryDoctorIssue,
   MemoryDoctorReport,
   MemoryDoctorStatus,
+  MemorySourceConfidence,
   ProjectMemoryOptions,
 } from "../../../kernel/memory/types";
 import { CapsuleStore } from "./capsule-store";
@@ -186,6 +187,7 @@ export class ProjectMemory {
       const brokenCapsules = capsules.filter((capsule) =>
         capsule.sourceState === "missing" ||
         capsule.sourceState === "outside_project" ||
+        capsule.sourceState === "invalid_source" ||
         capsule.sourceState === "corrupted",
       ).length;
       const untrackedCapsules = capsules.filter((capsule) => capsule.sourceState === "untracked").length;
@@ -272,51 +274,92 @@ function formatCause(error: unknown): string {
 }
 
 function inspectCapsuleSource(capsule: MemoryCapsule, projectRoot: string, issues: MemoryDoctorIssue[]): MemoryDoctorCapsuleEntry {
-  const sourcePath = capsule.source?.file;
-  if (!sourcePath) {
+  const source = capsule.source;
+  if (!source) {
     return capsuleDoctorEntry(capsule, "untracked");
   }
 
-  const timestampMs = Date.parse(capsule.context.timestamp);
-  const resolvedSourcePath = resolveSourcePath(projectRoot, sourcePath);
-  if (!isInsideProject(projectRoot, resolvedSourcePath)) {
-    issues.push({
-      code: "capsule_source_outside_project",
-      severity: "error",
-      target: { kind: "capsule", id: capsule.id },
-      message: `Memory capsule ${capsule.id} references a source outside the project root.`,
-      path: sourcePath,
-    });
-    return capsuleDoctorEntry(capsule, "outside_project", sourcePath);
+  const sourcePaths = sourcePathsForInspection(source.file, source.staleIfFilesChange);
+  if (sourcePaths.length === 0) {
+    return capsuleDoctorEntry(capsule, "untracked");
   }
 
-  if (!existsSync(resolvedSourcePath)) {
-    issues.push({
-      code: "capsule_source_missing",
-      severity: "error",
-      target: { kind: "capsule", id: capsule.id },
-      message: `Memory capsule ${capsule.id} references a source file that no longer exists.`,
-      path: sourcePath,
-    });
-    return capsuleDoctorEntry(capsule, "missing", sourcePath);
+  const sourcePath = source.file;
+  const referenceMs = Date.parse(source.lastVerified ?? capsule.context.timestamp);
+  let stale = false;
+  let brokenState: Extract<MemoryCapsuleSourceState, "missing" | "outside_project" | "invalid_source"> | undefined;
+
+  for (const inspectedPath of sourcePaths) {
+    const resolvedSourcePath = resolveSourcePath(projectRoot, inspectedPath);
+    if (!isInsideProject(projectRoot, resolvedSourcePath)) {
+      issues.push({
+        code: "capsule_source_outside_project",
+        severity: "error",
+        target: { kind: "capsule", id: capsule.id },
+        message: `Memory capsule ${capsule.id} references a source outside the project root.`,
+        path: inspectedPath,
+      });
+      brokenState = brokenState ?? "outside_project";
+      continue;
+    }
+
+    if (!existsSync(resolvedSourcePath)) {
+      issues.push({
+        code: "capsule_source_missing",
+        severity: "error",
+        target: { kind: "capsule", id: capsule.id },
+        message: `Memory capsule ${capsule.id} references a source file that no longer exists.`,
+        path: inspectedPath,
+      });
+      brokenState = brokenState ?? "missing";
+      continue;
+    }
+
+    if (inspectedPath === sourcePath && source.lines && !sourceLinesWithinFile(resolvedSourcePath, source.lines)) {
+      issues.push({
+        code: "capsule_source_invalid_lines",
+        severity: "error",
+        target: { kind: "capsule", id: capsule.id },
+        message: `Memory capsule ${capsule.id} references source lines outside the current file.`,
+        path: inspectedPath,
+      });
+      brokenState = brokenState ?? "invalid_source";
+    }
+
+    const modifiedAtMs = statSync(resolvedSourcePath).mtimeMs;
+    if (modifiedAtMs > referenceMs + 1000) {
+      issues.push({
+        code: "capsule_source_newer",
+        severity: "warning",
+        target: { kind: "capsule", id: capsule.id },
+        message: `Memory capsule ${capsule.id} may be stale because its source file changed after the capsule was verified.`,
+        path: inspectedPath,
+      });
+      stale = true;
+    }
   }
 
-  const modifiedAtMs = statSync(resolvedSourcePath).mtimeMs;
-  if (modifiedAtMs > timestampMs + 1000) {
-    issues.push({
-      code: "capsule_source_newer",
-      severity: "warning",
-      target: { kind: "capsule", id: capsule.id },
-      message: `Memory capsule ${capsule.id} may be stale because its source file changed after the capsule was recorded.`,
-      path: sourcePath,
-    });
+  if (brokenState) {
+    return capsuleDoctorEntry(capsule, brokenState, sourcePath);
+  }
+  if (stale) {
     return capsuleDoctorEntry(capsule, "stale", sourcePath);
   }
 
   return capsuleDoctorEntry(capsule, "fresh", sourcePath);
 }
 
+function sourcePathsForInspection(sourcePath: string | undefined, staleIfFilesChange: string[] | undefined): string[] {
+  return [...new Set([...(sourcePath ? [sourcePath] : []), ...(staleIfFilesChange ?? [])])];
+}
+
+function sourceLinesWithinFile(path: string, lines: [number, number]): boolean {
+  const lineCount = readFileSync(path, "utf-8").split(/\r?\n/).length;
+  return lines[0] <= lineCount && lines[1] <= lineCount;
+}
+
 function capsuleDoctorEntry(capsule: MemoryCapsule, sourceState: MemoryCapsuleSourceState, sourcePath?: string): MemoryDoctorCapsuleEntry {
+  const source = capsule.source;
   return {
     id: capsule.id,
     type: capsule.type,
@@ -324,6 +367,11 @@ function capsuleDoctorEntry(capsule: MemoryCapsule, sourceState: MemoryCapsuleSo
     timestamp: capsule.context.timestamp,
     sourceState,
     ...(sourcePath ? { sourcePath } : {}),
+    ...(source?.lines ? { sourceLines: source.lines } : {}),
+    ...(source?.commit ? { sourceCommit: source.commit } : {}),
+    ...(source?.confidence ? { sourceConfidence: source.confidence as MemorySourceConfidence } : {}),
+    ...(source?.lastVerified ? { lastVerified: source.lastVerified } : {}),
+    ...(source?.staleIfFilesChange ? { staleIfFilesChange: [...source.staleIfFilesChange] } : {}),
   };
 }
 

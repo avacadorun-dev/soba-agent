@@ -48,6 +48,8 @@ describe("System Prompt", () => {
     expect(prompt).toContain("Do not remove project data with rm -rf");
     expect(prompt).toContain("Use edit for precise changes");
     expect(prompt).toContain("Use checkpoint only for meaningful milestones or plan pivots in long tasks");
+    expect(prompt).toContain("include source receipts when known");
+    expect(prompt).toContain("staleIfFilesChange");
     expect(prompt).toContain("First check for AGENTS.md");
     expect(prompt).toContain("Work autonomously until the user's task is actually complete");
     expect(prompt).toContain("Simple Q&A or explanation-only turns that use no tools may end with normal text");

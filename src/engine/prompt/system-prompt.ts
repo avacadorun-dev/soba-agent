@@ -92,7 +92,7 @@ const CORE_GUIDELINES = [
   "Use edit for precise changes with exact text replacement, including multiple non-overlapping edits in one call",
   "Use write only for new files or complete rewrites",
   "Use checkpoint only for meaningful milestones or plan pivots in long tasks; it does not finish the turn",
-  "Use read_project_memory and write_project_memory for project memory. Never use write, edit, or shell commands to modify files under .soba/memory/** directly",
+  "Use read_project_memory/write_project_memory. For durable facts, include source receipts when known: file, lines, lastVerified, confidence, staleIfFilesChange. Never modify .soba/memory/** directly",
   "Be concise in your responses",
   "Show file paths clearly when working with files",
   "TRUST DIALOG DENIALS ARE FINAL: If the security system denies a bash command or tool call, this is the user's decision — not a transient error. Stop the ENTIRE sub-goal that required the denied operation. Do NOT try alternative commands, script wrappers (bun -e, node -e, python -c), file moves (mv to /tmp), or any workaround. Simply state what was blocked and ask how to proceed.",

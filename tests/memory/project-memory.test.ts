@@ -128,7 +128,16 @@ describe("ProjectMemory aggregator", () => {
 
       memory.addCapsule(capsuleInput({
         id: "fresh",
-        source: { error: "none", fix: "none", file: "fresh.ts" },
+        source: {
+          error: "none",
+          fix: "none",
+          file: "fresh.ts",
+          lines: [1, 1],
+          commit: "abc123",
+          confidence: "high",
+          lastVerified: "2026-06-19T10:00:00.000Z",
+          staleIfFilesChange: ["fresh.ts"],
+        },
       }));
       memory.addCapsule(capsuleInput({
         id: "stale",
@@ -175,9 +184,59 @@ describe("ProjectMemory aggregator", () => {
         "capsule_source_newer",
         "capsule_source_outside_project",
       ]);
+      expect(report.capsules.find((capsule) => capsule.id === "fresh")).toMatchObject({
+        sourceLines: [1, 1],
+        sourceCommit: "abc123",
+        sourceConfidence: "high",
+        lastVerified: "2026-06-19T10:00:00.000Z",
+        staleIfFilesChange: ["fresh.ts"],
+      });
     } finally {
       rmSync(outsideRoot, { recursive: true, force: true });
     }
+  });
+
+  test("doctor treats staleIfFilesChange drift and invalid source lines as receipt issues", () => {
+    const memory = createProjectMemory();
+    const sourcePath = join(projectRoot, "source.ts");
+    const watchedPath = join(projectRoot, "watched.ts");
+    writeFileSync(sourcePath, "line 1\nline 2\n", "utf-8");
+    writeFileSync(watchedPath, "changed dependency\n", "utf-8");
+    utimesSync(sourcePath, new Date("2026-06-19T09:59:00.000Z"), new Date("2026-06-19T09:59:00.000Z"));
+    utimesSync(watchedPath, new Date("2026-06-19T10:00:03.000Z"), new Date("2026-06-19T10:00:03.000Z"));
+
+    memory.addCapsule(capsuleInput({
+      id: "watcher-stale",
+      source: {
+        error: "source dependency changed",
+        fix: "refresh memory",
+        file: "source.ts",
+        lines: [1, 2],
+        lastVerified: "2026-06-19T10:00:00.000Z",
+        staleIfFilesChange: ["watched.ts"],
+      },
+    }));
+    memory.addCapsule(capsuleInput({
+      id: "line-drift",
+      source: {
+        error: "line moved",
+        fix: "update line receipt",
+        file: "source.ts",
+        lines: [1, 10],
+      },
+    }));
+
+    const report = memory.doctor();
+
+    expect(report.status).toBe("broken");
+    expect(report.capsules.map((capsule) => [capsule.id, capsule.sourceState]).sort()).toEqual([
+      ["line-drift", "invalid_source"],
+      ["watcher-stale", "stale"],
+    ]);
+    expect(report.issues.map((issue) => [issue.code, issue.path]).sort()).toEqual([
+      ["capsule_source_invalid_lines", "source.ts"],
+      ["capsule_source_newer", "watched.ts"],
+    ]);
   });
 
   test("store failure surfaces controlled ProjectMemoryError", () => {

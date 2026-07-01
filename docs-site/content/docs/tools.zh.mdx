@@ -120,6 +120,13 @@ Update Project Memory: add a convention that tests mirror src and are run with b
 Do not save secrets.
 ```
 
+对于长期事实，可以要求 SOBA 在能够验证来源时附上 source receipt：
+
+```text
+Update Project Memory with the provider registry loading rule.
+Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange.
+```
+
 ---
 
 ## 5. MCP tools

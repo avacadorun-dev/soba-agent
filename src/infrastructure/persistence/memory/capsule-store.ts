@@ -12,6 +12,7 @@ import type {
   MemoryCapsule,
   MemoryCapsuleInput,
   MemoryIndex,
+  MemorySourceConfidence,
 } from "../../../kernel/memory/types";
 
 const CAPSULE_STORE_VERSION = 1;
@@ -20,6 +21,7 @@ const LOW_PRIORITY_PRUNE_DAYS = 30;
 const CAPSULE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 const CAPSULE_TYPES: CapsuleType[] = ["decision", "error_fix", "discovery", "pattern", "blocker", "insight"];
 const CAPSULE_PRIORITIES: CapsulePriority[] = ["critical", "high", "medium", "low"];
+const SOURCE_CONFIDENCE_VALUES: MemorySourceConfidence[] = ["high", "medium", "low"];
 
 export type CapsuleStoreErrorCode =
   | "unknown_capsule"
@@ -355,6 +357,44 @@ function validateCapsule(value: unknown): asserts value is MemoryCapsule {
   if (typeof value.context.timestamp !== "string" || Number.isNaN(Date.parse(value.context.timestamp))) {
     throw new CapsuleStoreError("invalid_capsule", "Memory capsule timestamp is invalid");
   }
+  validateCapsuleSource(value.source);
+}
+
+function validateCapsuleSource(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!isRecord(value)) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source must be an object");
+  }
+  if (typeof value.error !== "string" || typeof value.fix !== "string") {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source error/fix must be strings");
+  }
+  if (value.file !== undefined && typeof value.file !== "string") {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source file must be a string");
+  }
+  if (value.lines !== undefined && !isValidSourceLines(value.lines)) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source lines must be [start,end] positive integers");
+  }
+  if (value.commit !== undefined && (typeof value.commit !== "string" || value.commit.trim().length === 0)) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source commit must be a non-empty string");
+  }
+  if (value.confidence !== undefined && !SOURCE_CONFIDENCE_VALUES.includes(value.confidence as MemorySourceConfidence)) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source confidence is invalid");
+  }
+  if (value.lastVerified !== undefined && (typeof value.lastVerified !== "string" || Number.isNaN(Date.parse(value.lastVerified)))) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source lastVerified timestamp is invalid");
+  }
+  if (value.staleIfFilesChange !== undefined && (!Array.isArray(value.staleIfFilesChange) || !value.staleIfFilesChange.every((path) => typeof path === "string"))) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source staleIfFilesChange must be an array of strings");
+  }
+}
+
+function isValidSourceLines(value: unknown): value is [number, number] {
+  return Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((line) => Number.isInteger(line) && line > 0) &&
+    value[0] <= value[1];
 }
 
 function validateIndex(value: unknown): asserts value is MemoryIndex {

@@ -46,6 +46,32 @@ describe("CapsuleStore", () => {
     expect(loaded).toEqual(capsule);
   });
 
+  test("add/get capsule preserves source receipt metadata", () => {
+    const capsule = addCapsule(store, {
+      source: {
+        error: "Provider registry fact may drift",
+        fix: "Verify source before reusing the fact",
+        file: "src/apps/cli/main.ts",
+        lines: [120, 150],
+        commit: "abc123",
+        confidence: "high",
+        lastVerified: "2026-06-19T09:00:00.000Z",
+        staleIfFilesChange: ["src/composition/runtime/create-soba-runtime.ts"],
+      },
+    });
+
+    expect(store.get(capsule.id).source).toEqual({
+      error: "Provider registry fact may drift",
+      fix: "Verify source before reusing the fact",
+      file: "src/apps/cli/main.ts",
+      lines: [120, 150],
+      commit: "abc123",
+      confidence: "high",
+      lastVerified: "2026-06-19T09:00:00.000Z",
+      staleIfFilesChange: ["src/composition/runtime/create-soba-runtime.ts"],
+    });
+  });
+
   test("index updates after add", () => {
     addCapsule(store, { summary: "First", priority: "medium" });
     currentNow = new Date("2026-06-19T11:00:00.000Z");
@@ -189,6 +215,22 @@ describe("CapsuleStore", () => {
     expect(() => store.get("broken")).toThrow(CapsuleStoreError);
     expect(store.list().map((capsule) => capsule.id)).toEqual(["valid"]);
   });
+
+  test("invalid source receipt is rejected before writing", () => {
+    expect(() =>
+      addCapsule(store, {
+        id: "bad-source",
+        source: {
+          error: "bad",
+          fix: "fix",
+          file: "src/app.ts",
+          lines: [7, 3],
+        },
+      }),
+    ).toThrow(CapsuleStoreError);
+
+    expect(existsSync(join(store.getCapsulesDir(), "bad-source.json"))).toBe(false);
+  });
 });
 
 function addCapsule(
@@ -201,6 +243,7 @@ function addCapsule(
     timestamp?: string;
     summary?: string;
     detail?: string;
+    source?: MemoryCapsuleInput["source"];
   } = {},
 ) {
   const input: MemoryCapsuleInput = {
@@ -216,6 +259,7 @@ function addCapsule(
     priority: overrides.priority ?? "medium",
     tags: overrides.tags ?? [],
     related: [],
+    ...(overrides.source ? { source: overrides.source } : {}),
   };
 
   return store.add(input);

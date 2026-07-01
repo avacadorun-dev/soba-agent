@@ -60,13 +60,50 @@ describe("Project memory tools", () => {
   test("write_project_memory writes a capsule", () => {
     const memory = createProjectMemory();
 
-    const result = writeProjectMemory(memory, { target: "capsule", capsule: capsuleInput({ tags: ["tools"] }) }, projectRoot);
+    const result = writeProjectMemory(
+      memory,
+      {
+        target: "capsule",
+        capsule: capsuleInput({
+          tags: ["tools"],
+          source: {
+            error: "Tool fact can drift",
+            fix: "Verify source before reuse",
+            file: "src/tools.ts",
+            lines: [1, 4],
+            commit: "abc123",
+            confidence: "medium",
+            lastVerified: "2026-06-19T09:30:00.000Z",
+            staleIfFilesChange: ["src/runtime.ts"],
+          },
+        }),
+      },
+      projectRoot,
+    );
 
     expect(result).toMatchObject({
       target: "capsule",
       id: "cap-001",
     });
-    expect(memory.getStores().capsules.get("cap-001").summary).toBe("Reusable memory tool note");
+    expect(memory.getStores().capsules.get("cap-001")).toMatchObject({
+      summary: "Reusable memory tool note",
+      source: {
+        file: "src/tools.ts",
+        lines: [1, 4],
+        commit: "abc123",
+        confidence: "medium",
+        lastVerified: "2026-06-19T09:30:00.000Z",
+        staleIfFilesChange: ["src/runtime.ts"],
+      },
+    });
+    expect(readProjectMemory(memory, { kind: "capsules" }).capsules[0]?.source).toEqual({
+      file: "src/tools.ts",
+      lines: [1, 4],
+      commit: "abc123",
+      confidence: "medium",
+      lastVerified: "2026-06-19T09:30:00.000Z",
+      staleIfFilesChange: ["src/runtime.ts"],
+    });
   });
 
   test("write_project_memory rejects empty capsule payload with an actionable example", async () => {
@@ -233,6 +270,7 @@ function capsuleInput(
     priority?: MemoryCapsuleInput["priority"];
     tags?: string[];
     timestamp?: string;
+    source?: MemoryCapsuleInput["source"];
   } = {},
 ): MemoryCapsuleInput {
   return {
@@ -248,5 +286,6 @@ function capsuleInput(
     priority: overrides.priority ?? "medium",
     tags: overrides.tags ?? [],
     related: [],
+    ...(overrides.source ? { source: overrides.source } : {}),
   };
 }

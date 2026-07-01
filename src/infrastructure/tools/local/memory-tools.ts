@@ -9,6 +9,7 @@ import {
   type KnowledgeKey,
   type MemoryCapsule,
   type MemoryCapsuleInput,
+  type MemoryCapsuleSource,
 } from "../../../kernel/memory/types";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import { ProjectMemory } from "../../persistence/memory/project-memory";
@@ -89,8 +90,18 @@ interface NormalizedMemoryCapsule {
   tags: string[];
   timestamp: string;
   detail?: string;
+  source?: NormalizedMemoryCapsuleSource;
   score?: number;
   truncated?: boolean;
+}
+
+interface NormalizedMemoryCapsuleSource {
+  file?: string;
+  lines?: [number, number];
+  commit?: string;
+  confidence?: MemoryCapsuleSource["confidence"];
+  lastVerified?: string;
+  staleIfFilesChange?: string[];
 }
 
 export type MemoryToolErrorCode =
@@ -232,6 +243,12 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
               context: {
                 type: "object",
                 description: "Optional task/session/timestamp context.",
+                additionalProperties: true,
+              },
+              source: {
+                type: "object",
+                description:
+                  "Optional receipt for where the capsule came from. Supports file, lines, commit, confidence, lastVerified and staleIfFilesChange.",
                 additionalProperties: true,
               },
             },
@@ -391,6 +408,7 @@ function normalizeCapsule(capsule: MemoryCapsule & { score?: number }, includeCo
     priority: capsule.priority,
     tags: [...capsule.tags],
     timestamp: capsule.context.timestamp,
+    ...(capsule.source ? { source: normalizeCapsuleSource(capsule.source) } : {}),
     ...(typeof capsule.score === "number" ? { score: capsule.score } : {}),
   };
 
@@ -401,6 +419,17 @@ function normalizeCapsule(capsule: MemoryCapsule & { score?: number }, includeCo
   }
 
   return normalized;
+}
+
+function normalizeCapsuleSource(source: MemoryCapsuleSource): NormalizedMemoryCapsuleSource {
+  return {
+    ...(source.file ? { file: sanitizeMemoryText(source.file) } : {}),
+    ...(source.lines ? { lines: source.lines } : {}),
+    ...(source.commit ? { commit: sanitizeMemoryText(source.commit) } : {}),
+    ...(source.confidence ? { confidence: source.confidence } : {}),
+    ...(source.lastVerified ? { lastVerified: source.lastVerified } : {}),
+    ...(source.staleIfFilesChange ? { staleIfFilesChange: source.staleIfFilesChange.map(sanitizeMemoryText) } : {}),
+  };
 }
 
 function boundReadResult(result: ReadProjectMemoryResult, maxBytes: number): ReadProjectMemoryResult {

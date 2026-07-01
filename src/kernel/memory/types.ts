@@ -30,6 +30,19 @@ export type CapsuleType = "decision" | "error_fix" | "discovery" | "pattern" | "
 
 export type CapsulePriority = "critical" | "high" | "medium" | "low";
 
+export type MemorySourceConfidence = "high" | "medium" | "low";
+
+export interface MemoryCapsuleSource {
+  error: string;
+  fix: string;
+  file?: string;
+  lines?: [number, number];
+  commit?: string;
+  confidence?: MemorySourceConfidence;
+  lastVerified?: string;
+  staleIfFilesChange?: string[];
+}
+
 export interface MemoryCapsule {
   id: string;
   type: CapsuleType;
@@ -43,11 +56,7 @@ export interface MemoryCapsule {
   priority: CapsulePriority;
   tags: string[];
   related: string[];
-  source?: {
-    error: string;
-    fix: string;
-    file?: string;
-  };
+  source?: MemoryCapsuleSource;
 }
 
 export interface MemoryCapsuleInput {
@@ -63,11 +72,7 @@ export interface MemoryCapsuleInput {
   priority: CapsulePriority;
   tags?: string[];
   related?: string[];
-  source?: {
-    error: string;
-    fix: string;
-    file?: string;
-  };
+  source?: MemoryCapsuleSource;
 }
 
 export interface CapsuleStoreOptions {
@@ -195,6 +200,7 @@ export type MemoryDoctorIssueSeverity = "warning" | "error";
 
 export type MemoryDoctorIssueCode =
   | "capsule_corrupted"
+  | "capsule_source_invalid_lines"
   | "capsule_source_missing"
   | "capsule_source_newer"
   | "capsule_source_outside_project";
@@ -210,7 +216,7 @@ export interface MemoryDoctorIssue {
   path?: string;
 }
 
-export type MemoryCapsuleSourceState = "fresh" | "stale" | "missing" | "outside_project" | "untracked" | "corrupted";
+export type MemoryCapsuleSourceState = "fresh" | "stale" | "missing" | "outside_project" | "untracked" | "corrupted" | "invalid_source";
 
 export interface MemoryDoctorKnowledgeEntry {
   key: KnowledgeKey;
@@ -226,6 +232,11 @@ export interface MemoryDoctorCapsuleEntry {
   timestamp?: string;
   sourceState: MemoryCapsuleSourceState;
   sourcePath?: string;
+  sourceLines?: [number, number];
+  sourceCommit?: string;
+  sourceConfidence?: MemorySourceConfidence;
+  lastVerified?: string;
+  staleIfFilesChange?: string[];
 }
 
 export interface MemoryDoctorReport {
