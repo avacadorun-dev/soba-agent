@@ -161,6 +161,8 @@ SOBA должен использовать `write_project_memory`. Для про
 soba memory doctor
 soba memory doctor --format json
 soba memory doctor --format markdown
+soba memory explain "provider registry"
+soba memory explain "provider registry" --format json
 ```
 
 Отчёт включает:
@@ -175,6 +177,10 @@ Exit code равен `0` только при статусе `healthy`. Если 
 отчёт в stderr, чтобы её можно было использовать в CI.
 
 Команда не запускает agent runtime и не требует provider credentials.
+
+`soba memory explain <query>` использует relevance scoring capsules и объединяет результат с `memory doctor`: показывает
+summary, tags, score, source receipt и issues для найденных capsules. Если найденный факт stale или broken, команда пишет
+объяснение в stderr и возвращает exit code `1`.
 
 ---
 

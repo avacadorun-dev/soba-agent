@@ -118,10 +118,13 @@ It reports knowledge file counts, estimated token usage, capsule source provenan
 | `soba memory doctor` | Inspect Project Memory health for the current project |
 | `soba memory doctor --format json` | Print the report as JSON for CI or scripts |
 | `soba memory doctor --format markdown` | Render the report as Markdown |
+| `soba memory explain <query>` | Explain relevant memory capsules, source receipts, and doctor issues |
+| `soba memory explain <query> --format json` | Print the explanation as JSON for scripts |
 
 Exit code is `0` only when memory is `healthy`. Stale or broken memory returns `1` and writes the report to stderr.
+For `soba memory explain`, exit code is `0` only when at least one matching capsule is safe to use; stale, broken, or missing matches return `1`.
 
-`soba memory doctor` does not start the agent runtime and does not require provider credentials.
+`soba memory doctor` and `soba memory explain` do not start the agent runtime and do not require provider credentials.
 
 ---
 

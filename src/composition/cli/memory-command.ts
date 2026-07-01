@@ -21,7 +21,7 @@ export function runFilesystemMemoryCommand(input: {
   return {
     exitCode: memoryCommandExitCode(view),
     output,
-    stream: view.kind === "report" && view.report.status === "healthy" ? "stdout" : "stderr",
+    stream: memoryCommandExitCode(view) === 0 ? "stdout" : "stderr",
   };
 }
 

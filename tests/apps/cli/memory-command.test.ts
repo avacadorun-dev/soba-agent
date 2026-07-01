@@ -83,4 +83,70 @@ describe("soba memory CLI", () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  test("explains relevant memory receipts without loading provider configuration", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "soba-memory-cli-explain-"));
+    try {
+      const sourcePath = join(cwd, "provider.ts");
+      writeFileSync(sourcePath, "export const providerRegistry = true;\n", "utf-8");
+      utimesSync(sourcePath, new Date("2026-06-19T09:59:00.000Z"), new Date("2026-06-19T09:59:00.000Z"));
+      const memory = new ProjectMemory({
+        projectRoot: cwd,
+        now: () => new Date("2026-06-19T10:00:00.000Z"),
+      });
+      memory.addCapsule({
+        id: "provider-registry",
+        type: "decision",
+        summary: "Provider registry loads before runtime composition.",
+        detail: "The provider registry is prepared before the full runtime is composed.",
+        context: {
+          task: "cli",
+          sessionId: "session-cli",
+          timestamp: "2026-06-19T10:00:00.000Z",
+        },
+        priority: "high",
+        tags: ["provider", "registry"],
+        related: [],
+        source: {
+          error: "provider registry fact can drift",
+          fix: "verify provider bootstrap before reuse",
+          file: "provider.ts",
+          lines: [1, 1],
+          commit: "abc123",
+          confidence: "high",
+          lastVerified: "2026-06-19T10:00:00.000Z",
+          staleIfFilesChange: ["provider.ts"],
+        },
+      });
+
+      const proc = Bun.spawn(["bun", CLI_PATH, "memory", "explain", "provider", "registry", "--format", "json"], {
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const code = await proc.exited;
+
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+      expect(JSON.parse(stdout)).toMatchObject({
+        query: "provider registry",
+        safeToUse: true,
+        matches: [
+          {
+            id: "provider-registry",
+            sourceState: "fresh",
+            source: {
+              sourcePath: "provider.ts",
+              sourceLines: [1, 1],
+              sourceCommit: "abc123",
+            },
+          },
+        ],
+      });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });
