@@ -7,17 +7,18 @@ description: История версий SOBA Agent, собранная из git
 
 Эта страница генерируется из тегов репозитория и commit subjects. Перед релизом запускайте `bun run docs:changelog`, а в CI проверяйте `bun run docs:changelog:check`.
 
-## Unreleased
+## v0.6.3
 
-Изменения после `v0.6.2`. Для релиза обновите версии и поставьте тег на release commit.
+Релиз 2026-07-01: `v0.6.3`.
 
-Local range: `v0.6.2..HEAD`
+[Compare](https://github.com/avacadorun-dev/soba-agent/compare/v0.6.2...v0.6.3)
 
 ### Fixed
 
-- retry transient model stream failures before API errors
-- handle user-cancelled model requests without API errors
-- ignore prose in verification command detection
+- support bun global wrapper layout ([7d5b8ae](https://github.com/avacadorun-dev/soba-agent/commit/7d5b8ae9bd960c69fcd20f2951db1ac548f39a73))
+- retry transient model stream failures before API errors ([67b43fc](https://github.com/avacadorun-dev/soba-agent/commit/67b43fc6311554282b52d45666304519ac634b11))
+- handle user-cancelled model requests without API errors ([02bee8a](https://github.com/avacadorun-dev/soba-agent/commit/02bee8a14f4dfd89f6f4ef4e2603886937b1128c))
+- ignore prose in verification command detection ([77cd3a7](https://github.com/avacadorun-dev/soba-agent/commit/77cd3a73ba4b4b3ca5564601fc5528eacab5e3ef))
 
 ## v0.6.2
 
