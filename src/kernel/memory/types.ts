@@ -189,3 +189,60 @@ export interface ProjectMemoryOptions {
   /** Deterministic capsule id generator for tests. */
   idGenerator?: (capsule: Omit<MemoryCapsule, "id">) => string;
 }
+
+export type MemoryDoctorStatus = "healthy" | "stale" | "broken";
+export type MemoryDoctorIssueSeverity = "warning" | "error";
+
+export type MemoryDoctorIssueCode =
+  | "capsule_corrupted"
+  | "capsule_source_missing"
+  | "capsule_source_newer"
+  | "capsule_source_outside_project";
+
+export interface MemoryDoctorIssue {
+  code: MemoryDoctorIssueCode;
+  severity: MemoryDoctorIssueSeverity;
+  target: {
+    kind: "capsule";
+    id: string;
+  };
+  message: string;
+  path?: string;
+}
+
+export type MemoryCapsuleSourceState = "fresh" | "stale" | "missing" | "outside_project" | "untracked" | "corrupted";
+
+export interface MemoryDoctorKnowledgeEntry {
+  key: KnowledgeKey;
+  path: string;
+  estimatedTokens: number;
+  bytes: number;
+}
+
+export interface MemoryDoctorCapsuleEntry {
+  id: string;
+  type?: CapsuleType;
+  priority?: CapsulePriority;
+  timestamp?: string;
+  sourceState: MemoryCapsuleSourceState;
+  sourcePath?: string;
+}
+
+export interface MemoryDoctorReport {
+  status: MemoryDoctorStatus;
+  generatedAt: string;
+  memoryDir: string;
+  summary: {
+    knowledgeFiles: number;
+    knowledgeTokens: number;
+    capsules: number;
+    freshCapsules: number;
+    staleCapsules: number;
+    brokenCapsules: number;
+    untrackedCapsules: number;
+    issues: number;
+  };
+  knowledge: MemoryDoctorKnowledgeEntry[];
+  capsules: MemoryDoctorCapsuleEntry[];
+  issues: MemoryDoctorIssue[];
+}

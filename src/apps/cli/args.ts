@@ -94,6 +94,10 @@ export interface CliArgs {
   explainClaim: boolean;
   /** Raw argv slice after the `explain-claim` token. */
   explainClaimArgs: string[];
+  /** Inspect Project Memory health and exit. */
+  memory: boolean;
+  /** Raw argv slice after the `memory` token. */
+  memoryArgs: string[];
   /**
    * `soba provider <sub> ...` sub-route. When this is defined, the binary
    * dispatches into the provider-cli module and skips agent setup. The
@@ -136,6 +140,8 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   verifyArgs: [],
   explainClaim: false,
   explainClaimArgs: [],
+  memory: false,
+  memoryArgs: [],
   providerSubArgs: [],
 };
 
@@ -368,6 +374,11 @@ export function parseArgs(argv: string[]): CliArgs {
       case "explain-claim":
         args.explainClaim = true;
         args.explainClaimArgs = argv.slice(i + 1);
+        return args;
+
+      case "memory":
+        args.memory = true;
+        args.memoryArgs = argv.slice(i + 1);
         return args;
 
       case "acp":

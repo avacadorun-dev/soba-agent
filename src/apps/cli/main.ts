@@ -15,15 +15,16 @@ import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
 import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
+import { runFilesystemExplainClaimCommand } from "../../composition/cli/explain-claim-command";
+import { runFilesystemMemoryCommand } from "../../composition/cli/memory-command";
+import { runFilesystemProveCommand } from "../../composition/cli/prove-command";
 import {
   listSessions,
   redactMcpSensitiveText,
-  runFilesystemExplainClaimCommand,
-  runFilesystemProveCommand,
-  runFilesystemVerifyCommand,
   SessionManager,
   syncMcpToolsIntoRegistry,
-} from "../../composition/cli/public";
+} from "../../composition/cli/runtime";
+import { runFilesystemVerifyCommand } from "../../composition/cli/verify-command";
 import {
   firstTimeSetup,
   loadConfig,
@@ -243,7 +244,7 @@ async function main() {
   // or the session manager — it only needs the ProviderRegistry.
   if (cliArgs.providerSubcommand !== undefined) {
     const { parseProviderCliArgs, runProviderCli } = await import("./provider-cli");
-    const { ProviderRegistry } = await import("../../composition/cli/public");
+    const { ProviderRegistry } = await import("../../composition/cli/runtime");
     const persistedRegistryForProvider = await ProviderRegistry.loadFromFile();
     const providerRegistryForCli = new ProviderRegistry(persistedRegistryForProvider ?? undefined);
     const options = parseProviderCliArgs(cliArgs.providerSubArgs);
@@ -307,6 +308,17 @@ async function main() {
   if (cliArgs.explainClaim) {
     const result = runFilesystemExplainClaimCommand({
       args: cliArgs.explainClaimArgs,
+      projectRoot: process.cwd(),
+    });
+    if (result.stream === "stdout") process.stdout.write(result.output);
+    else process.stderr.write(result.output);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
+  if (cliArgs.memory) {
+    const result = runFilesystemMemoryCommand({
+      args: cliArgs.memoryArgs,
       projectRoot: process.cwd(),
     });
     if (result.stream === "stdout") process.stdout.write(result.output);

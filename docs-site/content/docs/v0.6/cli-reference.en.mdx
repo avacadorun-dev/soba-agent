@@ -108,7 +108,24 @@ Permission receipts record each executed tool call's trust level, approval kind,
 
 ---
 
-## 4. Provider subcommands
+## 4. Project Memory commands
+
+Project Memory lives in `.soba/memory/`. `soba memory doctor` inspects the persisted knowledge files and memory capsules without starting the agent runtime.
+It reports knowledge file counts, estimated token usage, capsule source provenance, stale capsules, missing sources, outside-project source references, and corrupt capsule files.
+
+| Command | Purpose |
+|---|---|
+| `soba memory doctor` | Inspect Project Memory health for the current project |
+| `soba memory doctor --format json` | Print the report as JSON for CI or scripts |
+| `soba memory doctor --format markdown` | Render the report as Markdown |
+
+Exit code is `0` only when memory is `healthy`. Stale or broken memory returns `1` and writes the report to stderr.
+
+`soba memory doctor` does not start the agent runtime and does not require provider credentials.
+
+---
+
+## 5. Provider subcommands
 
 The provider registry is managed through the `soba provider` sub-route.
 

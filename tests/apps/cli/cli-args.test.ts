@@ -58,6 +58,14 @@ describe("CLI adaptive loop options", () => {
     expect(args.prompt).toBeUndefined();
   });
 
+  test("распознаёт top-level memory и отдаёт его флаги отдельному parser", () => {
+    const args = parseArgs(["memory", "doctor", "--format", "json"]);
+
+    expect(args.memory).toBe(true);
+    expect(args.memoryArgs).toEqual(["doctor", "--format", "json"]);
+    expect(args.prompt).toBeUndefined();
+  });
+
   test("принимает только известные темы и отклоняет неизвестные", () => {
     expect(parseArgs(["--theme", "aurora"]).theme).toBe("aurora");
     // Unknown theme should error out

@@ -108,7 +108,24 @@ Permission receipts записывают trust level, approval kind, approval va
 
 ---
 
-## 4. Provider subcommands
+## 4. Project Memory команды
+
+Project Memory хранится в `.soba/memory/`. `soba memory doctor` проверяет persisted knowledge files и memory capsules без запуска agent runtime.
+Команда показывает количество knowledge files, оценку token usage, provenance источников capsules, stale capsules, отсутствующие источники, ссылки за пределы проекта и битые capsule files.
+
+| Команда | Назначение |
+|---|---|
+| `soba memory doctor` | Проверить здоровье Project Memory текущего проекта |
+| `soba memory doctor --format json` | Вывести отчёт как JSON для CI или скриптов |
+| `soba memory doctor --format markdown` | Вывести отчёт как Markdown |
+
+Exit code равен `0` только для состояния `healthy`. Stale или broken memory возвращает `1` и пишет отчёт в stderr.
+
+`soba memory doctor` не запускает agent runtime и не требует credentials провайдера.
+
+---
+
+## 5. Provider subcommands
 
 Provider registry управляется через sub-route `soba provider`.
 

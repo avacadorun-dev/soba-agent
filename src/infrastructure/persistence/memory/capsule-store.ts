@@ -28,6 +28,17 @@ export type CapsuleStoreErrorCode =
   | "corrupted_capsule"
   | "corrupted_index";
 
+export interface CapsuleStoreCorruption {
+  id: string;
+  path: string;
+  message: string;
+}
+
+export interface CapsuleStoreInspection {
+  capsules: MemoryCapsule[];
+  corruptions: CapsuleStoreCorruption[];
+}
+
 export class CapsuleStoreError extends Error {
   readonly code: CapsuleStoreErrorCode;
 
@@ -122,6 +133,11 @@ export class CapsuleStore {
       .sort(compareByTimestampDescThenId);
   }
 
+  inspectFiles(): CapsuleStoreInspection {
+    this.init();
+    return this.inspectCapsuleFiles();
+  }
+
   getRelevant(query: string | CapsuleRelevanceQuery): CapsuleRelevanceResult[] {
     const normalizedQuery = normalizeRelevanceQuery(query, this.now().toISOString());
 
@@ -206,19 +222,33 @@ export class CapsuleStore {
   }
 
   private readAllCapsules(): MemoryCapsule[] {
+    return this.inspectCapsuleFiles().capsules;
+  }
+
+  private inspectCapsuleFiles(): CapsuleStoreInspection {
     if (!existsSync(this.capsulesDir)) {
-      return [];
+      return { capsules: [], corruptions: [] };
     }
 
-    return readdirSync(this.capsulesDir)
-      .filter((fileName) => fileName.endsWith(".json") && fileName !== "index.json")
-      .flatMap((fileName) => {
-        try {
-          return [this.readCapsuleFile(fileName.slice(0, -".json".length))];
-        } catch {
-          return [];
-        }
-      });
+    const capsules: MemoryCapsule[] = [];
+    const corruptions: CapsuleStoreCorruption[] = [];
+    for (const fileName of readdirSync(this.capsulesDir).filter((entry) => entry.endsWith(".json") && entry !== "index.json")) {
+      const id = fileName.slice(0, -".json".length);
+      try {
+        capsules.push(this.readCapsuleFile(id));
+      } catch (error) {
+        corruptions.push({
+          id,
+          path: join(this.capsulesDir, fileName),
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      capsules,
+      corruptions,
+    };
   }
 
   private readCapsuleFile(id: string): MemoryCapsule {

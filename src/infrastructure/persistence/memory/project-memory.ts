@@ -1,4 +1,5 @@
-import { join, resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type {
   CapsuleRelevanceQuery,
   CapsuleRelevanceResult,
@@ -6,6 +7,11 @@ import type {
   KnowledgeDocument,
   MemoryCapsule,
   MemoryCapsuleInput,
+  MemoryCapsuleSourceState,
+  MemoryDoctorCapsuleEntry,
+  MemoryDoctorIssue,
+  MemoryDoctorReport,
+  MemoryDoctorStatus,
   ProjectMemoryOptions,
 } from "../../../kernel/memory/types";
 import { CapsuleStore } from "./capsule-store";
@@ -56,6 +62,7 @@ export class ProjectMemory {
   private readonly projectRoot: string;
   private readonly memoryDir: string;
   private readonly contextCapsuleLimit: number;
+  private readonly now: () => Date;
   private readonly knowledge: KnowledgeStore;
   private readonly capsules: CapsuleStore;
   private readonly graph: EntityGraphStore | null;
@@ -64,6 +71,7 @@ export class ProjectMemory {
     this.projectRoot = resolve(options.projectRoot);
     this.memoryDir = resolve(options.memoryDir ?? join(this.projectRoot, ".soba", "memory"));
     this.contextCapsuleLimit = options.contextCapsuleLimit ?? 10;
+    this.now = options.now ?? (() => new Date());
     this.knowledge = new KnowledgeStore({
       projectRoot: this.projectRoot,
       memoryDir: this.memoryDir,
@@ -145,6 +153,69 @@ export class ProjectMemory {
     });
   }
 
+  doctor(): MemoryDoctorReport {
+    return this.withProjectError("load_failed", "doctor", () => {
+      this.initialize();
+      const generatedAt = this.now().toISOString();
+      const knowledge = this.getKnowledgeFiles().map((document) => ({
+        key: document.key,
+        path: document.path,
+        estimatedTokens: document.estimatedTokens,
+        bytes: Buffer.byteLength(document.content, "utf-8"),
+      }));
+      const issues: MemoryDoctorIssue[] = [];
+      const inspectedCapsules = this.withLayerError("capsule_store_failed", "capsules", "inspect capsules", () => this.capsules.inspectFiles());
+      const capsules = [
+        ...inspectedCapsules.capsules.map((capsule) => inspectCapsuleSource(capsule, this.projectRoot, issues)),
+        ...inspectedCapsules.corruptions.map((corruption) => {
+          issues.push({
+            code: "capsule_corrupted",
+            severity: "error",
+            target: { kind: "capsule", id: corruption.id },
+            message: corruption.message,
+            path: corruption.path,
+          });
+          return {
+            id: corruption.id,
+            sourceState: "corrupted" as const,
+          };
+        }),
+      ];
+
+      const staleCapsules = capsules.filter((capsule) => capsule.sourceState === "stale").length;
+      const brokenCapsules = capsules.filter((capsule) =>
+        capsule.sourceState === "missing" ||
+        capsule.sourceState === "outside_project" ||
+        capsule.sourceState === "corrupted",
+      ).length;
+      const untrackedCapsules = capsules.filter((capsule) => capsule.sourceState === "untracked").length;
+      const status: MemoryDoctorStatus = brokenCapsules > 0
+        ? "broken"
+        : staleCapsules > 0
+          ? "stale"
+          : "healthy";
+
+      return {
+        status,
+        generatedAt,
+        memoryDir: this.memoryDir,
+        summary: {
+          knowledgeFiles: knowledge.length,
+          knowledgeTokens: knowledge.reduce((sum, document) => sum + document.estimatedTokens, 0),
+          capsules: capsules.length,
+          freshCapsules: capsules.filter((capsule) => capsule.sourceState === "fresh").length,
+          staleCapsules,
+          brokenCapsules,
+          untrackedCapsules,
+          issues: issues.length,
+        },
+        knowledge,
+        capsules,
+        issues,
+      };
+    });
+  }
+
   getMemoryDir(): string {
     return this.memoryDir;
   }
@@ -198,4 +269,69 @@ function formatCause(error: unknown): string {
   }
 
   return String(error);
+}
+
+function inspectCapsuleSource(capsule: MemoryCapsule, projectRoot: string, issues: MemoryDoctorIssue[]): MemoryDoctorCapsuleEntry {
+  const sourcePath = capsule.source?.file;
+  if (!sourcePath) {
+    return capsuleDoctorEntry(capsule, "untracked");
+  }
+
+  const timestampMs = Date.parse(capsule.context.timestamp);
+  const resolvedSourcePath = resolveSourcePath(projectRoot, sourcePath);
+  if (!isInsideProject(projectRoot, resolvedSourcePath)) {
+    issues.push({
+      code: "capsule_source_outside_project",
+      severity: "error",
+      target: { kind: "capsule", id: capsule.id },
+      message: `Memory capsule ${capsule.id} references a source outside the project root.`,
+      path: sourcePath,
+    });
+    return capsuleDoctorEntry(capsule, "outside_project", sourcePath);
+  }
+
+  if (!existsSync(resolvedSourcePath)) {
+    issues.push({
+      code: "capsule_source_missing",
+      severity: "error",
+      target: { kind: "capsule", id: capsule.id },
+      message: `Memory capsule ${capsule.id} references a source file that no longer exists.`,
+      path: sourcePath,
+    });
+    return capsuleDoctorEntry(capsule, "missing", sourcePath);
+  }
+
+  const modifiedAtMs = statSync(resolvedSourcePath).mtimeMs;
+  if (modifiedAtMs > timestampMs + 1000) {
+    issues.push({
+      code: "capsule_source_newer",
+      severity: "warning",
+      target: { kind: "capsule", id: capsule.id },
+      message: `Memory capsule ${capsule.id} may be stale because its source file changed after the capsule was recorded.`,
+      path: sourcePath,
+    });
+    return capsuleDoctorEntry(capsule, "stale", sourcePath);
+  }
+
+  return capsuleDoctorEntry(capsule, "fresh", sourcePath);
+}
+
+function capsuleDoctorEntry(capsule: MemoryCapsule, sourceState: MemoryCapsuleSourceState, sourcePath?: string): MemoryDoctorCapsuleEntry {
+  return {
+    id: capsule.id,
+    type: capsule.type,
+    priority: capsule.priority,
+    timestamp: capsule.context.timestamp,
+    sourceState,
+    ...(sourcePath ? { sourcePath } : {}),
+  };
+}
+
+function resolveSourcePath(projectRoot: string, sourcePath: string): string {
+  return isAbsolute(sourcePath) ? resolve(sourcePath) : resolve(projectRoot, sourcePath);
+}
+
+function isInsideProject(projectRoot: string, targetPath: string): boolean {
+  const relativePath = relative(resolve(projectRoot), resolve(targetPath));
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
 }

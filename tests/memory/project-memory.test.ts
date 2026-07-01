@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KNOWLEDGE_KEYS, type MemoryCapsuleInput } from "../../src/engine/memory/types";
@@ -112,6 +112,74 @@ describe("ProjectMemory aggregator", () => {
     expect(readFileSync(join(projectRoot, ".soba", "memory", "graph.json"), "utf-8")).toContain("project-memory.ts");
   });
 
+  test("doctor reports source freshness, stale capsules, broken capsules, and corrupt capsule files", () => {
+    const memory = createProjectMemory();
+    const freshPath = join(projectRoot, "fresh.ts");
+    const stalePath = join(projectRoot, "stale.ts");
+    const outsideRoot = mkdtempSync(join(tmpdir(), "soba-project-memory-outside-"));
+    const outsidePath = join(outsideRoot, "outside.ts");
+
+    try {
+      writeFileSync(freshPath, "export const fresh = true;\n", "utf-8");
+      writeFileSync(stalePath, "export const stale = true;\n", "utf-8");
+      writeFileSync(outsidePath, "export const outside = true;\n", "utf-8");
+      utimesSync(freshPath, new Date("2026-06-19T09:59:00.000Z"), new Date("2026-06-19T09:59:00.000Z"));
+      utimesSync(stalePath, new Date("2026-06-19T10:00:02.000Z"), new Date("2026-06-19T10:00:02.000Z"));
+
+      memory.addCapsule(capsuleInput({
+        id: "fresh",
+        source: { error: "none", fix: "none", file: "fresh.ts" },
+      }));
+      memory.addCapsule(capsuleInput({
+        id: "stale",
+        source: { error: "old", fix: "refresh", file: "stale.ts" },
+      }));
+      memory.addCapsule(capsuleInput({
+        id: "missing",
+        source: { error: "missing", fix: "restore", file: "missing.ts" },
+      }));
+      memory.addCapsule(capsuleInput({
+        id: "outside",
+        source: { error: "outside", fix: "move", file: outsidePath },
+      }));
+      memory.addCapsule(capsuleInput({ id: "untracked" }));
+
+      const capsulesDir = join(projectRoot, ".soba", "memory", "capsules");
+      mkdirSync(capsulesDir, { recursive: true });
+      writeFileSync(join(capsulesDir, "corrupt.json"), "{ broken", "utf-8");
+
+      const report = memory.doctor();
+
+      expect(report.status).toBe("broken");
+      expect(report.generatedAt).toBe("2026-06-19T10:00:00.000Z");
+      expect(report.summary).toMatchObject({
+        knowledgeFiles: 4,
+        capsules: 6,
+        freshCapsules: 1,
+        staleCapsules: 1,
+        brokenCapsules: 3,
+        untrackedCapsules: 1,
+        issues: 4,
+      });
+      expect(report.capsules.map((capsule) => [capsule.id, capsule.sourceState]).sort()).toEqual([
+        ["corrupt", "corrupted"],
+        ["fresh", "fresh"],
+        ["missing", "missing"],
+        ["outside", "outside_project"],
+        ["stale", "stale"],
+        ["untracked", "untracked"],
+      ]);
+      expect(report.issues.map((issue) => issue.code).sort()).toEqual([
+        "capsule_corrupted",
+        "capsule_source_missing",
+        "capsule_source_newer",
+        "capsule_source_outside_project",
+      ]);
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
   test("store failure surfaces controlled ProjectMemoryError", () => {
     const memory = createProjectMemory();
 
@@ -167,6 +235,7 @@ function capsuleInput(
     priority?: MemoryCapsuleInput["priority"];
     tags?: string[];
     timestamp?: string;
+    source?: MemoryCapsuleInput["source"];
   } = {},
 ): MemoryCapsuleInput {
   return {
@@ -182,6 +251,7 @@ function capsuleInput(
     priority: overrides.priority ?? "medium",
     tags: overrides.tags ?? [],
     related: [],
+    ...(overrides.source ? { source: overrides.source } : {}),
   };
 }
 

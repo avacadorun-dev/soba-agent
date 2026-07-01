@@ -6,11 +6,12 @@ description: "Постоянная память проекта в SOBA v0.6.0: k
 Project Memory — это project-local память SOBA Agent. Она хранится в репозитории в `.soba/memory/` и переживает
 перезапуск процесса, новую сессию и compaction.
 
-В v0.6.0 Project Memory — это не slash-команда пользователя. Это слой памяти, который SOBA автоматически подключает к
-agent loop, и два agent tools:
+В v0.6.x Project Memory — это слой памяти, который SOBA автоматически подключает к agent loop, два agent tools и
+one-shot diagnostic command:
 
 - `read_project_memory` — прочитать bounded и sanitized память проекта;
 - `write_project_memory` — записать knowledge-файл или memory capsule.
+- `soba memory doctor` — проверить persisted memory без запуска agent runtime.
 
 ---
 
@@ -132,7 +133,30 @@ SOBA должен использовать `write_project_memory`. Для про
 
 ---
 
-## 5. Безопасность и sanitation
+## 5. Memory Doctor
+
+`soba memory doctor` проверяет `.soba/memory/` для текущего project root:
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory doctor --format markdown
+```
+
+Отчёт включает:
+
+- количество knowledge files, bytes и estimated tokens;
+- capsules со статусом source provenance: `fresh`, `stale`, `missing`, `outside_project`, `untracked`, `corrupted`;
+- issues для stale source files, missing source files, ссылок за пределы project root и битых capsule JSON files.
+
+Exit code равен `0` только при статусе `healthy`. Если есть stale или broken capsules, команда возвращает `1` и пишет
+отчёт в stderr, чтобы её можно было использовать в CI.
+
+Команда не запускает agent runtime и не требует provider credentials.
+
+---
+
+## 6. Безопасность и sanitation
 
 `write_project_memory` отклоняет:
 
@@ -157,7 +181,7 @@ SOBA должен использовать `write_project_memory`. Для про
 
 ---
 
-## 6. Project Memory vs Context Capsule vs Portable Capsule
+## 7. Project Memory vs Context Capsule vs Portable Capsule
 
 | Механизм | Где хранится | Для чего нужен |
 |---|---|---|
@@ -170,7 +194,7 @@ Capsules — для передачи работы.
 
 ---
 
-## 7. Проверка
+## 8. Проверка
 
 Минимальная проверка Project Memory:
 
