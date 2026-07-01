@@ -25,7 +25,8 @@ describe("tool choice descriptions", () => {
     expect(bashTool.description).toContain("Prefer ls, search_files, read, or inspect_file");
     expect(bashTool.description).toContain("verification workflows");
     expect(bashTool.description).toContain("--help/--version/which probes");
-    expect(bashTool.description).toContain("head/tail are diagnostic only");
+    expect(bashTool.description).toContain("head/tail/tee");
+    expect(bashTool.description).toContain("masked by `; echo exit` wrappers");
     expect(bashTool.description).toContain("do not count as passing verification evidence");
   });
 

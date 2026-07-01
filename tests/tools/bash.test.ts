@@ -45,6 +45,20 @@ describe("bash tool", () => {
     expect(result.content[0].text).toContain("Exit code: 1");
   });
 
+  test("masked wrapper с reported exit code не превращается в успешную команду", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute(
+      { command: 'false; printf "typecheck failed\\n---typecheck exit: 2\\n"' },
+      { cwd },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.details?.exitCode).toBe(2);
+    expect(result.details?.shellExitCode).toBe(0);
+    expect(result.details?.reportedExitCode).toBe(2);
+    expect(result.content[0].text).toContain("Exit code: 2");
+  });
+
   test("команда, завершённая сигналом, не печатает Exit code: null", async () => {
     const cwd = makeCwd();
     const result = await bashTool.execute({ command: "kill -TERM $$" }, { cwd });

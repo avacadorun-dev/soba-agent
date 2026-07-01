@@ -68,7 +68,8 @@ describe("CompletionController", () => {
       expect(rejectionText).toContain("Finish rejected by completion gate");
       expect(rejectionText).toContain("continue with tools");
       expect(rejectionText).toContain("--help/--version/which probes");
-      expect(rejectionText).toContain("head/tail do not count");
+      expect(rejectionText).toContain("head/tail/tee");
+      expect(rejectionText).toContain("masked by `; echo exit` wrappers do not count");
       expect(rejectionText).toContain("Use status blocked only for a concrete external blocker");
       expect(rejectionText).toContain("do not use blocked to bypass missing verification");
     }

@@ -60,6 +60,13 @@ describe("verification policy", () => {
   test("command classifier rejects probes and output-truncated checks as verification evidence", () => {
     expect(verificationKindFromCommand("bun lint --help 2>&1 | head -20")).toBeNull();
     expect(verificationKindFromCommand("bun test 2>&1 | tail -80")).toBeNull();
+    expect(verificationKindFromCommand("bun run typecheck 2>&1 | tee /tmp/typecheck.txt")).toBeNull();
+    expect(
+      verificationKindFromCommand(
+        'bun run lint 2>&1 | tee /tmp/lint.txt; echo "---lint exit: ${PIPESTATUS[0]}"',
+      ),
+    ).toBeNull();
+    expect(verificationKindFromCommand('bun test; echo "---test exit: $?"')).toBeNull();
     expect(verificationKindFromCommand("bun run typecheck --version")).toBeNull();
     expect(verificationKindFromCommand("node -v")).toBeNull();
     expect(verificationKindFromCommand("ruff -v")).toBeNull();

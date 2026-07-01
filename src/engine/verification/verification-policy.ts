@@ -203,6 +203,7 @@ export function isNonVerificationProbeCommand(command: string): boolean {
   if (normalized.length === 0) return true;
   if (isRoutineInspectionShellCommand(normalized)) return true;
   if (hasHeadTailPipeline(normalized)) return true;
+  if (hasMaskedVerificationExit(normalized)) return true;
   if (isShellUtilityOnlyCommand(normalized)) return true;
   if (isFileMutationOrSetupCommand(normalized)) return true;
   if (/(?:^|\s)(?:--help|--version|-h)(?:\s|$)/.test(normalized)) return true;
@@ -239,6 +240,14 @@ function isRoutineInspectionShellCommand(command: string): boolean {
 
 function hasHeadTailPipeline(command: string): boolean {
   return /\|\s*&?\s*(?:head|tail)\b/.test(command);
+}
+
+function hasMaskedVerificationExit(command: string): boolean {
+  if (!looksLikeVerificationExecution(command)) return false;
+  if (/\|\s*&?\s*tee\b/.test(command)) return true;
+  if (/\$\{?pipestatus\b/.test(command)) return true;
+  if (/;\s*(?:echo|printf)\b.*\bexit\b/.test(command)) return true;
+  return false;
 }
 
 const SHELL_UTILITY_COMMANDS = new Set([

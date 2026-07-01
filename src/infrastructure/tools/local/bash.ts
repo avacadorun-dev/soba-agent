@@ -331,7 +331,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
   name: "bash",
   label: "bash",
   description:
-    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Prefer ls, search_files, read, or inspect_file for bounded routine file inspection when they fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail are diagnostic only and do not count as passing verification evidence. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
+    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Prefer ls, search_files, read, or inspect_file for bounded routine file inspection when they fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail/tee or masked by `; echo exit` wrappers are diagnostic only and do not count as passing verification evidence. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
   parameters: {
     type: "object",
     properties: {
@@ -388,10 +388,14 @@ export const bashTool: ToolDefinition<BashArgs> = {
         outputText += `\n[Full output saved to ${result.tempPath}]`;
       }
 
-      if (result.exitCode !== null && result.exitCode !== 0) {
-        outputText += `\n[Exit code: ${result.exitCode}]`;
+      const reportedExitCode = detectReportedExitCode(args.command, outputText);
+      const effectiveExitCode = effectiveCommandExitCode(result.exitCode, reportedExitCode);
+      const effectiveResult = { ...result, exitCode: effectiveExitCode };
+
+      if (effectiveExitCode !== null && effectiveExitCode !== 0) {
+        outputText += `\n[Exit code: ${effectiveExitCode}]`;
       }
-      const error = commandErrorInfo(result);
+      const error = commandErrorInfo(effectiveResult);
       if (error) {
         outputText += `\n[${error.code}: ${error.nextAction}]`;
       }
@@ -399,11 +403,14 @@ export const bashTool: ToolDefinition<BashArgs> = {
 
       return {
         content: [{ type: "text", text: outputText || "(no output)" }],
-        isError: result.exitCode !== 0 || result.signalCode !== null || result.aborted,
+        isError: effectiveExitCode !== 0 || result.signalCode !== null || result.aborted,
         error,
         details: {
           command: args.command,
-          exitCode: result.exitCode,
+          exitCode: effectiveExitCode,
+          ...(reportedExitCode !== undefined && reportedExitCode !== result.exitCode
+            ? { shellExitCode: result.exitCode, reportedExitCode }
+            : {}),
           signalCode: result.signalCode ?? undefined,
           timedOut: result.timedOut,
           aborted: result.aborted,
@@ -425,3 +432,23 @@ export const bashTool: ToolDefinition<BashArgs> = {
     }
   },
 };
+
+function effectiveCommandExitCode(shellExitCode: number | null, reportedExitCode: number | undefined): number | null {
+  if (shellExitCode !== null && shellExitCode !== 0) return shellExitCode;
+  if (reportedExitCode !== undefined) return reportedExitCode;
+  return shellExitCode;
+}
+
+function detectReportedExitCode(command: string, output: string): number | undefined {
+  const normalized = command.toLowerCase();
+  if (!/\$\{?pipestatus\b/.test(normalized) && !/;\s*(?:echo|printf)\b.*\bexit\b/.test(normalized)) {
+    return undefined;
+  }
+
+  const matches = [...output.matchAll(/\bexit:\s*(-?\d+)\b/gi)];
+  const last = matches.at(-1)?.[1];
+  if (last === undefined) return undefined;
+
+  const parsed = Number.parseInt(last, 10);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}

@@ -324,7 +324,7 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationKinds).toEqual(new Set());
   });
 
-  test("verification piped through tail is diagnostic only", () => {
+  test("verification piped through tail or masked tee wrapper is diagnostic only", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({
       toolCallId: "write_1",
@@ -348,6 +348,21 @@ describe("EvidenceLedger", () => {
     expect(masked).toMatchObject({ kind: "inspect", status: "success" });
     expect(summary.needsVerification).toBe(true);
     expect(summary.verificationEvidenceCallIds).toEqual(new Set());
+
+    const maskedTee = ledger.recordToolOutcome({
+      toolCallId: "typecheck_tee",
+      toolName: "bash",
+      arguments: recordArgs('bun run typecheck 2>&1 | tee /tmp/typecheck.txt; echo "---typecheck exit: ${PIPESTATUS[0]}"'),
+      isError: false,
+      output: "0 errors\n---typecheck exit: 0",
+      iteration: 3,
+    });
+
+    const afterTee = ledger.getSummary();
+    expect(maskedTee).toMatchObject({ kind: "inspect", status: "success" });
+    expect(afterTee.needsVerification).toBe(true);
+    expect(afterTee.verificationEvidenceCallIds).toEqual(new Set());
+    expect(afterTee.verificationKinds).toEqual(new Set());
   });
 
   test("summary maps ledger evidence to completion state", () => {

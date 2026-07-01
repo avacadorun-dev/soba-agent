@@ -41,7 +41,8 @@ describe("System Prompt", () => {
     expect(prompt).toContain("Prefer ls, search_files, inspect_file, or read");
     expect(prompt).toContain("Use bash for verification commands");
     expect(prompt).toContain("Run final verification commands directly");
-    expect(prompt).toContain("Verification commands piped through head/tail do not count");
+    expect(prompt).toContain("Verification commands piped through head/tail/tee");
+    expect(prompt).toContain("`; echo exit` wrappers do not count");
     expect(prompt).toContain("Do not present --help, --version, which");
     expect(prompt).toContain("use mktemp -d or another unique temp directory");
     expect(prompt).toContain("env-configured storage paths, or test fixtures");
@@ -140,7 +141,7 @@ describe("System Prompt", () => {
     expect(prompt).toContain("inspect_file: Inspect bounded line-numbered text ranges");
     expect(prompt).toContain("bash: Run project commands, verification workflows");
     expect(prompt).toContain("Prefer bounded file tools for pwd, ls/find/grep/rg/sed/cat inspection");
-    expect(prompt).toContain("Verification commands piped through head/tail do not count");
+    expect(prompt).toContain("Verification commands piped through head/tail/tee");
   });
 
   test("промпт содержит дату и рабочую директорию", () => {
