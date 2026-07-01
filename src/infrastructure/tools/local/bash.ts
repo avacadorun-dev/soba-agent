@@ -10,7 +10,8 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, mkdirSync, mkdtempSync, openSync, writeSync } from "node:fs";
+import type { Dirent } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { commandErrorInfo, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
@@ -47,6 +48,21 @@ const DEFAULT_MAX_TIMEOUT = 300; // seconds
 const MAX_LINES = 2000;
 const MAX_BYTES = 50 * 1024; // 50KB
 const REDACTION_CARRY_CHARS = 4096;
+const MAX_MUTATION_SNAPSHOT_FILES = 10_000;
+const MAX_REPORTED_CHANGED_FILES = 100;
+const SNAPSHOT_SKIP_DIRS = new Set([
+  ".git",
+  ".hg",
+  ".svn",
+  ".soba-tmp",
+  "node_modules",
+  "vendor",
+  "dist",
+  "build",
+  "coverage",
+  ".next",
+  ".turbo",
+]);
 
 // ─── Helpers ───
 
@@ -325,6 +341,73 @@ function normalizeTimeout(
   };
 }
 
+type ProjectFileSnapshot = Map<string, string>;
+
+function shouldTrackShellFileChanges(command: string): boolean {
+  const normalized = command.toLowerCase();
+  if (/\b(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?format\b/.test(normalized)) return true;
+  if (/\bbiome\s+(?:check|format)\b/.test(normalized) && /\s--write(?:\s|$)/.test(normalized)) return true;
+  if (/\bprettier\b/.test(normalized) && /\s--write(?:\s|$)/.test(normalized)) return true;
+  if (/\bruff\s+format\b/.test(normalized) && !/\s--check(?:\s|$)/.test(normalized)) return true;
+  if (/\bgo\s+fmt\b/.test(normalized)) return true;
+  if (/\bcargo\s+fmt\b/.test(normalized)) return true;
+  return false;
+}
+
+function snapshotProjectFiles(root: string): ProjectFileSnapshot | null {
+  const snapshot: ProjectFileSnapshot = new Map();
+
+  const visit = (absoluteDir: string, relativeDir: string): boolean => {
+    let entries: Dirent<string>[];
+    try {
+      entries = readdirSync(absoluteDir, { withFileTypes: true, encoding: "utf8" });
+    } catch {
+      return true;
+    }
+
+    for (const entry of entries) {
+      if (snapshot.size > MAX_MUTATION_SNAPSHOT_FILES) return false;
+      if (entry.isSymbolicLink()) continue;
+
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      const absolutePath = join(absoluteDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (SNAPSHOT_SKIP_DIRS.has(entry.name)) continue;
+        if (!visit(absolutePath, relativePath)) return false;
+        continue;
+      }
+
+      if (!entry.isFile()) continue;
+
+      try {
+        const stat = statSync(absolutePath);
+        snapshot.set(relativePath, `${stat.size}:${Math.floor(stat.mtimeMs)}`);
+      } catch {
+        // Files can disappear while a tool is running; ignore this snapshot race.
+      }
+    }
+
+    return true;
+  };
+
+  return visit(root, "") ? snapshot : null;
+}
+
+function changedFilesBetween(before: ProjectFileSnapshot | null, after: ProjectFileSnapshot | null): string[] {
+  if (!before || !after) return [];
+
+  const changed = new Set<string>();
+  for (const [path, fingerprint] of after) {
+    if (before.get(path) !== fingerprint) changed.add(path);
+  }
+  for (const path of before.keys()) {
+    if (!after.has(path)) changed.add(path);
+  }
+
+  return [...changed].sort();
+}
+
 // ─── Tool Definition ───
 
 export const bashTool: ToolDefinition<BashArgs> = {
@@ -365,7 +448,9 @@ export const bashTool: ToolDefinition<BashArgs> = {
     const timeout = normalizeTimeout(args.timeout, context.bashMaxTimeoutSeconds);
 
     try {
+      const beforeSnapshot = shouldTrackShellFileChanges(args.command) ? snapshotProjectFiles(context.cwd) : null;
       const result = await execCommand(args.command, context.cwd, timeout.seconds, signal);
+      const changedFiles = beforeSnapshot ? changedFilesBetween(beforeSnapshot, snapshotProjectFiles(context.cwd)) : [];
 
       let output = timeout.note ? `${timeout.note}\n` : "";
       if (result.output) output += result.output;
@@ -418,6 +503,12 @@ export const bashTool: ToolDefinition<BashArgs> = {
           timeoutSeconds: timeout.seconds,
           maxTimeoutSeconds: timeout.maxSeconds,
           tempPath: result.tempPath,
+          ...(changedFiles.length > 0
+            ? {
+                changedFiles: changedFiles.slice(0, MAX_REPORTED_CHANGED_FILES),
+                changedFileCount: changedFiles.length,
+              }
+            : {}),
           outputDigest,
         },
       };

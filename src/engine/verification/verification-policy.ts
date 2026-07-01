@@ -204,6 +204,7 @@ export function isNonVerificationProbeCommand(command: string): boolean {
   if (isRoutineInspectionShellCommand(normalized)) return true;
   if (hasHeadTailPipeline(normalized)) return true;
   if (hasMaskedVerificationExit(normalized)) return true;
+  if (isFormattingMutationCommand(normalized)) return true;
   if (isShellUtilityOnlyCommand(normalized)) return true;
   if (isFileMutationOrSetupCommand(normalized)) return true;
   if (/(?:^|\s)(?:--help|--version|-h)(?:\s|$)/.test(normalized)) return true;
@@ -247,6 +248,16 @@ function hasMaskedVerificationExit(command: string): boolean {
   if (/\|\s*&?\s*tee\b/.test(command)) return true;
   if (/\$\{?pipestatus\b/.test(command)) return true;
   if (/;\s*(?:echo|printf)\b.*\bexit\b/.test(command)) return true;
+  return false;
+}
+
+function isFormattingMutationCommand(command: string): boolean {
+  if (/\b(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?format\b/.test(command)) return true;
+  if (/\bbiome\s+(?:check|format)\b/.test(command) && /\s--write(?:\s|$)/.test(command)) return true;
+  if (/\bprettier\b/.test(command) && /\s--write(?:\s|$)/.test(command)) return true;
+  if (/\bruff\s+format\b/.test(command) && !/\s--check(?:\s|$)/.test(command)) return true;
+  if (/\bgo\s+fmt\b/.test(command)) return true;
+  if (/\bcargo\s+fmt\b/.test(command)) return true;
   return false;
 }
 

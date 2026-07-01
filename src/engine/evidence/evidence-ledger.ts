@@ -101,6 +101,8 @@ export class EvidenceLedger {
   private readonly successfulToolCallIds = new Set<string>();
 
   recordToolOutcome(outcome: EvidenceToolOutcome): EvidenceEntry {
+    const shellMutation = outcome.toolName === "bash" ? this.recordShellMutation(outcome) : null;
+
     if (outcome.isError) {
       if (outcome.toolName === "bash") {
         const command = readCommand(outcome.arguments);
@@ -113,6 +115,8 @@ export class EvidenceLedger {
     }
 
     this.successfulToolCallIds.add(outcome.toolCallId);
+
+    if (shellMutation) return shellMutation;
 
     if (MUTATION_TOOL_NAMES.has(outcome.toolName)) {
       const files = readFiles(outcome.arguments);
@@ -457,6 +461,25 @@ export class EvidenceLedger {
     });
   }
 
+  private recordShellMutation(outcome: EvidenceToolOutcome): EvidenceEntry | null {
+    const files = readChangedFiles(outcome.details);
+    if (files.length === 0) return null;
+
+    return this.addEntry({
+      id: evidenceId("mutation", outcome.toolCallId),
+      kind: "mutation",
+      status: "unverified",
+      timestamp: Date.now(),
+      toolCallId: outcome.toolCallId,
+      toolName: outcome.toolName,
+      command: readCommand(outcome.arguments),
+      files,
+      iteration: outcome.iteration,
+      ...commandEvidenceFields(outcome),
+      summary: `bash changed project files: ${files.join(", ")}`,
+    });
+  }
+
   private addEntry(entry: EvidenceEntry): EvidenceEntry {
     this.entries.push(entry);
     return { ...entry, mutationIds: entry.mutationIds?.slice(), resolves: entry.resolves?.slice() };
@@ -549,6 +572,12 @@ function commandEvidenceFields(outcome: EvidenceToolOutcome): Pick<
 function readExitCode(details: Record<string, unknown> | undefined): number | null | undefined {
   if (!details || !("exitCode" in details)) return undefined;
   return details.exitCode === null || typeof details.exitCode === "number" ? details.exitCode : undefined;
+}
+
+function readChangedFiles(details: Record<string, unknown> | undefined): string[] {
+  const value = details?.changedFiles;
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function readStringDetail(details: Record<string, unknown> | undefined, key: string): string | undefined {

@@ -3,7 +3,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bashTool } from "../../src/infrastructure/tools/local/bash";
@@ -57,6 +57,26 @@ describe("bash tool", () => {
     expect(result.details?.shellExitCode).toBe(0);
     expect(result.details?.reportedExitCode).toBe(2);
     expect(result.content[0].text).toContain("Exit code: 2");
+  });
+
+  test("formatter shell command reports changed files", async () => {
+    const cwd = makeCwd();
+    mkdirSync(join(cwd, "src"));
+    writeFileSync(join(cwd, "src", "app.ts"), "const value = 1;\n");
+    writeFileSync(
+      join(cwd, "package.json"),
+      JSON.stringify({
+        scripts: {
+          format: "bun -e \"await Bun.write('src/app.ts', 'const value = 2;\\\\n')\"",
+        },
+      }),
+    );
+
+    const result = await bashTool.execute({ command: "bun run format" }, { cwd });
+
+    expect(result.isError).toBe(false);
+    expect(result.details?.changedFiles).toEqual(["src/app.ts"]);
+    expect(result.details?.changedFileCount).toBe(1);
   });
 
   test("команда, завершённая сигналом, не печатает Exit code: null", async () => {

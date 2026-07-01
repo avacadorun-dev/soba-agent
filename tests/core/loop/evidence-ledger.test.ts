@@ -365,6 +365,36 @@ describe("EvidenceLedger", () => {
     expect(afterTee.verificationKinds).toEqual(new Set());
   });
 
+  test("bash changedFiles details record shell mutation evidence", () => {
+    const ledger = new EvidenceLedger();
+
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "format_1",
+      toolName: "bash",
+      arguments: recordArgs("bun run format"),
+      isError: false,
+      output: "formatted",
+      iteration: 1,
+      details: {
+        exitCode: 0,
+        changedFiles: ["src/app.ts", "src/routes.ts"],
+        changedFileCount: 2,
+      },
+    });
+
+    const summary = ledger.getSummary();
+    expect(mutation).toMatchObject({
+      kind: "mutation",
+      status: "unverified",
+      toolName: "bash",
+      files: ["src/app.ts", "src/routes.ts"],
+    });
+    expect(summary.needsVerification).toBe(true);
+    expect(summary.hasMutatedFiles).toBe(true);
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set());
+    expect(summary.verificationKinds).toEqual(new Set());
+  });
+
   test("summary maps ledger evidence to completion state", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({

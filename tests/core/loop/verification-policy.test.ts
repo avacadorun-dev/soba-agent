@@ -67,6 +67,10 @@ describe("verification policy", () => {
       ),
     ).toBeNull();
     expect(verificationKindFromCommand('bun test; echo "---test exit: $?"')).toBeNull();
+    expect(verificationKindFromCommand("bun run format")).toBeNull();
+    expect(verificationKindFromCommand("biome check --write .")).toBeNull();
+    expect(verificationKindFromCommand("prettier --write src/**/*.ts")).toBeNull();
+    expect(verificationKindFromCommand("ruff format .")).toBeNull();
     expect(verificationKindFromCommand("bun run typecheck --version")).toBeNull();
     expect(verificationKindFromCommand("node -v")).toBeNull();
     expect(verificationKindFromCommand("ruff -v")).toBeNull();
