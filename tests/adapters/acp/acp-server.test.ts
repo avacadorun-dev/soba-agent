@@ -6,16 +6,23 @@ import { listRuntimeCommands, type RuntimeEvent, type RuntimeSessionInfo, type S
 import { APP_VERSION } from "../../../src/shared/version";
 
 interface MockRuntimeState {
+  lastCreateInput?: Parameters<SobaRuntime["createSession"]>[0];
+  lastLoadInput?: Parameters<SobaRuntime["loadSession"]>[0];
+  lastResumeInput?: Parameters<SobaRuntime["resumeSession"]>[0];
   lastTurnInput?: UserTurnInput;
   emitToolEvents?: boolean;
   emitEditEvents?: boolean;
   emitBashEvents?: boolean;
   emitPermission?: boolean;
+  emitPlan?: boolean;
+  emitReasoning?: boolean;
   waitForCancel?: boolean;
   permissionDecision?: string;
   turnErrorType?: "api_error" | "cancelled" | "security_denial";
   configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
   missingSessionIds?: Set<string>;
+  listedSessions?: RuntimeSessionInfo[];
+  loadEntries?: unknown[];
   assistantDeltas?: string[];
   assistantMessage?: string;
 }
@@ -25,6 +32,7 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
   const listeners: Array<(event: RuntimeEvent) => void> = [];
   return {
     async createSession(input) {
+      state.lastCreateInput = input;
       const session = {
         id: `session_${sessions.length + 1}`,
         cwd: input.cwd,
@@ -38,12 +46,13 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
       return { id: input.sessionId, cwd: input.cwd };
     },
     async loadSession(input) {
+      state.lastLoadInput = input;
       if (state.missingSessionIds?.has(input.sessionId)) {
         throw new Error(`Session not found: ${input.sessionId}`);
       }
       return {
         info: { id: input.sessionId, cwd: "/repo", title: "Loaded session" },
-        entries: [
+        entries: state.loadEntries ?? [
           {
             type: "item",
             item: {
@@ -56,12 +65,14 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
       };
     },
     async resumeSession(input) {
+      state.lastResumeInput = input;
       if (state.missingSessionIds?.has(input.sessionId)) {
         throw new Error(`Session not found: ${input.sessionId}`);
       }
       return { id: input.sessionId, cwd: "/repo", title: "Resumed session" };
     },
     async listSessions(input) {
+      if (state.listedSessions) return state.listedSessions;
       return sessions.length > 0 ? sessions : [{ id: "session_existing", cwd: input.cwd, title: "Existing session" }];
     },
     listCommands(input) {
@@ -219,6 +230,24 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           );
         });
       }
+      if (state.emitReasoning) {
+        listeners.forEach((listener) => listener({
+          type: "assistant_reasoning_delta",
+          timestamp: Date.now(),
+          messageId: "thought_1",
+          delta: "checking constraints",
+        } as RuntimeEvent));
+      }
+      if (state.emitPlan) {
+        listeners.forEach((listener) => listener({
+          type: "plan_update",
+          timestamp: Date.now(),
+          entries: [
+            { content: "Inspect ACP adapter", priority: "high", status: "completed" },
+            { content: "Add conformance tests", priority: "medium", status: "in_progress" },
+          ],
+        } as RuntimeEvent));
+      }
       const assistantDeltas = state.assistantMessage === undefined
         ? state.assistantDeltas ?? [`echo:${input.content[0]?.type === "text" ? input.content[0].text : "content"}`]
         : [];
@@ -357,13 +386,33 @@ describe("ACP stdio server foundation", () => {
         protocolVersion: 1,
         agentInfo: { name: "soba-agent", version: APP_VERSION },
         agentCapabilities: {
+          _meta: {
+            soba: {
+              extensions: {
+                fsInspectTextFile: "fs/inspect_text_file",
+                fsListDirectory: "fs/list_directory",
+                fsSearchFiles: "fs/search_files",
+              },
+            },
+          },
+          auth: {},
           loadSession: true,
+          mcpCapabilities: {
+            _meta: {
+              soba: {
+                sessionScopedMcpServers: "runtime_input_only",
+              },
+            },
+            http: false,
+            sse: false,
+          },
           promptCapabilities: {
             embeddedContext: true,
             image: true,
             audio: false,
           },
           sessionCapabilities: {
+            additionalDirectories: {},
             close: {},
             delete: {},
             list: {},
@@ -375,19 +424,28 @@ describe("ACP stdio server foundation", () => {
   });
 
   test("creates a session through the runtime", async () => {
-    const result = await runLines([
-      `${JSON.stringify({
-        jsonrpc: "2.0",
-        id: "new",
-        method: "session/new",
-        params: { cwd: "/repo/subproject", mcpServers: [] },
-      })}\n`,
-    ]);
+    const state: MockRuntimeState = {};
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "new",
+          method: "session/new",
+          params: { cwd: "/repo/subproject", mcpServers: [{ name: "fs", command: "/bin/echo", args: [], env: [] }], additionalDirectories: ["/repo/shared"] },
+        })}\n`,
+      ],
+      { state },
+    );
 
     expect(result.messages[0]).toEqual({
       jsonrpc: "2.0",
       id: "new",
       result: { sessionId: "session_1" },
+    });
+    expect(state.lastCreateInput).toMatchObject({
+      cwd: "/repo/subproject",
+      mcpServers: [{ name: "fs", command: "/bin/echo", args: [], env: [] }],
+      additionalDirectories: ["/repo/shared"],
     });
     expect(result.messages[1]).toMatchObject({
       jsonrpc: "2.0",
@@ -402,6 +460,18 @@ describe("ACP stdio server foundation", () => {
             expect.objectContaining({ name: "budget", description: "Show token budget usage." }),
             expect.objectContaining({ name: "help", description: "Show available commands." }),
           ]),
+        },
+      },
+    });
+    expect(result.messages[2]).toMatchObject({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId: "session_1",
+        update: {
+          sessionUpdate: "session_info_update",
+          title: "ACP test session",
+          updatedAt: "2026-06-27T00:00:00.000Z",
         },
       },
     });
@@ -496,12 +566,69 @@ describe("ACP stdio server foundation", () => {
     });
   });
 
+  test("rejects boolean config changes unless the client advertises boolean config support", async () => {
+    const result = await runLines([
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: "set-config",
+        method: "session/set_config_option",
+        params: { sessionId: "session_1", configId: "autonomy", type: "boolean", value: true },
+      })}\n`,
+    ]);
+
+    expect(result.messages[0]).toMatchObject({
+      id: "set-config",
+      error: { code: -32602, message: "Boolean config options are not supported by this client." },
+    });
+  });
+
+  test("accepts boolean config changes after client capability negotiation", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "init",
+          method: "initialize",
+          params: { protocolVersion: 1, clientCapabilities: { session: { configOptions: { boolean: {} } } } },
+        })}\n`,
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "set-config",
+          method: "session/set_config_option",
+          params: { sessionId: "session_1", configId: "autonomy", type: "boolean", value: true },
+        })}\n`,
+      ],
+      {
+        state: {
+          configOptions: [
+            {
+              id: "autonomy",
+              name: "Autonomy",
+              type: "boolean",
+              currentValue: true,
+              category: "mode",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.messages).toContainEqual(expect.objectContaining({
+      id: "set-config",
+      result: {
+        configOptions: [
+          { id: "autonomy", name: "Autonomy", type: "boolean", currentValue: true, category: "mode", description: null },
+        ],
+      },
+    }));
+  });
+
   test("lists, loads and resumes sessions", async () => {
     const result = await runLines(
       [
         `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`,
         `${JSON.stringify({ jsonrpc: "2.0", id: "load", method: "session/load", params: { sessionId: "session_loaded", cwd: "/repo", mcpServers: [] } })}\n`,
-        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded", cwd: "/repo" } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "resume", method: "session/resume", params: { sessionId: "session_loaded", cwd: "/repo", mcpServers: [] } })}\n`,
       ],
     );
 
@@ -533,9 +660,105 @@ describe("ACP stdio server foundation", () => {
     }));
   });
 
-  test("aliases stale ACP session ids to a live runtime session", async () => {
+  test("paginates session/list with opaque cursors", async () => {
+    const listedSessions = Array.from({ length: 55 }, (_, index): RuntimeSessionInfo => ({
+      id: `session_${String(index + 1).padStart(2, "0")}`,
+      cwd: "/repo",
+      title: `Session ${index + 1}`,
+      updatedAt: `2026-06-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+    }));
+    const firstPage = await runLines(
+      [`${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo" } })}\n`],
+      { state: { listedSessions } },
+    );
+    const nextCursor = (firstPage.messages[0].result as { nextCursor?: string }).nextCursor;
+
+    expect((firstPage.messages[0].result as { sessions: unknown[] }).sessions).toHaveLength(50);
+    expect(nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await runLines(
+      [`${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo", cursor: nextCursor } })}\n`],
+      { state: { listedSessions } },
+    );
+    expect((secondPage.messages[0].result as { sessions: unknown[] }).sessions).toHaveLength(5);
+    expect((secondPage.messages[0].result as { nextCursor?: string }).nextCursor).toBeUndefined();
+  });
+
+  test("replays user and agent messages with message ids on session/load", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "load",
+          method: "session/load",
+          params: { sessionId: "session_loaded", cwd: "/repo", mcpServers: [] },
+        })}\n`,
+      ],
+      {
+        state: {
+          loadEntries: [
+            {
+              type: "item",
+              item: {
+                id: "msg_user_1",
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: "original question" }],
+              },
+            },
+            {
+              type: "item",
+              item: {
+                id: "msg_agent_1",
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: "original answer" }],
+              },
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "session_loaded",
+        update: {
+          sessionUpdate: "user_message_chunk",
+          messageId: "msg_user_1",
+          content: { type: "text", text: "original question" },
+        },
+      },
+    });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        sessionId: "session_loaded",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg_agent_1",
+          content: { type: "text", text: "original answer" },
+        },
+      },
+    });
+    expect(result.messages).toContainEqual(expect.objectContaining({ id: "load", result: {} }));
+  });
+
+  test("rejects invalid session/list cursors", async () => {
+    const result = await runLines([
+      `${JSON.stringify({ jsonrpc: "2.0", id: "list", method: "session/list", params: { cwd: "/repo", cursor: "not-a-cursor" } })}\n`,
+    ]);
+
+    expect(result.messages[0]).toMatchObject({
+      id: "list",
+      error: { code: -32602, message: "Invalid session/list cursor." },
+    });
+  });
+
+  test("rejects missing load and resume sessions without creating aliases", async () => {
     const state: MockRuntimeState = {
-      missingSessionIds: new Set(["zed_stale_session"]),
+      missingSessionIds: new Set(["missing_session"]),
     };
     const result = await runLines(
       [
@@ -543,40 +766,27 @@ describe("ACP stdio server foundation", () => {
           jsonrpc: "2.0",
           id: "load",
           method: "session/load",
-          params: { sessionId: "zed_stale_session", cwd: "/repo", mcpServers: [] },
+          params: { sessionId: "missing_session", cwd: "/repo", mcpServers: [] },
         })}\n`,
         `${JSON.stringify({
           jsonrpc: "2.0",
-          id: "prompt",
-          method: "session/prompt",
-          params: { sessionId: "zed_stale_session", prompt: [{ type: "text", text: "hello" }] },
+          id: "resume",
+          method: "session/resume",
+          params: { sessionId: "missing_session", cwd: "/repo", mcpServers: [] },
         })}\n`,
       ],
       { state },
     );
 
-    expect(result.messages[0]).toMatchObject({ id: "load", result: {} });
-    expect(state.lastTurnInput).toMatchObject({ sessionId: "session_1" });
-    expect(result.messages).toContainEqual(expect.objectContaining({
-      method: "session/update",
-      params: expect.objectContaining({
-        sessionId: "zed_stale_session",
-        update: expect.objectContaining({
-          sessionUpdate: "available_commands_update",
-          availableCommands: expect.arrayContaining([expect.objectContaining({ name: "mcp" })]),
-        }),
-      }),
-    }));
-    expect(result.messages).toContainEqual(expect.objectContaining({
-      method: "session/update",
-      params: expect.objectContaining({
-        sessionId: "zed_stale_session",
-        update: expect.objectContaining({
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "echo:hello" },
-        }),
-      }),
-    }));
+    expect(result.messages[0]).toMatchObject({
+      id: "load",
+      error: { code: -32602, message: "Session not found: missing_session" },
+    });
+    expect(result.messages[1]).toMatchObject({
+      id: "resume",
+      error: { code: -32602, message: "Session not found: missing_session" },
+    });
+    expect(state.lastTurnInput).toBeUndefined();
   });
 
   test("rejects load and resume when session loading is not advertised", async () => {
@@ -669,6 +879,43 @@ describe("ACP stdio server foundation", () => {
       jsonrpc: "2.0",
       id: "prompt",
       result: { stopReason: "end_turn" },
+    });
+  });
+
+  test("emits ACP thought and plan updates for desktop clients", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "plan it" }] },
+        })}\n`,
+      ],
+      { state: { emitReasoning: true, emitPlan: true } },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          messageId: "thought_1",
+          content: { type: "text", text: "checking constraints" },
+        },
+      },
+    });
+    expect(result.messages[1]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          sessionUpdate: "plan",
+          entries: [
+            { content: "Inspect ACP adapter", priority: "high", status: "completed" },
+            { content: "Add conformance tests", priority: "medium", status: "in_progress" },
+          ],
+        },
+      },
     });
   });
 
@@ -777,7 +1024,7 @@ describe("ACP stdio server foundation", () => {
           kind: "read",
           status: "pending",
           rawInput: { path: "src/app.ts" },
-          locations: [{ path: "src/app.ts" }],
+          locations: [{ path: "/repo/src/app.ts" }],
           _meta: {
             tool_name: "read",
             soba: {
@@ -804,7 +1051,7 @@ describe("ACP stdio server foundation", () => {
           title: "Read src/app.ts",
           status: "completed",
           content: [{ type: "content", content: { type: "text", text: "file text" } }],
-          locations: [{ path: "src/app.ts", line: 3 }],
+          locations: [{ path: "/repo/src/app.ts", line: 3 }],
           _meta: {
             tool_name: "read",
             soba: {
@@ -1157,7 +1404,7 @@ describe("ACP stdio server foundation", () => {
         jsonrpc: "2.0",
         id: 5,
         method: "session/set_mode",
-        params: { sessionId: "session_1", modeId: "planning" },
+        params: { sessionId: "session_1", modeId: "repo" },
       })}\n`,
     ]);
 
@@ -1171,7 +1418,7 @@ describe("ACP stdio server foundation", () => {
       params: {
         update: {
           sessionUpdate: "current_mode_update",
-          currentModeId: "planning",
+          currentModeId: "repo",
         },
       },
     });
@@ -1193,6 +1440,84 @@ describe("ACP stdio server foundation", () => {
     );
 
     expect(result.messages.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "cancelled" },
+    });
+  });
+
+  test("handles protocol cancel_request notifications while a prompt request is pending", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", method: "$/cancel_request", params: { requestId: "prompt" } })}\n`,
+      ],
+      { state: { waitForCancel: true } },
+    );
+
+    expect(result.messages.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: "prompt",
+      result: { stopReason: "cancelled" },
+    });
+  });
+
+  test("cascades session cancellation to pending outbound permission requests", async () => {
+    const state: MockRuntimeState = { emitPermission: true };
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const input = async function* (): AsyncIterable<string> {
+      yield `${JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { protocolVersion: 1 } })}\n`;
+      yield `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: "prompt",
+        method: "session/prompt",
+        params: { sessionId: "session_1", prompt: [{ type: "text", text: "delete files" }] },
+      })}\n`;
+      const started = Date.now();
+      while (!stdout.some((chunk) => chunk.includes("session/request_permission"))) {
+        if (Date.now() - started > 1000) throw new Error("Timed out waiting for outbound permission request.");
+        await Bun.sleep(1);
+      }
+      yield `${JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: "session_1" } })}\n`;
+    };
+
+    await runAcpServer({
+      runtime: makeRuntime(state),
+      cwd: "/repo",
+      input: input(),
+      writeStdout: (chunk) => {
+        stdout.push(chunk);
+      },
+      writeStderr: (chunk) => {
+        stderr.push(chunk);
+      },
+      agentInfo: { name: "soba-agent", version: APP_VERSION },
+    });
+    expect(stderr).toEqual([]);
+    const messages = stdout.flatMap((chunk) =>
+      chunk
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>),
+    );
+
+    expect(state.permissionDecision).toBe("deny");
+    expect(messages).toContainEqual(expect.objectContaining({
+      id: "client_1",
+      method: "session/request_permission",
+    }));
+    expect(messages).toContainEqual(expect.objectContaining({
+      method: "$/cancel_request",
+      params: { requestId: "client_1" },
+    }));
+    expect(messages.at(-1)).toEqual({
       jsonrpc: "2.0",
       id: "prompt",
       result: { stopReason: "cancelled" },

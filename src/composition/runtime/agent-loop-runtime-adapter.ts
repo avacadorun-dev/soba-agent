@@ -23,6 +23,7 @@ import type { AgentEvent } from "../../engine/turn/types";
 import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import type { PermissionMode } from "../../kernel/permissions/trust";
 import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
 import {
   buildProviderConfigOptions,
@@ -134,6 +135,10 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   async setSessionMode(input: SetSessionModeInput): Promise<RuntimeSessionInfo> {
     this.assertActiveSession(input.sessionId);
+    if (!isPermissionMode(input.mode)) {
+      throw new Error(`Unsupported session mode "${input.mode}".`);
+    }
+    this.loop.getTrustManager().setPermissionMode(input.mode);
     return this.activeSessionInfo();
   }
 
@@ -197,6 +202,10 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
     this.session = session;
     this.loop.setSessionManager(session);
   }
+}
+
+function isPermissionMode(value: string): value is PermissionMode {
+  return value === "ask" || value === "repo" || value === "full";
 }
 
 function runtimeBlocksToUserContent(blocks: UserTurnInput["content"]): Array<InputTextContent | InputImageContent> {

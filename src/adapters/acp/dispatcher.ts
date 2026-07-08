@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { isAbsolute, resolve } from "node:path";
 import type { z } from "zod";
 import type {
   RuntimeCommandMetadata,
@@ -21,6 +23,7 @@ import {
 } from "./json-rpc";
 import { AcpRequestRegistry } from "./request-registry";
 import {
+  cancelRequestParamsSchema,
   initializeParamsSchema,
   sessionCancelParamsSchema,
   sessionIdParamsSchema,
@@ -40,6 +43,8 @@ const ACP_PERMISSION_OPTIONS: JsonValue[] = [
   { optionId: "repo", name: "Allow for repository", kind: "allow_always" },
   { optionId: "full", name: "Allow full access", kind: "allow_always" },
 ];
+
+const ACP_SESSION_LIST_PAGE_SIZE = 50;
 
 export interface AcpDispatcherOptions {
   runtime: SobaRuntime;
@@ -75,6 +80,9 @@ export class AcpDispatcher {
   private clientCapabilities: AcpClientCapabilities = EMPTY_ACP_CLIENT_CAPABILITIES;
   private readonly requestRegistry = new AcpRequestRegistry();
   private readonly sessionAliases = new Map<string, string>();
+  private readonly sessionCwds = new Map<string, string>();
+  private readonly sessionAdditionalDirectories = new Map<string, string[]>();
+  private readonly pendingPermissions = new Map<string, Set<(decision: "deny") => void>>();
   private readonly activeToolCalls = new Map<string, ActiveAcpToolCall>();
   private postResponseEffects: Array<() => Promise<void>> = [];
 
@@ -127,9 +135,11 @@ export class AcpDispatcher {
       case "session/resume":
         return this.handleSessionResume(request.params);
       case "session/prompt":
-        return this.handleSessionPrompt(request.params);
+        return this.handleSessionPrompt(request.params, context);
       case "session/cancel":
         return this.handleSessionCancel(request.params);
+      case "$/cancel_request":
+        return this.handleCancelRequest(request.params);
       case "session/close":
         return this.handleSessionClose(request.params);
       case "session/delete":
@@ -164,9 +174,13 @@ export class AcpDispatcher {
     if (!result.success) {
       throw invalidParams(result.error.issues);
     }
-    const sessions = await this.runtime.listSessions({ cwd: result.data.cwd ?? this.cwd });
+    const cursor = decodeSessionListCursor(result.data.cursor ?? null);
+    const sessions = await this.runtime.listSessions({ cwd: result.data.cwd ?? this.cwd, cursor: result.data.cursor ?? null });
+    const page = sessions.slice(cursor.offset, cursor.offset + ACP_SESSION_LIST_PAGE_SIZE);
+    const nextOffset = cursor.offset + page.length;
     return {
-      sessions: sessions.map(sessionToAcp),
+      sessions: page.map(sessionToAcp),
+      ...(nextOffset < sessions.length ? { nextCursor: encodeSessionListCursor(nextOffset) } : {}),
     };
   }
 
@@ -183,9 +197,16 @@ export class AcpDispatcher {
       throw invalidParams(result.error.issues);
     }
 
-    const session = await this.runtime.createSession({ cwd: result.data.cwd });
+    const additionalDirectories = result.data.additionalDirectories ?? [];
+    const session = await this.runtime.createSession({
+      cwd: result.data.cwd,
+      mcpServers: result.data.mcpServers,
+      additionalDirectories,
+    });
+    this.rememberSessionState(session.id, session.cwd, additionalDirectories);
     const configOptions = await this.sessionConfigOptions(session.id);
     this.afterResponse(() => this.emitAvailableCommands(session.id));
+    this.afterResponse(() => this.emitSessionInfoUpdate(session.id, session));
     return {
       sessionId: session.id,
       ...(configOptions.length > 0 ? { configOptions } : {}),
@@ -203,20 +224,28 @@ export class AcpDispatcher {
     const clientSessionId = result.data.sessionId;
     const cwd = result.data.cwd;
     let runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
-    let configOptions: JsonValue[];
+    const additionalDirectories = result.data.additionalDirectories ?? [];
+    let snapshot: Awaited<ReturnType<SobaRuntime["loadSession"]>>;
     try {
-      const snapshot = await this.runtime.loadSession({ sessionId: runtimeSessionId });
-      runtimeSessionId = snapshot.info.id;
-      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
-      await this.replaySessionEntries(clientSessionId, runtimeSessionId, snapshot.entries);
-      configOptions = await this.sessionConfigOptions(runtimeSessionId);
+      snapshot = await this.runtime.loadSession({
+        sessionId: runtimeSessionId,
+        cwd,
+        mcpServers: result.data.mcpServers,
+        additionalDirectories,
+      });
     } catch (error) {
-      if (!isSessionNotFound(error)) throw error;
-      const session = await this.runtime.createSession({ cwd });
-      runtimeSessionId = session.id;
-      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
-      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+      if (isSessionNotFound(error)) {
+        throw new JsonRpcError(JSON_RPC_INVALID_PARAMS, `Session not found: ${clientSessionId}`);
+      }
+      throw error;
     }
+    runtimeSessionId = snapshot.info.id;
+    this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+    this.rememberSessionState(clientSessionId, snapshot.info.cwd ?? cwd, additionalDirectories);
+    this.rememberSessionState(runtimeSessionId, snapshot.info.cwd ?? cwd, additionalDirectories);
+    await this.replaySessionEntries(clientSessionId, runtimeSessionId, snapshot.entries);
+    const configOptions = await this.sessionConfigOptions(runtimeSessionId);
+    this.afterResponse(() => this.emitSessionInfoUpdate(clientSessionId, snapshot.info));
     this.afterResponse(() => this.emitAvailableCommands(clientSessionId));
     return configOptions.length > 0 ? { configOptions } : {};
   }
@@ -232,24 +261,32 @@ export class AcpDispatcher {
     const clientSessionId = result.data.sessionId;
     const cwd = result.data.cwd;
     let runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
-    let configOptions: JsonValue[];
+    const additionalDirectories = result.data.additionalDirectories ?? [];
+    let session: Awaited<ReturnType<SobaRuntime["resumeSession"]>>;
     try {
-      const session = await this.runtime.resumeSession({ sessionId: runtimeSessionId });
-      runtimeSessionId = session.id;
-      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
-      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+      session = await this.runtime.resumeSession({
+        sessionId: runtimeSessionId,
+        cwd,
+        mcpServers: result.data.mcpServers,
+        additionalDirectories,
+      });
     } catch (error) {
-      if (!isSessionNotFound(error)) throw error;
-      const session = await this.runtime.createSession({ cwd });
-      runtimeSessionId = session.id;
-      this.rememberSessionAlias(clientSessionId, runtimeSessionId);
-      configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+      if (isSessionNotFound(error)) {
+        throw new JsonRpcError(JSON_RPC_INVALID_PARAMS, `Session not found: ${clientSessionId}`);
+      }
+      throw error;
     }
+    runtimeSessionId = session.id;
+    this.rememberSessionAlias(clientSessionId, runtimeSessionId);
+    this.rememberSessionState(clientSessionId, session.cwd ?? cwd, additionalDirectories);
+    this.rememberSessionState(runtimeSessionId, session.cwd ?? cwd, additionalDirectories);
+    const configOptions = await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
+    this.afterResponse(() => this.emitSessionInfoUpdate(clientSessionId, session));
     this.afterResponse(() => this.emitAvailableCommands(clientSessionId));
     return configOptions.length > 0 ? { configOptions } : {};
   }
 
-  private async handleSessionPrompt(params: JsonValue | undefined): Promise<JsonValue> {
+  private async handleSessionPrompt(params: JsonValue | undefined, context: AcpDispatchContext): Promise<JsonValue> {
     const result = sessionPromptParamsSchema.safeParse(params ?? {});
     if (!result.success) {
       throw invalidParams(result.error.issues);
@@ -273,8 +310,13 @@ export class AcpDispatcher {
           : undefined,
       });
       return {
-        stopReason: turnToStopReason(turn),
+        stopReason: context.signal.aborted ? "cancelled" : turnToStopReason(turn),
       };
+    } catch (error) {
+      if (context.signal.aborted) {
+        return { stopReason: "cancelled" };
+      }
+      throw error;
     } finally {
       unsubscribe();
     }
@@ -289,11 +331,26 @@ export class AcpDispatcher {
     const { sessionId } = result.data;
     const cancelledRequests = this.requestRegistry.cancelBySession(sessionId);
     this.runtime.cancelTurn(this.resolveRuntimeSessionId(sessionId));
+    this.cancelPendingPermissions(sessionId);
 
     return {
       cancelled: true,
       cancelledRequests,
     };
+  }
+
+  private handleCancelRequest(params: JsonValue | undefined): JsonValue {
+    const result = cancelRequestParamsSchema.safeParse(params ?? {});
+    if (!result.success) {
+      throw invalidParams(result.error.issues);
+    }
+
+    const request = this.requestRegistry.cancelById(result.data.requestId);
+    if (request?.sessionId) {
+      this.runtime.cancelTurn(this.resolveRuntimeSessionId(request.sessionId));
+      this.cancelPendingPermissions(request.sessionId);
+    }
+    return {};
   }
 
   private async handleSessionClose(params: JsonValue | undefined): Promise<JsonValue> {
@@ -302,8 +359,14 @@ export class AcpDispatcher {
       throw invalidParams(result.error.issues);
     }
     const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
+    this.runtime.cancelTurn(runtimeSessionId);
+    this.cancelPendingPermissions(result.data.sessionId);
     await this.runtime.closeSession(runtimeSessionId);
     this.sessionAliases.delete(result.data.sessionId);
+    this.sessionCwds.delete(result.data.sessionId);
+    this.sessionCwds.delete(runtimeSessionId);
+    this.sessionAdditionalDirectories.delete(result.data.sessionId);
+    this.sessionAdditionalDirectories.delete(runtimeSessionId);
     return {};
   }
 
@@ -314,8 +377,13 @@ export class AcpDispatcher {
     }
     const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
     this.runtime.cancelTurn(runtimeSessionId);
+    this.cancelPendingPermissions(result.data.sessionId);
     await this.runtime.deleteSession(runtimeSessionId);
     this.sessionAliases.delete(result.data.sessionId);
+    this.sessionCwds.delete(result.data.sessionId);
+    this.sessionCwds.delete(runtimeSessionId);
+    this.sessionAdditionalDirectories.delete(result.data.sessionId);
+    this.sessionAdditionalDirectories.delete(runtimeSessionId);
     return {};
   }
 
@@ -323,6 +391,9 @@ export class AcpDispatcher {
     const result = setSessionConfigParamsSchema.safeParse(params ?? {});
     if (!result.success) {
       throw invalidParams(result.error.issues);
+    }
+    if (result.data.type === "boolean" && !this.clientCapabilities.booleanConfigOptions) {
+      throw new JsonRpcError(JSON_RPC_INVALID_PARAMS, "Boolean config options are not supported by this client.");
     }
     const clientSessionId = result.data.sessionId;
     const runtimeSessionId = this.resolveRuntimeSessionId(clientSessionId);
@@ -358,7 +429,7 @@ export class AcpDispatcher {
 
   private async replaySessionEntries(clientSessionId: string, runtimeSessionId: string, entries: unknown[]): Promise<void> {
     for (const entry of entries) {
-      const update = sessionEntryToUpdate(entry);
+      const update = sessionEntryToUpdate(entry, this.cwdForSession(clientSessionId));
       if (update) await this.emitSessionUpdate(clientSessionId, update);
     }
     await this.emitSessionConfigOptions(clientSessionId, runtimeSessionId);
@@ -372,6 +443,12 @@ export class AcpDispatcher {
       configOptions: options,
     });
     return options;
+  }
+
+  private async emitSessionInfoUpdate(sessionId: string, session: RuntimeSessionInfo): Promise<void> {
+    const update = sessionInfoUpdate(session);
+    if (!update) return;
+    await this.emitSessionUpdate(sessionId, update);
   }
 
   private async emitAvailableCommands(sessionId: string): Promise<void> {
@@ -407,6 +484,7 @@ export class AcpDispatcher {
       return;
     }
 
+    let settled = false;
     try {
       const rawInput = {
         command: event.toolName === "bash" ? event.description : undefined,
@@ -415,21 +493,30 @@ export class AcpDispatcher {
         level: event.level,
         alternatives: event.alternatives,
       };
-      const response = await this.requestClient("session/request_permission", {
-        sessionId,
-        toolCall: {
-          toolCallId: event.toolCallId,
-          title: toolTitle(event.toolName, rawInput),
-          kind: toolKind(event.toolName),
-          status: "pending",
-          rawInput: compactJsonObject(rawInput),
-          _meta: toolMeta(event.toolName, rawInput),
-        },
-        options: ACP_PERMISSION_OPTIONS,
-      });
-      event.resolve(permissionDecisionFromAcp(response));
+      const permissionResolver = (decision: "deny") => {
+        settled = true;
+        event.resolve(decision);
+      };
+      this.trackPendingPermission(sessionId, permissionResolver);
+      try {
+        const response = await this.requestClient("session/request_permission", {
+          sessionId,
+          toolCall: {
+            toolCallId: event.toolCallId,
+            title: toolTitle(event.toolName, rawInput),
+            kind: toolKind(event.toolName),
+            status: "pending",
+            rawInput: compactJsonObject(rawInput),
+            _meta: toolMeta(event.toolName, rawInput),
+          },
+          options: ACP_PERMISSION_OPTIONS,
+        });
+        if (!settled) event.resolve(permissionDecisionFromAcp(response));
+      } finally {
+        this.untrackPendingPermission(sessionId, permissionResolver);
+      }
     } catch {
-      event.resolve("deny");
+      if (!settled) event.resolve("deny");
     }
   }
 
@@ -453,6 +540,12 @@ export class AcpDispatcher {
           messageId: event.messageId,
           text: event.text,
         });
+      case "assistant_reasoning_delta":
+        return {
+          sessionUpdate: "agent_thought_chunk",
+          messageId: event.messageId,
+          content: { type: "text", text: event.delta },
+        };
       case "assistant_text_done":
         return agentMessageUpdate({
           messageId: event.messageId,
@@ -462,7 +555,7 @@ export class AcpDispatcher {
       case "tool_call_start": {
         const key = this.toolCallKey(sessionId, event.toolCallId);
         this.activeToolCalls.set(key, { toolName: event.toolName, args: event.args });
-        return toolCallStartUpdate(event.toolCallId, event.toolName, event.args);
+        return toolCallStartUpdate(event.toolCallId, event.toolName, event.args, this.cwdForSession(sessionId));
       }
       case "tool_call_result": {
         const key = this.toolCallKey(sessionId, event.toolCallId);
@@ -470,7 +563,7 @@ export class AcpDispatcher {
         const args = active?.args;
         const status = event.result.isError ? "failed" : "completed";
         if (active) active.resultStatus = status;
-        return toolCallResultUpdate(event.toolCallId, event.toolName, event.result, args, status);
+        return toolCallResultUpdate(event.toolCallId, event.toolName, event.result, args, status, this.cwdForSession(sessionId));
       }
       case "tool_call_end": {
         const key = this.toolCallKey(sessionId, event.toolCallId);
@@ -490,6 +583,24 @@ export class AcpDispatcher {
           },
         };
       case "working_narration":
+        if (event.eventType === "plan") {
+          return {
+            sessionUpdate: "plan",
+            entries: [{
+              content: event.message,
+              priority: "medium",
+              status: "in_progress",
+            }],
+            _meta: {
+              soba: {
+                evidence: {
+                  source: "working_narration",
+                  evidenceIds: event.evidenceIds,
+                },
+              },
+            },
+          };
+        }
         return {
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: event.message },
@@ -522,6 +633,11 @@ export class AcpDispatcher {
             recoveryAttempted: event.recoveryAttempted,
           },
         };
+      case "plan_update":
+        return {
+          sessionUpdate: "plan",
+          entries: event.entries,
+        };
       default:
         return undefined;
     }
@@ -542,6 +658,40 @@ export class AcpDispatcher {
     }
     this.sessionAliases.set(clientSessionId, runtimeSessionId);
   }
+
+  private rememberSessionState(sessionId: string, cwd: string, additionalDirectories: string[]): void {
+    this.sessionCwds.set(sessionId, absolutePath(this.cwd, cwd));
+    this.sessionAdditionalDirectories.set(sessionId, additionalDirectories.map((path) => absolutePath(this.cwd, path)));
+  }
+
+  private cwdForSession(sessionId: string): string {
+    return this.sessionCwds.get(sessionId)
+      ?? this.sessionCwds.get(this.resolveRuntimeSessionId(sessionId))
+      ?? this.cwd;
+  }
+
+  private trackPendingPermission(sessionId: string, resolve: (decision: "deny") => void): void {
+    const resolvers = this.pendingPermissions.get(sessionId) ?? new Set<(decision: "deny") => void>();
+    resolvers.add(resolve);
+    this.pendingPermissions.set(sessionId, resolvers);
+  }
+
+  private untrackPendingPermission(sessionId: string, resolve: (decision: "deny") => void): void {
+    const resolvers = this.pendingPermissions.get(sessionId);
+    if (!resolvers) return;
+    resolvers.delete(resolve);
+    if (resolvers.size === 0) this.pendingPermissions.delete(sessionId);
+  }
+
+  private cancelPendingPermissions(sessionId: string): void {
+    const ids = [sessionId, this.resolveRuntimeSessionId(sessionId)];
+    for (const id of ids) {
+      const resolvers = this.pendingPermissions.get(id);
+      if (!resolvers) continue;
+      this.pendingPermissions.delete(id);
+      for (const resolve of resolvers) resolve("deny");
+    }
+  }
 }
 
 function extractSessionId(params: JsonValue | undefined): string | undefined {
@@ -550,24 +700,48 @@ function extractSessionId(params: JsonValue | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function absolutePath(cwd: string, path: string): string {
+  return isAbsolute(path) ? path : resolve(cwd, path);
+}
+
 function isSessionNotFound(error: unknown): boolean {
   return error instanceof Error && /session not found/i.test(error.message);
 }
 
+function encodeSessionListCursor(offset: number): string {
+  return Buffer.from(JSON.stringify({ offset }), "utf8").toString("base64url");
+}
+
+function decodeSessionListCursor(cursor: string | null): { offset: number } {
+  if (!cursor) return { offset: 0 };
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (!isRecord(parsed) || typeof parsed.offset !== "number" || !Number.isInteger(parsed.offset) || parsed.offset < 0) {
+      throw new Error("Invalid cursor payload.");
+    }
+    return { offset: parsed.offset };
+  } catch {
+    throw new JsonRpcError(JSON_RPC_INVALID_PARAMS, "Invalid session/list cursor.");
+  }
+}
+
 function configOptionToAcp(option: RuntimeSessionConfigOption): JsonValue {
-  return {
+  const value: { [key: string]: JsonValue } = {
     id: option.id,
     name: option.name,
     description: option.description ?? null,
     category: option.category ?? "model",
     type: option.type,
     currentValue: option.currentValue,
-    options: option.options.map((selectOption) => ({
+  };
+  if (option.type === "select") {
+    value.options = (option.options ?? []).map((selectOption) => ({
       value: selectOption.value,
       name: selectOption.name,
       description: selectOption.description ?? null,
-    })),
-  };
+    }));
+  }
+  return value;
 }
 
 const ACP_COMMAND_DESCRIPTIONS: Record<string, string> = {
@@ -623,12 +797,32 @@ function invalidParams(issues: Array<{ path: PropertyKey[]; message: string }>):
 }
 
 function sessionToAcp(session: RuntimeSessionInfo): JsonValue {
-  return {
+  const value: { [key: string]: JsonValue } = {
     sessionId: session.id,
-    cwd: session.cwd,
+    cwd: absolutePath(process.cwd(), session.cwd),
     title: session.title ?? null,
     updatedAt: session.updatedAt ?? null,
   };
+  if (session.additionalDirectories && session.additionalDirectories.length > 0) {
+    value.additionalDirectories = session.additionalDirectories.map((path) => absolutePath(session.cwd, path));
+  }
+  return value;
+}
+
+function sessionInfoUpdate(session: RuntimeSessionInfo): JsonValue | undefined {
+  const update: { [key: string]: JsonValue } = {
+    sessionUpdate: "session_info_update",
+  };
+  if (session.title !== undefined) update.title = session.title ?? null;
+  if (session.updatedAt !== undefined) update.updatedAt = session.updatedAt ?? null;
+  if (session.entries !== undefined) {
+    update._meta = {
+      soba: {
+        entries: session.entries,
+      },
+    };
+  }
+  return Object.keys(update).length > 1 ? update : undefined;
 }
 
 function acpContentToRuntime(content: z.infer<typeof sessionPromptParamsSchema>["prompt"][number]): RuntimeContentBlock {
@@ -677,7 +871,7 @@ function agentMessageUpdate(input: { messageId: string; text: string; metadataOn
   return update;
 }
 
-function toolCallStartUpdate(toolCallId: string, toolName: string, args: Record<string, unknown>): JsonValue {
+function toolCallStartUpdate(toolCallId: string, toolName: string, args: Record<string, unknown>, cwd: string): JsonValue {
   const update: { [key: string]: JsonValue } = {
     sessionUpdate: "tool_call",
     toolCallId,
@@ -687,7 +881,7 @@ function toolCallStartUpdate(toolCallId: string, toolName: string, args: Record<
     rawInput: jsonValueFromUnknown(args) ?? {},
     _meta: toolMeta(toolName, args),
   };
-  const locations = toolLocations(toolName, args);
+  const locations = toolLocations(toolName, args, undefined, cwd);
   if (locations.length > 0) update.locations = locations;
   return update;
 }
@@ -698,17 +892,18 @@ function toolCallResultUpdate(
   result: { content?: unknown; details?: Record<string, unknown>; isError?: boolean },
   args: Record<string, unknown> | undefined,
   status: "completed" | "failed",
+  cwd: string,
 ): JsonValue {
   const update: { [key: string]: JsonValue } = {
     sessionUpdate: "tool_call_update",
     toolCallId,
     title: toolTitle(toolName, args, result),
     status,
-    content: toolResultContent(result),
+    content: toolResultContent(result, cwd),
     rawOutput: jsonValueFromUnknown(result) ?? {},
     _meta: toolMeta(toolName, args, result),
   };
-  const locations = toolLocations(toolName, args, result);
+  const locations = toolLocations(toolName, args, result, cwd);
   if (locations.length > 0) update.locations = locations;
   return update;
 }
@@ -978,9 +1173,9 @@ function jsonValueFromUnknown(value: unknown): JsonValue | undefined {
   return String(value);
 }
 
-function toolResultContent(result: { content?: unknown; details?: Record<string, unknown> }): JsonValue[] {
+function toolResultContent(result: { content?: unknown; details?: Record<string, unknown> }, cwd: string): JsonValue[] {
   const content: JsonValue[] = [];
-  const diff = diffContent(result.details);
+  const diff = diffContent(result.details, cwd);
   if (diff) content.push(diff);
 
   if (Array.isArray(result.content)) {
@@ -1013,11 +1208,11 @@ function toolOutputPreview(result: { content?: unknown } | undefined): string | 
   return truncateInline(text, 500);
 }
 
-function diffContent(details: Record<string, unknown> | undefined): JsonValue | undefined {
+function diffContent(details: Record<string, unknown> | undefined, cwd: string): JsonValue | undefined {
   if (!details || typeof details.path !== "string" || typeof details.newText !== "string") return undefined;
   const diff: { [key: string]: JsonValue } = {
     type: "diff",
-    path: details.path,
+    path: absolutePath(cwd, details.path),
     newText: details.newText,
   };
   if (typeof details.oldText === "string") {
@@ -1028,45 +1223,50 @@ function diffContent(details: Record<string, unknown> | undefined): JsonValue | 
   return diff;
 }
 
-function toolLocations(toolName: string, args?: Record<string, unknown>, result?: { details?: Record<string, unknown> }): JsonValue[] {
+function toolLocations(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  result: { details?: Record<string, unknown> } | undefined,
+  cwd: string,
+): JsonValue[] {
   const locations: JsonValue[] = [];
   const detailPath = pathFrom(undefined, result?.details);
 
   if (detailPath) {
-    addLocation(locations, result?.details);
+    addLocation(locations, result?.details, cwd);
   } else {
-    addLocation(locations, args);
+    addLocation(locations, args, cwd);
   }
 
   const argPath = pathFrom(args);
   const resultLine = numberField(result?.details, "line") ?? numberField(result?.details, "startLine");
-  if (!detailPath && argPath && resultLine !== undefined) locations.push({ path: argPath, line: resultLine });
+  if (!detailPath && argPath && resultLine !== undefined) locations.push({ path: absolutePath(cwd, argPath), line: resultLine });
 
   const matches = result?.details?.matches;
   if (Array.isArray(matches)) {
-    for (const match of matches) addLocation(locations, match);
+    for (const match of matches) addLocation(locations, match, cwd);
   }
 
-  return dedupeLocations(locations.length > 0 ? locations : fallbackToolLocations(toolName, args));
+  return dedupeLocations(locations.length > 0 ? locations : fallbackToolLocations(toolName, args, cwd));
 }
 
-function fallbackToolLocations(toolName: string, args?: Record<string, unknown>): JsonValue[] {
+function fallbackToolLocations(toolName: string, args: Record<string, unknown> | undefined, cwd: string): JsonValue[] {
   if (!args) return [];
   if (!["read", "edit", "delete", "move", "search"].includes(toolKind(toolName))) return [];
-  return typeof args.path === "string" ? [{ path: args.path }] : [];
+  return typeof args.path === "string" ? [{ path: absolutePath(cwd, args.path) }] : [];
 }
 
-function addLocation(locations: JsonValue[], value: unknown): void {
+function addLocation(locations: JsonValue[], value: unknown, cwd: string): void {
   if (!isRecord(value)) return;
 
   const nested = value.location;
-  if (isRecord(nested)) addLocation(locations, nested);
+  if (isRecord(nested)) addLocation(locations, nested, cwd);
 
   const path = typeof value.path === "string" ? value.path : typeof value.file === "string" ? value.file : undefined;
   if (!path) return;
 
   const location: { [key: string]: JsonValue } = {
-    path,
+    path: absolutePath(cwd, path),
   };
   const line = typeof value.line === "number" ? value.line : typeof value.startLine === "number" ? value.startLine : undefined;
   if (line !== undefined) location.line = line;
@@ -1126,7 +1326,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
+function sessionEntryToUpdate(entry: unknown, cwd: string): JsonValue | undefined {
   if (!entry || typeof entry !== "object") return undefined;
   const typedEntry = entry as { type?: unknown; item?: unknown };
   if (typedEntry.type !== "item" || !typedEntry.item || typeof typedEntry.item !== "object") return undefined;
@@ -1135,23 +1335,36 @@ function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
     role?: unknown;
     content?: unknown;
     call_id?: unknown;
+    id?: unknown;
     name?: unknown;
     arguments?: unknown;
     command?: unknown;
     output?: unknown;
   };
+  if (item.type === "message" && item.role === "user") {
+    const text = messageText(item.content);
+    if (!text) return undefined;
+    const update: { [key: string]: JsonValue } = {
+      sessionUpdate: "user_message_chunk",
+      content: { type: "text", text },
+    };
+    if (typeof item.id === "string") update.messageId = item.id;
+    return update;
+  }
   if (item.type === "message" && item.role === "assistant") {
     const text = messageText(item.content);
     if (!text) return undefined;
-    return {
+    const update: { [key: string]: JsonValue } = {
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text },
     };
+    if (typeof item.id === "string") update.messageId = item.id;
+    return update;
   }
   if (item.type === "function_call" && typeof item.call_id === "string") {
     const toolName = typeof item.name === "string" ? item.name : "tool";
     const args = parseToolArguments(item.arguments);
-    const update = toolCallStartUpdate(item.call_id, toolName, args) as { [key: string]: JsonValue };
+    const update = toolCallStartUpdate(item.call_id, toolName, args, cwd) as { [key: string]: JsonValue };
     update.status = "completed";
     update.rawInput = jsonValueFromUnknown(item) ?? update.rawInput;
     return update;
@@ -1167,7 +1380,7 @@ function sessionEntryToUpdate(entry: unknown): JsonValue | undefined {
   }
   if (item.type === "local_shell_call" && typeof item.call_id === "string") {
     const args = typeof item.command === "string" ? { command: item.command } : {};
-    const update = toolCallStartUpdate(item.call_id, "bash", args) as { [key: string]: JsonValue };
+    const update = toolCallStartUpdate(item.call_id, "bash", args, cwd) as { [key: string]: JsonValue };
     update.status = "completed";
     update.rawInput = jsonValueFromUnknown(item) ?? update.rawInput;
     return update;

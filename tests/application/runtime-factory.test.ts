@@ -576,8 +576,9 @@ describe("createSobaRuntime", () => {
 
       expect(composition.client.getActiveProviderId()).toBe("openrouter");
       expect(composition.client.getConfig().model).toBe("moonshotai/kimi-k2.7-code");
+      expect(modelOption?.type).toBe("select");
       expect(modelOption?.currentValue).toBe("moonshotai/kimi-k2.7-code");
-      expect(modelOption?.options.map((option) => option.value)).toEqual([
+      expect(modelOption?.type === "select" ? modelOption.options.map((option) => option.value) : []).toEqual([
         "google/gemini-3.1-flash-image",
         "minimax/minimax-m3",
         "moonshotai/kimi-k2.7-code",

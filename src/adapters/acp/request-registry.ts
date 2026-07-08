@@ -29,12 +29,12 @@ export class AcpRequestRegistry {
     this.pending.delete(keyForId(id));
   }
 
-  cancelById(id: JsonRpcId): boolean {
+  cancelById(id: JsonRpcId): PendingRequest | undefined {
     const request = this.pending.get(keyForId(id));
-    if (!request) return false;
+    if (!request) return undefined;
     request.controller.abort();
     this.pending.delete(keyForId(id));
-    return true;
+    return request;
   }
 
   cancelBySession(sessionId: string): number {

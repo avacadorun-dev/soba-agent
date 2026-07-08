@@ -42,4 +42,36 @@ describe("AgentLoopRuntimeAdapter rich content", () => {
       { type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" },
     ]);
   });
+
+  test("applies supported ACP session modes to the trust manager", async () => {
+    let permissionMode = "ask";
+    const loop = {
+      runTurn: async () => ({}),
+      setSessionManager: () => {},
+      abort: () => {},
+      onEvent: () => () => {},
+      getTrustManager: () => ({
+        setPermissionMode: (mode: string) => {
+          permissionMode = mode;
+        },
+      }),
+    };
+    const session = {
+      getSessionId: () => "session_1",
+      getCwd: () => "/repo",
+    };
+    const adapter = new AgentLoopRuntimeAdapter(
+      loop as never,
+      session as never,
+      {} as never,
+      {
+        getActiveProvider: () => ({ id: "openai" }),
+      } as never,
+    );
+
+    await adapter.setSessionMode({ sessionId: "session_1", mode: "repo", enabled: true });
+    expect(permissionMode).toBe("repo");
+    await expect(adapter.setSessionMode({ sessionId: "session_1", mode: "planning", enabled: true }))
+      .rejects.toThrow('Unsupported session mode "planning".');
+  });
 });

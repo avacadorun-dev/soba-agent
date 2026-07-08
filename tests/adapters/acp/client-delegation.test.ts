@@ -95,6 +95,15 @@ describe("ACP client tool delegation", () => {
     };
     const delegation = new AcpClientToolDelegation(() => requester);
     delegation.updateCapabilities({
+      _meta: {
+        soba: {
+          fs: {
+            listDirectory: true,
+            inspectTextFile: true,
+            searchFiles: true,
+          },
+        },
+      },
       fs: {
         listDirectory: true,
         inspectTextFile: true,

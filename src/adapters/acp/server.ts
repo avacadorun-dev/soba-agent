@@ -4,6 +4,7 @@ import {
   isJsonRpcResponse,
   JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_INVALID_REQUEST,
+  JSON_RPC_REQUEST_CANCELLED,
   JsonRpcError,
   type JsonRpcId,
   type JsonRpcMessage,
@@ -43,11 +44,12 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
   let inputEnded = false;
   const requestClient = options.requestClient ?? (async (method: string, params: JsonValue): Promise<JsonValue> => {
     const id = `client_${nextClientRequestId++}`;
-    await options.writeStdout(serializeJsonRpc(makeJsonRpcRequest(id, method, params)));
-
-    const orphan = orphanClientResponses.get(clientRequestKey(id));
+    const sessionId = extractSessionId(params);
+    const key = clientRequestKey(id);
+    const orphan = orphanClientResponses.get(key);
     if (orphan) {
-      orphanClientResponses.delete(clientRequestKey(id));
+      await options.writeStdout(serializeJsonRpc(makeJsonRpcRequest(id, method, params)));
+      orphanClientResponses.delete(key);
       return jsonRpcResponseToResult(orphan);
     }
 
@@ -55,9 +57,19 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
       throw new Error("ACP input ended before the client returned a response.");
     }
 
-    return new Promise<JsonValue>((resolve, reject) => {
-      pendingClientRequests.set(clientRequestKey(id), { resolve, reject });
+    const result = new Promise<JsonValue>((resolve, reject) => {
+      pendingClientRequests.set(key, { id, method, sessionId, resolve, reject });
     });
+    await options.writeStdout(serializeJsonRpc(makeJsonRpcRequest(id, method, params)));
+
+    const writtenOrphan = orphanClientResponses.get(key);
+    if (writtenOrphan) {
+      orphanClientResponses.delete(key);
+      pendingClientRequests.delete(key);
+      return jsonRpcResponseToResult(writtenOrphan);
+    }
+
+    return result;
   });
   options.onClientRequester?.(requestClient);
 
@@ -91,6 +103,9 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
       }
 
       if (isImmediateNotification(message)) {
+        if (message.method === "session/cancel") {
+          await cancelPendingClientRequestsForSession(options, pendingClientRequests, extractSessionId(message.params));
+        }
         const written = await handleClientMessage(options, dispatcher, message);
         responsesWritten += written;
         continue;
@@ -116,10 +131,13 @@ export async function runAcpServer(options: AcpServerOptions): Promise<AcpServer
 }
 
 function isImmediateNotification(message: JsonRpcMessage): boolean {
-  return "method" in message && !("id" in message) && message.method === "session/cancel";
+  return "method" in message && !("id" in message) && (message.method === "session/cancel" || message.method === "$/cancel_request");
 }
 
 interface PendingClientRequest {
+  id: JsonRpcId;
+  method: string;
+  sessionId?: string;
   resolve: (value: JsonValue) => void;
   reject: (error: Error) => void;
 }
@@ -194,8 +212,28 @@ function rejectPendingClientRequests(pendingClientRequests: Map<string, PendingC
   pendingClientRequests.clear();
 }
 
+async function cancelPendingClientRequestsForSession(
+  options: AcpServerOptions,
+  pendingClientRequests: Map<string, PendingClientRequest>,
+  sessionId: string | undefined,
+): Promise<void> {
+  if (!sessionId) return;
+  for (const [key, pending] of [...pendingClientRequests.entries()]) {
+    if (pending.sessionId !== sessionId) continue;
+    pendingClientRequests.delete(key);
+    await options.writeStdout(serializeJsonRpc(makeJsonRpcNotification("$/cancel_request", { requestId: pending.id })));
+    pending.reject(new JsonRpcError(JSON_RPC_REQUEST_CANCELLED, `Cancelled client request: ${pending.method}`));
+  }
+}
+
 function clientRequestKey(id: JsonRpcId): string {
   return JSON.stringify(id);
+}
+
+function extractSessionId(params: JsonValue | undefined): string | undefined {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return undefined;
+  const sessionId = params.sessionId;
+  return typeof sessionId === "string" ? sessionId : undefined;
 }
 
 export async function* readLines(input: AsyncIterable<string | Uint8Array>): AsyncIterable<string> {

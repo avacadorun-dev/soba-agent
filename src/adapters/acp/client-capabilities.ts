@@ -12,6 +12,8 @@ export interface AcpClientCapabilities {
   terminalWaitForExit: boolean;
   terminalKill: boolean;
   terminalRelease: boolean;
+  booleanConfigOptions: boolean;
+  planUpdates: boolean;
 }
 
 export const EMPTY_ACP_CLIENT_CAPABILITIES: AcpClientCapabilities = {
@@ -26,6 +28,8 @@ export const EMPTY_ACP_CLIENT_CAPABILITIES: AcpClientCapabilities = {
   terminalWaitForExit: false,
   terminalKill: false,
   terminalRelease: false,
+  booleanConfigOptions: false,
+  planUpdates: false,
 };
 
 const METHOD_CAPABILITIES: Array<[keyof AcpClientCapabilities, string]> = [
@@ -43,10 +47,15 @@ const METHOD_CAPABILITIES: Array<[keyof AcpClientCapabilities, string]> = [
 ];
 
 export function parseAcpClientCapabilities(value: JsonValue | undefined): AcpClientCapabilities {
-  const parsed = Object.fromEntries(
+  const parsed = {
+    ...Object.fromEntries(
     METHOD_CAPABILITIES.map(([key, method]) => [key, hasClientCapability(value, method)]),
-  ) as unknown as AcpClientCapabilities;
+    ),
+    booleanConfigOptions: hasBooleanConfigOptionsCapability(value),
+    planUpdates: hasPlanUpdateCapability(value),
+  } as AcpClientCapabilities;
 
+  // `session/request_permission` is a baseline client method in ACP v1.
   parsed.requestPermission = true;
   if (hasSpecTerminalCapability(value)) {
     parsed.terminalCreate = true;
@@ -70,9 +79,9 @@ function hasClientCapability(value: JsonValue | undefined, method: string): bool
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (method === "fs/read_text_file" && isRecord(value.fs) && value.fs.readTextFile === true) return true;
   if (method === "fs/write_text_file" && isRecord(value.fs) && value.fs.writeTextFile === true) return true;
-  if (method === "fs/list_directory" && isRecord(value.fs) && value.fs.listDirectory === true) return true;
-  if (method === "fs/inspect_text_file" && isRecord(value.fs) && value.fs.inspectTextFile === true) return true;
-  if (method === "fs/search_files" && isRecord(value.fs) && value.fs.searchFiles === true) return true;
+  if (method.startsWith("fs/") && !["fs/read_text_file", "fs/write_text_file"].includes(method)) {
+    return hasSobaClientMethod(value, method);
+  }
   if (value[method] === true) return true;
   if (value[method.replace("/", ".")] === true) return true;
 
@@ -91,6 +100,32 @@ function hasClientCapability(value: JsonValue | undefined, method: string): bool
 
 function hasSpecTerminalCapability(value: JsonValue | undefined): boolean {
   return !!value && typeof value === "object" && !Array.isArray(value) && value.terminal === true;
+}
+
+function hasBooleanConfigOptionsCapability(value: JsonValue | undefined): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return isRecord(value.session)
+    && isRecord(value.session.configOptions)
+    && isRecord(value.session.configOptions.boolean);
+}
+
+function hasPlanUpdateCapability(value: JsonValue | undefined): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return isRecord(value.plan);
+}
+
+function hasSobaClientMethod(value: Record<string, JsonValue>, method: string): boolean {
+  const methods = value.methods;
+  if (Array.isArray(methods) && methods.includes(method)) return true;
+  if (!isRecord(value._meta) || !isRecord(value._meta.soba)) return false;
+  const sobaMethods = value._meta.soba.clientMethods;
+  if (Array.isArray(sobaMethods) && sobaMethods.includes(method)) return true;
+  const fs = value._meta.soba.fs;
+  if (!isRecord(fs)) return false;
+  if (method === "fs/list_directory") return fs.listDirectory === true;
+  if (method === "fs/inspect_text_file") return fs.inspectTextFile === true;
+  if (method === "fs/search_files") return fs.searchFiles === true;
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

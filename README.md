@@ -7,10 +7,6 @@ receipts for the work it claims to have done. It is built for everyday engineeri
 not only "did the agent edit the code?", but also "what changed, what was checked, what permissions were used, and what
 evidence supports the handoff?"
 
-![SOBA Agent terminal interface](docs-site/public/soba-preview.png)
-
-<!-- Replace the preview image with a short GIF here once a polished demo recording is ready. -->
-
 ## What SOBA is for
 
 SOBA is a coding agent with a local workflow:

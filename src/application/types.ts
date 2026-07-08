@@ -32,6 +32,7 @@ export type RuntimeEventType =
   | "compaction_done"
   | "context_error"
   | "working_narration"
+  | "plan_update"
   | "skill_activated"
   | "skill_deactivated";
 
@@ -217,6 +218,15 @@ export interface RuntimeWorkingNarrationEvent extends BaseRuntimeEvent {
   evidenceIds: string[];
 }
 
+export interface RuntimePlanUpdateEvent extends BaseRuntimeEvent {
+  type: "plan_update";
+  entries: Array<{
+    content: string;
+    priority: "high" | "medium" | "low";
+    status: "pending" | "in_progress" | "completed";
+  }>;
+}
+
 export interface RuntimeSkillActivatedEvent extends BaseRuntimeEvent {
   type: "skill_activated";
   skillName: string;
@@ -254,6 +264,7 @@ export type RuntimeEvent =
   | RuntimeCompactionDoneEvent
   | RuntimeContextErrorEvent
   | RuntimeWorkingNarrationEvent
+  | RuntimePlanUpdateEvent
   | RuntimeSkillActivatedEvent
   | RuntimeSkillDeactivatedEvent;
 
@@ -320,6 +331,8 @@ export type RuntimeCommandExecutor = (input: RuntimeCommandExecutionInput) => Co
 
 export interface CreateSessionInput {
   cwd: string;
+  mcpServers?: unknown[];
+  additionalDirectories?: string[];
 }
 
 export interface OpenSessionInput {
@@ -329,14 +342,21 @@ export interface OpenSessionInput {
 
 export interface LoadSessionInput {
   sessionId: string;
+  cwd?: string;
+  mcpServers?: unknown[];
+  additionalDirectories?: string[];
 }
 
 export interface ResumeSessionInput {
   sessionId: string;
+  cwd?: string;
+  mcpServers?: unknown[];
+  additionalDirectories?: string[];
 }
 
 export interface ListSessionsInput {
   cwd: string;
+  cursor?: string | null;
 }
 
 export interface SetSessionConfigInput {
@@ -351,7 +371,9 @@ export interface SetSessionModeInput {
   enabled: boolean;
 }
 
-export interface RuntimeSessionConfigOption {
+export type RuntimeSessionConfigOption = RuntimeSessionSelectConfigOption | RuntimeSessionBooleanConfigOption;
+
+export interface RuntimeSessionSelectConfigOption {
   id: string;
   name: string;
   description?: string | null;
@@ -365,9 +387,19 @@ export interface RuntimeSessionConfigOption {
   }>;
 }
 
+export interface RuntimeSessionBooleanConfigOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  type: "boolean";
+  currentValue: boolean;
+}
+
 export interface RuntimeSessionInfo {
   id: string;
   cwd: string;
+  additionalDirectories?: string[];
   title?: string;
   updatedAt?: string;
   entries?: number;

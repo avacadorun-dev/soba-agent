@@ -36,12 +36,13 @@ export const sessionLoadParamsSchema = z.object({
 export const sessionResumeParamsSchema = z.object({
   sessionId: z.string().min(1),
   cwd: z.string().min(1),
-  mcpServers: z.array(z.unknown()).optional(),
+  mcpServers: z.array(z.unknown()),
   additionalDirectories: z.array(z.string().min(1)).optional(),
 }).passthrough();
 
 export const sessionListParamsSchema = z.object({
   cwd: z.string().min(1).optional(),
+  cursor: z.string().min(1).nullable().optional(),
 }).passthrough();
 
 const textContentSchema = z.object({
@@ -91,10 +92,15 @@ export const setSessionConfigParamsSchema = z.object({
   sessionId: z.string().min(1),
   configId: z.string().min(1).optional(),
   key: z.string().min(1).optional(),
+  type: z.literal("boolean").optional(),
   value: z.unknown(),
 }).passthrough().refine((value) => value.configId || value.key, {
   message: "Expected configId",
 });
+
+export const cancelRequestParamsSchema = z.object({
+  requestId: z.union([z.string(), z.number(), z.null()]),
+}).passthrough();
 
 export const setSessionModeParamsSchema = z.object({
   sessionId: z.string().min(1),

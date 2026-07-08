@@ -1,3 +1,5 @@
+import type { AgentCapabilities } from "@agentclientprotocol/sdk";
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { JsonValue } from "./json-rpc";
 
 export interface AcpFeatureSet {
@@ -5,25 +7,31 @@ export interface AcpFeatureSet {
   sessionNew: boolean;
   sessionPrompt: boolean;
   loadSession: boolean;
+  additionalDirectories: boolean;
   embeddedContext: boolean;
   image: boolean;
   audio: boolean;
+  mcpHttp: boolean;
+  mcpSse: boolean;
 }
 
-export const ACP_PROTOCOL_VERSION = 1;
+export const ACP_PROTOCOL_VERSION = PROTOCOL_VERSION;
 
 export const ACP_LIFECYCLE_FEATURES: AcpFeatureSet = {
   initialize: true,
   sessionNew: true,
   sessionPrompt: true,
   loadSession: true,
+  additionalDirectories: true,
   embeddedContext: true,
   image: true,
   audio: false,
+  mcpHttp: false,
+  mcpSse: false,
 };
 
 export function buildAgentCapabilities(features: AcpFeatureSet = ACP_LIFECYCLE_FEATURES): JsonValue {
-  const sessionCapabilities: Record<string, JsonValue> = {
+  const sessionCapabilities: NonNullable<AgentCapabilities["sessionCapabilities"]> = {
     close: {},
     delete: {},
     list: {},
@@ -31,14 +39,37 @@ export function buildAgentCapabilities(features: AcpFeatureSet = ACP_LIFECYCLE_F
   if (features.loadSession) {
     sessionCapabilities.resume = {};
   }
+  if (features.additionalDirectories) {
+    sessionCapabilities.additionalDirectories = {};
+  }
 
-  return {
+  const capabilities: AgentCapabilities = {
     loadSession: features.loadSession,
+    auth: {},
+    mcpCapabilities: {
+      http: features.mcpHttp,
+      sse: features.mcpSse,
+      _meta: {
+        soba: {
+          sessionScopedMcpServers: "runtime_input_only",
+        },
+      },
+    },
     promptCapabilities: {
       audio: features.audio,
       embeddedContext: features.embeddedContext,
       image: features.image,
     },
     sessionCapabilities,
+    _meta: {
+      soba: {
+        extensions: {
+          fsListDirectory: "fs/list_directory",
+          fsInspectTextFile: "fs/inspect_text_file",
+          fsSearchFiles: "fs/search_files",
+        },
+      },
+    },
   };
+  return capabilities as JsonValue;
 }
