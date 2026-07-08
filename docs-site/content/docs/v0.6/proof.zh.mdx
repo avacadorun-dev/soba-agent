@@ -1,0 +1,109 @@
+---
+title: Proof receipts
+description: SOBA proof bundles、claim explanations、verification commands、permission receipts 和发布级证据工作流。
+---
+
+SOBA 的 0.6.x 线转向 evidence-first。代理不应只说“完成了”，还应留下可检查的证据链：改了什么、运行了什么、
+哪些声明有证据、哪些风险仍然存在，以及哪些权限被使用。
+
+Proof receipts 保存在 `.soba/evidence/*.soba-proof.json`。它们是本地项目文件；查看时不需要启动代理，也不需要
+provider credentials。
+
+---
+
+## Evidence proof receipts
+
+Evidence proof receipts 是 SOBA 在 accepted finish 之后写入磁盘的 proof 文件。使用 `soba prove --last`
+查看最新 receipt；如果要检查较早任务，可以传入具体的 `.soba/evidence/<id>.soba-proof.json`。
+
+Proof claim mapping 表示重要 finish claims 会映射到 evidence ids。一个 claim 可以指向 command、check、
+changed file、file mutation、risk 或 review action。`soba verify` 会检查 supported references 是否指向已知 ids，
+而不是只留下无法验证的文本。
+
+Proof claim explanations 通过 `soba explain-claim` 查看。可以传入 claim 文本或 id；如果不是最新 proof，
+添加 `--proof .soba/evidence/<id>.soba-proof.json`。
+
+Proof permission receipts 会记录 trust level、approval kind、approval value、decision、reason，以及 SOBA 能推断出时的
+least-privilege alternatives。
+
+---
+
+## Proof receipt 包含什么
+
+Proof receipt 可以包含：
+
+- changed files 和 mutation summary；
+- checks 和 command evidence；
+- 映射到 evidence ids 的 finish claims；
+- risks 和 unverified 区域；
+- tool calls 的 permission receipts；
+- 对危险命令的 safer alternatives，如果 SOBA 能推断出 least-privilege rewrite。
+
+目标是让最终回答可审计。比如 “tests passed” 应指向真实运行过的命令；没有证据的 claim 应明确保持 unverified。
+
+---
+
+## 命令
+
+```bash
+soba prove
+soba prove --last
+soba prove --format markdown
+soba prove --format json
+soba prove .soba/evidence/<id>.soba-proof.json
+
+soba verify
+soba verify --format json
+soba verify .soba/evidence/<id>.soba-proof.json
+
+soba explain-claim "All TypeScript errors are fixed"
+soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
+```
+
+这些命令只读取已保存的 proof 数据。它们不会启动 agent runtime，也不需要 API credentials。
+
+---
+
+## 推荐的完成标准
+
+对于代码任务，一个发布级 SOBA turn 应以这些内容结束：
+
+1. changed-files summary；
+2. 实际运行过的 checks，包括 exit status；
+3. 重要 claims 的 proof 或明确 unverified status；
+4. 验证后仍存在的 risks；
+5. 敏感 tool calls 的 permission receipts。
+
+如果需要更强保证，请在 prompt 中写明 required checks：
+
+```text
+Fix the failing parser tests.
+Before finishing, run bun test tests/parser.test.ts and bunx tsc --noEmit --pretty false.
+If either check fails, do not call the task complete.
+```
+
+---
+
+## Permission receipts
+
+Permission receipts 记录为什么某个 tool call 被允许或拒绝。对于危险命令，SOBA 也可以展示 least-privilege
+alternatives。
+
+示例：
+
+```text
+Instead of approving rm -rf dist && bun run build:
+1. allow deleting only ./dist inside the repository
+2. run bun run build separately
+3. deny external deletion patterns
+```
+
+这让 local-first delegation 保持有边界：代理可以快速工作，但高风险范围始终可见。
+
+---
+
+## 相关页面
+
+- [CLI 参考](/zh/docs/v0.6/cli-reference)
+- [代理工具](/zh/docs/v0.6/tools)
+- [安全](/zh/docs/v0.6/security)

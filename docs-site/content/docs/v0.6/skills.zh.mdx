@@ -1,0 +1,94 @@
+---
+title: Skills
+description: SOBA bundled、user 和 project skills，以及 eval、bench、trace、promotion、history 和 rollback。
+---
+
+Skills 是用于可重复代理行为的 Markdown 指令包。在 0.6.x 中，它们不只是 prompt snippets：它们有本地生命周期，
+包括 evals、bench summaries、traces、revision history、promotion 和 rollback。
+
+---
+
+## Skill scopes
+
+| Scope | Location | Use |
+|---|---|---|
+| Bundled | SOBA package 中的 `skills/` | 始终可用 |
+| User | `~/.soba/skills/` | 跨项目可用 |
+| Project | `.soba/skills/` | 仅当前项目可用 |
+| Internal | SOBA repo 内的 `.soba/skills/` | 开发 SOBA 自身时使用 |
+
+名称冲突时，优先级为：Project > User > Internal > Bundled。
+
+---
+
+## 命令
+
+```text
+/skill list
+/skill new <name>
+/skill edit <name>
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+/skill promote <name>
+/skill history <name>
+/skill rollback <name> <revision-id>
+/skill rm <name> --confirm
+/skill:<name> [prompt]
+```
+
+`eval` 运行确定性的 skill evaluation cases。`bench` 展示聚合质量：run count、success rate、median pass rate、
+latest run 和 common failures。`trace` 展示最近 eval runs 和 failed cases。
+
+这让 skill 更接近一个小型行为包，而不是松散的自定义指令。
+
+---
+
+## Skill eval bench and trace
+
+当一个 skill 要重复使用时，使用这个循环：
+
+1. 创建或编辑 skill 后运行 `/skill eval <name>`。它会执行 deterministic evaluation cases，并保存本地 eval artifacts。
+2. 运行 `/skill bench <name>` 查看聚合质量：run count、success rate、median pass rate、latest run 和 common failures。
+3. 当 bench 结果不清楚时运行 `/skill trace <name>`。Trace 会显示最近 eval runs 和 failed cases，让下一次编辑针对真实失败。
+
+在 eval、bench、trace 给出一致结果前，不要 promote project skill。
+
+---
+
+## Skill card checklist
+
+高质量 skills 应明确这些部分：
+
+- purpose and trigger examples；
+- false-positive examples；
+- required tools and forbidden actions；
+- verification contract or required checks；
+- known failure modes；
+- eval tasks。
+
+示例：
+
+```markdown
+---
+name: fix-until-green
+description: Diagnose a failing project check, fix the root cause, and rerun the targeted check before broader gates.
+---
+
+## Trigger Examples
+- "Fix this failing test output."
+- "Run the targeted check and make it green."
+
+## Verification Contract
+- Reproduce the failure first.
+- Prefer a targeted test before a full suite.
+- Do not call the task complete while the target check fails.
+```
+
+---
+
+## 相关页面
+
+- [Proof receipts](/zh/docs/v0.6/proof)
+- [界面与命令](/zh/docs/v0.6/usage)
+- [安全](/zh/docs/v0.6/security)

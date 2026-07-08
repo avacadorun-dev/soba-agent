@@ -174,6 +174,14 @@ $EDITOR .soba/skills/my-skill.md
 показывает последние runs с pass rate и причинами failed cases. Эти команды не запускают модель: они читают уже
 сохранённые eval artifacts.
 
+Skill eval bench and trace — обязательный цикл для скила, который должен использоваться повторно:
+
+1. `/skill eval <name>` запускает deterministic evaluation cases и сохраняет локальные artifacts.
+2. `/skill bench <name>` показывает агрегированное качество и common failures.
+3. `/skill trace <name>` раскрывает последние eval runs и failed cases, чтобы следующая правка была точечной.
+
+Не продвигайте project skill в user scope, пока eval, bench и trace не показывают согласованную картину.
+
 ### 6.4. Promote
 
 Продвижение project skill → user skill:

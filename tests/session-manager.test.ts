@@ -156,6 +156,31 @@ describe("SessionManager", () => {
     expect(input.previousResponseId).toBeUndefined();
   });
 
+  test("buildInput сохраняет mixed text/image user content", () => {
+    const sm = SessionManager.inMemory("/project");
+
+    sm.appendItem({
+      type: "message",
+      role: "user",
+      content: [
+        { type: "input_text", text: "Describe this image" },
+        { type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" },
+      ],
+    });
+
+    const input = sm.buildInput();
+    expect(input.items).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "Describe this image" },
+          { type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" },
+        ],
+      },
+    ]);
+  });
+
   test("buildInput включает function_call и function_call_output", () => {
     const sm = SessionManager.inMemory("/project");
 

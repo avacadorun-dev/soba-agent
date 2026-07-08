@@ -1,5 +1,6 @@
 import type { CommandResult, I18n, ProjectTrustStore, RuntimeAgentHandle, RuntimeModelChangeSource, SobaRuntime, TuiThemeName } from "../../../../application/ui/public";
 import type { TuiEvidenceSummary } from "../lib/evidence-summary";
+import type { ComposerBlock } from "../lib/rich-paste";
 import type { NotificationStore } from "./notification-store";
 import type { ProviderStore } from "./provider-store";
 
@@ -45,6 +46,7 @@ export interface InteractiveTUIOptions {
 export interface QueuedMessage {
   id: number;
   content: string;
+  blocks?: ComposerBlock[];
   kind: "message" | "shell" | "shell-silent";
 }
 

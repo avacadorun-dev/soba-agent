@@ -13,7 +13,7 @@ import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointArgs, type CheckpointEvent } from "../../kernel/tools/checkpoint";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolResult } from "../../kernel/tools/types";
-import type { UserMessageItemParam } from "../../kernel/transcript/types";
+import type { InputImageContent, InputTextContent, UserMessageItemParam } from "../../kernel/transcript/types";
 import type { AutoVerifierToolCall } from "../verification/auto-verifier";
 import type { TaskKind } from "../verification/verification-policy";
 import type { AgentTurnError, CheckpointWorkPlanState } from "./types";
@@ -69,14 +69,34 @@ const FINISH_TOOL: FunctionToolParam = {
 };
 
 /**
- * Create a UserMessageItemParam from plain text.
+ * User-authored content accepted by the agent loop.
  */
-export function createUserItem(text: string): UserMessageItemParam {
+export type UserInputContent = Array<InputTextContent | InputImageContent>;
+
+export type AgentUserInput = string | UserInputContent;
+
+/**
+ * Create a UserMessageItemParam from text or mixed user content.
+ */
+export function createUserItem(input: AgentUserInput): UserMessageItemParam {
   return {
     type: "message",
     role: "user",
-    content: [{ type: "input_text", text }],
+    content: typeof input === "string" ? [{ type: "input_text", text: input }] : input,
   };
+}
+
+export function userInputToText(input: AgentUserInput): string {
+  if (typeof input === "string") return input;
+  return input
+    .map((part) => {
+      if (part.type === "input_text") return part.text;
+      if (!part.image_url.startsWith("data:")) return "[Image: image]";
+      const metadataEnd = part.image_url.indexOf(";");
+      return `[Image: ${metadataEnd > 5 ? part.image_url.slice(5, metadataEnd) : "image"}]`;
+    })
+    .filter((part) => part.trim().length > 0)
+    .join("\n\n");
 }
 
 export function createLoopErrorResponse(): ResponseResource {
@@ -287,14 +307,46 @@ export function getAutonomousFollowUpReason(
     return null;
   }
 
-  if (assistantMessages.some((message) => message.phase === "final_answer")) {
-    if (hasMutatedFiles) {
-      return "You changed project files and already have verification evidence. Do not write another prose summary. Call finish now with status completed, your final response in summary, and concrete completion criteria.";
-    }
+  if (isTextOnlyFinalResponseCandidate(assistantMessages)) {
     return null;
   }
 
   return "Tool-assisted turns must end through finish. If the task is done and verified, call finish now with status completed, final summary, and concrete criteria. Do not write commentary. If not done, continue with tools.";
+}
+
+function isTextOnlyFinalResponseCandidate(assistantMessages: MessageField[]): boolean {
+  if (assistantMessages.some((message) => message.phase === "final_answer")) return true;
+
+  const text = assistantMessages
+    .flatMap((message) =>
+      message.content
+        .filter((content): content is OutputTextContent => content.type === "output_text")
+        .map((content) => content.text),
+    )
+    .join("\n")
+    .trim();
+  if (text.length === 0) return false;
+  if (looksLikeContinuation(text)) return false;
+
+  return looksLikeFinalText(text);
+}
+
+function looksLikeContinuation(text: string): boolean {
+  const normalized = text.toLowerCase();
+  if (/[：:]\s*$/.test(normalized)) return true;
+  return [
+    /\b(?:i\s+will|i'll|let\s+me|next\s+i|now\s+i|going\s+to|need\s+to|should\s+now|will\s+check|will\s+run|will\s+try|continue\s+with)\b/,
+    /\b(?:checking|running|trying|looking\s+at|investigating)\b/,
+    /\b(?:проверю|проверим|сейчас\s+провер|теперь\s+провер|запущу|попробую|посмотрю|разберу|продолжу|дальше|нужно|надо)\b/u,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function looksLikeFinalText(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return [
+    /\b(?:done|completed|fixed|implemented|verified|works|working|checks?\s+pass|tests?\s+pass|all\s+set)\b/,
+    /\b(?:готово|готов|работает|выполнено|сделано|исправлено|добавлено|реализовано|проверено|проверка\s+завершена|тесты\s+проходят|проверки\s+прошли)\b/u,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 /**

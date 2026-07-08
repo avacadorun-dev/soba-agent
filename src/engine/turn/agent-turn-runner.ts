@@ -23,6 +23,8 @@ import { createAgentTurnVerificationStage } from "./agent-turn-verification-stag
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import { completeAgentTurn } from "./turn-completion";
+import type { AgentUserInput } from "./turn-helpers";
+import { userInputToText } from "./turn-helpers";
 import { evaluateTurnStopGuards } from "./turn-stop-guards";
 import type {
   AgentEvent,
@@ -37,7 +39,7 @@ export interface AgentLoopState {
   lastDeniedOperation: string;
 }
 export interface RunAgentTurnInput {
-  userText: string;
+  userInput: AgentUserInput;
   session: SessionPort;
   cwd: string;
   runtime: AgentLoopRuntimeServices;
@@ -53,7 +55,7 @@ export async function runAgentTurn(
   input: RunAgentTurnInput,
 ): Promise<AgentTurnResult> {
   const {
-    userText,
+    userInput,
     session,
     cwd,
     runtime,
@@ -65,6 +67,7 @@ export async function runAgentTurn(
     debug,
     flight,
   } = input;
+  const userText = userInputToText(userInput);
   const emitStopReason = createTurnStopEmitter({ emit, debug });
   const {
     abortController,
@@ -76,7 +79,7 @@ export async function runAgentTurn(
     allowUnverifiedCompletion,
     emitNarrationOnce,
   } = beginAgentTurn({
-    userText,
+    userInput,
     session,
     state,
     setAbortController,

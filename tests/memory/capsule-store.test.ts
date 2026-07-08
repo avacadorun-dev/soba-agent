@@ -49,8 +49,6 @@ describe("CapsuleStore", () => {
   test("add/get capsule preserves source receipt metadata", () => {
     const capsule = addCapsule(store, {
       source: {
-        error: "Provider registry fact may drift",
-        fix: "Verify source before reusing the fact",
         file: "src/apps/cli/main.ts",
         lines: [120, 150],
         commit: "abc123",
@@ -61,14 +59,28 @@ describe("CapsuleStore", () => {
     });
 
     expect(store.get(capsule.id).source).toEqual({
-      error: "Provider registry fact may drift",
-      fix: "Verify source before reusing the fact",
       file: "src/apps/cli/main.ts",
       lines: [120, 150],
       commit: "abc123",
       confidence: "high",
       lastVerified: "2026-06-19T09:00:00.000Z",
       staleIfFilesChange: ["src/composition/runtime/create-soba-runtime.ts"],
+    });
+  });
+
+  test("add/get capsule accepts optional error/fix source pair", () => {
+    const capsule = addCapsule(store, {
+      source: {
+        error: "Provider registry fact may drift",
+        fix: "Verify source before reusing the fact",
+        file: "src/apps/cli/main.ts",
+      },
+    });
+
+    expect(store.get(capsule.id).source).toEqual({
+      error: "Provider registry fact may drift",
+      fix: "Verify source before reusing the fact",
+      file: "src/apps/cli/main.ts",
     });
   });
 

@@ -18,12 +18,12 @@ type OrbitNode = Point3D & {
 
 const NODES: OrbitNode[] = [
   { label: "Session Tree", short: "JSONL", x: -170, y: -58, z: 30, radius: 150, speed: 0.42, phase: 0.2 },
-  { label: "Context Capsules", short: "63%", x: 142, y: -84, z: -40, radius: 175, speed: 0.34, phase: 1.8 },
-  { label: "Skills", short: "YAML", x: 188, y: 66, z: 36, radius: 142, speed: 0.5, phase: 3.1 },
-  { label: "Tools", short: "Bash", x: -128, y: 98, z: -76, radius: 160, speed: 0.38, phase: 4.3 },
-  { label: "Trust", short: "Safe", x: 42, y: 150, z: 94, radius: 132, speed: 0.45, phase: 5.2 },
+  { label: "Proof Receipts", short: ".json", x: 142, y: -84, z: -40, radius: 175, speed: 0.34, phase: 1.8 },
+  { label: "Skill Lab", short: "bench", x: 188, y: 66, z: 36, radius: 142, speed: 0.5, phase: 3.1 },
+  { label: "Tools", short: "checks", x: -128, y: 98, z: -76, radius: 160, speed: 0.38, phase: 4.3 },
+  { label: "Permissions", short: "receipts", x: 42, y: 150, z: 94, radius: 132, speed: 0.45, phase: 5.2 },
   { label: "MCP", short: "stdio", x: 8, y: -162, z: 102, radius: 168, speed: 0.47, phase: 2.55 },
-  { label: "Project Memory", short: ".soba", x: -206, y: 34, z: 118, radius: 128, speed: 0.31, phase: 5.85 },
+  { label: "Project Memory", short: "provenance", x: -206, y: 34, z: 118, radius: 128, speed: 0.31, phase: 5.85 },
 ];
 
 const CONNECTIONS: Array<[number, number]> = [
@@ -165,14 +165,14 @@ export function SobaOrbitCanvas() {
       if (!reduceMotion.matches) frame += delta * 0.001;
 
       const isDark = document.documentElement.classList.contains("dark");
-      const background = cssColor("--color-fd-background", isDark ? "hsl(220, 17%, 7%)" : "hsl(39, 41%, 93%)");
-      const foreground = cssColor("--color-fd-foreground", isDark ? "hsl(215, 18%, 87%)" : "hsl(30, 15%, 10%)");
-      const primary = cssColor("--color-fd-primary", isDark ? "hsl(214, 17%, 73%)" : "hsl(209, 25%, 35%)");
-      const muted = cssColor("--color-fd-muted", isDark ? "hsl(220, 16%, 11%)" : "hsl(37, 34%, 88%)");
-      const border = cssColor("--color-fd-border", isDark ? "hsl(217, 16%, 22%)" : "hsl(35, 25%, 76%)");
+      const background = cssColor("--color-fd-background", isDark ? "hsl(220, 17%, 7%)" : "#F7F7F2");
+      const foreground = cssColor("--color-fd-foreground", isDark ? "hsl(215, 18%, 87%)" : "#171717");
+      const primary = cssColor("--color-fd-primary", isDark ? "hsl(214, 17%, 73%)" : "#244C66");
+      const muted = cssColor("--color-fd-muted", isDark ? "hsl(220, 16%, 11%)" : "#ECEBE3");
+      const border = cssColor("--color-fd-border", isDark ? "hsl(217, 16%, 22%)" : "#D5D2C6");
       const mutedForeground = cssColor(
         "--color-fd-muted-foreground",
-        isDark ? "hsl(215, 9%, 53%)" : "hsl(33, 12%, 32%)",
+        isDark ? "hsl(215, 9%, 53%)" : "#5E625C",
       );
 
       ctx.clearRect(0, 0, width, height);

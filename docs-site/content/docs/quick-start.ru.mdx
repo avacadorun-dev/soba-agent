@@ -1,11 +1,11 @@
 ---
 title: Быстрый старт
-description: "Актуальный быстрый старт SOBA v0.6.0: запуск, first-run init, provider, TUI, sessions, Project Memory, MCP, capsules и проверки."
+description: "Актуальный быстрый старт SOBA v0.6.4: запуск, provider, TUI, proof receipts, Project Memory, MCP, capsules и проверки."
 ---
 
-Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.0 workflow. Он не заменяет справочник, а показывает
-минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, сохранить память проекта и проверить
-MCP.
+Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.4 workflow. Он не заменяет справочник, а показывает
+минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, посмотреть proof receipts, сохранить
+память проекта и проверить MCP.
 
 ---
 
@@ -231,6 +231,18 @@ Project Memory хранит знания проекта в `.soba/memory/` и д
 !find .soba/memory -maxdepth 3 -type f | sort
 ```
 
+Проверить Project Memory doctor и Memory health commands:
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory stale
+soba memory verify
+soba memory explain "provider registry"
+```
+
+`soba memory explain` даёт Memory receipt explanations: найденные capsules, source receipts, score и doctor issues.
+
 Подробнее: [Project Memory](/ru/docs/project-memory).
 
 ---
@@ -291,6 +303,14 @@ Project skills требуют trust:
 /project-trust approve
 ```
 
+Для reusable skills используйте цикл Skill eval bench and trace:
+
+```text
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+```
+
 Подробнее: [Skills](/ru/docs/skills).
 
 ---
@@ -319,7 +339,26 @@ Project skills требуют trust:
 
 ---
 
-## 11. Минимальный gate перед завершением
+## 11. Проверить proof receipts
+
+После нетривиальной задачи проверьте локальный proof trail:
+
+```bash
+soba prove --last
+soba verify --last
+soba explain-claim "No test regressions detected"
+```
+
+Evidence proof receipts лежат в `.soba/evidence/*.soba-proof.json`. Proof receipt должен показывать changed files,
+checks, proof claim mapping, risks и proof permission receipts. Если важный claim не подтверждён, он должен оставаться
+явно unverified. Для Proof claim explanations по конкретному файлу используйте
+`soba explain-claim --proof .soba/evidence/<id>.soba-proof.json`.
+
+Подробнее: [Proof receipts](/ru/docs/proof).
+
+---
+
+## 12. Минимальный gate перед завершением
 
 Для Bun/TypeScript проекта:
 
@@ -339,13 +378,14 @@ Project skills требуют trust:
 
 ---
 
-## 12. Куда идти дальше
+## 13. Куда идти дальше
 
 | Задача | Документ |
 |---|---|
 | Полный end-to-end проект | [Проект шаг за шагом](/ru/docs/walkthrough-building-a-project) |
 | Все CLI-флаги | [CLI reference](/ru/docs/cli-reference) |
 | TUI и slash-команды | [Интерфейс и команды](/ru/docs/usage) |
+| Proof receipts | [Proof receipts](/ru/docs/proof) |
 | Project Memory | [Project Memory](/ru/docs/project-memory) |
 | MCP | [MCP-серверы](/ru/docs/mcp) |
 | Tools | [Инструменты агента](/ru/docs/tools) |

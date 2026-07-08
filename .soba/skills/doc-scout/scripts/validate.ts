@@ -140,6 +140,9 @@ const SOURCE_FACTS = {
     "skip-provider",
     "skip-trust",
     "skip-mcp",
+    "last",
+    "format",
+    "proof",
   ]),
 
   envVars: new Set([
@@ -162,6 +165,7 @@ const SOURCE_FACTS = {
     "SOBA_SOUND_ENABLED",
     "SOBA_SOUND_VOLUME",
     "SOBA_SOUND_REPEAT",
+    "SOBA_CONFIG_PATH",
     "SOBA_RUN_LIVE_TESTS",
     "SOBA_LOCALES_DIR",
     "SOBA_TEST_AUDIO_DIR",
@@ -201,6 +205,10 @@ const SOURCE_FACTS = {
     ["provider", new Set(["list", "add", "remove", "show", "use"])],
     ["init", new Set(["check"])],
     ["acp", new Set<string>()],
+    ["prove", new Set<string>()],
+    ["verify", new Set<string>()],
+    ["explain-claim", new Set<string>()],
+    ["memory", new Set(["doctor", "stale", "verify", "explain"])],
   ]),
 
   configKeys: new Set([
@@ -283,7 +291,7 @@ const SOURCE_FACTS = {
     "End",
   ]),
 
-  specialSyntax: new Set(["!"]),
+  specialSyntax: new Set(["!", "!!"]),
 
   // Known to NOT exist (common fabrications)
   knownFabrications: new Map([
@@ -408,12 +416,13 @@ function extractClaims(content: string): Claim[] {
     }
   }
 
-  // Special syntax: ! (direct shell)
-  const specialRe = /(`!`|"!"|прям(?:ой|ых) shell)/gi;
+  // Special syntax: ! (direct shell) and !! (silent shell)
+  const specialRe = /(`!!?`|"!!?"|shell-silent|silent shell|прям(?:ой|ых) shell)/gi;
   for (let i = 0; i < lines.length; i++) {
     const matches = lines[i].matchAll(specialRe);
-    for (const _m of matches) {
-      claims.push({ kind: "special-syntax", text: "!", value: "!", line: i + 1 });
+    for (const m of matches) {
+      const value = m[0].includes("!!") || /silent|shell-silent/i.test(m[0]) ? "!!" : "!";
+      claims.push({ kind: "special-syntax", text: value, value, line: i + 1 });
     }
   }
 
@@ -428,7 +437,7 @@ function isDocumentationFileName(value: string): boolean {
 
 function verifyCliFlag(flag: string): { verdict: Verdict; hint: string } {
   if (SOURCE_FACTS.cliFlags.has(flag)) {
-    return { verdict: "confirmed", hint: "src/cli.ts" };
+    return { verdict: "confirmed", hint: "src/apps/cli/args.ts | src/application/commands/*" };
   }
   if (SOURCE_FACTS.knownFabrications.has(`--${flag}`)) {
     return { verdict: "fabricated", hint: "не существует в коде" };
@@ -470,7 +479,7 @@ function verifySlashCommand(command: string): { verdict: Verdict; hint: string }
 function verifySubcommand(cmd: string): { verdict: Verdict; hint: string } {
   for (const [parent, subs] of SOURCE_FACTS.cliSubcommands) {
     if (parent === cmd || subs.has(cmd)) {
-    return { verdict: "confirmed", hint: `src/cli/${parent}-cli.ts` };
+      return { verdict: "confirmed", hint: `src/apps/cli/args.ts | src/application/commands/${parent}.ts` };
     }
   }
   if (SOURCE_FACTS.knownFabrications.has(cmd)) {
@@ -481,7 +490,7 @@ function verifySubcommand(cmd: string): { verdict: Verdict; hint: string } {
 
 function verifyConfigKey(key: string): { verdict: Verdict; hint: string } {
   if (SOURCE_FACTS.configKeys.has(key)) {
-    return { verdict: "confirmed", hint: "src/core/config/config-loader.ts | src/core/config/types.ts" };
+    return { verdict: "confirmed", hint: "src/composition/config/config-loader.ts | src/application/config/types.ts" };
   }
   if (SOURCE_FACTS.knownFabrications.has(key)) {
     return { verdict: "fabricated", hint: "не существует в конфигурации" };
@@ -491,7 +500,7 @@ function verifyConfigKey(key: string): { verdict: Verdict; hint: string } {
 
 function verifyPermissionMode(mode: string): { verdict: Verdict; hint: string } {
   if (SOURCE_FACTS.permissionModes.has(mode)) {
-    return { verdict: "confirmed", hint: "src/core/trust/trust-manager.ts" };
+    return { verdict: "confirmed", hint: "src/kernel/permissions/trust.ts" };
   }
   if (SOURCE_FACTS.knownFabrications.has(mode)) {
     return { verdict: "fabricated", hint: "PermissionMode: только ask | repo | full" };
@@ -511,7 +520,7 @@ function verifyHotkey(hotkey: string): { verdict: Verdict; hint: string } {
 
 function verifySpecialSyntax(syntax: string): { verdict: Verdict; hint: string } {
   if (SOURCE_FACTS.specialSyntax.has(syntax)) {
-    return { verdict: "confirmed", hint: "src/core/loop/agent-loop.ts" };
+    return { verdict: "confirmed", hint: "src/ui/terminal/interactive/model/tui-store.ts" };
   }
   return { verdict: "unknown", hint: "не найден" };
 }
@@ -566,7 +575,7 @@ function findMissingFromDocs(docContent: string, fileName: string): MissingItem[
       missing.push({
         category: "permission-mode",
         item: "repo",
-        sourceLocation: "src/core/trust/trust-manager.ts",
+        sourceLocation: "src/kernel/permissions/trust.ts",
         reason: "PermissionMode 'repo' существует, но не упомянут в доке",
       });
     }
@@ -574,7 +583,7 @@ function findMissingFromDocs(docContent: string, fileName: string): MissingItem[
       missing.push({
         category: "permission-mode",
         item: "full",
-        sourceLocation: "src/core/trust/trust-manager.ts",
+        sourceLocation: "src/kernel/permissions/trust.ts",
         reason: "PermissionMode 'full' существует, но не упомянут в доке",
       });
     }
@@ -596,7 +605,7 @@ function findMissingFromDocs(docContent: string, fileName: string): MissingItem[
       missing.push({
         category: "special-syntax",
         item: "! (direct shell)",
-        sourceLocation: "src/core/loop/agent-loop.ts",
+        sourceLocation: "src/ui/terminal/interactive/model/tui-store.ts",
         reason: "Синтаксис прямых shell-команд существует, но не описан",
       });
     }

@@ -10,6 +10,9 @@ export function baseOptions(locale?: string): BaseLayoutProps {
         </span>
       ),
     },
+    searchToggle: {
+      enabled: false,
+    },
     links: [
       {
         text: locale === "ru" ? "Документация" : locale === "zh" ? "文档" : "Documentation",

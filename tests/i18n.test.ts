@@ -135,7 +135,7 @@ describe("I18n translation", () => {
 
     try {
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toContain("консольный AI-ассистент");
+      expect(result.stdout.toString()).toContain("агент для разработки");
     } finally {
       rmSync(tempDir, { recursive: true });
     }

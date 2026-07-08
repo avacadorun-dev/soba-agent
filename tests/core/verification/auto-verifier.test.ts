@@ -64,6 +64,29 @@ describe("auto verifier", () => {
     });
   });
 
+  test("docs-only mutation skips command gates even if prompt task kind was feature", async () => {
+    await withFixture(async (cwd) => {
+      await writePackageJson(cwd, { scripts: { test: "bun test" } });
+      const ledger = ledgerWithMutation("docs/guide.md");
+      const executed: string[] = [];
+
+      const result = await runAutoVerifier({
+        cwd,
+        taskKind: "feature",
+        evidenceSummary: ledger.getSummary(),
+        ledger,
+        bashTool: makeBashTool(executed),
+        toolContext: { cwd },
+        trustManager: new TrustManager({ repoRoot: cwd }),
+        projectFiles: testProjectFiles(cwd),
+      });
+
+      expect(result.executions).toEqual([]);
+      expect(executed).toEqual([]);
+      expect(result.skipped[0]?.reason).toContain("Docs-only mutation");
+    });
+  });
+
   test("failing command produces failed verification evidence and active diagnostic", async () => {
     await withFixture(async (cwd) => {
       await writePackageJson(cwd, { scripts: { test: "bun test" } });

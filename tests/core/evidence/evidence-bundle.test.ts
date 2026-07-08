@@ -5,7 +5,7 @@ import {
   type EvidenceCommandRun,
   formatEvidenceBundleForHandoff,
 } from "../../../src/engine/evidence";
-import type { EvidenceEntry, EvidenceLedgerSummary } from "../../../src/engine/evidence/evidence-ledger";
+import { type EvidenceEntry, EvidenceLedger, type EvidenceLedgerSummary } from "../../../src/engine/evidence/evidence-ledger";
 
 const NOW = new Date("2026-06-27T00:00:00.000Z");
 
@@ -226,6 +226,71 @@ describe("Evidence Bundle builder", () => {
 
     expect(bundle.status).toBe("verified");
     expect(bundle.checks).toMatchObject([{ label: "Manual inspection", status: "passed", verificationKind: "manual_inspection" }]);
+    expect(bundle.risks).toEqual([]);
+  });
+
+  test("builds verified bundle when ledger links docs readback to docs mutation", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_docs",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "docs/architecture/target-agent-platform-tasks-review.md" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+    ledger.recordToolOutcome({
+      toolCallId: "inspect_docs",
+      toolName: "inspect_file",
+      arguments: JSON.stringify({ path: "docs/architecture/target-agent-platform-tasks-review.md", startLine: 1, endLine: 40 }),
+      isError: false,
+      output: "manual inspection passed",
+      iteration: 2,
+    });
+
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_docs_readback",
+      completionStatus: "completed",
+      summary: "Updated docs and read them back.",
+      ledger: ledger.getSummary(),
+      now: () => NOW,
+    });
+
+    expect(bundle.status).toBe("verified");
+    expect(bundle.checks).toMatchObject([{ label: "Manual inspection", status: "passed", verificationKind: "manual_inspection" }]);
+    expect(bundle.risks).toEqual([]);
+  });
+
+  test("does not keep active diagnostic risk after corrected project memory write", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "memory_bad_1",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule", capsule: { source: { file: "docs/plan.md" } } }),
+      isError: true,
+      output: "ProjectMemory capsules store failed during add capsule: Memory capsule source error/fix must be strings",
+      iteration: 1,
+    });
+    ledger.recordToolOutcome({
+      toolCallId: "memory_good",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule", capsule: { type: "discovery", summary: "Stored", detail: "Stored", priority: "medium" } }),
+      isError: false,
+      output: "stored memory capsule",
+      iteration: 2,
+    });
+
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_memory",
+      completionStatus: "completed",
+      summary: "Stored project memory after correcting the payload.",
+      ledger: ledger.getSummary(),
+      now: () => NOW,
+    });
+
+    expect(bundle.status).toBe("verified");
     expect(bundle.risks).toEqual([]);
   });
 

@@ -119,6 +119,7 @@ SOBA конфигурируется через три источника с чё
 | `SOBA_API_KEY` | `apiKey` | API-ключ |
 | `SOBA_MODEL` | `model` | Идентификатор модели |
 | `SOBA_MAX_OUTPUT_TOKENS` | `maxOutputTokens` | Лимит выходных токенов |
+| `SOBA_MAX_TOKENS` | `maxOutputTokens` | Устаревший alias для `SOBA_MAX_OUTPUT_TOKENS` |
 | `SOBA_MAX_COMPLETION_TOKENS` | `maxCompletionTokens` | Лимит reasoning токенов |
 | `SOBA_CONTEXT_WINDOW` | `contextWindow` | Размер контекстного окна |
 | `SOBA_MAX_AGENT_ITERATIONS` | `maxAgentIterations` | Лимит итераций |
@@ -131,6 +132,8 @@ SOBA конфигурируется через три источника с чё
 | `SOBA_SOUND_ENABLED` | `sound.enabled` | Включить/отключить звуковые уведомления |
 | `SOBA_SOUND_VOLUME` | `sound.volume` | Громкость 0.0–1.0 |
 | `SOBA_SOUND_REPEAT` | `sound.repeatMode` | `repeat`/`true`/`1` = повтор, `once`/`false`/`0` = один раз |
+| `SOBA_CONFIG_PATH` | путь к config file | Использовать нестандартный файл конфигурации |
+| `NO_COLOR` | output colors | Отключить ANSI-цвета, как `--no-color` |
 | `DEEPSEEK_API_KEY` | `apiKey` (для провайдера deepseek) | API-ключ DeepSeek |
 | `MOONSHOT_API_KEY` | `apiKey` (для провайдера kimi) | API-ключ Moonshot Kimi |
 | `DASHSCOPE_API_KEY` | `apiKey` (для провайдера alibaba) | API-ключ Alibaba Qwen |
@@ -164,6 +167,7 @@ SOBA конфигурируется через три источника с чё
 | Флаг | Описание |
 |---|---|
 | `--max-output-tokens <n>` | Лимит выходных токенов на ответ |
+| `--max-tokens <n>` | Устаревший alias для `--max-output-tokens` |
 | `--max-completion-tokens <n>` | Лимит reasoning/thinking токенов на ответ |
 | `--context-window <n>` | Переопределить размер контекстного окна модели |
 | `--budget <n>` | Ограничить общий бюджет токенов на задачу |
@@ -196,7 +200,7 @@ SOBA конфигурируется через три источника с чё
 
 ## 5. Конфигурация провайдеров
 
-SOBA v0.6.0 использует систему реестра провайдеров (registry). Подробнее о провайдерах — в
+SOBA v0.6.x использует систему реестра провайдеров (registry). Подробнее о провайдерах — в
 [гайде по провайдерам](/ru/docs/v0.6/providers).
 
 ### 5.1. Встроенные провайдеры

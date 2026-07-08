@@ -96,7 +96,7 @@ describe("printHelp with i18n", () => {
     try {
       printHelp();
       const output = logs.join("\n");
-      expect(output).toContain("terminal AI coding assistant");
+      expect(output).toContain("local-first engineering agent");
       expect(output).toContain("Usage: soba");
       expect(output).toContain("soba init");
       expect(output).toContain("Modes:");
@@ -122,7 +122,7 @@ describe("printHelp with i18n", () => {
       const i18n = new I18n("ru");
       printHelp(i18n);
       const output = logs.join("\n");
-      expect(output).toContain("консольный AI-ассистент");
+      expect(output).toContain("агент для разработки");
       expect(output).toContain("Использование: soba");
       expect(output).toContain("soba init");
       expect(output).toContain("Режимы:");
@@ -144,7 +144,7 @@ describe("printHelp with i18n", () => {
       const i18n = new I18n("zh");
       printHelp(i18n);
       const output = logs.join("\n");
-      expect(output).toContain("终端 AI 编码助手");
+      expect(output).toContain("local-first 工程代理");
       expect(output).toContain("用法: soba");
       expect(output).toContain("soba init");
       expect(output).toContain("模式:");

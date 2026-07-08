@@ -5,7 +5,7 @@ import { EvidenceLedger } from "../evidence/evidence-ledger";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
 import { emitWorkingNarration } from "./agent-turn-runner-events";
 import { createWorkingNarrationGate, isNonTrivialPrompt, type WorkingNarrationEmitter } from "./narration";
-import { createUserItem } from "./turn-helpers";
+import { type AgentUserInput, createUserItem, userInputToText } from "./turn-helpers";
 import type { AgentEvent, AgentTurnError } from "./types";
 
 interface BeginAgentTurnState {
@@ -27,14 +27,15 @@ export interface BeginAgentTurnResult {
 }
 
 export function beginAgentTurn(input: {
-  userText: string;
+  userInput: AgentUserInput;
   session: SessionPort;
   state: BeginAgentTurnState;
   setAbortController(controller: AbortController): void;
   emit(event: AgentEvent): void;
   debug(data: DebugEntry["data"]): void;
 }): BeginAgentTurnResult {
-  const { userText, session, state, setAbortController, emit, debug } = input;
+  const { userInput, session, state, setAbortController, emit, debug } = input;
+  const userText = userInputToText(userInput);
   if (state.isProcessing) {
     throw new Error("Agent is already processing a turn");
   }
@@ -64,7 +65,7 @@ export function beginAgentTurn(input: {
     userInput: userText,
   });
 
-  const userItem = createUserItem(userText);
+  const userItem = createUserItem(userInput);
   session.appendItem(userItem as unknown as SessionItemParam);
   allItems.push(userItem as unknown as ItemParam);
   debug({

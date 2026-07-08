@@ -22,6 +22,13 @@ export interface VerificationPolicyDecision {
   reason: string;
 }
 
+export interface VerificationPolicyContext {
+  taskKind?: TaskKind;
+  hasDocsMutations?: boolean;
+  hasCodeMutations?: boolean;
+  forceFullGate?: boolean;
+}
+
 const DOC_EXTENSIONS = new Set([".md", ".mdx", ".txt", ".rst", ".adoc"]);
 
 export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): VerificationPolicyDecision {
@@ -92,6 +99,21 @@ export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): Verifi
         reason: "Unknown task kind uses conservative project command verification after mutation.",
       };
   }
+}
+
+export function decideVerificationPolicyForContext(
+  context: VerificationPolicyContext,
+): VerificationPolicyDecision {
+  if (context.forceFullGate || context.taskKind === "release_task") {
+    return decideVerificationPolicy("release_task");
+  }
+
+  const docsOnly = context.hasDocsMutations === true && context.hasCodeMutations !== true;
+  if (docsOnly) {
+    return decideVerificationPolicy("docs_change");
+  }
+
+  return decideVerificationPolicy(context.taskKind ?? "unknown");
 }
 
 export function inferTaskKindFromPrompt(prompt: string): TaskKind {

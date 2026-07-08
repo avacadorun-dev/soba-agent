@@ -18,7 +18,10 @@ type FactCategory =
   | "cli-flag"
   | "env-var"
   | "config-key"
-  | "special-syntax";
+  | "special-syntax"
+  | "capability";
+
+type SupportedLang = "en" | "ru" | "zh";
 
 interface Fact {
   category: FactCategory;
@@ -27,6 +30,7 @@ interface Fact {
   required: boolean;
   aliases?: string[];
   note?: string;
+  lang?: SupportedLang;
 }
 
 interface CoveredFact extends Fact {
@@ -51,6 +55,94 @@ const CWD = process.cwd();
 const DEFAULT_DOCS_ROOT = "docs-site/content/docs";
 const OUTPUT_DIR = ".soba/skills/docs-semantic-auditor/output";
 const OUTPUT_FILE = `${OUTPUT_DIR}/semantic-coverage.json`;
+
+const CAPABILITY_REQUIREMENTS: Array<{
+  id: string;
+  source: string;
+  phrases: Record<SupportedLang, string[]>;
+}> = [
+  {
+    id: "evidence-proof-receipts",
+    source: "docs capability matrix: proof receipts persisted evidence",
+    phrases: {
+      en: ["Evidence proof receipts", ".soba/evidence/*.soba-proof.json", "soba prove --last"],
+      ru: ["Evidence proof receipts", ".soba/evidence/*.soba-proof.json", "soba prove --last"],
+      zh: ["Evidence proof receipts", ".soba/evidence/*.soba-proof.json", "soba prove --last"],
+    },
+  },
+  {
+    id: "proof-claim-mapping",
+    source: "docs capability matrix: claim references to evidence ids",
+    phrases: {
+      en: ["Proof claim mapping", "mapped to evidence ids", "soba verify"],
+      ru: ["Proof claim mapping", "привязаны к evidence ids", "soba verify"],
+      zh: ["Proof claim mapping", "映射到 evidence ids", "soba verify"],
+    },
+  },
+  {
+    id: "proof-claim-explanations",
+    source: "docs capability matrix: explain-claim workflow",
+    phrases: {
+      en: ["Proof claim explanations", "soba explain-claim", "--proof .soba/evidence/<id>.soba-proof.json"],
+      ru: ["Proof claim explanations", "soba explain-claim", "--proof .soba/evidence/<id>.soba-proof.json"],
+      zh: ["Proof claim explanations", "soba explain-claim", "--proof .soba/evidence/<id>.soba-proof.json"],
+    },
+  },
+  {
+    id: "proof-permission-receipts",
+    source: "docs capability matrix: permission receipt fields",
+    phrases: {
+      en: ["Proof permission receipts", "trust level", "least-privilege alternatives"],
+      ru: ["Proof permission receipts", "trust level", "least-privilege alternatives"],
+      zh: ["Proof permission receipts", "trust level", "least-privilege alternatives"],
+    },
+  },
+  {
+    id: "project-memory-doctor",
+    source: "docs capability matrix: memory doctor",
+    phrases: {
+      en: ["Project Memory doctor", "soba memory doctor --format json", "without starting the agent runtime"],
+      ru: ["Project Memory doctor", "soba memory doctor --format json", "без запуска agent runtime"],
+      zh: ["Project Memory doctor", "soba memory doctor --format json", "不会启动 agent runtime"],
+    },
+  },
+  {
+    id: "memory-source-receipts",
+    source: "docs capability matrix: memory source provenance fields",
+    phrases: {
+      en: ["Memory source receipts", "source.file", "staleIfFilesChange"],
+      ru: ["Memory source receipts", "source.file", "staleIfFilesChange"],
+      zh: ["Memory source receipts", "source.file", "staleIfFilesChange"],
+    },
+  },
+  {
+    id: "memory-receipt-explanations",
+    source: "docs capability matrix: memory explain",
+    phrases: {
+      en: ["Memory receipt explanations", "soba memory explain", "doctor issues"],
+      ru: ["Memory receipt explanations", "soba memory explain", "doctor issues"],
+      zh: ["Memory receipt explanations", "soba memory explain", "doctor issues"],
+    },
+  },
+  {
+    id: "memory-health-commands",
+    source: "docs capability matrix: memory health CLI",
+    phrases: {
+      en: ["Memory health commands", "soba memory stale", "soba memory verify"],
+      ru: ["Memory health commands", "soba memory stale", "soba memory verify"],
+      zh: ["Memory health commands", "soba memory stale", "soba memory verify"],
+    },
+  },
+  {
+    id: "skill-eval-bench-trace",
+    source: "docs capability matrix: skill evaluation workflow",
+    phrases: {
+      en: ["Skill eval bench and trace", "/skill eval <name>", "/skill bench <name>", "/skill trace <name>"],
+      ru: ["Skill eval bench and trace", "/skill eval <name>", "/skill bench <name>", "/skill trace <name>"],
+      zh: ["Skill eval bench and trace", "/skill eval <name>", "/skill bench <name>", "/skill trace <name>"],
+    },
+  },
+];
 
 function parseArgs(): { docsRoot: string; json: boolean } {
   const args = process.argv.slice(2);
@@ -80,7 +172,7 @@ function uniqueFacts(facts: Fact[]): Fact[] {
   const seen = new Set<string>();
   const result: Fact[] = [];
   for (const fact of facts) {
-    const key = `${fact.category}:${fact.value}`;
+    const key = `${fact.category}:${fact.lang ?? "all"}:${fact.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(fact);
@@ -108,8 +200,8 @@ function stringUnionValues(project: Project, sourcePath: string, typeName: strin
 }
 
 function slashCommandFacts(project: Project): Fact[] {
-  const sourceFile = project.getSourceFileOrThrow("src/cli/commands.ts");
-  const declaration = sourceFile.getVariableDeclarationOrThrow("SLASH_COMMANDS");
+  const sourceFile = project.getSourceFileOrThrow("src/application/command-service.ts");
+  const declaration = sourceFile.getVariableDeclarationOrThrow("RUNTIME_COMMANDS");
   const initializer = arrayInitializer(declaration.getInitializerOrThrow());
   const facts: Fact[] = [];
 
@@ -122,16 +214,32 @@ function slashCommandFacts(project: Project): Fact[] {
     facts.push({
       category: "slash-command",
       value,
-      source: "src/cli/commands.ts:SLASH_COMMANDS",
+      source: "src/application/command-service.ts:RUNTIME_COMMANDS",
       required: true,
     });
+  }
+
+  for (const tuiCommandFile of project.getSourceFiles("src/ui/terminal/interactive/commands/*.ts")) {
+    for (const objectLiteral of tuiCommandFile.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
+      if (!Node.isReturnStatement(objectLiteral.getParent())) continue;
+      const nameProperty = objectLiteral.getProperty("name");
+      if (!Node.isPropertyAssignment(nameProperty)) continue;
+      const value = nameProperty.getInitializerIfKind(SyntaxKind.StringLiteral)?.getLiteralText();
+      if (!value) continue;
+      facts.push({
+        category: "slash-command",
+        value: `/${value}`,
+        source: `${tuiCommandFile.getFilePath()}:SlashCommand.name`,
+        required: true,
+      });
+    }
   }
 
   return facts;
 }
 
 function cliFlagFacts(project: Project): Fact[] {
-  const sourceFile = project.getSourceFileOrThrow("src/cli/args.ts");
+  const sourceFile = project.getSourceFileOrThrow("src/apps/cli/args.ts");
   const facts: Fact[] = [];
 
   for (const literal of sourceFile.getDescendantsOfKind(SyntaxKind.StringLiteral)) {
@@ -141,7 +249,7 @@ function cliFlagFacts(project: Project): Fact[] {
     facts.push({
       category: "cli-flag",
       value,
-      source: "src/cli/args.ts:parseArgs",
+      source: "src/apps/cli/args.ts:parseArgs",
       required: true,
     });
   }
@@ -155,7 +263,7 @@ function isSwitchCaseLiteral(literal: StringLiteral): boolean {
 }
 
 function configKeyFacts(project: Project): Fact[] {
-  const sourceFile = project.getSourceFileOrThrow("src/core/config/types.ts");
+  const sourceFile = project.getSourceFileOrThrow("src/application/config/types.ts");
   const interfaces = ["SobaConfig", "SoundConfig"];
   const facts: Fact[] = [];
 
@@ -166,7 +274,7 @@ function configKeyFacts(project: Project): Fact[] {
       facts.push({
         category: "config-key",
         value,
-        source: `src/core/config/types.ts:${interfaceName}`,
+        source: `src/application/config/types.ts:${interfaceName}`,
         required: interfaceName === "SobaConfig",
         note: interfaceName === "SoundConfig" ? "nested sound config key" : undefined,
       });
@@ -179,19 +287,22 @@ function configKeyFacts(project: Project): Fact[] {
 async function envVarFacts(): Promise<Fact[]> {
   const files = await listFiles("src", [".ts", ".tsx"]);
   const facts: Fact[] = [];
-  const envRe = /\b(?:process\.env\.)?(SOBA_[A-Z0-9_]+|NO_COLOR)\b/g;
+  const dotEnvRe = /\bprocess\.env\.(SOBA_[A-Z0-9_]+|NO_COLOR)\b/g;
+  const bracketEnvRe = /\bprocess\.env\[\s*["'](SOBA_[A-Z0-9_]+|NO_COLOR)["']\s*\]/g;
+  const internalEnvVars = new Set(["SOBA_BUNDLED_SKILLS_PATH", "SOBA_PACKAGE_ROOT"]);
 
   for (const file of files) {
     const content = await readFile(file, "utf8");
-    for (const match of content.matchAll(envRe)) {
+    const matches = [...content.matchAll(dotEnvRe), ...content.matchAll(bracketEnvRe)];
+    for (const match of matches) {
       const value = match[1];
-      const isTestOnly = value.includes("_TEST_") || value.includes("_LIVE_TESTS") || value.includes("_PROXY_HTTP_TESTS");
+      const isIgnored = value.includes("_TEST_") || value.includes("_LIVE_TESTS") || value.includes("_PROXY_HTTP_TESTS") || internalEnvVars.has(value);
       facts.push({
         category: "env-var",
         value,
         source: shortPath(file),
-        required: !isTestOnly,
-        note: isTestOnly ? "test/internal environment variable" : undefined,
+        required: !isIgnored,
+        note: isIgnored ? "test/internal environment variable" : undefined,
       });
     }
   }
@@ -200,7 +311,7 @@ async function envVarFacts(): Promise<Fact[]> {
 }
 
 function trustCommandPatternFacts(project: Project): Fact[] {
-  const sourceFile = project.getSourceFileOrThrow("src/core/trust/trust-manager.ts");
+  const sourceFile = project.getSourceFileOrThrow("src/application/trust/trust-manager.ts");
   const declaration = sourceFile.getVariableDeclarationOrThrow("DEFAULT_COMMAND_RULES");
   const initializer = arrayInitializer(declaration.getInitializerOrThrow());
   const importantPatterns = new Set(["rm ", "sudo ", "curl ", "git push", "git reset", "bun run dev", "npm run dev"]);
@@ -214,7 +325,7 @@ function trustCommandPatternFacts(project: Project): Fact[] {
     facts.push({
       category: "trust-level",
       value: `${pattern.trim()}:${level}`,
-      source: "src/core/trust/trust-manager.ts:DEFAULT_COMMAND_RULES",
+      source: "src/application/trust/trust-manager.ts:DEFAULT_COMMAND_RULES",
       required: true,
       aliases: [pattern.trim(), `${pattern.trim()}:${level}`],
     });
@@ -247,25 +358,40 @@ function specialSyntaxFacts(): Fact[] {
     {
       category: "special-syntax",
       value: "!",
-      source: "src/core/loop/agent-loop.ts:runShellCommand",
+      source: "src/engine/turn/agent-loop.ts:runShellCommand",
       required: true,
       aliases: ["`!`", "direct shell", "прямые shell", "прямой shell"],
     },
     {
       category: "special-syntax",
       value: "!!",
-      source: "src/widgets/tui/model/tui-store.ts:shell-silent",
+      source: "src/ui/terminal/interactive/model/tui-store.ts:shell-silent",
       required: true,
-      aliases: ["`!!`", "shell-silent", "silent shell"],
+      aliases: ["!!", "`!!`", "!!command", "shell-silent", "silent shell"],
     },
   ];
+}
+
+function capabilityFacts(): Fact[] {
+  return CAPABILITY_REQUIREMENTS.flatMap((requirement) => {
+    return (Object.entries(requirement.phrases) as Array<[SupportedLang, string[]]>).flatMap(([lang, phrases]) => {
+      return phrases.map((phrase, index) => ({
+        category: "capability",
+        value: `${lang}:${requirement.id}:${index + 1}`,
+        source: requirement.source,
+        required: true,
+        aliases: [phrase],
+        lang,
+      } satisfies Fact));
+    });
+  });
 }
 
 function addAliases(facts: Fact[]): Fact[] {
   return facts.map((fact) => {
     const aliases = new Set(fact.aliases ?? []);
 
-    if (!["approval-decision", "permission-mode", "special-syntax"].includes(fact.category)) aliases.add(fact.value);
+    if (!["approval-decision", "permission-mode"].includes(fact.category)) aliases.add(fact.value);
     if (fact.category === "approval-decision") {
       const shortcut = { once: "y", session: "s", repo: "r", full: "f", deny: "n" }[fact.value];
       aliases.add(`\`${fact.value}\``);
@@ -285,14 +411,15 @@ function addAliases(facts: Fact[]): Fact[] {
 
 async function collectSourceFacts(project: Project): Promise<Fact[]> {
   const facts: Fact[] = [
-    ...stringUnionValues(project, "src/core/trust/trust-manager.ts", "PermissionMode"),
-    ...stringUnionValues(project, "src/core/trust/trust-manager.ts", "TrustLevel"),
-    ...stringUnionValues(project, "src/core/loop/types.ts", "ApprovalDecision"),
+    ...stringUnionValues(project, "src/kernel/permissions/trust.ts", "PermissionMode"),
+    ...stringUnionValues(project, "src/kernel/permissions/trust.ts", "TrustLevel"),
+    ...stringUnionValues(project, "src/engine/turn/types.ts", "ApprovalDecision"),
     ...slashCommandFacts(project),
     ...cliFlagFacts(project),
     ...configKeyFacts(project),
     ...trustCommandPatternFacts(project),
     ...specialSyntaxFacts(),
+    ...capabilityFacts(),
     ...(await envVarFacts()),
   ];
 
@@ -324,7 +451,13 @@ async function listFiles(root: string, extensions: string[]): Promise<string[]> 
 
 async function readDocs(docsRoot: string): Promise<Array<{ path: string; content: string }>> {
   const files = await listFiles(docsRoot, [".md", ".mdx"]);
-  return Promise.all(files.map(async (file) => ({ path: shortPath(file), content: await readFile(file, "utf8") })));
+  const currentDocs = files.filter((file) => {
+    const normalized = shortPath(file);
+    if (normalized.includes("/v0.6/")) return false;
+    if (basename(normalized).startsWith("changelog.")) return false;
+    return true;
+  });
+  return Promise.all(currentDocs.map(async (file) => ({ path: shortPath(file), content: await readFile(file, "utf8") })));
 }
 
 function coverFacts(facts: Fact[], docs: Array<{ path: string; content: string }>): CoveredFact[] {
@@ -334,6 +467,7 @@ function coverFacts(facts: Fact[], docs: Array<{ path: string; content: string }
     }
 
     for (const doc of docs) {
+      if (fact.lang && docLang(doc.path) !== fact.lang) continue;
       for (const alias of fact.aliases ?? [fact.value]) {
         if (containsFact(doc.content, alias)) {
           return { ...fact, covered: true, matchedBy: alias, matchedIn: doc.path };
@@ -345,6 +479,13 @@ function coverFacts(facts: Fact[], docs: Array<{ path: string; content: string }
   });
 }
 
+function docLang(path: string): SupportedLang | undefined {
+  const match = basename(path).match(/\.([a-z]{2})\.mdx?$/);
+  if (!match) return;
+  const lang = match[1];
+  if (lang === "en" || lang === "ru" || lang === "zh") return lang;
+}
+
 function containsFact(content: string, alias: string): boolean {
   const plainContent = content.replace(/[*_`]/g, "");
   if (containsLiteral(content, alias) || containsLiteral(plainContent, alias)) return true;
@@ -352,7 +493,7 @@ function containsFact(content: string, alias: string): boolean {
 }
 
 function containsLiteral(content: string, alias: string): boolean {
-  if (alias.length <= 2 || alias.startsWith("/") || alias.startsWith("-") || alias.includes("_") || alias.includes(" ")) {
+  if (alias.length <= 2 || alias.startsWith("/") || alias.startsWith("-") || alias.includes("_") || alias.includes(" ") || /[^A-Za-z0-9]/.test(alias)) {
     return content.includes(alias);
   }
   return new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i").test(content);

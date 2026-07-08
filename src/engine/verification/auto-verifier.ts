@@ -3,7 +3,7 @@ import type { EvidenceLedger, EvidenceLedgerSummary } from "../evidence/evidence
 import type { TrustController } from "../permissions/trust-controller";
 import { detectProjectCommands } from "./project-command-detector";
 import type { ProjectCommand, ProjectCommandFileReader, ProjectCommandKind, SkippedProjectCommand } from "./types";
-import type { TaskKind, VerificationKind } from "./verification-policy";
+import { decideVerificationPolicyForContext, type TaskKind, type VerificationKind } from "./verification-policy";
 
 export interface AutoVerifierToolCall {
   callId: string;
@@ -154,8 +154,14 @@ export async function runAutoVerifier(options: AutoVerifierOptions): Promise<Aut
 
 function requiredCommandKinds(options: AutoVerifierOptions): ProjectCommandKind[] {
   if (!options.evidenceSummary.needsVerification) return [];
-  if (options.includeFullGate || options.includeReleaseGate || options.taskKind === "release_task") return FULL_GATE_KINDS;
-  if (options.evidenceSummary.hasDocsMutations && !options.evidenceSummary.hasCodeMutations) return [];
+  const policy = decideVerificationPolicyForContext({
+    taskKind: options.taskKind,
+    hasDocsMutations: options.evidenceSummary.hasDocsMutations,
+    hasCodeMutations: options.evidenceSummary.hasCodeMutations,
+    forceFullGate: options.includeFullGate || options.includeReleaseGate,
+  });
+  if (policy.requirement === "full_gate") return FULL_GATE_KINDS;
+  if (policy.requirement !== "command") return [];
   return TARGETED_KINDS_BY_TASK[options.taskKind];
 }
 

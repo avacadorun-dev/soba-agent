@@ -4,8 +4,8 @@ import {
   ArrowRight,
   BrainCircuit,
   CheckCircle2,
+  ClipboardCheck,
   GitBranch,
-  Github,
   Languages,
   LockKeyhole,
   Network,
@@ -23,94 +23,94 @@ import { APP_VERSION_LABEL } from "@/lib/version";
 
 const features = [
   {
-    icon: Terminal,
+    icon: ClipboardCheck,
     title: {
-      en: "Cozy terminal TUI",
-      ru: "Уютная консоль",
-      zh: "舒适的终端 TUI",
+      en: "Evidence-first finishes",
+      ru: "Финиш с доказательствами",
+      zh: "证据优先的完成状态",
     },
     desc: {
-      en: "Slash commands, hotkeys, and readable tool output right where you code.",
-      ru: "Команды, горячие клавиши и вывод инструментов остаются под рукой.",
-      zh: "斜杠命令、热键和清晰的工具输出，都在你写代码的地方。",
+      en: "Proof receipts map changed files, checks, claims, risks, and permissions to the final answer.",
+      ru: "Proof receipts связывают изменённые файлы, проверки, claims, риски и разрешения с финальным ответом.",
+      zh: "Proof receipts 会把变更文件、检查、声明、风险和权限映射到最终回答。",
     },
   },
   {
     icon: GitBranch,
     title: {
-      en: "Sessions that remember",
-      ru: "Работа не теряется",
-      zh: "会记住的会话",
+      en: "Session time machine",
+      ru: "Сессии как time machine",
+      zh: "会话时间机器",
     },
     desc: {
-      en: "Continue, rewind, and inspect past turns without losing the thread.",
-      ru: "Можно продолжить, вернуться назад и посмотреть, что уже было сделано.",
-      zh: "继续、回退、查看过去的回合，不丢上下文。",
+      en: "Continue, rewind, branch, and inspect past turns without losing the work trail.",
+      ru: "Можно продолжить, откатиться, ветвиться и смотреть прошлые turn'ы без потери следа работы.",
+      zh: "继续、回退、分支并查看过去回合，同时保留工作轨迹。",
     },
   },
   {
     icon: BrainCircuit,
     title: {
-      en: "Context that stays tidy",
-      ru: "Контекст в порядке",
-      zh: "保持整洁的上下文",
+      en: "Portable handoff capsules",
+      ru: "Portable handoff capsules",
+      zh: "可移植交接胶囊",
     },
     desc: {
-      en: "Capsules keep decisions, files, and next steps compact enough for long work.",
-      ru: "Решения, файлы и следующие шаги не расползаются по длинной задаче.",
-      zh: "胶囊保存决策、文件和下一步，让长任务也清爽。",
+      en: "Capsules keep goals, decisions, files, risks, and next steps compact enough to resume elsewhere.",
+      ru: "Капсулы держат цель, решения, файлы, риски и следующие шаги так, чтобы задачу можно было продолжить.",
+      zh: "胶囊保存目标、决策、文件、风险和下一步，方便在别处继续。",
     },
   },
   {
     icon: BrainCircuit,
     title: {
-      en: "Project Memory",
-      ru: "Память проекта",
-      zh: "项目记忆",
+      en: "Memory with provenance",
+      ru: "Память с provenance",
+      zh: "带来源的项目记忆",
     },
     desc: {
-      en: "A small project notebook for architecture, conventions, and things the agent should not forget.",
-      ru: "Небольшой блокнот с архитектурой, договорённостями и важными деталями.",
-      zh: "一个小小的项目笔记本：架构、约定和代理不该忘的东西。",
+      en: "Project facts can carry source files, verification time, confidence, and stale-if-changed rules.",
+      ru: "Факты проекта получают source files, время проверки, confidence и правила устаревания.",
+      zh: "项目事实可以带有源文件、验证时间、置信度和变更即过期规则。",
     },
   },
   {
     icon: Network,
     title: {
-      en: "MCP tools",
-      ru: "Внешние инструменты",
-      zh: "MCP 工具",
+      en: "MCP without losing control",
+      ru: "MCP без потери контроля",
+      zh: "可控的 MCP 工具",
     },
     desc: {
-      en: "Connect stdio or Streamable HTTP MCP servers when the built-ins are not enough.",
-      ru: "Подключайте MCP-серверы, если встроенных возможностей уже мало.",
-      zh: "内置工具不够时，可以接入 stdio 或 Streamable HTTP MCP 服务器。",
+      en: "Connect stdio or Streamable HTTP servers while SOBA keeps permissions and tool results visible.",
+      ru: "Подключайте stdio или Streamable HTTP servers, а SOBA оставит права и результаты инструментов видимыми.",
+      zh: "接入 stdio 或 Streamable HTTP 服务，同时保持权限和工具结果可见。",
     },
   },
   {
     icon: LockKeyhole,
     title: {
-      en: "Clear permissions",
-      ru: "Понятные разрешения",
-      zh: "清晰的权限",
+      en: "Permission receipts",
+      ru: "Permission receipts",
+      zh: "权限回执",
     },
     desc: {
-      en: "Read, edit, run, approve, or deny. Risky actions stay visible.",
-      ru: "Предлагает правки и предупреждает о рискованных действиях.",
-      zh: "读取、编辑、运行、允许或拒绝。高风险操作会清楚显示。",
+      en: "Risky operations show scope, alternatives, and the decision that allowed or denied them.",
+      ru: "Рискованные операции показывают scope, альтернативы и решение, которым их разрешили или запретили.",
+      zh: "高风险操作会显示范围、替代方案以及允许或拒绝的决定。",
     },
   },
   {
     icon: Zap,
     title: {
-      en: "Tiny reusable skills",
-      ru: "Небольшие skills",
-      zh: "小巧可复用技能",
+      en: "Skill evolution lab",
+      ru: "Skill evolution lab",
+      zh: "技能演进实验室",
     },
     desc: {
-      en: "Package project habits into Markdown skills and reuse them when the work repeats.",
-      ru: "Сохраняйте привычные правила проекта и возвращайтесь к ним в похожих задачах.",
-      zh: "把项目习惯写成 Markdown 技能，需要时重复使用。",
+      en: "Markdown skills have evals, bench, trace, revision history, promotion, and rollback.",
+      ru: "Markdown skills получают eval, bench, trace, историю версий, promote и rollback.",
+      zh: "Markdown 技能支持 eval、bench、trace、版本历史、promote 和 rollback。",
     },
   },
   {
@@ -121,9 +121,9 @@ const features = [
       zh: "三种语言",
     },
     desc: {
-      en: "English, Russian, and Chinese UI/docs, with quick switching in the TUI.",
-      ru: "Интерфейс и документация на английском, русском и китайском языках.",
-      zh: "英文、俄文和中文 UI/文档，可在 TUI 中快速切换。",
+      en: "English, Russian, and Chinese UI/docs, with release messaging kept aligned.",
+      ru: "Интерфейс и документация на английском, русском и китайском языках, с синхронным release message.",
+      zh: "英文、俄文和中文 UI/文档，并保持发布信息一致。",
     },
   },
 ];
@@ -133,68 +133,71 @@ const workflow = [
     icon: Network,
     title: { en: "Read", ru: "Читает", zh: "读取" },
     desc: {
-      en: "Looks at code, docs, memory, and session context first.",
-      ru: "Разбирается в коде, документации и текущей сессии.",
-      zh: "先看代码、文档、记忆和会话上下文。",
+      en: "Looks at code, docs, session state, memory receipts, and MCP context first.",
+      ru: "Сначала смотрит код, документацию, состояние сессии, memory receipts и MCP context.",
+      zh: "先查看代码、文档、会话状态、记忆回执和 MCP 上下文。",
     },
   },
   {
     icon: Workflow,
     title: { en: "Do", ru: "Делает", zh: "执行" },
     desc: {
-      en: "Uses built-in tools, shell shortcuts, skills, and MCP.",
-      ru: "Правит файлы, запускает команды и подключает MCP, когда нужно.",
-      zh: "使用内置工具、shell 快捷方式、技能和 MCP。",
+      en: "Edits through bounded tools, skills, shell checks, and MCP integrations.",
+      ru: "Правит через ограниченные tools, skills, shell checks и MCP integrations.",
+      zh: "通过有边界的工具、技能、shell 检查和 MCP 集成执行。",
     },
   },
   {
     icon: Shield,
-    title: { en: "Check", ru: "Проверяет", zh: "检查" },
+    title: { en: "Prove", ru: "Доказывает", zh: "证明" },
     desc: {
-      en: "Runs the project checks and leaves the result in the session.",
-      ru: "Запускает проверки и выдаёт понятный результат.",
-      zh: "运行项目检查，并把结果留在会话里。",
+      en: "Maps checks, claims, risks, and permissions into a visible proof trail.",
+      ru: "Связывает проверки, claims, риски и разрешения в понятный отчёт с доказательствами.",
+      zh: "把检查、声明、风险和权限映射成可见证据链。",
     },
   },
 ];
 
 const copy = {
   badge: {
-    en: `SOBA Agent ${APP_VERSION_LABEL} · cute terminal coding agent`,
-    ru: `SOBA Agent ${APP_VERSION_LABEL}`,
-    zh: `SOBA Agent ${APP_VERSION_LABEL} · 可爱的终端编码代理`,
+    en: `SOBA Agent ${APP_VERSION_LABEL} · local-first engineering agent`,
+    ru: `SOBA Agent ${APP_VERSION_LABEL} · local-first инженерный агент`,
+    zh: `SOBA Agent ${APP_VERSION_LABEL} · local-first 工程代理`,
   },
-  headlineA: { en: "A tiny coding agent", ru: "Работа с кодом", zh: "一个小小的编码代理" },
-  headlineB: { en: "that remembers", ru: "в консоли", zh: "会记住事情" },
+  headlineLines: {
+    en: ["The coding agent", "that leaves receipts"],
+    ru: ["SOBA", "агент для", "разработки"],
+    zh: ["编码代理", "会留下证据"],
+  },
   lead: {
-    en: "SOBA helps with coding from the terminal. It remembers project notes, connects MCP tools over stdio or Streamable HTTP, keeps sessions tidy, and asks before risky moves.",
-    ru: "SOBA помогает вести проект, править код и структурировать файлы. Документы и заметки всегда остаются под рукой.",
-    zh: "SOBA 在终端里帮你写代码。它记住项目笔记，通过 stdio 或 Streamable HTTP 连接 MCP 工具，整理会话，并在高风险操作前询问。",
+    en: "SOBA is a local-first engineering agent for teams that want more than code edits. It remembers the project, works inside bounded tool loops, verifies outcomes, and turns work into evidence.",
+    ru: "SOBA — local-first инженерный агент для работы, где важны не только правки кода. Он помнит проект, работает в ограниченных tool loops, проверяет результат и сохраняет подтверждения того, что сделал.",
+    zh: "SOBA 是 local-first 工程代理，不只是改代码。它记住项目，在有边界的工具循环中工作，验证结果，并把工作转成证据。",
   },
   primaryCta: { en: "Read the docs", ru: "Документы", zh: "阅读文档" },
   secondaryCta: { en: "Quick start", ru: "Быстрый старт", zh: "快速入门" },
   githubCta: { en: "GitHub", ru: "GitHub", zh: "GitHub" },
   roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
   proof: {
-    en: ["Project Memory", "MCP tools", "Friendly TUI", "Long sessions"],
-    ru: ["Память", "MCP", "Консоль", "Сессии"],
-    zh: ["项目记忆", "MCP 工具", "友好的 TUI", "长会话"],
+    en: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
+    ru: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
+    zh: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
   },
-  orbitEyebrow: { en: "How it fits", ru: "Архитектура", zh: "如何组合" },
+  orbitEyebrow: { en: "Execution model", ru: "Модель работы", zh: "执行模型" },
   orbitTitle: {
-    en: "One small core. Lots of helpful orbits.",
-    ru: "Всё важное рядом",
-    zh: "一个小核心，许多有用的小轨道。",
+    en: "Local control, visible proof, repeatable habits.",
+    ru: "Локальный контроль, видимый proof, повторяемые привычки.",
+    zh: "本地控制、可见证据、可重复习惯。",
   },
   orbitText: {
-    en: "Memory, MCP, tools, sessions, capsules, and skills stay close to the agent core.",
-    ru: "Код, сессии, память проекта, инструменты и MCP собраны в один рабочий поток.",
-    zh: "记忆、MCP、工具、会话、胶囊和技能围绕代理核心。",
+    en: "SOBA keeps memory, tools, MCP, skills, sessions, capsules, and proof receipts in the same local workflow.",
+    ru: "SOBA держит memory, tools, MCP, skills, sessions, capsules и proof receipts в одном локальном workflow.",
+    zh: "SOBA 把记忆、工具、MCP、技能、会话、胶囊和 proof receipts 放在同一个本地工作流。",
   },
   architectureInput: {
-    en: "prompt · files · session · memory · MCP",
-    ru: "запрос · файлы · сессия · память · MCP",
-    zh: "提示 · 文件 · 会话 · 记忆 · MCP",
+    en: "task · files · session · memory receipts · MCP",
+    ru: "задача · файлы · сессия · memory receipts · MCP",
+    zh: "任务 · 文件 · 会话 · 记忆回执 · MCP",
   },
   architectureInputLabel: {
     en: "input",
@@ -202,9 +205,9 @@ const copy = {
     zh: "输入",
   },
   architectureOutput: {
-    en: "patches · verification · memory updates · session checkpoint",
-    ru: "правки · проверки · заметки · точка в сессии",
-    zh: "补丁 · 验证 · 记忆更新 · 会话检查点",
+    en: "patches · checks · claims · risks · proof receipts",
+    ru: "правки · проверки · claims · риски · proof receipts",
+    zh: "补丁 · 检查 · 声明 · 风险 · proof receipts",
   },
   architectureOutputLabel: {
     en: "output",
@@ -212,14 +215,14 @@ const copy = {
     zh: "输出",
   },
   featuresTitle: {
-    en: "Small pieces that help a lot",
-    ru: "Что помогает в работе",
-    zh: "小组件，大帮助",
+    en: "What makes SOBA different",
+    ru: "Чем SOBA отличается",
+    zh: "SOBA 的不同之处",
   },
   workflowTitle: {
-    en: "Read. Do. Check.",
-    ru: "Прочитал. Сделал. Проверил.",
-    zh: "读取。执行。检查。",
+    en: "Read. Do. Prove.",
+    ru: "Прочитал. Сделал. Доказал.",
+    zh: "读取。执行。证明。",
   },
   terminalEyebrow: {
     en: "TUI preview",
@@ -227,22 +230,22 @@ const copy = {
     zh: "TUI 预览",
   },
   terminalTitle: {
-    en: "Still just your terminal",
-    ru: "Интерактивный и one-shot режимы",
-    zh: "仍然只是你的终端",
+    en: "A terminal surface for verifiable work",
+    ru: "Терминал для проверяемой работы",
+    zh: "用于可验证工作的终端界面",
   },
   terminalText: {
-    en: "Commands, tool output, compacted context, language switching, and checks stay visible in one calm place.",
-    ru: "Для длинной работы есть интерактивная сессия с историей и контекстом. Для разовых задач — one-shot запуск одной командой.",
-    zh: "命令、工具输出、压缩上下文、语言切换和检查都在一个安静的地方。",
+    en: "Use one-shot prompts for small tasks or the TUI for long work. Slash commands, model switching, proof summaries, memory, permissions, and MCP status stay visible.",
+    ru: "Для коротких задач есть one-shot, для длинных — TUI. Slash-команды, выбор модели, proof summaries, memory, permissions и MCP status остаются видимыми.",
+    zh: "小任务用 one-shot，长任务用 TUI。斜杠命令、模型切换、proof summaries、记忆、权限和 MCP 状态保持可见。",
   },
 };
 
 const stats = [
-  { value: "JSONL", label: { en: "Durable sessions", ru: "Долговечные сессии", zh: "持久会话" } },
-  { value: "Memory", label: { en: "Project knowledge", ru: "Знания проекта", zh: "项目知识" } },
+  { value: "Proof", label: { en: "Claim-mapped evidence", ru: "Доказательства для claims", zh: "声明映射证据" } },
+  { value: "Memory", label: { en: "Provenance + staleness", ru: "Provenance + staleness", zh: "来源 + 过期检测" } },
   { value: "MCP", label: { en: "stdio + remote tools", ru: "stdio + remote tools", zh: "stdio + remote 工具" } },
-  { value: "Safe", label: { en: "Ask before risky", ru: "Спросит перед риском", zh: "高风险前会询问" } },
+  { value: "Local", label: { en: "Bounded permissions", ru: "Ограниченные права", zh: "有边界的权限" } },
 ];
 
 export const Route = createFileRoute("/$lang/")({
@@ -272,6 +275,7 @@ export const Route = createFileRoute("/$lang/")({
 function Home() {
   const { lang } = Route.useParams();
   const t = (obj: Record<string, string>) => obj[lang] ?? obj.en;
+  const localizedHeadlineLines = copy.headlineLines[lang as keyof typeof copy.headlineLines] ?? copy.headlineLines.en;
   const localizedProof = copy.proof[lang as keyof typeof copy.proof] ?? copy.proof.en;
 
   return (
@@ -279,18 +283,29 @@ function Home() {
       <main className="landing-shell">
         <section className="hero-section">
           <div className="hero-bg" aria-hidden />
-          <div className="hero-grid mx-auto grid max-w-7xl items-center gap-10 px-6 py-20 sm:py-24 lg:grid-cols-[1.02fr_0.98fr] lg:px-8 lg:py-28">
+          <div className="hero-grid mx-auto grid items-start px-6 lg:px-8">
             <div className="hero-copy">
               <div className="hero-badge">
                 <Sparkles className="size-3.5" />
                 <span>{t(copy.badge)}</span>
               </div>
-              <h1 className="mt-7 text-5xl font-bold tracking-[-0.045em] text-fd-foreground sm:text-7xl lg:text-8xl">
-                {t(copy.headlineA)} <span>{t(copy.headlineB)}</span>
+              <h1
+                className="mt-6 text-5xl font-bold tracking-[-0.045em] text-fd-foreground sm:text-7xl lg:text-[4.25rem] lg:leading-[4.5rem]"
+                aria-label={localizedHeadlineLines.join(" ")}
+              >
+                {localizedHeadlineLines.map((line, index) => (
+                  <span
+                    key={line}
+                    className={index === 0 ? "headline-line" : "headline-line headline-accent"}
+                    aria-hidden="true"
+                  >
+                    {line}
+                  </span>
+                ))}
               </h1>
-              <p className="mt-7 max-w-2xl text-lg leading-8 text-fd-muted-foreground sm:text-xl">{t(copy.lead)}</p>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-fd-muted-foreground sm:text-xl">{t(copy.lead)}</p>
 
-              <div className="mt-9 flex flex-wrap items-center gap-4">
+              <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="hero-cta hero-cta-primary">
                   {t(copy.primaryCta)}
                   <ArrowRight className="size-4" />
@@ -311,12 +326,12 @@ function Home() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <Github className="size-4" />
+                  <GitBranch className="size-4" />
                   {t(copy.githubCta)}
                 </a>
               </div>
 
-              <div className="mt-8 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-6 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
                 {localizedProof.map((item) => (
                   <div key={item} className="proof-pill">
                     <CheckCircle2 className="size-4" />
@@ -437,10 +452,10 @@ function Home() {
             <p>
               SOBA Agent {APP_VERSION_LABEL} —{" "}
               {lang === "ru"
-                ? "консольный помощник для разработки"
+                ? "local-first агент для разработки"
                 : lang === "zh"
-                  ? "终端 AI 编码助手"
-                  : "terminal AI coding assistant"}
+                  ? "会留下证据的 local-first 工程代理"
+                  : "local-first engineering agent that leaves receipts"}
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <a
@@ -449,7 +464,7 @@ function Home() {
                 target="_blank"
                 rel="noreferrer"
               >
-                <Github className="size-3.5" />
+                <GitBranch className="size-3.5" />
                 {t(copy.githubCta)}
               </a>
               <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="footer-link">

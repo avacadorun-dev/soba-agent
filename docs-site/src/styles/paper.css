@@ -1,36 +1,48 @@
-/* === SOBA Paper Theme (Light) === */
+/* === SOBA Ink Theme (Light) === */
 
 @theme {
-  --color-fd-background: hsl(39, 41%, 93%);
-  --color-fd-foreground: hsl(30, 15%, 10%);
-  --color-fd-muted: hsl(37, 34%, 88%);
-  --color-fd-muted-foreground: hsl(33, 12%, 32%);
-  --color-fd-popover: hsl(39, 41%, 96%);
-  --color-fd-popover-foreground: hsl(30, 15%, 10%);
-  --color-fd-card: hsl(37, 34%, 88%);
-  --color-fd-card-foreground: hsl(30, 15%, 10%);
-  --color-fd-border: hsl(35, 25%, 76%);
-  --color-fd-primary: hsl(209, 25%, 35%);
-  --color-fd-primary-foreground: hsl(39, 41%, 93%);
-  --color-fd-secondary: hsl(37, 34%, 88%);
-  --color-fd-secondary-foreground: hsl(30, 15%, 10%);
-  --color-fd-accent: hsl(209, 25%, 35%);
-  --color-fd-accent-foreground: hsl(39, 41%, 93%);
-  --color-fd-ring: hsl(209, 25%, 35%);
+  --soba-ink-background: #F7F7F2;
+  --soba-ink-panel: #ECEBE3;
+  --soba-ink-border: #D5D2C6;
+  --soba-ink-text: #171717;
+  --soba-ink-muted: #5E625C;
+  --soba-ink-dim: #A09D92;
+  --soba-ink-primary: #244C66;
+  --soba-ink-secondary: #6B4E71;
+  --soba-ink-success: #3F7052;
+  --soba-ink-error: #9B3D44;
+  --soba-ink-warning: #71540B;
 
-  --color-fd-success: hsl(133, 18%, 39%);
-  --color-fd-warning: hsl(38, 56%, 27%);
-  --color-fd-error: hsl(355, 36%, 48%);
-  --color-fd-info: hsl(276, 17%, 44%);
-  --color-fd-idea: hsl(276, 17%, 52%);
+  --color-fd-background: var(--soba-ink-background);
+  --color-fd-foreground: var(--soba-ink-text);
+  --color-fd-muted: var(--soba-ink-panel);
+  --color-fd-muted-foreground: var(--soba-ink-muted);
+  --color-fd-popover: var(--soba-ink-background);
+  --color-fd-popover-foreground: var(--soba-ink-text);
+  --color-fd-card: var(--soba-ink-panel);
+  --color-fd-card-foreground: var(--soba-ink-text);
+  --color-fd-border: var(--soba-ink-border);
+  --color-fd-primary: var(--soba-ink-primary);
+  --color-fd-primary-foreground: var(--soba-ink-background);
+  --color-fd-secondary: var(--soba-ink-panel);
+  --color-fd-secondary-foreground: var(--soba-ink-text);
+  --color-fd-accent: var(--soba-ink-primary);
+  --color-fd-accent-foreground: var(--soba-ink-background);
+  --color-fd-ring: var(--soba-ink-primary);
 
-  --color-fd-diff-add: hsla(133, 18%, 39%, 0.12);
-  --color-fd-diff-add-symbol: hsl(133, 18%, 32%);
-  --color-fd-diff-remove: hsla(355, 36%, 48%, 0.12);
-  --color-fd-diff-remove-symbol: hsl(355, 36%, 42%);
+  --color-fd-success: var(--soba-ink-success);
+  --color-fd-warning: var(--soba-ink-warning);
+  --color-fd-error: var(--soba-ink-error);
+  --color-fd-info: var(--soba-ink-secondary);
+  --color-fd-idea: var(--soba-ink-secondary);
+
+  --color-fd-diff-add: color-mix(in oklab, var(--soba-ink-success) 14%, transparent);
+  --color-fd-diff-add-symbol: var(--soba-ink-success);
+  --color-fd-diff-remove: color-mix(in oklab, var(--soba-ink-error) 14%, transparent);
+  --color-fd-diff-remove-symbol: var(--soba-ink-error);
 }
 
 #nd-sidebar {
-  --color-fd-muted: hsl(37, 34%, 88%);
-  --color-fd-secondary: hsl(37, 34%, 88%);
+  --color-fd-muted: var(--soba-ink-panel);
+  --color-fd-secondary: var(--soba-ink-panel);
 }

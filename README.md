@@ -1,6 +1,7 @@
 # SOBA Agent
 
-SOBA Agent is a Bun-first CLI coding agent with an interactive terminal UI, proactive context management, project memory, skills, and MCP support.
+SOBA Agent is a local-first engineering agent that remembers the project, verifies work, and leaves proof receipts. It
+ships with an interactive terminal UI, Project Memory provenance, MCP support, bounded permissions, and evolvable skills.
 
 ## Install
 
@@ -27,6 +28,14 @@ Start the interactive TUI:
 
 ```bash
 soba -i
+```
+
+Inspect proof receipts after a task:
+
+```bash
+soba prove --last
+soba verify --last
+soba explain-claim "No test regressions detected"
 ```
 
 ## From Source

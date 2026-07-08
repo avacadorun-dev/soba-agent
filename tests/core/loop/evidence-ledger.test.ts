@@ -108,6 +108,44 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationEvidenceCallIds).toEqual(new Set(["test_pass"]));
   });
 
+  test("successful memory write resolves earlier memory write diagnostics", () => {
+    const ledger = new EvidenceLedger();
+    const first = ledger.recordToolOutcome({
+      toolCallId: "memory_bad_1",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule", capsule: { source: { file: "docs/plan.md" } } }),
+      isError: true,
+      output: "ProjectMemory capsules store failed during add capsule: Memory capsule source error/fix must be strings",
+      iteration: 1,
+    });
+    const second = ledger.recordToolOutcome({
+      toolCallId: "memory_bad_2",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule", capsule: { source: { file: "docs/plan.md", confidence: "high" } } }),
+      isError: true,
+      output: "ProjectMemory capsules store failed during add capsule: Memory capsule source error/fix must be strings",
+      iteration: 2,
+    });
+
+    const success = ledger.recordToolOutcome({
+      toolCallId: "memory_good",
+      toolName: "write_project_memory",
+      arguments: JSON.stringify({ target: "capsule", capsule: { type: "discovery", summary: "Stored", detail: "Stored", priority: "medium" } }),
+      isError: false,
+      output: "stored memory capsule",
+      iteration: 3,
+    });
+
+    const summary = ledger.getSummary();
+    expect(success).toMatchObject({
+      kind: "inspect",
+      status: "success",
+      resolves: [first.id, second.id],
+    });
+    expect(summary.activeDiagnosticIds).toEqual([]);
+    expect(summary.entries.filter((entry) => entry.kind === "diagnostic").map((entry) => entry.status)).toEqual(["resolved", "resolved"]);
+  });
+
   test("explicit verification kind metadata verifies arbitrary command text", () => {
     const ledger = new EvidenceLedger();
     const mutation = ledger.recordToolOutcome({
@@ -322,6 +360,39 @@ describe("EvidenceLedger", () => {
     expect(summary.unverifiedMutationIds).toEqual([mutation.id]);
     expect(summary.verificationEvidenceCallIds).toEqual(new Set());
     expect(summary.verificationKinds).toEqual(new Set());
+  });
+
+  test("inspect_file readback verifies matching docs-only mutation", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "edit_docs",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "docs/architecture/target-agent-platform-tasks-review.md" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const inspection = ledger.recordToolOutcome({
+      toolCallId: "inspect_docs",
+      toolName: "inspect_file",
+      arguments: JSON.stringify({ path: "docs/architecture/target-agent-platform-tasks-review.md", startLine: 1, endLine: 80 }),
+      isError: false,
+      output: "manual inspection passed",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(inspection).toMatchObject({
+      kind: "inspect",
+      status: "success",
+      verificationKind: "manual_inspection",
+      mutationIds: [mutation.id],
+    });
+    expect(summary.needsVerification).toBe(false);
+    expect(summary.unverifiedMutationIds).toEqual([]);
+    expect(summary.unverifiedDocsMutationIds).toEqual([]);
+    expect(summary.inspectionEvidenceCallIds).toEqual(new Set(["inspect_docs"]));
   });
 
   test("verification piped through tail or masked tee wrapper is diagnostic only", () => {

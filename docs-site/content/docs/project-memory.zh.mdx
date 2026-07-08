@@ -1,0 +1,109 @@
+---
+title: Project Memory
+description: SOBA Project Memory：knowledge files、capsules、source receipts、stale detection 和 memory doctor 命令。
+---
+
+Project Memory 是 SOBA 的项目本地记忆层。它保存在 `.soba/memory/`，可以跨进程重启、新 session 和 context
+compaction 保留。
+
+0.6.x 线把记忆推进到 "memory with receipts"：长期事实应说明来源，以及什么时候需要重新验证。
+
+---
+
+## 磁盘结构
+
+```text
+.soba/memory/
+├── knowledge/
+│   ├── architecture.md
+│   ├── conventions.md
+│   ├── known-errors.md
+│   └── dependencies.md
+├── capsules/
+│   └── index.json
+└── graph.json
+```
+
+Knowledge files 是稳定项目笔记。Capsules 是结构化记录，用于 decisions、discoveries、patterns、fixes、blockers
+和 insights。
+
+---
+
+## Memory source receipts
+
+如果可以，请让 SOBA 保存带 source receipts 的长期事实。Prompt 中应明确字段：`source.file`、`source.lines`、
+`source.lastVerified`、`source.confidence` 和 `staleIfFilesChange`。
+
+```json
+{
+  "source": {
+    "file": "src/apps/cli/main.ts",
+    "lines": [120, 150],
+    "commit": "abc123",
+    "confidence": "high",
+    "lastVerified": "2026-07-08T10:00:00.000Z",
+    "staleIfFilesChange": ["src/composition/runtime/create-soba-runtime.ts"]
+  }
+}
+```
+
+这样 SOBA 可以区分当前可靠的项目知识和可能已经漂移的旧笔记。
+
+---
+
+## Project Memory doctor 和 Memory health commands
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory doctor --format markdown
+
+soba memory stale
+soba memory stale --format json
+
+soba memory verify
+soba memory verify --format json
+
+soba memory explain "provider registry"
+soba memory explain "provider registry" --format json
+```
+
+这些命令只检查已保存的 memory。它们不会启动 agent runtime，也不需要 provider credentials。
+
+Project Memory doctor 是完整诊断入口。`soba memory doctor` 会报告 knowledge files、estimated tokens、
+capsule provenance、stale facts、missing files、source line drift、outside-project references 和 corrupt JSON，
+并且不会启动 agent runtime。
+
+Memory health commands 是更适合 CI 的入口：
+
+- `soba memory stale` 只报告 stale 或 broken memory receipts 以及相关 issues。
+- `soba memory verify` 返回紧凑 verification report，只有 memory 可安全使用时才是 `verified: true`。
+- `soba memory explain <query>` 返回 Memory receipt explanations：匹配的 capsules、source receipts、relevance
+  score 和 doctor issues。
+
+`soba memory verify` 是适合 CI 的检查：exit code `0` 表示 memory 可以安全使用。
+
+---
+
+## Prompt pattern
+
+```text
+Update Project Memory with the provider registry loading rule.
+Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange.
+Do not store secrets or absolute home paths.
+```
+
+长任务之前：
+
+```text
+Read Project Memory first.
+If any relevant memory is stale, call it out before planning.
+```
+
+---
+
+## 相关页面
+
+- [Proof receipts](/zh/docs/proof)
+- [代理工具](/zh/docs/tools)
+- [安全](/zh/docs/security)

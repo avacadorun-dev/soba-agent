@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/preset.css";
 
-/* Paper theme (light, default) */
+/* Ink theme (light, default) */
 @import "./paper.css";
 
 /* Graphite theme (dark) */
@@ -106,9 +106,13 @@ html > body[data-scroll-locked] {
 }
 
 .hero-section {
+  --hero-grid-unit: 72px;
+  --hero-content-max: calc(var(--hero-grid-unit) * 16 + 4rem);
+  --hero-grid-x: max(1.5rem, calc((100% - var(--hero-content-max)) / 2 + 1.5rem));
+  --hero-grid-y: 3.5rem;
   position: relative;
   overflow: hidden;
-  min-height: calc(100svh - 4rem);
+  min-height: calc(84svh - 4rem);
   border-bottom: 1px solid var(--color-fd-border);
 }
 
@@ -117,16 +121,21 @@ html > body[data-scroll-locked] {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(color-mix(in oklab, var(--color-fd-border) 52%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklab, var(--color-fd-border) 52%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(circle at 48% 34%, black 0%, transparent 68%);
-  opacity: 0.3;
+    linear-gradient(color-mix(in oklab, var(--color-fd-border) 66%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-fd-border) 66%, transparent) 1px, transparent 1px);
+  background-position: var(--hero-grid-x) var(--hero-grid-y);
+  background-size: var(--hero-grid-unit) var(--hero-grid-unit);
+  mask-image: linear-gradient(180deg, black 0%, black 72%, transparent 100%);
+  opacity: 0.58;
 }
 
 .hero-grid {
   position: relative;
-  min-height: calc(100svh - 4rem);
+  gap: calc(var(--hero-grid-unit) * 0.75);
+  max-width: var(--hero-content-max);
+  min-height: calc(84svh - 4rem);
+  padding-top: var(--hero-grid-y);
+  padding-bottom: calc(var(--hero-grid-unit) * 0.75);
 }
 
 .hero-copy {
@@ -134,8 +143,11 @@ html > body[data-scroll-locked] {
   z-index: 2;
 }
 
-.hero-copy h1 span {
+.hero-copy h1 .headline-line {
   display: block;
+}
+
+.hero-copy h1 .headline-accent {
   color: var(--color-fd-primary);
 }
 
@@ -213,7 +225,7 @@ html > body[data-scroll-locked] {
 
 .hero-visual-card {
   position: relative;
-  min-height: 620px;
+  min-height: calc(var(--hero-grid-unit) * 6);
   overflow: hidden;
   border: 1px solid color-mix(in oklab, var(--color-fd-border) 82%, transparent);
   border-radius: 2rem;
@@ -224,6 +236,28 @@ html > body[data-scroll-locked] {
     inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
     0 30px 90px color-mix(in oklab, var(--color-fd-foreground) 14%, transparent);
   isolation: isolate;
+}
+
+@media (min-width: 1024px) {
+  .hero-section {
+    --hero-grid-x: max(2rem, calc((100% - var(--hero-content-max)) / 2 + 2rem));
+  }
+
+  .hero-grid {
+    gap: var(--hero-grid-unit);
+    grid-template-columns: calc(var(--hero-grid-unit) * 7) minmax(0, 1fr);
+    padding-bottom: var(--hero-grid-unit);
+  }
+
+  .hero-visual-card {
+    min-height: calc(var(--hero-grid-unit) * 8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .hero-grid {
+    grid-template-columns: calc(var(--hero-grid-unit) * 8) calc(var(--hero-grid-unit) * 7);
+  }
 }
 
 .hero-visual-card::after {

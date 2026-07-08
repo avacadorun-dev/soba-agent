@@ -1,0 +1,97 @@
+---
+title: Skills
+description: SOBA bundled, user, and project skills with eval, bench, trace, promotion, history, and rollback.
+---
+
+Skills are Markdown instruction packages for repeatable agent behavior. In 0.6.x, they are not just prompt snippets:
+they have a local lifecycle with evals, bench summaries, traces, revision history, promotion, and rollback.
+
+---
+
+## Skill scopes
+
+| Scope | Location | Use |
+|---|---|---|
+| Bundled | `skills/` in the SOBA package | Always available |
+| User | `~/.soba/skills/` | Available across projects |
+| Project | `.soba/skills/` | Available only in the current project |
+| Internal | `.soba/skills/` inside the SOBA repo | Used while developing SOBA itself |
+
+When names collide, SOBA resolves them as: Project > User > Internal > Bundled.
+
+---
+
+## Commands
+
+```text
+/skill list
+/skill new <name>
+/skill edit <name>
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+/skill promote <name>
+/skill history <name>
+/skill rollback <name> <revision-id>
+/skill rm <name> --confirm
+/skill:<name> [prompt]
+```
+
+`eval` runs deterministic skill evaluation cases. `bench` shows aggregate quality: run count, success rate, median pass
+rate, latest run, and common failures. `trace` opens recent eval runs and failed cases.
+
+These commands make a skill closer to a small behavior package than a loose custom instruction.
+
+---
+
+## Skill eval bench and trace
+
+Use this loop when a skill is meant to be reused:
+
+1. Run `/skill eval <name>` after creating or editing the skill. It executes deterministic evaluation cases and stores
+   local eval artifacts.
+2. Run `/skill bench <name>` to inspect aggregate quality: run count, success rate, median pass rate, latest run, and
+   common failures.
+3. Run `/skill trace <name>` when a bench result is unclear. Trace shows recent eval runs and failed cases, so the next
+   edit can target the actual failure.
+
+Do not promote a project skill until eval, bench, and trace tell the same story.
+
+---
+
+## Skill card checklist
+
+For production-quality skills, keep these sections explicit:
+
+- purpose and trigger examples;
+- false-positive examples;
+- required tools and forbidden actions;
+- verification contract or required checks;
+- known failure modes;
+- eval tasks.
+
+Example:
+
+```markdown
+---
+name: fix-until-green
+description: Diagnose a failing project check, fix the root cause, and rerun the targeted check before broader gates.
+---
+
+## Trigger Examples
+- "Fix this failing test output."
+- "Run the targeted check and make it green."
+
+## Verification Contract
+- Reproduce the failure first.
+- Prefer a targeted test before a full suite.
+- Do not call the task complete while the target check fails.
+```
+
+---
+
+## Related pages
+
+- [Proof receipts](/en/docs/proof)
+- [Interface and commands](/en/docs/usage)
+- [Security](/en/docs/security)

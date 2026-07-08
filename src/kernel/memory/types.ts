@@ -33,8 +33,8 @@ export type CapsulePriority = "critical" | "high" | "medium" | "low";
 export type MemorySourceConfidence = "high" | "medium" | "low";
 
 export interface MemoryCapsuleSource {
-  error: string;
-  fix: string;
+  error?: string;
+  fix?: string;
   file?: string;
   lines?: [number, number];
   commit?: string;

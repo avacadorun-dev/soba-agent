@@ -92,8 +92,9 @@ export interface EvidenceLedgerSummary {
   entries: EvidenceEntry[];
 }
 
-const INSPECT_TOOL_NAMES = new Set(["read", "ls"]);
+const INSPECT_TOOL_NAMES = new Set(["read", "ls", "inspect_file"]);
 const MUTATION_TOOL_NAMES = new Set(["write", "edit"]);
+const SUCCESS_RESOLVES_TOOL_DIAGNOSTICS = new Set(["read_project_memory", "write_project_memory"]);
 const OUTPUT_PREVIEW_MAX_CHARS = 2_000;
 
 export class EvidenceLedger {
@@ -115,6 +116,7 @@ export class EvidenceLedger {
     }
 
     this.successfulToolCallIds.add(outcome.toolCallId);
+    const resolvedDiagnosticIds = this.resolveActiveDiagnosticsForSuccessfulTool(outcome);
 
     if (shellMutation) return shellMutation;
 
@@ -140,6 +142,7 @@ export class EvidenceLedger {
         return this.recordVerification(outcome, command, verificationKind);
       }
       if (verificationKind === "diff_inspection") {
+        const mutationIds = this.resolveDocsMutationsWithDiffInspection(outcome.toolCallId);
         return this.addEntry({
           id: evidenceId("inspection", outcome.toolCallId),
           kind: "verification",
@@ -149,6 +152,7 @@ export class EvidenceLedger {
           toolName: outcome.toolName,
           command,
           verificationKind: "diff_inspection",
+          ...(mutationIds.length > 0 ? { mutationIds } : {}),
           iteration: outcome.iteration,
           ...commandEvidenceFields(outcome),
           summary: `Inspected project diff with: ${command}`,
@@ -172,6 +176,7 @@ export class EvidenceLedger {
 
     if (INSPECT_TOOL_NAMES.has(outcome.toolName)) {
       const files = readFiles(outcome.arguments);
+      const mutationIds = this.resolveDocsMutationsWithInspection(files, outcome.toolCallId);
       return this.addEntry({
         id: evidenceId("inspect", outcome.toolCallId),
         kind: "inspect",
@@ -181,6 +186,7 @@ export class EvidenceLedger {
         toolName: outcome.toolName,
         verificationKind: "manual_inspection",
         files,
+        ...(mutationIds.length > 0 ? { mutationIds } : {}),
         iteration: outcome.iteration,
         summary: `${outcome.toolName} inspected project context${files.length > 0 ? `: ${files.join(", ")}` : ""}`,
       });
@@ -194,6 +200,7 @@ export class EvidenceLedger {
       toolCallId: outcome.toolCallId,
       toolName: outcome.toolName,
       iteration: outcome.iteration,
+      ...(resolvedDiagnosticIds.length > 0 ? { resolves: resolvedDiagnosticIds } : {}),
       summary: `${outcome.toolName} produced successful runtime evidence`,
     });
   }
@@ -478,6 +485,56 @@ export class EvidenceLedger {
       ...commandEvidenceFields(outcome),
       summary: `bash changed project files: ${files.join(", ")}`,
     });
+  }
+
+  private resolveActiveDiagnosticsForSuccessfulTool(outcome: EvidenceToolOutcome): string[] {
+    if (!SUCCESS_RESOLVES_TOOL_DIAGNOSTICS.has(outcome.toolName)) {
+      return [];
+    }
+
+    const resolvedIds: string[] = [];
+    for (const entry of this.entries) {
+      if (entry.kind !== "diagnostic" || entry.status !== "active" || entry.toolName !== outcome.toolName) {
+        continue;
+      }
+
+      entry.status = "resolved";
+      entry.resolves = [...(entry.resolves ?? []), outcome.toolCallId];
+      resolvedIds.push(entry.id);
+    }
+
+    return resolvedIds;
+  }
+
+  private resolveDocsMutationsWithInspection(files: string[], toolCallId: string): string[] {
+    if (files.length === 0) {
+      return [];
+    }
+
+    const inspectedFiles = new Set(files);
+    return this.resolveDocsMutations(
+      (entry) => (entry.files ?? []).length > 0 && (entry.files ?? []).every((file) => inspectedFiles.has(file)),
+      toolCallId,
+    );
+  }
+
+  private resolveDocsMutationsWithDiffInspection(toolCallId: string): string[] {
+    return this.resolveDocsMutations(() => true, toolCallId);
+  }
+
+  private resolveDocsMutations(matches: (entry: EvidenceEntry) => boolean, toolCallId: string): string[] {
+    const mutationIds: string[] = [];
+    for (const entry of this.entries) {
+      if (entry.kind !== "mutation" || entry.status !== "unverified" || !entryFilesAreDocs(entry) || !matches(entry)) {
+        continue;
+      }
+
+      entry.status = "success";
+      entry.resolves = [...(entry.resolves ?? []), toolCallId];
+      mutationIds.push(entry.id);
+    }
+
+    return mutationIds;
   }
 
   private addEntry(entry: EvidenceEntry): EvidenceEntry {

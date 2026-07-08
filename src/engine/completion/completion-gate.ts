@@ -2,6 +2,7 @@ import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import type { AgentTurnError } from "../turn/types";
 import {
   decideVerificationPolicy,
+  decideVerificationPolicyForContext,
   type TaskKind,
   type VerificationKind,
 } from "../verification/verification-policy";
@@ -137,7 +138,7 @@ export function parseFinishRequest(toolCall: FunctionCallField): FinishRequest |
 
 export function evaluateCompletion(request: FinishRequest, state: CompletionState): CompletionDecision {
   const reasons: string[] = [];
-  const policy = decideVerificationPolicy(state.taskKind ?? "unknown");
+  const policy = decideEffectiveVerificationPolicy(state);
   const activeErrors = state.errors.filter((error) => error.status === "active");
   const activeErrorIds = new Set(activeErrors.map((error) => error.id));
   const unknownAcknowledgements = request.acknowledgedErrorIds.filter((id) => !activeErrorIds.has(id));
@@ -205,6 +206,14 @@ export function evaluateCompletion(request: FinishRequest, state: CompletionStat
   }
 
   return reasons.length === 0 ? { accepted: true, request } : { accepted: false, reasons };
+}
+
+function decideEffectiveVerificationPolicy(state: CompletionState): ReturnType<typeof decideVerificationPolicy> {
+  return decideVerificationPolicyForContext({
+    taskKind: state.taskKind,
+    hasDocsMutations: state.hasDocsMutations,
+    hasCodeMutations: state.hasCodeMutations,
+  });
 }
 
 function unknownCriterionEvidenceIds(request: FinishRequest, knownIds: Set<string> | undefined): string[] {

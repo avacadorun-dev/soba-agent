@@ -1,7 +1,7 @@
 {
   "name": "soba-agent",
-  "version": "0.6.2",
-  "description": "Bun-first CLI coding agent with terminal UI, proactive context management, skills, project memory, and MCP support.",
+  "version": "0.6.4",
+  "description": "Local-first engineering agent with proof receipts, project memory provenance, MCP, skills, and terminal TUI.",
   "type": "module",
   "private": false,
   "license": "MIT",

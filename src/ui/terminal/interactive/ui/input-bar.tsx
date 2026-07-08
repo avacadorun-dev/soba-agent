@@ -1,4 +1,5 @@
-import type { KeyEvent, TextareaRenderable } from "@opentui/core";
+import type { KeyEvent, PasteEvent, TextareaRenderable } from "@opentui/core";
+import { usePaste } from "@opentui/solid";
 import { For, Show, createEffect, createSignal } from "solid-js";
 import {
   applyInputSuggestion,
@@ -8,6 +9,7 @@ import {
   type InputSuggestion,
   VISIBLE_INPUT_SUGGESTIONS,
 } from "../lib/input-suggestions";
+import { blockFromPasteBytes, classifyPastedText, readClipboardImageBlock } from "../lib/rich-paste";
 import { getTuiTheme } from "../lib/theme";
 import type { TuiStore } from "../model/tui-store";
 
@@ -28,6 +30,7 @@ const INPUT_BAR_KEY_BINDINGS = [
 export function InputBar(props: { store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   const queued = () => props.store.queuedMessages();
+  const composerBlocks = () => props.store.composerBlocks();
   const [suggestions, setSuggestions] = createSignal<InputSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = createSignal(0);
   const visibleSuggestions = () => getVisibleInputSuggestions(suggestions(), selectedSuggestion());
@@ -60,13 +63,29 @@ export function InputBar(props: { store: TuiStore }) {
   };
 
   const submit = (value: string) => {
-    if (!value.trim()) return;
+    if (!props.store.hasSubmittableInput(value)) return;
     void props.store.submit(value);
     // Clear the textarea’s internal buffer — the signal alone only sets a JS
     // property on the node, it does not update the native text buffer.
     textareaRef?.setText("");
     textareaRef?.focus();
   };
+
+  const handlePaste = (event: PasteEvent): void => {
+    if (!textareaRef || props.store.activePane() !== "input") return;
+    const block = blockFromPasteBytes(event.bytes, event.metadata);
+    if (!block) return;
+    if (block.type === "text" && classifyPastedText(block.text) === "inline") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (props.store.addComposerBlock(block)) {
+      setSuggestions([]);
+    }
+  };
+
+  usePaste(handlePaste);
 
   const navigateHistory = (direction: "older" | "newer"): void => {
     if (!textareaRef) return;
@@ -131,12 +150,27 @@ export function InputBar(props: { store: TuiStore }) {
       props.store.copyLastAssistant();
       return;
     }
+
+    if (key.name === "backspace" && textareaRef.plainText.length === 0 && props.store.removeLastComposerBlock()) {
+      key.preventDefault();
+      setSuggestions([]);
+      return;
+    }
+
+    if (key.ctrl && key.name === "v") {
+      void readClipboardImageBlock().then((block) => {
+        if (block) props.store.addComposerBlock(block);
+      });
+    }
   };
 
   return (
     <box
       height={
-        TEXTAREA_HEIGHT + Math.min(suggestions().length, VISIBLE_INPUT_SUGGESTIONS) + (queued().length > 0 ? 2 : 1)
+        TEXTAREA_HEIGHT +
+        composerBlocks().length +
+        Math.min(suggestions().length, VISIBLE_INPUT_SUGGESTIONS) +
+        (queued().length > 0 ? 2 : 1)
       }
       backgroundColor={theme().background}
       border={["bottom"]}
@@ -156,6 +190,19 @@ export function InputBar(props: { store: TuiStore }) {
           <text fg={theme().dim} wrapMode="none" truncate>
             {props.store.l("tui.queue.hint")}
           </text>
+        </box>
+      </Show>
+      <Show when={composerBlocks().length > 0}>
+        <box backgroundColor={theme().background} style={{ flexDirection: "column", paddingLeft: 3 }}>
+          <For each={composerBlocks()}>
+            {(block) => (
+              <box height={1} backgroundColor={theme().background}>
+                <text fg={theme().primary} wrapMode="none" truncate>
+                  {props.store.formatComposerBlock(block)}
+                </text>
+              </box>
+            )}
+          </For>
         </box>
       </Show>
       <box backgroundColor={theme().background} style={{ flexDirection: "column", paddingLeft: 3 }}>

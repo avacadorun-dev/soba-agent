@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { docsPageExists } from "@/lib/docs-static";
 import { DOCS_VERSIONS, type DocsVersionSlug } from "@/lib/docs-versions";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
@@ -35,7 +36,7 @@ export function VersionSwitcher({
     <div className="flex flex-col gap-1">
       <span className="text-xs text-fd-muted-foreground px-1 font-medium">Version</span>
       <div className="lang-switcher inline-flex">
-        {versionEntries.map((entry) => {
+        {versionEntries.filter((entry) => docsPageExists(currentSlug, lang, entry.version)).map((entry) => {
           const active = entry.latest ? !currentVersion : currentVersion === entry.version;
 
           return (

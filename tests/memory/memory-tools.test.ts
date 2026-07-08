@@ -67,8 +67,6 @@ describe("Project memory tools", () => {
         capsule: capsuleInput({
           tags: ["tools"],
           source: {
-            error: "Tool fact can drift",
-            fix: "Verify source before reuse",
             file: "src/tools.ts",
             lines: [1, 4],
             commit: "abc123",
@@ -127,6 +125,34 @@ describe("Project memory tools", () => {
     expect(result?.content[0]?.text).toContain("Missing or empty fields: type, summary, detail, priority");
     expect(result?.content[0]?.text).toContain('\\"target\\":\\"capsule\\"');
     expect(result?.error?.nextAction).toContain("Fix the write_project_memory arguments");
+  });
+
+  test("write_project_memory rejects invalid capsule source before storage", async () => {
+    const memory = createProjectMemory();
+    const [, writeTool] = createMemoryTools({ createMemory: () => memory });
+
+    const result = await writeTool?.execute(
+      {
+        target: "capsule",
+        capsule: capsuleInput({
+          source: {
+            error: "Fact can drift",
+            file: "docs/architecture.md",
+          } as MemoryCapsuleInput["source"],
+        }),
+      },
+      { cwd: projectRoot },
+    );
+
+    expect(result?.isError).toBe(true);
+    expect(result?.error).toMatchObject({
+      code: "invalid_arguments",
+      category: "validation",
+      retryable: false,
+    });
+    expect(result?.content[0]?.text).toContain("source.error and source.fix");
+    expect(result?.error?.nextAction).toContain("do not retry unchanged");
+    expect(memory.getStores().capsules.list()).toEqual([]);
   });
 
   test("write_project_memory replaces and appends an allowed knowledge file", () => {

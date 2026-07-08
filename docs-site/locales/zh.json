@@ -1,7 +1,7 @@
 {
-  "cli.help.title": "SOBA Agent — 终端 AI 编码助手",
+  "cli.help.title": "SOBA Agent — local-first 工程代理",
   "cli.help.usage": "用法: soba [选项] [提示]",
-  "cli.help.description": "新一代 CLI 编码代理，具有主动上下文管理、自修改架构和混合可视化层。",
+  "cli.help.description": "Local-first 工程代理，支持 Project Memory、有边界 tools、验证和 proof receipts。",
   "cli.help.options": "选项:",
   "cli.help.commands": "交互命令（前缀 /）:",
   "cli.help.examples": "示例:",

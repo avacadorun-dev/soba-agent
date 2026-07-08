@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { accessSync, constants, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const binPath = realpathSync(fileURLToPath(import.meta.url));
 const packageRoot = dirname(dirname(binPath));
 const bundledBun = join(packageRoot, "node_modules", "bun", "bin", "bun.exe");
-const bunExecutable = process.env.SOBA_BUN_PATH || (existsSync(bundledBun) ? bundledBun : "bun");
+const hoistedBun = join(packageRoot, "..", "bun", "bin", "bun.exe");
+const bunExecutable = process.env.SOBA_BUN_PATH || firstExistingExecutable([bundledBun, hoistedBun]) || "bun";
 const cliEntry = join(packageRoot, "dist", "cli.js");
 
 const child = spawn(bunExecutable, [cliEntry, ...process.argv.slice(2)], {
@@ -36,3 +37,14 @@ child.on("exit", (code, signal) => {
   }
   process.exit(code ?? 1);
 });
+
+function firstExistingExecutable(paths) {
+  return paths.find((path) => {
+    try {
+      accessSync(path, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}

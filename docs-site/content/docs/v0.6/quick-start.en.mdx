@@ -1,10 +1,11 @@
 ---
 title: Quick Start
-description: "Start SOBA Agent v0.6.0: install, provider, TUI, sessions, direct shell, Project Memory, MCP, and skills."
+description: "Start SOBA Agent v0.6.4: install, provider, TUI, proof receipts, Project Memory, MCP, skills, and verification."
 ---
 
-This guide gets you from a fresh checkout to a working SOBA v0.6.0 session. It focuses on the practical path: verify
-the provider, start the TUI, run a task, save project memory, and connect optional tools.
+This guide takes you from a clean install to a working SOBA v0.6.4 workflow. It is the practical path: install, verify
+the provider, start the TUI, run a bounded task, inspect evidence proof receipts, save Project Memory, connect MCP, use
+skills, and finish with real checks.
 
 ---
 
@@ -27,14 +28,15 @@ bun add -g soba-agent
 
 Use the Bun install path when Bun is already part of your toolchain and you want Bun to manage the global package.
 
-Standalone binaries for macOS and Linux are attached to GitHub Releases. For normal use, prefer the npm or Bun package;
-use a binary when you do not want a global package install.
+Standalone binaries for macOS and Linux are attached to GitHub Releases. For normal use, prefer npm or Bun; use a
+binary when you do not want a global package install.
 
 Check the CLI:
 
 ```bash
 soba --version
 soba --help
+soba init --check
 ```
 
 From source, use:
@@ -72,9 +74,10 @@ soba provider add ollama \
   --set-active
 ```
 
-For local models, start with a modest context and output size. `8192,2048` is much gentler on a laptop than a 128k context. Raise it later only if your model and hardware handle it comfortably.
+For local models, start with a modest context and output size. `8192,2048` is much gentler on a laptop than a 128k
+context. Raise it later only if the model and hardware handle it comfortably.
 
-See [Providers and models](/en/docs/v0.6/providers) for the full provider registry.
+See [Providers and models](/en/docs/v0.6/providers).
 
 ---
 
@@ -88,6 +91,7 @@ Useful first commands:
 
 ```text
 /session
+/sessions list
 /budget
 /permissions ask
 /auto-compact on
@@ -104,7 +108,7 @@ only when you want to trust all dangerous operations for the current session, in
 
 ---
 
-## 4. Run the first task
+## 4. Run the first bounded task
 
 Example prompt:
 
@@ -143,6 +147,14 @@ soba -r
 soba -s <SESSION_ID> "Continue the task"
 ```
 
+Inside the TUI:
+
+```text
+/session
+/sessions list
+/budget
+```
+
 For throwaway prompts:
 
 ```bash
@@ -151,29 +163,171 @@ soba --no-session "One-off question"
 
 ---
 
-## 6. Use Project Memory, MCP, and skills
+## 6. Manage long context
 
-Project Memory stores durable project facts in `.soba/memory/`:
+Turn proactive compaction on:
 
 ```text
-Update Project Memory with architecture, conventions, known errors, and dependencies.
+/auto-compact on
+```
+
+Create a manual compact checkpoint:
+
+```text
+/compact Preserve the goal, decisions, changed files, checks, risks, and next step.
+```
+
+Inspect or rewind checkpoints:
+
+```text
+/capsule
+/capsule CHECKPOINT_ID
+/rewind
+/rewind CHECKPOINT_ID
+```
+
+---
+
+## 7. Save Project Memory
+
+Project Memory stores durable project facts in `.soba/memory/` and makes them available across sessions.
+
+Ask SOBA to write durable facts with memory source receipts:
+
+```text
+Update Project Memory:
+- architecture: core modules and data flow;
+- conventions: Bun only, strict TypeScript, tests with bun test;
+- known-errors: recurring failures and verification commands;
+- dependencies: important runtime and dev dependencies.
+
+Use project memory tools. Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange when a source can be verified.
 Do not store secrets.
 ```
+
+Check Project Memory doctor and Memory health commands:
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory stale
+soba memory verify
+soba memory explain "provider registry"
+```
+
+Use `soba memory explain` for Memory receipt explanations: it shows matching capsules, source receipts, relevance score,
+and doctor issues.
+
+See [Project Memory](/en/docs/v0.6/project-memory).
+
+---
+
+## 8. Connect MCP tools
 
 MCP servers are configured in `.soba/mcp.json`:
 
 ```text
 /mcp status
 /mcp start <server>
+/mcp reload
+/mcp status
+```
+
+SOBA supports local `stdio` servers and remote `streamableHttp` endpoints. Remote auth should use `bearerEnv` or
+`apiKeyEnv`; OAuth commands require an auth controller for that provider:
+
+```text
+/mcp auth login <server>
 /mcp auth status <server>
 ```
 
-Skills are listed and activated from the TUI:
+MCP tools appear in the agent tool registry as:
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+---
+
+## 9. Use skills
+
+List skills:
 
 ```text
 /skill list
+```
+
+Activate a skill:
+
+```text
 /skill:commit-message Suggest a conventional commit message for staged changes.
 ```
 
-Next: [CLI reference](/en/docs/v0.6/cli-reference), [Interface and commands](/en/docs/v0.6/usage),
-[MCP servers](/ru/docs/v0.6/mcp), and [Skills](/ru/docs/v0.6/skills).
+Project skills require trust:
+
+```text
+/project-trust status
+/project-trust approve
+```
+
+For reusable skills, run the Skill eval bench and trace loop:
+
+```text
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+```
+
+See [Skills](/en/docs/v0.6/skills).
+
+---
+
+## 10. Verify proof receipts
+
+After non-trivial work, inspect the local proof trail:
+
+```bash
+soba prove --last
+soba verify --last
+soba explain-claim "No test regressions detected"
+```
+
+Evidence proof receipts live in `.soba/evidence/*.soba-proof.json`. A good receipt shows changed files, checks, proof
+claim mapping, risks, and proof permission receipts. If a claim is not supported by evidence, it should stay visibly
+unverified. Use `soba explain-claim --proof .soba/evidence/<id>.soba-proof.json` for Proof claim explanations from a
+specific receipt.
+
+See [Proof receipts](/en/docs/v0.6/proof).
+
+---
+
+## 11. Minimal finish gate
+
+For a Bun/TypeScript project:
+
+```text
+!bun test
+!bun run build
+!bunx tsc --noEmit
+!git diff --check
+!git status --short
+```
+
+For SOBA itself, also run:
+
+```text
+!bun run lint
+```
+
+---
+
+## 12. Next steps
+
+| Task | Document |
+|---|---|
+| Full end-to-end project | [Project walkthrough](/en/docs/v0.6/walkthrough-building-a-project) |
+| CLI flags | [CLI reference](/en/docs/v0.6/cli-reference) |
+| TUI and slash commands | [Interface and commands](/en/docs/v0.6/usage) |
+| Proof receipts | [Proof receipts](/en/docs/v0.6/proof) |
+| Project Memory | [Project Memory](/en/docs/v0.6/project-memory) |
+| Skills | [Skills](/en/docs/v0.6/skills) |

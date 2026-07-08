@@ -1,0 +1,111 @@
+---
+title: Project Memory
+description: SOBA Project Memory with knowledge files, capsules, source receipts, stale detection, and memory doctor commands.
+---
+
+Project Memory is SOBA's project-local memory layer. It lives in `.soba/memory/` and survives process restarts, new
+sessions, and context compaction.
+
+The 0.6.x line moves memory toward "memory with receipts": durable facts should say where they came from and when they
+need to be checked again.
+
+---
+
+## Disk layout
+
+```text
+.soba/memory/
+├── knowledge/
+│   ├── architecture.md
+│   ├── conventions.md
+│   ├── known-errors.md
+│   └── dependencies.md
+├── capsules/
+│   └── index.json
+└── graph.json
+```
+
+Knowledge files are stable project notes. Capsules are structured records for decisions, discoveries, patterns, fixes,
+blockers, and insights.
+
+---
+
+## Memory source receipts
+
+When possible, ask SOBA to save durable facts with source receipts. In prompts, name the fields explicitly:
+`source.file`, `source.lines`, `source.lastVerified`, `source.confidence`, and `staleIfFilesChange`.
+
+```json
+{
+  "source": {
+    "file": "src/apps/cli/main.ts",
+    "lines": [120, 150],
+    "commit": "abc123",
+    "confidence": "high",
+    "lastVerified": "2026-07-08T10:00:00.000Z",
+    "staleIfFilesChange": ["src/composition/runtime/create-soba-runtime.ts"]
+  }
+}
+```
+
+This lets SOBA distinguish current project knowledge from old notes that may have drifted.
+
+---
+
+## Project Memory doctor and Memory health commands
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory doctor --format markdown
+
+soba memory stale
+soba memory stale --format json
+
+soba memory verify
+soba memory verify --format json
+
+soba memory explain "provider registry"
+soba memory explain "provider registry" --format json
+```
+
+These commands inspect persisted memory only. They do not start the agent runtime and do not require provider
+credentials.
+
+Project Memory doctor is the broad diagnostic pass. `soba memory doctor` reports knowledge files, estimated tokens,
+capsule provenance, stale facts, missing files, source line drift, outside-project references, and corrupt JSON without
+starting the agent runtime.
+
+Memory health commands are the CI-friendly surface:
+
+- `soba memory stale` reports only stale or broken memory receipts and related issues.
+- `soba memory verify` returns a compact verification report with `verified: true` only when memory is safe to use.
+- `soba memory explain <query>` returns Memory receipt explanations: matching capsules, source receipts, relevance
+  score, and doctor issues for those matches.
+
+`soba memory verify` is the CI-friendly check: exit code `0` means the memory is safe to use.
+
+---
+
+## Prompt pattern
+
+```text
+Update Project Memory with the provider registry loading rule.
+Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange.
+Do not store secrets or absolute home paths.
+```
+
+Before a long task:
+
+```text
+Read Project Memory first.
+If any relevant memory is stale, call it out before planning.
+```
+
+---
+
+## Related pages
+
+- [Proof receipts](/en/docs/v0.6/proof)
+- [Agent tools](/en/docs/v0.6/tools)
+- [Security](/en/docs/v0.6/security)

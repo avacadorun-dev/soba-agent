@@ -642,7 +642,7 @@ describe("AgentLoop", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  test("после tool-assisted final prose follow-up прямо требует finish без commentary", async () => {
+  test("после проверенной tool-assisted работы принимает final prose без supersede и повторного finish", async () => {
     const requests: CreateResponseParams[] = [];
     const responses = [
       makeToolCallResponse("edit", '{"input":"change"}', "edit_1"),
@@ -664,12 +664,17 @@ describe("AgentLoop", () => {
     const tools = new ToolRegistry();
     tools.register(makeDummyTool("edit"));
     tools.register(makeDummyTool("bash"));
-    const loop = new AgentLoop(client, session, tools, "/test");
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: true,
+    });
+    const events: AgentEvent[] = [];
+    loop.onEvent((event) => events.push(event));
 
     const result = await loop.runTurn("Измени интеграцию");
 
     expect(result.errors).toHaveLength(0);
-    expect(requests).toHaveLength(4);
+    expect(requests).toHaveLength(3);
+    expect(events.some((event) => event.type === "assistant_message_superseded")).toBe(false);
     const assistantTexts = result.items
       .filter((item) => item.type === "message" && item.role === "assistant")
       .flatMap((item) =>
@@ -679,21 +684,6 @@ describe("AgentLoop", () => {
       );
     expect(assistantTexts).toHaveLength(1);
     expect(assistantTexts[0]).toContain("Готово, проверки прошли.");
-    expect(assistantTexts[0]).toContain("**Evidence**");
-    const followUpInput = requests[3]?.input;
-    expect(Array.isArray(followUpInput)).toBe(true);
-    if (Array.isArray(followUpInput)) {
-      const lastItem = followUpInput.at(-1);
-      expect(lastItem?.type).toBe("message");
-      if (lastItem?.type === "message" && lastItem.role === "user") {
-        const text = lastItem.content
-          .filter((content) => content.type === "input_text")
-          .map((content) => content.text)
-          .join("");
-        expect(text).toContain("Call finish now");
-        expect(text).toContain("Do not output commentary");
-      }
-    }
   });
 
   test("опасная bash-команда запрашивает подтверждение и блокируется при отказе", async () => {
@@ -2502,6 +2492,8 @@ describe("AgentLoop", () => {
     expect(item.role).toBe("user");
     expect(item.content).toHaveLength(1);
     expect(item.content[0].type).toBe("input_text");
-    expect(item.content[0].text).toBe("Hello, world!");
+    if (item.content[0].type === "input_text") {
+      expect(item.content[0].text).toBe("Hello, world!");
+    }
   });
 });

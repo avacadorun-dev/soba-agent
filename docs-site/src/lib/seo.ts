@@ -14,20 +14,20 @@ type LocalizedSeo = {
 
 const landingSeo: Record<SupportedLang, LocalizedSeo> = {
   en: {
-    title: "SOBA Agent - CLI coding agent with memory, MCP, and cozy TUI",
+    title: "SOBA Agent - local-first coding agent that leaves receipts",
     description:
-      "SOBA Agent is a Bun-first CLI coding agent with project memory, long-lived sessions, MCP tools, and a calm terminal UI.",
+      "SOBA Agent is a local-first engineering agent with proof receipts, Project Memory provenance, MCP tools, bounded permissions, and a terminal TUI.",
     locale: "en_US",
   },
   ru: {
-    title: "SOBA Agent - консольный агент для кода с памятью проекта и MCP",
+    title: "SOBA Agent - local-first агент для разработки",
     description:
-      "SOBA Agent помогает работать с кодом из консоли: помнит заметки проекта, держит длинные сессии в порядке, подключает MCP и просит подтверждение перед риском.",
+      "SOBA Agent помогает работать с кодом локально: сохраняет proof receipts, хранит Project Memory с provenance, подключает MCP и ограничивает рискованные операции.",
     locale: "ru_RU",
   },
   zh: {
-    title: "SOBA Agent - 带项目记忆、MCP 和舒适 TUI 的 CLI 编码代理",
-    description: "SOBA Agent 是 Bun-first CLI 编码代理，支持项目记忆、长会话、MCP 工具和安静好用的终端界面。",
+    title: "SOBA Agent - 会留下证据的 local-first 编码代理",
+    description: "SOBA Agent 是 local-first 工程代理，支持 proof receipts、带来源的项目记忆、MCP 工具、有边界权限和终端 TUI。",
     locale: "zh_CN",
   },
 };

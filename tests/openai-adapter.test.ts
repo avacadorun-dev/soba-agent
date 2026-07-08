@@ -347,6 +347,35 @@ describe("OpenAIAdapter.convertRequest", () => {
     expect(messages[1].content).toBe("Hello!");
   });
 
+  test("mixed text and image user content stays structured", () => {
+    const request = adapter.convertRequest(
+      {
+        model: "gpt-4o",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              { type: "input_text", text: "Describe this" },
+              { type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" },
+            ],
+          },
+        ],
+      },
+      config,
+    );
+
+    const messages = request.messages as Array<{
+      role: string;
+      content: Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    }>;
+    expect(messages[0].role).toBe("user");
+    expect(messages[0].content).toEqual([
+      { type: "text", text: "Describe this" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AQID" } },
+    ]);
+  });
+
   test("запрос с tools конвертирует в OpenAI tools формат", () => {
     const request = adapter.convertRequest(
       {

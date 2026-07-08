@@ -29,6 +29,7 @@ import {
 } from "./agent-loop-runtime";
 import { runAgentTurn } from "./agent-turn-runner";
 import type { SkillSource } from "./skill-source";
+import type { AgentUserInput } from "./turn-helpers";
 import type { ProjectContextReader } from "./turn-prompt-preparation";
 import {
   type AgentEvent,
@@ -229,9 +230,9 @@ export class AgentLoop {
    * A turn processes one user input and continues until
    * the LLM returns a response without tool calls.
    */
-  async runTurn(userText: string): Promise<AgentTurnResult> {
+  async runTurn(userInput: AgentUserInput): Promise<AgentTurnResult> {
     return runAgentTurn({
-      userText,
+      userInput,
       session: this.session,
       cwd: this.cwd,
       runtime: this.runtime,

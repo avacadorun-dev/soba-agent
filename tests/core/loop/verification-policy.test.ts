@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   allowsUnverifiedCompletion,
   decideVerificationPolicy,
+  decideVerificationPolicyForContext,
   inferTaskKindFromPrompt,
   isCodePath,
   isDocumentationPath,
@@ -36,6 +37,27 @@ describe("verification policy", () => {
     expect(decision.acceptedKinds).toEqual(["test", "lint", "typecheck", "build", "run"]);
     expect(decision.commands).toEqual([]);
     expect(decision.reason).toContain("project verification gate");
+  });
+
+  test("policy context derives docs-only verification from mutation shape", () => {
+    expect(
+      decideVerificationPolicyForContext({
+        taskKind: "feature",
+        hasDocsMutations: true,
+        hasCodeMutations: false,
+      }),
+    ).toMatchObject({
+      requirement: "inspection",
+      acceptedKinds: ["diff_inspection", "manual_inspection"],
+    });
+    expect(
+      decideVerificationPolicyForContext({
+        taskKind: "feature",
+        hasDocsMutations: true,
+        hasCodeMutations: false,
+        forceFullGate: true,
+      }).requirement,
+    ).toBe("full_gate");
   });
 
   test("command classifier maps Bun/Biome project commands to verification kinds", () => {

@@ -1,5 +1,11 @@
 import { type Accessor, batch, createSignal, type Setter } from "solid-js";
-import type { RuntimeEvent, TranslationKey } from "../../../../application/ui/public";
+import type {
+  InputImageContent,
+  InputTextContent,
+  RuntimeContentBlock,
+  RuntimeEvent,
+  TranslationKey,
+} from "../../../../application/ui/public";
 import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
@@ -13,6 +19,13 @@ import { CommandHistory } from "../lib/command-history";
 import { formatTuiEvidenceSummary, splitAssistantEvidence } from "../lib/evidence-summary";
 import { formatToolArgs, formatToolResult, formatToolSummary } from "../lib/format-tool";
 import { buildFileTree, readChangeStats } from "../lib/project-info";
+import {
+  type ComposerBlock,
+  type ComposerBlockInput,
+  composerBlockToPromptText,
+  formatComposerBlock,
+  validateComposerBlock,
+} from "../lib/rich-paste";
 import type { NotificationStore } from "./notification-store";
 import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type QueuedMessage, SIDEBAR_MODES, type SidebarMode, type TuiMessage, type TuiMessageInput } from "./types";
 
@@ -43,6 +56,7 @@ export class TuiStore {
   readonly changes: Accessor<ChangeStat[]>;
   readonly confirmation: Accessor<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   readonly inputValue: Accessor<string>;
+  readonly composerBlocks: Accessor<ComposerBlock[]>;
   readonly lastAssistantText: Accessor<string>;
   readonly isProcessing: Accessor<boolean>;
   readonly themeName: Accessor<TuiThemeName>;
@@ -76,6 +90,7 @@ export class TuiStore {
   private readonly _toolSummaries = new Map<string, string>();
   private readonly _toolDetails = new Map<string, string[]>();
   private readonly setInputValue: Setter<string>;
+  private readonly setComposerBlocks: Setter<ComposerBlock[]>;
   private readonly setLastAssistantText: Setter<string>;
   private readonly setIsProcessing: Setter<boolean>;
   private readonly setThemeName: Setter<TuiThemeName>;
@@ -93,6 +108,7 @@ export class TuiStore {
   private _scrollboxRef: { scrollTo(position: number): void; readonly height: number; readonly scrollHeight: number } | null = null;
   private nextId = 1;
   private nextQueueId = 1;
+  private nextComposerBlockId = 1;
   private streamMessageId: string | null = null;
   private streamTuiId: number | null = null;
   private readonly reasoningTuiIds = new Map<string, number>();
@@ -129,6 +145,7 @@ export class TuiStore {
       { type: "dangerous_confirmation" }
     > | null>(null);
     [this.inputValue, this.setInputValue] = createSignal("");
+    [this.composerBlocks, this.setComposerBlocks] = createSignal<ComposerBlock[]>([]);
     [this.lastAssistantText, this.setLastAssistantText] = createSignal("");
     [this.isProcessing, this.setIsProcessing] = createSignal(false);
     [this.themeName, this.setThemeName] = createSignal(options.theme);
@@ -349,6 +366,36 @@ export class TuiStore {
     this.setInputValue(value);
   }
 
+  addComposerBlock(block: ComposerBlockInput): boolean {
+    const validationError = validateComposerBlock(block, this.composerBlocks());
+    if (validationError) {
+      this.add({ type: "warning", content: validationError });
+      return false;
+    }
+    this.setComposerBlocks((blocks) => [...blocks, { ...block, id: this.nextComposerBlockId++ } as ComposerBlock]);
+    this.setActiveUiPane("input");
+    return true;
+  }
+
+  removeLastComposerBlock(): boolean {
+    const blocks = this.composerBlocks();
+    if (blocks.length === 0) return false;
+    this.setComposerBlocks(blocks.slice(0, -1));
+    return true;
+  }
+
+  clearComposerBlocks(): void {
+    this.setComposerBlocks([]);
+  }
+
+  hasSubmittableInput(value: string): boolean {
+    return value.trim().length > 0 || this.composerBlocks().length > 0;
+  }
+
+  formatComposerBlock(block: ComposerBlock): string {
+    return formatComposerBlock(block);
+  }
+
   clearMessages(): void {
     this.setMessages([]);
     this.finalizedIds.clear();
@@ -439,22 +486,24 @@ export class TuiStore {
 
   async submit(rawInput: string): Promise<void> {
     const input = rawInput.trim();
-    if (!input) return;
+    const blocks = this.composerBlocks();
+    if (!input && blocks.length === 0) return;
     if (this.confirmation()) {
       this.resolveConfirmation(input);
       return;
     }
     this.setInputValue("");
-    this.history.add(input);
-    if (/^\/queue(?:\s|$)/.test(input)) {
+    this.clearComposerBlocks();
+    this.history.add(this.formatTurnDisplay(input, blocks));
+    if (blocks.length === 0 && /^\/queue(?:\s|$)/.test(input)) {
       this.handleQueueCommand(input);
       return;
     }
-    if (/^\/permissions(?:\s|$)/.test(input)) {
+    if (blocks.length === 0 && /^\/permissions(?:\s|$)/.test(input)) {
       this.handlePermissionsCommand(input);
       return;
     }
-    if (input.startsWith("/")) {
+    if (blocks.length === 0 && input.startsWith("/")) {
       // Phase 2.5 A4: Try TUI slash command registry first.
       // This dispatches TUI commands like /clear, /notifications,
       // and future /model, /search, /sessions without modifying
@@ -480,7 +529,7 @@ export class TuiStore {
       }
       return;
     }
-    const shellKind = input.startsWith("!!") ? "shell-silent" : input.startsWith("!") ? "shell" : null;
+    const shellKind = blocks.length === 0 ? (input.startsWith("!!") ? "shell-silent" : input.startsWith("!") ? "shell" : null) : null;
     if (shellKind) {
       const command = input.slice(shellKind === "shell-silent" ? 2 : 1).trim();
       if (!command) return;
@@ -492,13 +541,52 @@ export class TuiStore {
       return;
     }
     if (this.turnActive || this.isProcessing()) {
-      this.enqueue(input);
+      this.enqueue(input, "message", blocks);
       return;
     }
-    await this.runTurn(input);
+    await this.runTurn(input, blocks);
   }
 
-  private async runTurn(input: string): Promise<void> {
+  private buildRuntimeContent(input: string, blocks: ComposerBlock[]): RuntimeContentBlock[] {
+    const content: RuntimeContentBlock[] = [];
+    for (const block of blocks) {
+      if (block.type === "text") {
+        content.push({ type: "text", text: block.text });
+      } else {
+        content.push({ type: "image", mimeType: block.mimeType, data: block.data });
+      }
+    }
+    if (input.trim().length > 0) {
+      content.push({ type: "text", text: input });
+    }
+    return content;
+  }
+
+  private buildAgentLoopContent(input: string, blocks: ComposerBlock[]): Array<InputTextContent | InputImageContent> {
+    const content: Array<InputTextContent | InputImageContent> = [];
+    for (const block of blocks) {
+      if (block.type === "text") {
+        content.push({ type: "input_text", text: block.text });
+      } else {
+        content.push({ type: "input_image", image_url: `data:${block.mimeType};base64,${block.data}`, detail: "auto" });
+      }
+    }
+    if (input.trim().length > 0) {
+      content.push({ type: "input_text", text: input });
+    }
+    return content;
+  }
+
+  private formatTurnDisplay(input: string, blocks: ComposerBlock[]): string {
+    return [
+      ...blocks.map((block) => composerBlockToPromptText(block)),
+      input,
+    ]
+      .filter((part) => part.trim().length > 0)
+      .join("\n\n");
+  }
+
+  private async runTurn(input: string, blocks: ComposerBlock[] = []): Promise<void> {
     this.turnActive = true;
     this.setIsProcessing(true);
     this.setIsIdle(false);
@@ -508,10 +596,10 @@ export class TuiStore {
         await this.options.runtime.runTurn({
           sessionId: this.getSessionId(),
           source: "tui",
-          content: [{ type: "text", text: input }],
+          content: this.buildRuntimeContent(input, blocks),
         });
       } else {
-        await this.options.agentLoop.runTurn(input);
+        await this.options.agentLoop.runTurn(blocks.length === 0 ? input : this.buildAgentLoopContent(input, blocks));
       }
     } catch (error) {
       this.add({
@@ -817,8 +905,13 @@ export class TuiStore {
     this.confirmation()?.resolve("deny");
   }
 
-  private enqueue(content: string, kind: QueuedMessage["kind"] = "message"): void {
-    const queued = { id: this.nextQueueId++, content, kind };
+  private enqueue(content: string, kind: QueuedMessage["kind"] = "message", blocks: ComposerBlock[] = []): void {
+    const queued = {
+      id: this.nextQueueId++,
+      content,
+      kind,
+      ...(kind === "message" && blocks.length > 0 ? { blocks: blocks.map((block) => ({ ...block })) } : {}),
+    };
     this.setQueuedMessages((messages) => [...messages, queued]);
     this.add({ type: "info", content: this.l("tui.queue.added", { id: queued.id }) });
   }
@@ -829,7 +922,7 @@ export class TuiStore {
     if (!next) return;
     this.setQueuedMessages((messages) => messages.slice(1));
     if (next.kind === "message") {
-      await this.runTurn(next.content);
+      await this.runTurn(next.content, next.blocks ?? []);
     } else {
       await this.runShellCommand(next.content, next.kind === "shell-silent");
     }
@@ -886,7 +979,7 @@ export class TuiStore {
   private formatQueuedMessage(message: QueuedMessage): string {
     if (message.kind === "shell") return `!${message.content}`;
     if (message.kind === "shell-silent") return `!!${message.content}`;
-    return message.content;
+    return this.formatTurnDisplay(message.content, message.blocks ?? []);
   }
 
   private handlePermissionsCommand(input: string): void {

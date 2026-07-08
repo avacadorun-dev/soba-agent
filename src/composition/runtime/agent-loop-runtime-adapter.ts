@@ -23,6 +23,7 @@ import type { AgentEvent } from "../../engine/turn/types";
 import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
 import {
   buildProviderConfigOptions,
   providerHasCredentials,
@@ -152,7 +153,7 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
         return this.loop.runTurn(result.prompt);
       }
     }
-    return this.loop.runTurn(runtimeBlocksToText(input.content));
+    return this.loop.runTurn(runtimeBlocksToUserContent(input.content));
   }
 
   cancelTurn(sessionId: string): void {
@@ -196,6 +197,24 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
     this.session = session;
     this.loop.setSessionManager(session);
   }
+}
+
+function runtimeBlocksToUserContent(blocks: UserTurnInput["content"]): Array<InputTextContent | InputImageContent> {
+  const content: Array<InputTextContent | InputImageContent> = [];
+  for (const block of blocks) {
+    if (block.type === "text") {
+      content.push({ type: "input_text", text: block.text });
+    } else if (block.type === "resource") {
+      content.push({ type: "input_text", text: `\n\n[Resource: ${block.uri}]\n${block.text}` });
+    } else if (block.type === "resource_link") {
+      content.push({ type: "input_text", text: `\n\n[Resource link: ${block.name}](${block.uri})` });
+    } else if (block.type === "image") {
+      content.push({ type: "input_image", image_url: `data:${block.mimeType};base64,${block.data}`, detail: "auto" });
+    } else {
+      content.push({ type: "input_text", text: `\n\n[Audio: ${block.mimeType}]` });
+    }
+  }
+  return content;
 }
 
 function commandTextFromTurn(input: UserTurnInput): string | undefined {

@@ -1,0 +1,110 @@
+---
+title: Proof receipts
+description: SOBA proof bundles, claim explanations, verification commands, permission receipts, and release-ready evidence workflow.
+---
+
+SOBA's 0.6.x release line is evidence-first. The agent should not only say what it did; it should leave a proof trail
+that a user, reviewer, or CI job can inspect later.
+
+Proof receipts live in `.soba/evidence/*.soba-proof.json`. They are local project artifacts and do not require a
+provider connection to inspect.
+
+---
+
+## Evidence proof receipts
+
+Evidence proof receipts are the persisted proof files SOBA writes after an accepted finish. Use `soba prove --last` to
+open the newest receipt, or pass a specific `.soba/evidence/<id>.soba-proof.json` file when reviewing an older task.
+
+Proof claim mapping means each important finish claim should be mapped to evidence ids. A claim can point to a command,
+check, changed file, file mutation, risk, or review action. `soba verify` checks that supported references point to known
+ids instead of dangling text.
+
+Proof claim explanations are read with `soba explain-claim`. Use the claim text or id, and add
+`--proof .soba/evidence/<id>.soba-proof.json` when the claim is not in the latest receipt.
+
+Proof permission receipts record trust level, approval kind, approval value, decision, reason, and least-privilege
+alternatives when SOBA can infer a safer command.
+
+---
+
+## What a proof receipt contains
+
+A proof receipt can include:
+
+- changed files and mutation summaries;
+- checks and command evidence;
+- finish claims mapped to evidence ids;
+- risks and unverified areas;
+- permission receipts for tool calls;
+- safer alternatives for risky commands when SOBA can infer them.
+
+This makes the final answer auditable. A claim such as "tests passed" should point to the command that actually ran. A
+claim that has no evidence should stay visibly unverified.
+
+---
+
+## Commands
+
+```bash
+soba prove
+soba prove --last
+soba prove --format markdown
+soba prove --format json
+soba prove .soba/evidence/<id>.soba-proof.json
+
+soba verify
+soba verify --format json
+soba verify .soba/evidence/<id>.soba-proof.json
+
+soba explain-claim "All TypeScript errors are fixed"
+soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
+```
+
+These commands read persisted proof data only. They do not start the agent runtime and do not require API credentials.
+
+---
+
+## Recommended finish standard
+
+For code work, a release-ready SOBA turn should end with:
+
+1. a changed-files summary;
+2. checks that actually ran, including exit status;
+3. proof or explicit unverified status for each important claim;
+4. risks that remain after verification;
+5. permission receipts for sensitive tool calls.
+
+When you need stronger guarantees, write the required checks into the prompt:
+
+```text
+Fix the failing parser tests.
+Before finishing, run bun test tests/parser.test.ts and bunx tsc --noEmit --pretty false.
+If either check fails, do not call the task complete.
+```
+
+---
+
+## Permission receipts
+
+Permission receipts record why a tool call was allowed or denied. For dangerous commands, SOBA can also show
+least-privilege alternatives.
+
+Example:
+
+```text
+Instead of approving rm -rf dist && bun run build:
+1. allow deleting only ./dist inside the repository
+2. run bun run build separately
+3. deny external deletion patterns
+```
+
+This keeps local-first delegation bounded: the agent can work quickly, but risky scope stays visible.
+
+---
+
+## Related pages
+
+- [CLI reference](/en/docs/v0.6/cli-reference)
+- [Agent tools](/en/docs/v0.6/tools)
+- [Security](/en/docs/v0.6/security)

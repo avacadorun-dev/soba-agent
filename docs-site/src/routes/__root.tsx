@@ -25,7 +25,7 @@ export const Route = createRootRoute({
         { property: "og:description", content: fallback.description },
         { property: "og:url", content: canonicalUrl("/") },
         { property: "og:image", content: previewImageUrl },
-        { property: "og:image:alt", content: "SOBA Agent terminal coding assistant preview" },
+        { property: "og:image:alt", content: "SOBA Agent local-first engineering agent preview" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: fallback.title },
         { name: "twitter:description", content: fallback.description },

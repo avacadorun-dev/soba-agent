@@ -110,6 +110,7 @@ Environment variables override `config.json`.
 | `SOBA_API_KEY` | `apiKey` | API key |
 | `SOBA_MODEL` | `model` | Model identifier |
 | `SOBA_MAX_OUTPUT_TOKENS` | `maxOutputTokens` | Output token limit |
+| `SOBA_MAX_TOKENS` | `maxOutputTokens` | Deprecated alias for `SOBA_MAX_OUTPUT_TOKENS` |
 | `SOBA_MAX_COMPLETION_TOKENS` | `maxCompletionTokens` | Reasoning token limit |
 | `SOBA_CONTEXT_WINDOW` | `contextWindow` | Context window size |
 | `SOBA_MAX_AGENT_ITERATIONS` | `maxAgentIterations` | Iteration limit |
@@ -122,6 +123,8 @@ Environment variables override `config.json`.
 | `SOBA_SOUND_ENABLED` | `sound.enabled` | Enable or disable sound notifications |
 | `SOBA_SOUND_VOLUME` | `sound.volume` | Volume from 0.0 to 1.0 |
 | `SOBA_SOUND_REPEAT` | `sound.repeatMode` | `repeat`/`true`/`1` repeats, `once`/`false`/`0` plays once |
+| `SOBA_CONFIG_PATH` | config file path | Use a non-default config file |
+| `NO_COLOR` | output colors | Disable ANSI colors, same effect as `--no-color` |
 | `DEEPSEEK_API_KEY` | DeepSeek provider key | DeepSeek API key |
 | `MOONSHOT_API_KEY` | Kimi provider key | Moonshot Kimi API key |
 | `DASHSCOPE_API_KEY` | Alibaba provider key | Alibaba Qwen API key |
@@ -155,6 +158,7 @@ CLI flags have the highest priority.
 | Flag | Description |
 |---|---|
 | `--max-output-tokens <n>` | Output token limit |
+| `--max-tokens <n>` | Deprecated alias for `--max-output-tokens` |
 | `--max-completion-tokens <n>` | Reasoning/thinking token limit |
 | `--context-window <n>` | Override model context window |
 | `--budget <n>` | Set total token budget for the task |
@@ -187,7 +191,7 @@ CLI flags have the highest priority.
 
 ## 5. Provider configuration
 
-SOBA v0.6.0 uses a provider registry. See [Providers and models](/en/docs/providers) for details.
+SOBA v0.6.x uses a provider registry. See [Providers and models](/en/docs/providers) for details.
 
 Built-in providers:
 

@@ -1,7 +1,7 @@
 {
-  "cli.help.title": "SOBA Agent — terminal AI coding assistant",
+  "cli.help.title": "SOBA Agent — local-first engineering agent",
   "cli.help.usage": "Usage: soba [options] [prompt]",
-  "cli.help.description": "A next-generation CLI coding agent with proactive context management, self-modifying architecture, and hybrid visual layer.",
+  "cli.help.description": "Local-first engineering agent with Project Memory, bounded tools, verification, and proof receipts.",
   "cli.help.options": "Options:",
   "cli.help.commands": "Interactive commands (prefix with /):",
   "cli.help.examples": "Examples:",

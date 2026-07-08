@@ -450,6 +450,69 @@ describe("evaluateCompletion", () => {
     expect(decision.accepted).toBe(true);
   });
 
+  test("docs-only mutation uses inspection policy even when prompt task kind was not docs", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "feature",
+        hasMutatedFiles: true,
+        hasDocsMutations: true,
+        hasCodeMutations: false,
+        needsVerification: true,
+        unverifiedMutationIds: ["ev_mutation_docs_1"],
+        unverifiedDocsMutationIds: ["ev_mutation_docs_1"],
+        inspectionEvidenceCallIds: new Set(["read_1"]),
+        verificationKinds: new Set(["manual_inspection"]),
+      }),
+    );
+
+    expect(decision.accepted).toBe(true);
+  });
+
+  test("docs-only mutation without inspection asks for readback or diff, not code gates", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "feature",
+        hasMutatedFiles: true,
+        hasDocsMutations: true,
+        hasCodeMutations: false,
+        needsVerification: true,
+        unverifiedMutationIds: ["ev_mutation_docs_1"],
+        unverifiedDocsMutationIds: ["ev_mutation_docs_1"],
+      }),
+    );
+
+    expect(decision.accepted).toBe(false);
+    if (!decision.accepted) {
+      const reasons = decision.reasons.join("\n");
+      expect(reasons).toContain("Docs-only changes need inspection evidence");
+      expect(reasons).not.toContain("Code files changed without accepted command verification");
+    }
+  });
+
+  test("release task keeps full command gate even for docs-only mutation", () => {
+    const decision = evaluateCompletion(
+      completedRequest(),
+      baseState({
+        taskKind: "release_task",
+        hasMutatedFiles: true,
+        hasDocsMutations: true,
+        hasCodeMutations: false,
+        needsVerification: true,
+        unverifiedMutationIds: ["ev_mutation_docs_1"],
+        unverifiedDocsMutationIds: ["ev_mutation_docs_1"],
+        inspectionEvidenceCallIds: new Set(["read_1"]),
+        verificationKinds: new Set(["manual_inspection"]),
+      }),
+    );
+
+    expect(decision.accepted).toBe(false);
+    if (!decision.accepted) {
+      expect(decision.reasons.join("\n")).toContain("requires passing command evidence");
+    }
+  });
+
   test("read/inspection evidence does not verify code mutation", () => {
     const decision = evaluateCompletion(
       completedRequest(),

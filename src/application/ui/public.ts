@@ -1,8 +1,9 @@
+import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
 import type { ModelDefinition, ProviderDefinition, TestResult } from "../providers/public";
 import type { PermissionMode } from "../trust/trust-manager";
 
 export { CURRENT_SESSION_VERSION } from "../../kernel/session/version";
-export type { SessionInfo } from "../../kernel/transcript/types";
+export type { InputImageContent, InputTextContent, SessionInfo } from "../../kernel/transcript/types";
 export { detectLocale, I18n, isLocale, resetI18n } from "../../shared/i18n/i18n";
 export type { Locale, TranslationKey } from "../../shared/i18n/types";
 export type {
@@ -112,7 +113,7 @@ export interface RuntimeAgentHandle {
   getContextManager(): RuntimeAgentContextView | undefined;
   abortActiveTool(): boolean;
   abort(): void;
-  runTurn(userText: string): Promise<unknown>;
+  runTurn(userInput: string | Array<InputTextContent | InputImageContent>): Promise<unknown>;
   runShellCommand(command: string, silent?: boolean): Promise<unknown>;
 }
 

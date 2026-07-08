@@ -17,11 +17,17 @@ export interface OutputTextContent {
   text: string;
 }
 
+export interface InputImageContent {
+  type: "input_image";
+  image_url: string;
+  detail?: "auto" | "low" | "high";
+}
+
 /**
  * A content block within a message item.
- * In phase 1 we only support text content.
+ * User messages may include image inputs.
  */
-export type MessageContent = InputTextContent | OutputTextContent;
+export type MessageContent = InputTextContent | OutputTextContent | InputImageContent;
 
 export interface UserMessageItemParam {
   type: "message";
@@ -34,7 +40,7 @@ export interface UserMessageItemParam {
 export interface AssistantMessageItemParam {
   type: "message";
   role: "assistant";
-  content: MessageContent[];
+  content: Array<InputTextContent | OutputTextContent>;
   id?: string | null;
   status?: string | null;
   phase?: "commentary" | "final_answer";
@@ -44,7 +50,7 @@ export interface AssistantMessageItemParam {
 export interface SystemMessageItemParam {
   type: "message";
   role: "system";
-  content: MessageContent[];
+  content: InputTextContent[];
   id?: string | null;
   status?: string | null;
 }

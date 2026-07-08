@@ -1,7 +1,7 @@
 {
-  "cli.help.title": "SOBA Agent — консольный AI-ассистент для разработки",
+  "cli.help.title": "SOBA Agent — агент для разработки",
   "cli.help.usage": "Использование: soba [опции] [запрос]",
-  "cli.help.description": "CLI-агент кодинга нового поколения с проактивным управлением контекстом, самомодифицируемой архитектурой и гибридным визуальным слоем.",
+  "cli.help.description": "Local-first агент для разработки с Project Memory, ограниченными tools, проверками и proof receipts.",
   "cli.help.options": "Опции:",
   "cli.help.commands": "Интерактивные команды (префикс /):",
   "cli.help.examples": "Примеры:",

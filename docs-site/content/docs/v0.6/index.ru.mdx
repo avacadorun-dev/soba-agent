@@ -1,10 +1,11 @@
 ---
 title: Руководство пользователя SOBA
-description: Полное руководство пользователя SOBA Agent — установка, CLI/TUI, Project Memory, MCP, сессии, безопасность, tools, skills и темы.
+description: Руководство пользователя SOBA Agent — local-first агент с proof receipts, Project Memory provenance, MCP, sessions, tools, skills и bounded permissions.
 ---
 
-SOBA Agent — CLI-агент кодинга с фокусом на proactive context management, самомодифицируемую архитектуру (skills)
-и гибридный визуальный слой для фронтенд-разработки.
+SOBA Agent — local-first инженерный агент, который помнит проект, работает в ограниченных tool loops, проверяет
+результат и оставляет receipts. Текущая линия 0.6.x — стабилизационная перед 0.7.0: фокус на proof receipts, memory
+provenance, permission receipts, skill eval/bench/trace и надёжной установке через npm/Bun.
 
 ## Быстрый старт
 
@@ -26,6 +27,7 @@ SOBA Agent — CLI-агент кодинга с фокусом на proactive co
 | [**Конфигурация**](/ru/docs/v0.6/configuration) | Файл `~/.soba/config.json`, CLI-флаги, переменные окружения, приоритет настроек |
 | [**Провайдеры и модели**](/ru/docs/v0.6/providers) | 4 встроенных провайдера (DeepSeek, Moonshot Kimi, Alibaba Qwen, OpenRouter), динамический discovery моделей, кастомные провайдеры через `soba provider`, диагностика |
 | [**Интерфейс и команды**](/ru/docs/v0.6/usage) | TUI, slash-команды, прямая оболочка `!` / `!!`, очередь, горячие клавиши |
+| [**Proof receipts**](/ru/docs/v0.6/proof) | `.soba/evidence/*.soba-proof.json`, `soba prove`, `soba verify`, `soba explain-claim`, permission receipts и release-ready finish |
 | [**Инструменты агента**](/ru/docs/v0.6/tools) | Built-in tools, Project Memory tools, MCP tools, direct shell и trust boundary |
 | [**ACP и Zed**](/ru/docs/v0.6/acp) | `soba acp`, ACP v1 server, sessions, permissions, tool updates, evidence metadata и ограничения |
 | [**Сессии**](/ru/docs/v0.6/sessions) | Формат JSONL, продолжение, rewind, ветвление, навигация по дереву |
@@ -34,7 +36,7 @@ SOBA Agent — CLI-агент кодинга с фокусом на proactive co
 | [**Portable Capsules**](/ru/docs/v0.6/portable-capsules) | Создание, экспорт и загрузка `.capsule.md` handoff-файлов между сессиями, агентами и проектами |
 | [**MCP-серверы**](/ru/docs/v0.6/mcp) | Подключение project-local stdio и remote Streamable HTTP MCP tools через `.soba/mcp.json`, auth, trustMode и `/mcp` commands |
 | [**Безопасность**](/ru/docs/v0.6/security) | Разрешения, trust-уровни, project trust, PermissionMode |
-| [**Skills**](/ru/docs/v0.6/skills) | Bundled-, user-, project-скилы, создание, edit, eval, promote, revision history |
+| [**Skills**](/ru/docs/v0.6/skills) | Bundled-, user-, project-скилы, создание, edit, eval, bench, trace, promote, revision history |
 | [**Звуковые уведомления**](/ru/docs/v0.6/notifications) | Sound config, CLI-флаги, env и практические режимы |
 | [**Темы**](/ru/docs/v0.6/themes) | Цветовые режимы TUI (dark, light, forest), семантические токены, создание пользовательских тем |
 | [**Changelog**](/ru/docs/v0.6/changelog) | История версий, собранная из git-тегов и commit subjects |

@@ -53,10 +53,11 @@ describe("System Prompt", () => {
     expect(prompt).toContain("staleIfFilesChange");
     expect(prompt).toContain("First check for AGENTS.md");
     expect(prompt).toContain("Work autonomously until the user's task is actually complete");
-    expect(prompt).toContain("Simple Q&A or explanation-only turns that use no tools may end with normal text");
-    expect(prompt).toContain("After using tools, plain text without final_answer is intermediate");
-    expect(prompt).toContain("do not write a final prose summary as an assistant message");
-    expect(prompt).toContain("call finish immediately with status completed");
+    expect(prompt).toContain("Simple Q&A with no tools may end with normal text");
+    expect(prompt).toContain("After tools, intermediate plain text should lead to more tool use or finish");
+    expect(prompt).toContain("Prefer finish with status completed");
+    expect(prompt).toContain("if unavailable, emit one concise final answer");
+    expect(prompt).toContain("Docs/text-only changes need readback or diff inspection, not code gates");
     expect(prompt).toContain("Use blocked only for a real external blocker");
     expect(prompt).toContain("Do not repeat the same command");
     expect(prompt).toContain("optional tooling or non-critical implementation choices");
@@ -110,9 +111,10 @@ describe("System Prompt", () => {
 
     expect(prompt).toContain(custom);
     expect(prompt).not.toContain("Available tools:");
-    expect(prompt).toContain("call finish");
-    expect(prompt).toContain("After using tools, plain text without final_answer is intermediate");
-    expect(prompt).toContain("do not write a final prose summary as an assistant message");
+    expect(prompt).toContain("Prefer finish with status completed");
+    expect(prompt).toContain("After tools, intermediate plain text should lead to more tool use or finish");
+    expect(prompt).toContain("if unavailable, emit one concise final answer");
+    expect(prompt).toContain("Docs/text-only changes need readback or diff inspection");
     expect(prompt).toContain("Do not repeat the same command");
     expect(prompt).toContain("understand, inspect, plan, act, verify, reflect, finish");
   });

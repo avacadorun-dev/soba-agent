@@ -1,0 +1,111 @@
+---
+title: Proof receipts
+description: Proof bundles SOBA, explain-claim, verify, permission receipts и release-ready workflow с доказательствами.
+---
+
+Линия SOBA 0.6.x — про доказуемый результат. Агент должен не только написать, что сделал, а сохранить proof receipt:
+что изменил, какие команды запускал, какие claims подтвердил, какие риски остались и какие разрешения использовал.
+
+Proof receipts лежат в `.soba/evidence/*.soba-proof.json`. Это локальные артефакты проекта: их можно читать без запуска
+агента и без provider credentials.
+
+---
+
+## Evidence proof receipts
+
+Evidence proof receipts — это сохранённые proof-файлы, которые SOBA пишет после accepted finish. Используйте
+`soba prove --last`, чтобы открыть последний receipt, или передайте конкретный
+`.soba/evidence/<id>.soba-proof.json`, если проверяете старую задачу.
+
+Proof claim mapping означает, что важные finish claims привязаны к evidence ids. Claim может ссылаться на command,
+check, changed file, file mutation, risk или review action. `soba verify` проверяет, что поддержанные ссылки указывают
+на известные ids, а не висят обычным текстом.
+
+Proof claim explanations читаются через `soba explain-claim`. Передавайте текст или id claim, а для не последнего proof
+добавляйте `--proof .soba/evidence/<id>.soba-proof.json`.
+
+Proof permission receipts записывают trust level, approval kind, approval value, decision, reason и
+least-privilege alternatives, если SOBA может вывести более безопасную команду.
+
+---
+
+## Что входит в proof receipt
+
+Proof receipt может включать:
+
+- changed files и summary мутаций;
+- checks и command evidence;
+- finish claims, привязанные к evidence ids;
+- risks и unverified области;
+- permission receipts для tool calls;
+- safer alternatives для рискованных команд, если SOBA может предложить least-privilege rewrite.
+
+Смысл простой: финальный ответ можно проверить. Если агент пишет "tests passed", рядом должен быть check,
+который реально запускался. Если подтверждений нет, claim должен оставаться явно unverified.
+
+---
+
+## Команды
+
+```bash
+soba prove
+soba prove --last
+soba prove --format markdown
+soba prove --format json
+soba prove .soba/evidence/<id>.soba-proof.json
+
+soba verify
+soba verify --format json
+soba verify .soba/evidence/<id>.soba-proof.json
+
+soba explain-claim "All TypeScript errors are fixed"
+soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
+```
+
+Эти команды читают уже сохранённые proof-файлы. Они не запускают agent runtime и не требуют API ключей.
+
+---
+
+## Release-ready finish standard
+
+Для работы с кодом хороший turn должен закончиться так:
+
+1. summary изменённых файлов;
+2. checks, которые реально запускались, с exit status;
+3. proof или честный unverified status для важных claims;
+4. риски, которые остались после проверки;
+5. permission receipts для чувствительных tool calls.
+
+Если нужны строгие гарантии, пишите проверки прямо в задаче:
+
+```text
+Исправь failing parser tests.
+Перед завершением запусти bun test tests/parser.test.ts и bunx tsc --noEmit --pretty false.
+Если любая проверка падает, не называй задачу завершённой.
+```
+
+---
+
+## Permission receipts
+
+Permission receipts фиксируют, почему tool call был разрешён или отклонён. Для опасных команд SOBA может показывать
+least-privilege alternatives.
+
+Пример:
+
+```text
+Вместо approval для rm -rf dist && bun run build:
+1. разрешить удаление только ./dist внутри репозитория
+2. отдельно запустить bun run build
+3. запретить external deletion patterns
+```
+
+Так local-first delegation остаётся bounded: агент работает быстро, но рискованный scope остаётся видимым.
+
+---
+
+## Связанные страницы
+
+- [CLI reference](/ru/docs/cli-reference)
+- [Инструменты агента](/ru/docs/tools)
+- [Безопасность](/ru/docs/security)

@@ -248,8 +248,45 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
               source: {
                 type: "object",
                 description:
-                  "Optional receipt for where the capsule came from. Supports file, lines, commit, confidence, lastVerified and staleIfFilesChange.",
-                additionalProperties: true,
+                  "Optional receipt for where the capsule came from. Supports file, lines, commit, confidence, lastVerified, staleIfFilesChange, and optional error/fix pair.",
+                properties: {
+                  error: {
+                    type: "string",
+                    description: "Optional error or drift condition this source records. If provided, fix must also be provided.",
+                  },
+                  fix: {
+                    type: "string",
+                    description: "Optional fix or verification guidance for the error. If provided, error must also be provided.",
+                  },
+                  file: {
+                    type: "string",
+                    description: "Project-relative source file path.",
+                  },
+                  lines: {
+                    type: "array",
+                    description: "Inclusive 1-indexed source line range.",
+                    items: { type: "number" },
+                  },
+                  commit: {
+                    type: "string",
+                    description: "Source commit or revision identifier.",
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: ["high", "medium", "low"],
+                    description: "Confidence in the receipt.",
+                  },
+                  lastVerified: {
+                    type: "string",
+                    description: "ISO timestamp or date when the source was last verified.",
+                  },
+                  staleIfFilesChange: {
+                    type: "array",
+                    description: "Project-relative files that should make this receipt stale when changed.",
+                    items: { type: "string" },
+                  },
+                },
+                additionalProperties: false,
               },
             },
             required: ["type", "summary", "detail", "priority"],
@@ -554,7 +591,7 @@ function errorToolResult(code: MemoryToolErrorCode, message: string): ToolResult
 function nextActionForMemoryError(code: MemoryToolErrorCode): string {
   switch (code) {
     case "invalid_arguments":
-      return `Fix the write_project_memory arguments before retrying. For target=capsule use ${CAPSULE_EXAMPLE}`;
+      return `Fix the write_project_memory arguments before retrying; do not retry unchanged. For target=capsule use ${CAPSULE_EXAMPLE}. Capsule source receipts may include file, lines, lastVerified, confidence and staleIfFilesChange; source.error/source.fix are optional but must be provided together.`;
     case "invalid_path":
       return "Use only the allowed project memory knowledge path for the selected key.";
     case "invalid_secret":
@@ -611,6 +648,49 @@ function assertValidCapsuleInput(capsule: MemoryCapsuleInput): void {
   if (capsule.related?.some((id) => typeof id !== "string")) {
     throw new MemoryToolError("invalid_arguments", "Memory capsule related ids must be strings.");
   }
+  assertValidCapsuleSourceInput(capsule.source);
+}
+
+function assertValidCapsuleSourceInput(source: MemoryCapsuleInput["source"]): void {
+  if (source === undefined) {
+    return;
+  }
+  if (!isRecord(source)) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source must be an object.");
+  }
+  if ((source.error === undefined) !== (source.fix === undefined)) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.error and source.fix are optional, but must be provided together when either is present.");
+  }
+  if (source.error !== undefined && (typeof source.error !== "string" || typeof source.fix !== "string")) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.error and source.fix must be strings when provided.");
+  }
+  if (source.file !== undefined && typeof source.file !== "string") {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.file must be a string.");
+  }
+  if (source.lines !== undefined && !isValidSourceLines(source.lines)) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.lines must be [start,end] positive integers.");
+  }
+  if (source.commit !== undefined && (typeof source.commit !== "string" || source.commit.trim().length === 0)) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.commit must be a non-empty string.");
+  }
+  if (source.confidence !== undefined && source.confidence !== "high" && source.confidence !== "medium" && source.confidence !== "low") {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.confidence must be one of high, medium, low.");
+  }
+  if (source.lastVerified !== undefined && (typeof source.lastVerified !== "string" || Number.isNaN(Date.parse(source.lastVerified)))) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.lastVerified must be a parseable ISO timestamp or date.");
+  }
+  if (source.staleIfFilesChange !== undefined && !isStringArray(source.staleIfFilesChange)) {
+    throw new MemoryToolError("invalid_arguments", "Memory capsule source.staleIfFilesChange must be an array of strings.");
+  }
+}
+
+function isValidSourceLines(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every((line) => Number.isInteger(line) && line > 0) &&
+    value[0] <= value[1]
+  );
 }
 
 function assertAllowedKnowledgePath(memory: ProjectMemory, projectRoot: string, key: KnowledgeKey, path: string | undefined): void {

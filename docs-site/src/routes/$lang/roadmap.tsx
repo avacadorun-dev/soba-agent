@@ -21,19 +21,19 @@ type Localized = Record<string, string>;
 
 const copy = {
   badge: {
-    en: `Roadmap · ${APP_VERSION_LABEL} focus`,
-    ru: "Дорожная карта · что делаем дальше",
-    zh: `路线图 · ${APP_VERSION_LABEL} 重点`,
+    en: `Roadmap · ${APP_VERSION_LABEL} stabilization`,
+    ru: `Дорожная карта · стабилизация ${APP_VERSION_LABEL}`,
+    zh: `路线图 · ${APP_VERSION_LABEL} 稳定化`,
   },
   title: {
-    en: "From terminal helper to verifiable delegation",
-    ru: "Куда движется SOBA",
-    zh: "从终端助手到可验证的委托运行时",
+    en: "From terminal helper to evidence-first engineering agent",
+    ru: "От терминального помощника к инженерному агенту с доказательствами",
+    zh: "从终端助手到证据优先的工程代理",
   },
   lead: {
-    en: "This roadmap shows product intentions, not internal task cards. The direction is simple: SOBA should remember the project, use the right tools, verify its work, and know when to ask.",
-    ru: "Без внутренней кухни и списков задач. Здесь только то, что важно снаружи: SOBA должна помнить проект, аккуратно работать с инструментами, проверять себя и спрашивать, когда риск выше обычного.",
-    zh: "这份路线图展示产品意图，而不是内部任务卡。方向很简单：SOBA 应该记住项目、使用合适工具、验证工作，并知道何时询问。",
+    en: "The current 0.6.x line is about stabilization: proofs, memory provenance, permissions, skills, and docs must become dependable before 0.7.0 adds larger delegation features.",
+    ru: "Текущая линия 0.6.x — про стабилизацию: proof receipts, память с источниками, разрешения, skills и документация должны стать надёжными до того, как 0.7.0 добавит более крупную delegation-модель.",
+    zh: "当前 0.6.x 线聚焦稳定化：proof、记忆来源、权限、技能和文档先变可靠，0.7.0 再加入更大的委托能力。",
   },
   primaryCta: { en: "Start with the docs", ru: "Открыть документацию", zh: "从文档开始" },
   backCta: { en: "Back to home", ru: "На главную", zh: "返回首页" },
@@ -54,9 +54,9 @@ const copy = {
     zh: "通往 1.0 的路径",
   },
   horizonLead: {
-    en: "Each step raises the level of trust before adding more autonomy.",
-    ru: "Сначала делаем работу понятнее и надёжнее. Больше самостоятельности — только после этого.",
-    zh: "每一步都先提高信任度，再增加自主性。",
+    en: "Each step raises evidence quality before adding more autonomy.",
+    ru: "Каждый шаг сначала делает подтверждения надёжнее, и только потом добавляет автономность.",
+    zh: "每一步先提高证据质量，再增加自主性。",
   },
   footerTitle: {
     en: "The north star",
@@ -64,9 +64,9 @@ const copy = {
     zh: "北极星",
   },
   footerText: {
-    en: "SOBA should become the local-first engineering agent that knows the project, works in bounded loops, verifies outcomes, and leaves a clear trail.",
-    ru: "SOBA должна быть локальным помощником по проекту: понимать контекст, работать короткими понятными циклами, проверять результат и оставлять после себя нормальную историю.",
-    zh: "SOBA 应成为 local-first 工程代理：理解项目、在有界循环中工作、验证结果，并留下清晰轨迹。",
+    en: "SOBA should become the local-first engineering agent that remembers, verifies, and leaves receipts.",
+    ru: "SOBA должна стать local-first инженерным агентом, который помнит проект, проверяет результат и оставляет receipts.",
+    zh: "SOBA 应成为 local-first 工程代理：记住项目、验证结果并留下 receipts。",
   },
 };
 
@@ -74,56 +74,56 @@ const stages = [
   {
     icon: ShieldCheck,
     release: APP_VERSION_LABEL,
-    state: { en: "Current focus", ru: "Сейчас в работе", zh: "当前重点" },
+    state: { en: "Release focus", ru: "Фокус релиза", zh: "发布重点" },
     title: {
-      en: "Trust foundation",
-      ru: "Основа, которой можно доверять",
-      zh: "信任基础",
+      en: "0.6.x stabilization",
+      ru: "Стабилизация 0.6.x",
+      zh: "0.6.x 稳定化",
     },
     intent: {
-      en: "Project Memory, MCP tools, and a verified agent loop become one release stream.",
-      ru: "Собираем в один рабочий слой память проекта, MCP-инструменты и цикл агента, где видно, что он делает и чем подтверждает результат.",
-      zh: "项目记忆、MCP 工具和可验证代理循环进入同一个发布流。",
+      en: "Proof receipts, memory provenance, permission receipts, skill bench/trace, and the Bun wrapper fix ship together as a dependable 0.6.x baseline.",
+      ru: "Proof receipts, memory provenance, permission receipts, skill bench/trace и Bun wrapper fix выходят вместе как надёжная 0.6.x база.",
+      zh: "Proof receipts、记忆来源、权限回执、skill bench/trace 和 Bun wrapper 修复一起作为可靠的 0.6.x 基线发布。",
     },
     outcomes: {
       en: [
-        "Remembers project context",
-        "Connects external tools",
-        "Shows a clear work trail",
-        "Does not finish code work without evidence",
+        "Bun and npm global installs work",
+        "Proof commands explain claims",
+        "Memory doctor detects stale facts",
+        "Skill bench and trace expose eval quality",
       ],
       ru: [
-        "Помнит важные детали проекта",
-        "Подключает нужные внешние инструменты",
-        "Показывает ход работы без тумана",
-        "Не говорит «готово» без проверки",
+        "Глобальная установка через Bun и npm работает",
+        "Proof commands объясняют claims",
+        "Memory doctor находит stale facts",
+        "Skill bench и trace показывают качество eval",
       ],
-      zh: ["记住项目上下文", "连接外部工具", "展示清晰工作轨迹", "没有证据不结束代码任务"],
+      zh: ["Bun 和 npm 全局安装可用", "Proof 命令解释 claims", "Memory doctor 发现过期事实", "Skill bench 和 trace 展示 eval 质量"],
     },
   },
   {
     icon: Workflow,
-    release: "v0.6",
-    state: { en: "Next", ru: "Следом", zh: "下一步" },
+    release: "v0.6.x",
+    state: { en: "Harden", ru: "Доводим", zh: "加固" },
     title: {
-      en: "Visible proof",
-      ru: "Понятные подтверждения",
-      zh: "可见证据",
+      en: "Evidence contracts",
+      ru: "Evidence contracts",
+      zh: "证据契约",
     },
     intent: {
-      en: "The user should see what changed, what ran, what passed, and what still carries risk.",
-      ru: "После задачи должно быть видно: что поменялось, какие команды запускались, что прошло, а где лучше не делать вид, что всё идеально.",
-      zh: "用户应看到改了什么、运行了什么、通过了什么，以及风险在哪里。",
+      en: "Finish behavior should be enforced by runtime gates and explicit verification contracts, not only prompt discipline.",
+      ru: "Финиш должен держаться runtime gates и явными verification contracts, а не только дисциплиной prompt.",
+      zh: "完成行为应由 runtime gates 和明确 verification contracts 约束，而不只靠 prompt 纪律。",
     },
     outcomes: {
-      en: ["Evidence bundle", "Diff review", "First-run polish"],
-      ru: ["Сводка проверок", "Разбор diff перед сдачей", "Более гладкий первый запуск"],
-      zh: ["证据包", "差异审查", "首次体验打磨"],
+      en: ["Verification contracts", "Proof-gated finish", "Release smoke scenarios"],
+      ru: ["Verification contracts", "Proof-gated finish", "Release smoke scenarios"],
+      zh: ["Verification contracts", "Proof-gated finish", "发布 smoke 场景"],
     },
   },
   {
     icon: BrainCircuit,
-    release: "v0.6",
+    release: "v0.6.x",
     state: { en: "Then", ru: "Затем", zh: "然后" },
     title: {
       en: "Living project knowledge",
@@ -143,7 +143,7 @@ const stages = [
   },
   {
     icon: GitBranch,
-    release: "v0.7",
+    release: "v0.7.0",
     state: { en: "After trust", ru: "Когда база окрепнет", zh: "信任之后" },
     title: {
       en: "Background delegation",

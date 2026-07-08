@@ -367,8 +367,11 @@ function validateCapsuleSource(value: unknown): void {
   if (!isRecord(value)) {
     throw new CapsuleStoreError("invalid_capsule", "Memory capsule source must be an object");
   }
-  if (typeof value.error !== "string" || typeof value.fix !== "string") {
-    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source error/fix must be strings");
+  if ((value.error === undefined) !== (value.fix === undefined)) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source error/fix must be provided together");
+  }
+  if (value.error !== undefined && (typeof value.error !== "string" || typeof value.fix !== "string")) {
+    throw new CapsuleStoreError("invalid_capsule", "Memory capsule source error/fix must be strings when provided");
   }
   if (value.file !== undefined && typeof value.file !== "string") {
     throw new CapsuleStoreError("invalid_capsule", "Memory capsule source file must be a string");

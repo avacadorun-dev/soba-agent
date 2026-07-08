@@ -7,6 +7,7 @@ import type { AgentEvent } from "../../../../src/engine/turn/types";
 import { createFilesystemProjectTrustStore } from "../../../../src/infrastructure/persistence/skills/project-trust-storage";
 import { I18n } from "../../../../src/shared/i18n/i18n";
 import { readChangeStats } from "../../../../src/ui/terminal/interactive/lib/project-info";
+import { createImageComposerBlock, createTextComposerBlock } from "../../../../src/ui/terminal/interactive/lib/rich-paste";
 import { NotificationStore } from "../../../../src/ui/terminal/interactive/model/notification-store";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../../src/ui/terminal/interactive/model/types";
@@ -112,6 +113,80 @@ describe("OpenTUI Solid store", () => {
       source: "tui",
       content: [{ type: "text", text: "inspect runtime" }],
     });
+  });
+
+  test("submits composer blocks as runtime content before typed prompt", async () => {
+    let runtimeInput: UserTurnInput | undefined;
+    const agentLoop = {
+      getModel: () => "test-model",
+      runTurn: async () => {},
+      getSessionManager: () => ({
+        isPersisted: () => false,
+        getSessionId: () => "session_tui",
+      }),
+      getTrustManager: () => ({
+        getPermissionMode: () => "ask" as const,
+        setPermissionMode: (_mode: string) => {},
+        clearSessionApprovals: () => {},
+      }),
+      abortActiveTool: () => false,
+      abort: () => {},
+      runShellCommand: async () => ({ content: [{ type: "text" as const, text: "ok" }], isError: false }),
+      onEvent: () => () => {},
+    } as unknown as RuntimeAgentHandle;
+    const runtime = {
+      runTurn: async (input: UserTurnInput) => {
+        runtimeInput = input;
+        return {} as Awaited<ReturnType<SobaRuntime["runTurn"]>>;
+      },
+    } as unknown as SobaRuntime;
+    const store = new TuiStore(
+      {
+        cwd: process.cwd(),
+        tokenBudget: 10_000,
+        contextWindow: 128_000,
+        theme: "graphite",
+        runtime,
+        agentLoop,
+        toolNames: ["read", "edit"],
+        executeCommand: async () => ({ handled: true }),
+        debug: false,
+        maxOutputTokens: 0,
+        maxCompletionTokens: 0,
+        maxAgentIterations: 0,
+        maxStalledIterations: 4,
+        maxRunMinutes: 0,
+        autoCompact: true,
+      },
+      () => {},
+    );
+
+    store.addComposerBlock(createTextComposerBlock("large pasted text"));
+    store.addComposerBlock(createImageComposerBlock("image/png", new Uint8Array([1, 2, 3])));
+    await store.submit("summarize this");
+
+    expect(runtimeInput?.content).toEqual([
+      { type: "text", text: "large pasted text" },
+      { type: "image", mimeType: "image/png", data: "AQID" },
+      { type: "text", text: "summarize this" },
+    ]);
+    expect(store.composerBlocks()).toEqual([]);
+    expect(store.history.newer()).toBeNull();
+  });
+
+  test("queue edit preserves composer blocks on queued messages", async () => {
+    const store = createStore();
+    await store.submit("first");
+    store.addComposerBlock(createTextComposerBlock("attached context"));
+    await store.submit("second");
+
+    expect(store.queuedMessages()).toHaveLength(1);
+    expect(store.queuedMessages()[0].blocks?.[0]).toMatchObject({ type: "text", text: "attached context" });
+
+    await store.submit("/queue edit 1 revised second");
+
+    expect(store.queuedMessages()[0]).toMatchObject({ id: 1, content: "revised second", kind: "message" });
+    expect(store.queuedMessages()[0].blocks?.[0]).toMatchObject({ type: "text", text: "attached context" });
   });
 
   test("собирает streaming-ответ ассистента в одно markdown-сообщение", () => {
