@@ -54,7 +54,7 @@ export type TuiMessage =
   | { id: number; type: "user"; content: string }
   | { id: number; type: "assistant"; content: string; streaming: boolean }
   | { id: number; type: "evidence"; summary: TuiEvidenceSummary }
-  | { id: number; type: "reasoning"; content: string }
+  | { id: number; type: "reasoning"; content: string; streaming: boolean }
   | { id: number; type: "narration"; eventType: string; content: string; evidenceIds: string[] }
   | { id: number; type: "tool-start"; toolName: string; summary: string }
   | {

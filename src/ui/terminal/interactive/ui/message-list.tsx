@@ -1,11 +1,13 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { For, Match, Show, Switch, batch, createMemo, createSignal } from "solid-js";
 import { BLOCK } from "../lib/message-blocks";
+import { computeReasoningExpanded, isReasoningCollapsible } from "../lib/reasoning-collapse";
 import { getMarkdownStyle, getTuiTheme } from "../lib/theme";
 import { computeTurnMap, computeTurnStarts, isTurnStart as checkTurnStart } from "../lib/turn-grouping";
 import type { TuiStore } from "../model/tui-store";
 import type { TuiMessage } from "../model/types";
 import { EvidenceBlock } from "./evidence-block";
+import { ReasoningBlock } from "./reasoning-block";
 import { ToolResultBlock } from "./tool-result-block";
 import { TurnSeparator } from "./turn-separator";
 
@@ -56,20 +58,6 @@ function AssistantMessage(props: { message: Extract<TuiMessage, { type: "assista
         </Switch>
       </box>
     </Show>
-  );
-}
-
-function ReasoningMessage(props: { content: string; store: TuiStore }) {
-  const theme = () => getTuiTheme(props.store.themeName());
-  return (
-    <box style={{ marginBottom: BLOCK.marginBottom }}>
-      <text wrapMode="word">
-        <span style={{ fg: theme().muted }}>🍜 </span>
-        <span style={{ fg: theme().muted }}>
-          <i>{props.content}</i>
-        </span>
-      </text>
-    </box>
   );
 }
 
@@ -134,7 +122,15 @@ function Message(props: {
         )}
       </Match>
       <Match when={props.message.type === "reasoning" && props.message}>
-        {(message) => <ReasoningMessage content={message().content} store={props.store} />}
+        {(message) => (
+          <ReasoningBlock
+            message={message()}
+            store={props.store}
+            expanded={props.expanded}
+            focused={props.focused}
+            onToggle={props.onToggle}
+          />
+        )}
       </Match>
       <Match when={props.message.type === "narration" && props.message}>
         {(message) => <NarrationMessage message={message()} store={props.store} />}
@@ -185,6 +181,9 @@ export function MessageList(props: {
 
   // Track expanded tool-results by message ID
   const [expandedIds, setExpandedIds] = createSignal(new Set<number>());
+  // Per-reasoning explicit expand/collapse overrides (id -> expanded).
+  // When absent, the default is computed from streaming + length threshold.
+  const [reasoningOverrides, setReasoningOverrides] = createSignal(new Map<number, boolean>());
   // Index in messages array of the currently focused tool-result (-1 = none)
   const [focusedIndex, setFocusedIndex] = createSignal(-1);
 
@@ -199,12 +198,33 @@ export function MessageList(props: {
   // For each message index, return the turn index it belongs to (-1 if before first turn)
   const turnForIndex = createMemo(() => computeTurnMap(turnStarts(), props.messages.length));
 
+  /** Whether a reasoning block is expanded, honoring user overrides. */
+  const isReasoningExpanded = (message: Extract<TuiMessage, { type: "reasoning" }>): boolean => {
+    return computeReasoningExpanded(message, reasoningOverrides().get(message.id));
+  };
+
+  const toggleReasoning = (message: Extract<TuiMessage, { type: "reasoning" }>): void => {
+    if (!isReasoningCollapsible(message)) return;
+    batch(() => {
+      const current = reasoningOverrides();
+      const next = new Map(current);
+      next.set(message.id, !isReasoningExpanded(message));
+      setReasoningOverrides(next);
+      const idx = props.messages.indexOf(message);
+      if (idx >= 0) setFocusedIndex(idx);
+      props.store.setActiveUiPane("output");
+    });
+  };
+
   // Derived list of message indices that can be focused and expanded.
   const inspectableIndices = createMemo(() => {
     const indices: number[] = [];
     const msgs = props.messages;
     for (let i = 0; i < msgs.length; i++) {
-      if (msgs[i].type === "tool-result" || msgs[i].type === "evidence") {
+      const m = msgs[i];
+      if (m.type === "tool-result" || m.type === "evidence") {
+        indices.push(i);
+      } else if (m.type === "reasoning" && isReasoningCollapsible(m)) {
         indices.push(i);
       }
     }
@@ -253,6 +273,8 @@ export function MessageList(props: {
           }
           setExpandedIds(next);
         });
+      } else if (msg?.type === "reasoning") {
+        toggleReasoning(msg);
       }
     },
     focusNext: () => {
@@ -340,29 +362,41 @@ export function MessageList(props: {
           }
 
           const isHighlighted = () => highlightedIndex() === i;
-          const isExpanded = () =>
-            (message.type === "tool-result" || message.type === "evidence") && expandedIds().has(message.id);
+          const isExpanded = () => {
+            if (message.type === "tool-result" || message.type === "evidence") {
+              return expandedIds().has(message.id);
+            }
+            if (message.type === "reasoning") {
+              return isReasoningExpanded(message);
+            }
+            return false;
+          };
           const isFocused = () => {
             const fi = focusedIndex();
             if (fi < 0) return false;
             return props.messages[fi]?.id === message.id;
           };
           const onToggle = () => {
-            if (message.type !== "tool-result" && message.type !== "evidence") return;
-            batch(() => {
-              const current = expandedIds();
-              const next = new Set(current);
-              if (next.has(message.id)) {
-                next.delete(message.id);
-              } else {
-                next.add(message.id);
-              }
-              setExpandedIds(next);
-              // Also set focus to this tool-result
-              const idx = props.messages.indexOf(message);
-              if (idx >= 0) setFocusedIndex(idx);
-              props.store.setActiveUiPane("output");
-            });
+            if (message.type === "tool-result" || message.type === "evidence") {
+              batch(() => {
+                const current = expandedIds();
+                const next = new Set(current);
+                if (next.has(message.id)) {
+                  next.delete(message.id);
+                } else {
+                  next.add(message.id);
+                }
+                setExpandedIds(next);
+                // Also set focus to this tool-result
+                const idx = props.messages.indexOf(message);
+                if (idx >= 0) setFocusedIndex(idx);
+                props.store.setActiveUiPane("output");
+              });
+              return;
+            }
+            if (message.type === "reasoning") {
+              toggleReasoning(message);
+            }
           };
           return (
             <>

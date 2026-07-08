@@ -247,7 +247,7 @@ describe("OpenTUI Solid store", () => {
     );
 
     expect(store.messages()).toEqual([
-      { id: 1, type: "reasoning", content: "Думаю дальше." },
+      { id: 1, type: "reasoning", content: "Думаю дальше.", streaming: false },
       { id: 2, type: "assistant", content: "Готово", streaming: false },
     ]);
   });

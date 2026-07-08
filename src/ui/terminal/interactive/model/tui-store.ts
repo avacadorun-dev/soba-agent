@@ -649,6 +649,8 @@ export class TuiStore {
         break;
       case "assistant_message_start": {
         if (this.streamMessageId) break;
+        // A new assistant text response means the previous thought is done.
+        this.finalizeStreamingReasoning();
         // Stop noodle animation — streaming text provides its own visual feedback
         this.stopNoodle();
         const message = this.add({ type: "assistant", content: "", streaming: true });
@@ -673,7 +675,7 @@ export class TuiStore {
           break;
         }
 
-        const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.delta };
+        const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.delta, streaming: true };
         this.reasoningTuiIds.set(event.messageId, reasoningMsg.id);
         this.setMessages((messages) => {
           if (this.streamMessageId === event.messageId && this.streamTuiId !== null) {
@@ -704,10 +706,10 @@ export class TuiStore {
             if (event.reasoningContent) {
               const existingReasoningId = this.reasoningTuiIds.get(event.messageId);
               if (existingReasoningId !== undefined) {
-                this.updateReasoning(existingReasoningId, () => event.reasoningContent as string);
+                this.updateReasoning(existingReasoningId, () => event.reasoningContent as string, false);
                 relatedIds.push(existingReasoningId);
               } else {
-                const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.reasoningContent };
+                const reasoningMsg: TuiMessage = { id: this.nextId++, type: "reasoning", content: event.reasoningContent, streaming: false };
                 relatedIds.push(reasoningMsg.id);
                 this.setMessages((messages) => {
                   const index = messages.findIndex((m) => m.id === tuiId);
@@ -733,13 +735,15 @@ export class TuiStore {
           this.finalizedIds.add(event.messageId);
           // Add reasoning BEFORE assistant message
           if (event.reasoningContent) {
-            this.add({ type: "reasoning", content: event.reasoningContent });
+            this.add({ type: "reasoning", content: event.reasoningContent, streaming: false });
           }
           this.addAssistantFinalText(event.text);
           this.setLastAssistantText(event.text);
         }
         break;
       case "working_narration":
+        // Narration is the next activity — finish any streaming thought first.
+        this.finalizeStreamingReasoning();
         this.add({
           type: "narration",
           eventType: event.eventType,
@@ -748,6 +752,8 @@ export class TuiStore {
         });
         break;
       case "tool_call_start":
+        // A tool call is the next activity — finish any streaming thought first.
+        this.finalizeStreamingReasoning();
         this.stopNoodle();
         // Store summary for use by tool-result
         this._toolSummaries.set(event.toolCallId, formatToolSummary(event.toolName, event.args));
@@ -828,12 +834,14 @@ export class TuiStore {
         }
         break;
       case "turn_end":
+        this.finalizeStreamingReasoning(true);
         this.stopNoodle();
         this.setIsProcessing(false);
         this.setIsIdle(true);
         this.setStatus(this.l("tui.status.idle"));
         break;
       case "turn_error":
+        this.finalizeStreamingReasoning(true);
         this.add({ type: "error", content: this.l("tui.label.error", { message: event.error }) });
         this._notificationStore?.notify(
           "error",
@@ -856,6 +864,8 @@ export class TuiStore {
           this.add({ type: "info", content: this.l("tui.label.stop", { reason: event.reason, detail: event.detail }) });
         break;
       case "dangerous_confirmation":
+        // Permission request is the next activity — finish any streaming thought first.
+        this.finalizeStreamingReasoning();
         this.setConfirmation(event);
         this.add({
           type: "warning",
@@ -1070,17 +1080,46 @@ export class TuiStore {
     });
   }
 
-  private updateReasoning(id: number, update: (content: string) => string): void {
+  private updateReasoning(id: number, update: (content: string) => string, streaming?: boolean): void {
     this.setMessages((messages) => {
       const idx = messages.findIndex((m) => m.id === id);
       if (idx === -1) return messages;
       const message = messages[idx];
       if (message.type !== "reasoning") return messages;
-      const updated: TuiMessage = { ...message, content: update(message.content) };
+      const updated: TuiMessage =
+        streaming === undefined
+          ? { ...message, content: update(message.content) }
+          : { ...message, content: update(message.content), streaming };
       const next = messages.slice();
       next[idx] = updated;
       return next;
     });
+  }
+
+  /**
+   * Mark every currently-streaming reasoning block as completed.
+   *
+   * Called when the agent moves on to the next activity (text response,
+   * tool call, narration, permission request, turn end) so that finished
+   * long thoughts can collapse in the transcript. The reasoning→messageId
+   * map is preserved by default so a later `assistant_text_done` can still
+   * finalize the same block instead of creating a duplicate.
+   */
+  private finalizeStreamingReasoning(clearMap = false): void {
+    if (this.reasoningTuiIds.size === 0) return;
+    this.setMessages((messages) => {
+      let changed = false;
+      const next = messages.slice();
+      for (let i = 0; i < next.length; i++) {
+        const m = next[i];
+        if (m.type === "reasoning" && m.streaming) {
+          next[i] = { ...m, streaming: false };
+          changed = true;
+        }
+      }
+      return changed ? next : messages;
+    });
+    if (clearMap) this.reasoningTuiIds.clear();
   }
 
   /** Refresh file tree asynchronously to reflect newly created/deleted files. */

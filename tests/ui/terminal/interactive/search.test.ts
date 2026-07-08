@@ -59,7 +59,7 @@ describe("SearchEngine: extractSearchText", () => {
   });
 
   test("extracts content from reasoning message", () => {
-    const msg: TuiMessage = { id: 3, type: "reasoning", content: "Let me think..." };
+    const msg: TuiMessage = { id: 3, type: "reasoning", content: "Let me think...", streaming: false };
     expect(extractSearchText(msg)).toBe("Let me think...");
   });
 
@@ -128,7 +128,7 @@ describe("SearchEngine: searchMessages", () => {
   const messages: TuiMessage[] = [
     { id: 1, type: "user", content: "Hello world" },
     { id: 2, type: "assistant", content: "Hi there! Hello again.", streaming: false },
-    { id: 3, type: "reasoning", content: "The user greeted." },
+    { id: 3, type: "reasoning", content: "The user greeted.", streaming: false },
     { id: 4, type: "tool-result", content: "File: hello.txt", isError: false, isDiff: false, toolName: "read", summary: "Read hello.txt" },
     { id: 5, type: "error", content: "Hello is not defined" },
   ];
