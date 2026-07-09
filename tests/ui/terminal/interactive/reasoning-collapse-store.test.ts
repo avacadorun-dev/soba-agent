@@ -108,6 +108,20 @@ describe("Collapse completed agent thoughts — store", () => {
     expect(reasoning?.type === "reasoning" && reasoning.streaming).toBe(false);
   });
 
+  test("plan_update finalizes a still-streaming thought", () => {
+    store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: LONG_THOUGHT }));
+    store.onAgentEvent(
+      event({
+        type: "plan_update",
+        entries: [{ content: "Inspect ACP adapter", priority: "high", status: "in_progress" }],
+      }),
+    );
+
+    const reasoning = store.messages().find((m) => m.type === "reasoning");
+    expect(reasoning?.type === "reasoning" && reasoning.streaming).toBe(false);
+    expect(reasoning?.type === "reasoning" && isReasoningCollapsible(reasoning)).toBe(true);
+  });
+
   test("assistant_message_start finalizes a still-streaming thought", () => {
     store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: LONG_THOUGHT }));
     store.onAgentEvent(event({ type: "assistant_message_start", messageId: "m1" }));

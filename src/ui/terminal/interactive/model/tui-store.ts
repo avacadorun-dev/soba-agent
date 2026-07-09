@@ -895,6 +895,9 @@ export class TuiStore {
           }),
         );
         break;
+      case "plan_update":
+        this.finalizeStreamingReasoning();
+        break;
       case "function_call_delta":
       case "function_call_done":
       case "skill_deactivated":
