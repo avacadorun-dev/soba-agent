@@ -192,11 +192,16 @@ function commitsForRange(range: string): Commit[] {
         subject: subjectParts.join("\t"),
       };
     })
-    .filter((commit) => !isReleaseCommit(commit.subject));
+    .filter((commit) => !isReleaseCommit(commit.subject))
+    .filter((commit) => !isGeneratedChangelogCommit(commit.subject));
 }
 
 function isReleaseCommit(subject: string): boolean {
   return /^(chore:\s*)?release:? v?\d+\.\d+\.\d+$/i.test(subject);
+}
+
+function isGeneratedChangelogCommit(subject: string): boolean {
+  return /\bgenerated changelog\b/i.test(subject);
 }
 
 function buildSections(options: { nextTag?: string } = {}): ChangelogSection[] {
