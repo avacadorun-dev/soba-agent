@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/brand/soba-bowl-icon-github.png" width="54" alt="SOBA Agent logo" />
+  <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/brand/soba-bowl-icon-github.png" width="54" align="absmiddle" alt="SOBA Agent logo" />
   SOBA Agent
 </h1>
 
