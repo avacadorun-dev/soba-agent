@@ -1,11 +1,38 @@
-# SOBA Agent
+<p align="center">
+  <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/brand/soba-bowl-icon-github.png" width="84" alt="SOBA Agent logo" />
+</p>
 
-Local-first engineering agent for teams that want code changes with a verifiable trail.
+<h1 align="center">SOBA Agent</h1>
+
+<p align="center">
+  <strong>Local-first engineering agent for code changes with a verifiable trail.</strong>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/soba-agent"><img alt="npm" src="https://img.shields.io/npm/v/soba-agent?color=244C66"></a>
+  <a href="https://github.com/avacadorun-dev/soba-agent/releases"><img alt="release" src="https://img.shields.io/github/v/release/avacadorun-dev/soba-agent?color=3F7052"></a>
+  <a href="https://github.com/avacadorun-dev/soba-agent/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/avacadorun-dev/soba-agent/ci.yml?branch=main&label=ci"></a>
+  <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/avacadorun-dev/soba-agent?color=6B4E71"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a>
+  · <a href="#first-workflow">First workflow</a>
+  · <a href="https://soba-agent.dev/en/docs/quick-start">Docs</a>
+  · <a href="https://soba-agent.dev/en/docs/changelog">Changelog</a>
+</p>
 
 SOBA runs in your terminal, keeps project context close to the repository, works through bounded tool loops, and writes
 receipts for the work it claims to have done. It is built for everyday engineering tasks where the important question is
 not only "did the agent edit the code?", but also "what changed, what was checked, what permissions were used, and what
 evidence supports the handoff?"
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/tui_screen.png" alt="SOBA Agent terminal UI showing the session sidebar, collapsed reasoning blocks, tool activity, and context budget" />
+</p>
+
+SOBA is built for engineers who want an agent to stay close to the repo: inspect before editing, ask for permission
+before risky operations, run the project's own checks, and leave behind receipts that can be reviewed after the session.
 
 ## What SOBA is for
 
