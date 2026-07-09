@@ -24,7 +24,7 @@ not only "did the agent edit the code?", but also "what changed, what was checke
 evidence supports the handoff?"
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/tui_screen.png" alt="SOBA Agent terminal UI showing the session sidebar, collapsed reasoning blocks, tool activity, and context budget" />
+  <img src="docs-site/public/tui_screen.png" alt="" />
 </p>
 
 SOBA is built for engineers who want an agent to stay close to the repo: inspect before editing, ask for permission
