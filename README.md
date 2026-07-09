@@ -1,7 +1,4 @@
-<h1 align="center">
-  <img src="docs-site/public/brand/soba-bowl-icon-github.png" width="54" align="absmiddle" alt="" />
-  SOBA Agent
-</h1>
+<h1 align="center">SOBA Agent</h1>
 
 <p align="center">
   <strong>Local-first engineering agent for code changes with a verifiable trail.</strong>
