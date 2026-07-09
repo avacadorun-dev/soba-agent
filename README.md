@@ -1,7 +1,9 @@
-<h1 align="center">
+<div align="center">
+<h1>
   <img src="https://raw.githubusercontent.com/avacadorun-dev/soba-agent/main/docs-site/public/brand/soba-bowl-icon-github.png" width="54" align="absmiddle" alt="SOBA Agent logo" />
   SOBA Agent
 </h1>
+</div>
 
 <p align="center">
   <strong>Local-first engineering agent for code changes with a verifiable trail.</strong>
