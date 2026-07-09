@@ -40,7 +40,7 @@ describe("CI quality gate", () => {
   test("workflow uses Bun setup and Bun-only quality commands", () => {
     const workflow = readWorkflow();
 
-    expect(workflow).toContain("actions/checkout@v4");
+    expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("oven-sh/setup-bun@v2");
     expect(extractRunCommands(workflow)).toEqual([
       "bun install --frozen-lockfile",

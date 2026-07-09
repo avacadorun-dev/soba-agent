@@ -16,10 +16,10 @@ describe("Docs Pages workflow", () => {
 
     expect(workflow).toContain("pages: write");
     expect(workflow).toContain("id-token: write");
-    expect(workflow).toContain("uses: actions/configure-pages@v5");
-    expect(workflow).toContain("uses: actions/upload-pages-artifact@v3");
+    expect(workflow).toContain("uses: actions/configure-pages@v6");
+    expect(workflow).toContain("uses: actions/upload-pages-artifact@v5");
     expect(workflow).toContain("path: docs-site/dist/client");
-    expect(workflow).toContain("uses: actions/deploy-pages@v4");
+    expect(workflow).toContain("uses: actions/deploy-pages@v5");
   });
 
   test("prerenders the root route for static hosting", () => {
