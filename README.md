@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/soba-agent"><img alt="npm" src="https://img.shields.io/npm/v/soba-agent?color=244C66"></a>
-  <a href="https://github.com/avacadorun-dev/soba-agent/releases"><img alt="release" src="https://img.shields.io/github/v/release/avacadorun-dev/soba-agent?color=3F7052"></a>
+  <a href="https://github.com/avacadorun-dev/soba-agent/releases"><img alt="release" src="https://img.shields.io/github/v/tag/avacadorun-dev/soba-agent?label=release&color=3F7052"></a>
   <a href="https://github.com/avacadorun-dev/soba-agent/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/avacadorun-dev/soba-agent/ci.yml?branch=main&label=ci"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/avacadorun-dev/soba-agent?color=6B4E71"></a>
 </p>
