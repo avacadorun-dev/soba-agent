@@ -42,6 +42,7 @@ export async function executeModelTurn(input: {
   stream: boolean;
   ephemeralMessages: Array<{ role: "developer"; content: string }>;
   allowParallelToolCalls: boolean;
+  allowedToolNames?: ReadonlySet<string>;
   turn: number;
   iteration: number;
   totalUsage: Usage;
@@ -68,6 +69,7 @@ export async function executeModelTurn(input: {
     input.temperature,
     input.ephemeralMessages,
     input.allowParallelToolCalls,
+    input.allowedToolNames,
   );
 
   const systemPromptTokens = Math.ceil(input.systemPrompt.length / 4);

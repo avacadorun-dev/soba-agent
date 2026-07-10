@@ -83,6 +83,7 @@ export class AcpDispatcher {
   private readonly sessionCwds = new Map<string, string>();
   private readonly sessionAdditionalDirectories = new Map<string, string[]>();
   private readonly pendingPermissions = new Map<string, Set<(decision: "deny") => void>>();
+  private readonly pendingClarifications = new Map<string, Set<() => void>>();
   private readonly activeToolCalls = new Map<string, ActiveAcpToolCall>();
   /** Assistant text already streamed as ACP chunks for the in-flight prompt, keyed by client session id. */
   private readonly streamedAssistantTextBySession = new Map<string, string>();
@@ -311,6 +312,7 @@ export class AcpDispatcher {
             args: result.data.command.args ?? [],
           }
           : undefined,
+        clarificationAvailable: this.clientCapabilities.elicitationForm,
       });
       return {
         stopReason: context.signal.aborted ? "cancelled" : turnToStopReason(turn),
@@ -336,6 +338,7 @@ export class AcpDispatcher {
     const cancelledRequests = this.requestRegistry.cancelBySession(sessionId);
     this.runtime.cancelTurn(this.resolveRuntimeSessionId(sessionId));
     this.cancelPendingPermissions(sessionId);
+    this.cancelPendingClarifications(sessionId);
 
     return {
       cancelled: true,
@@ -353,6 +356,7 @@ export class AcpDispatcher {
     if (request?.sessionId) {
       this.runtime.cancelTurn(this.resolveRuntimeSessionId(request.sessionId));
       this.cancelPendingPermissions(request.sessionId);
+      this.cancelPendingClarifications(request.sessionId);
     }
     return {};
   }
@@ -365,6 +369,7 @@ export class AcpDispatcher {
     const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
     this.runtime.cancelTurn(runtimeSessionId);
     this.cancelPendingPermissions(result.data.sessionId);
+    this.cancelPendingClarifications(result.data.sessionId);
     await this.runtime.closeSession(runtimeSessionId);
     this.sessionAliases.delete(result.data.sessionId);
     this.sessionCwds.delete(result.data.sessionId);
@@ -382,6 +387,7 @@ export class AcpDispatcher {
     const runtimeSessionId = this.resolveRuntimeSessionId(result.data.sessionId);
     this.runtime.cancelTurn(runtimeSessionId);
     this.cancelPendingPermissions(result.data.sessionId);
+    this.cancelPendingClarifications(result.data.sessionId);
     await this.runtime.deleteSession(runtimeSessionId);
     this.sessionAliases.delete(result.data.sessionId);
     this.sessionCwds.delete(result.data.sessionId);
@@ -477,9 +483,35 @@ export class AcpDispatcher {
       await this.handlePermissionRequest(sessionId, event);
       return;
     }
+    if (event.type === "clarification_request") {
+      await this.handleClarificationRequest(sessionId, event);
+      return;
+    }
 
     const update = this.runtimeEventToUpdate(sessionId, event);
     if (update) await this.emitSessionUpdate(sessionId, update);
+  }
+
+  private async handleClarificationRequest(
+    sessionId: string,
+    event: Extract<RuntimeEvent, { type: "clarification_request" }>,
+  ): Promise<void> {
+    if (!this.requestClient || !this.clientCapabilities.elicitationForm) return;
+    event.claim();
+    let settled = false;
+    const cancel = () => {
+      settled = true;
+      event.resolve({ status: "cancelled" });
+    };
+    this.trackPendingClarification(sessionId, cancel);
+    try {
+      const response = await this.requestClient("elicitation/create", clarificationToAcpRequest(sessionId, event.request));
+      if (!settled) event.resolve(clarificationOutcomeFromAcp(response, event.request.options.map((option) => option.id), event.request.allowOther === true));
+    } catch {
+      if (!settled) event.resolve({ status: "unavailable" });
+    } finally {
+      this.untrackPendingClarification(sessionId, cancel);
+    }
   }
 
   private async handlePermissionRequest(sessionId: string, event: Extract<RuntimeEvent, { type: "dangerous_confirmation" }>): Promise<void> {
@@ -712,12 +744,85 @@ export class AcpDispatcher {
       for (const resolve of resolvers) resolve("deny");
     }
   }
+
+  private trackPendingClarification(sessionId: string, cancel: () => void): void {
+    const pending = this.pendingClarifications.get(sessionId) ?? new Set<() => void>();
+    pending.add(cancel);
+    this.pendingClarifications.set(sessionId, pending);
+  }
+
+  private untrackPendingClarification(sessionId: string, cancel: () => void): void {
+    const pending = this.pendingClarifications.get(sessionId);
+    if (!pending) return;
+    pending.delete(cancel);
+    if (pending.size === 0) this.pendingClarifications.delete(sessionId);
+  }
+
+  private cancelPendingClarifications(sessionId: string): void {
+    for (const id of [sessionId, this.resolveRuntimeSessionId(sessionId)]) {
+      const pending = this.pendingClarifications.get(id);
+      if (!pending) continue;
+      this.pendingClarifications.delete(id);
+      for (const cancel of pending) cancel();
+    }
+  }
 }
 
 function extractSessionId(params: JsonValue | undefined): string | undefined {
   if (!params || typeof params !== "object" || Array.isArray(params)) return undefined;
   const value = params.sessionId;
   return typeof value === "string" ? value : undefined;
+}
+
+function clarificationToAcpRequest(sessionId: string, request: {
+  question: string;
+  options: Array<{ id: string; label: string; description?: string }>;
+  allowOther?: boolean;
+}): JsonValue {
+  const options = request.options.map((option) => ({ const: option.id, title: option.label, description: option.description ?? null }));
+  return {
+    sessionId,
+    mode: "form",
+    message: request.question,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        choice: {
+          type: "string",
+          title: "Choose one",
+          oneOf: [
+            ...options,
+            ...(request.allowOther ? [{ const: "other", title: "Other" }] : []),
+          ],
+        },
+        ...(request.allowOther
+          ? { other: { type: "string", title: "Other details", description: "Optional free-text answer." } }
+          : {}),
+      },
+      required: ["choice"],
+      additionalProperties: false,
+    },
+  };
+}
+
+function clarificationOutcomeFromAcp(
+  value: JsonValue,
+  optionIds: string[],
+  allowOther: boolean,
+): { status: "answered"; choice: string; other?: string } | { status: "declined" | "cancelled" | "unavailable" } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { status: "unavailable" };
+  if (value.action === "decline") return { status: "declined" };
+  if (value.action === "cancel") return { status: "cancelled" };
+  if (value.action !== "accept" || !value.content || typeof value.content !== "object" || Array.isArray(value.content)) {
+    return { status: "unavailable" };
+  }
+  const choice = value.content.choice;
+  const other = value.content.other;
+  if (typeof choice !== "string") return { status: "unavailable" };
+  if (choice === "other" && allowOther) {
+    return { status: "answered", choice, ...(typeof other === "string" && other.trim() ? { other: other.trim() } : {}) };
+  }
+  return optionIds.includes(choice) ? { status: "answered", choice } : { status: "unavailable" };
 }
 
 function absolutePath(cwd: string, path: string): string {

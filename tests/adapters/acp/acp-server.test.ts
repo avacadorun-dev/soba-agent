@@ -14,10 +14,12 @@ interface MockRuntimeState {
   emitEditEvents?: boolean;
   emitBashEvents?: boolean;
   emitPermission?: boolean;
+  emitClarification?: boolean;
   emitPlan?: boolean;
   emitReasoning?: boolean;
   waitForCancel?: boolean;
   permissionDecision?: string;
+  clarificationOutcome?: unknown;
   turnErrorType?: "api_error" | "cancelled" | "security_denial";
   configOptions?: Awaited<ReturnType<NonNullable<SobaRuntime["listSessionConfigOptions"]>>>;
   missingSessionIds?: Set<string>;
@@ -231,6 +233,27 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
               },
             } as RuntimeEvent),
           );
+        });
+      }
+      if (state.emitClarification) {
+        await new Promise<void>((resolve) => {
+          listeners.forEach((listener) => listener({
+            type: "clarification_request",
+            timestamp: Date.now(),
+            request: {
+              question: "Which release channel?",
+              options: [
+                { id: "stable", label: "Stable" },
+                { id: "rc", label: "Release candidate" },
+              ],
+              allowOther: true,
+            },
+            claim: () => undefined,
+            resolve: (outcome: unknown) => {
+              state.clarificationOutcome = outcome;
+              resolve();
+            },
+          } as RuntimeEvent));
         });
       }
       if (state.emitReasoning) {
@@ -1438,6 +1461,34 @@ describe("ACP stdio server foundation", () => {
       id: "prompt",
       result: { stopReason: "end_turn" },
     });
+  });
+
+  test("maps plan clarification choices to an opt-in ACP form", async () => {
+    const state: MockRuntimeState = { emitClarification: true };
+    const requests: Array<{ method: string; params: JsonValue }> = [];
+    await runLines(
+      [
+        `${JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } } })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: "prompt", method: "session/prompt", params: { sessionId: "session_1", prompt: [{ type: "text", text: "plan" }] } })}\n`,
+      ],
+      {
+        state,
+        requestClient: (method, params) => {
+          requests.push({ method, params });
+          return { action: "accept", content: { choice: "rc", other: "Ship Friday" } };
+        },
+      },
+    );
+    expect(requests).toEqual([{
+      method: "elicitation/create",
+      params: expect.objectContaining({
+        sessionId: "session_1",
+        mode: "form",
+        message: "Which release channel?",
+        requestedSchema: expect.objectContaining({ required: ["choice"] }),
+      }),
+    }]);
+    expect(state.clarificationOutcome).toEqual({ status: "answered", choice: "rc" });
   });
 
   test("correlates stdio client responses for outbound permission requests", async () => {

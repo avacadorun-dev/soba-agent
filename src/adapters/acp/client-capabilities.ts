@@ -14,6 +14,7 @@ export interface AcpClientCapabilities {
   terminalRelease: boolean;
   booleanConfigOptions: boolean;
   planUpdates: boolean;
+  elicitationForm: boolean;
 }
 
 export const EMPTY_ACP_CLIENT_CAPABILITIES: AcpClientCapabilities = {
@@ -30,6 +31,7 @@ export const EMPTY_ACP_CLIENT_CAPABILITIES: AcpClientCapabilities = {
   terminalRelease: false,
   booleanConfigOptions: false,
   planUpdates: false,
+  elicitationForm: false,
 };
 
 const METHOD_CAPABILITIES: Array<[keyof AcpClientCapabilities, string]> = [
@@ -53,6 +55,7 @@ export function parseAcpClientCapabilities(value: JsonValue | undefined): AcpCli
     ),
     booleanConfigOptions: hasBooleanConfigOptionsCapability(value),
     planUpdates: hasPlanUpdateCapability(value),
+    elicitationForm: hasElicitationFormCapability(value),
   } as AcpClientCapabilities;
 
   // `session/request_permission` is a baseline client method in ACP v1.
@@ -112,6 +115,14 @@ function hasBooleanConfigOptionsCapability(value: JsonValue | undefined): boolea
 function hasPlanUpdateCapability(value: JsonValue | undefined): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return isRecord(value.plan);
+}
+
+function hasElicitationFormCapability(value: JsonValue | undefined): boolean {
+  return !!value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && isRecord(value.elicitation)
+    && isRecord(value.elicitation.form);
 }
 
 function hasSobaClientMethod(value: Record<string, JsonValue>, method: string): boolean {
