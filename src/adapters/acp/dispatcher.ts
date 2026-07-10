@@ -84,6 +84,8 @@ export class AcpDispatcher {
   private readonly sessionAdditionalDirectories = new Map<string, string[]>();
   private readonly pendingPermissions = new Map<string, Set<(decision: "deny") => void>>();
   private readonly activeToolCalls = new Map<string, ActiveAcpToolCall>();
+  /** Assistant text already streamed as ACP chunks for the in-flight prompt, keyed by client session id. */
+  private readonly streamedAssistantTextBySession = new Map<string, string>();
   private postResponseEffects: Array<() => Promise<void>> = [];
 
   constructor(options: AcpDispatcherOptions) {
@@ -294,6 +296,7 @@ export class AcpDispatcher {
 
     const { sessionId } = result.data;
     const runtimeSessionId = this.resolveRuntimeSessionId(sessionId);
+    this.streamedAssistantTextBySession.set(sessionId, "");
     const unsubscribe = this.runtime.onEvent((event) => {
       void this.handleRuntimeEvent(sessionId, event);
     });
@@ -319,6 +322,7 @@ export class AcpDispatcher {
       throw error;
     } finally {
       unsubscribe();
+      this.streamedAssistantTextBySession.delete(sessionId);
     }
   }
 
@@ -529,17 +533,33 @@ export class AcpDispatcher {
 
   private runtimeEventToUpdate(sessionId: string, event: RuntimeEvent): JsonValue | undefined {
     switch (event.type) {
-      case "assistant_text_delta":
+      case "assistant_text_delta": {
+        if (event.delta) {
+          const previous = this.streamedAssistantTextBySession.get(sessionId) ?? "";
+          this.streamedAssistantTextBySession.set(sessionId, previous + event.delta);
+        }
         return {
           sessionUpdate: "agent_message_chunk",
           messageId: event.messageId,
           content: { type: "text", text: event.delta },
         };
-      case "assistant_message":
+      }
+      case "assistant_message": {
+        // ACP clients (e.g. Zed) append agent_message_chunk bodies. After streaming
+        // deltas, a second full-body assistant_message would duplicate the visible text.
+        // Keep metadata (evidence handoff) but suppress a redundant body when the text
+        // was already streamed, or is essentially the same final handoff.
+        const streamed = this.streamedAssistantTextBySession.get(sessionId) ?? "";
+        const metadataOnly = shouldSuppressAssistantMessageBody(streamed, event.text);
+        if (!metadataOnly && event.text) {
+          this.streamedAssistantTextBySession.set(sessionId, streamed + event.text);
+        }
         return agentMessageUpdate({
           messageId: event.messageId,
           text: event.text,
+          metadataOnly,
         });
+      }
       case "assistant_reasoning_delta":
         return {
           sessionUpdate: "agent_thought_chunk",
@@ -869,6 +889,25 @@ function agentMessageUpdate(input: { messageId: string; text: string; metadataOn
     };
   }
   return update;
+}
+
+/**
+ * Decide whether a final assistant_message body should be suppressed on the ACP wire.
+ * Clients append chunk text, so re-sending text that was already streamed (or a finish
+ * handoff whose body is essentially the streamed answer + evidence) would double the UI.
+ */
+function shouldSuppressAssistantMessageBody(streamed: string, fullText: string): boolean {
+  if (!fullText) return true;
+  if (!streamed) return false;
+  if (fullText === streamed) return true;
+  if (fullText.startsWith(streamed)) return true;
+
+  const streamedBody = splitEvidenceHandoff(streamed).body.trim();
+  const fullBody = splitEvidenceHandoff(fullText).body.trim();
+  if (streamedBody.length > 0 && fullBody === streamedBody) return true;
+  if (streamedBody.length > 0 && fullBody.startsWith(streamedBody)) return true;
+
+  return false;
 }
 
 function toolCallStartUpdate(toolCallId: string, toolName: string, args: Record<string, unknown>, cwd: string): JsonValue {

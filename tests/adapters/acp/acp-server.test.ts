@@ -25,6 +25,9 @@ interface MockRuntimeState {
   loadEntries?: unknown[];
   assistantDeltas?: string[];
   assistantMessage?: string;
+  /** When true with assistantDeltas, also emit a final assistant_message (simulates finish/non-stream handoff). */
+  emitAssistantMessageAfterDeltas?: boolean;
+  assistantMessageAfterDeltas?: string;
 }
 
 function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
@@ -267,6 +270,16 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           delta,
         } as RuntimeEvent));
       });
+      if (state.emitAssistantMessageAfterDeltas && state.assistantMessage === undefined) {
+        const text = state.assistantMessageAfterDeltas
+          ?? assistantDeltas.join("");
+        listeners.forEach((listener) => listener({
+          type: "assistant_message",
+          timestamp: Date.now(),
+          messageId: "msg_1",
+          text,
+        } as RuntimeEvent));
+      }
       const turnError = state.turnErrorType
         ? {
           id: "err_1",
@@ -880,6 +893,81 @@ describe("ACP stdio server foundation", () => {
       id: "prompt",
       result: { stopReason: "end_turn" },
     });
+  });
+
+  test("does not re-emit full assistant body after ACP deltas (Zed-safe dedupe)", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "hello" }] },
+        })}\n`,
+      ],
+      {
+        state: {
+          assistantDeltas: ["Goal brief\n", "section 1"],
+          emitAssistantMessageAfterDeltas: true,
+          assistantMessageAfterDeltas: [
+            "Goal brief\nsection 1",
+            "",
+            "**Evidence**",
+            "- Status: verified",
+          ].join("\n"),
+        },
+      },
+    );
+
+    const agentChunks = result.messages.filter((message) =>
+      message.method === "session/update"
+      && (message.params as { update?: { sessionUpdate?: string } } | undefined)?.update?.sessionUpdate
+        === "agent_message_chunk",
+    );
+
+    expect(agentChunks).toHaveLength(3);
+    expect(agentChunks[0]).toMatchObject({
+      params: {
+        update: {
+          messageId: "msg_1",
+          content: { type: "text", text: "Goal brief\n" },
+        },
+      },
+    });
+    expect(agentChunks[1]).toMatchObject({
+      params: {
+        update: {
+          messageId: "msg_1",
+          content: { type: "text", text: "section 1" },
+        },
+      },
+    });
+    // Final assistant_message must not re-append the body — only evidence metadata (empty text).
+    expect(agentChunks[2]).toMatchObject({
+      params: {
+        update: {
+          messageId: "msg_1",
+          content: { type: "text", text: "" },
+          _meta: {
+            soba: {
+              evidence: {
+                source: "assistant_handoff",
+                status: "verified",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const visibleText = agentChunks
+      .map((message) => {
+        const update = (message.params as { update: { content?: { text?: string } } }).update;
+        return update.content?.text ?? "";
+      })
+      .join("");
+    expect(visibleText).toBe("Goal brief\nsection 1");
+    expect(visibleText).not.toContain("Goal brief\nsection 1Goal brief");
   });
 
   test("emits ACP thought and plan updates for desktop clients", async () => {
