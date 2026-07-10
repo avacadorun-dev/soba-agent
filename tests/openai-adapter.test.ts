@@ -918,6 +918,67 @@ describe("OpenAIAdapter stream parsing", () => {
     }
   });
 
+  test("MiniMax non-prefix visible corrections do not re-emit the full answer", () => {
+    const acc = adapter.createStreamAccumulator();
+    const deltas: string[] = [];
+
+    // Real MiniMax/OpenRouter shapes: cumulative body, then a full re-snapshot after
+    // think-tag stripping that is not a strict prefix of the previous visible text.
+    for (const content of [
+      "Goal brief — invoice-notes-api v1\n\nContext",
+      "Goal brief — invoice-notes-api v1\n\nContext from inspection",
+      // full re-send of the same answer (common MiniMax glitch)
+      "Goal brief — invoice-notes-api v1\n\nContext from inspection",
+      // corrected re-snapshot that shares a long prefix but is not previous+delta
+      "Goal brief — invoice-notes-api v1\n\nContext from inspection (read-only).\nNext steps",
+    ]) {
+      const events = adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-minimax-correction",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "MiniMax-M3",
+          choices: [
+            {
+              index: 0,
+              delta: { content },
+              finish_reason: content.includes("Next steps") ? "stop" : null,
+            },
+          ],
+        }),
+        acc,
+      );
+      for (const event of events) {
+        if (event.type === "response.output_text.delta") {
+          deltas.push(event.delta);
+        }
+      }
+    }
+
+    const visible = deltas.join("");
+    expect(visible).toBe(
+      "Goal brief — invoice-notes-api v1\n\nContext from inspection (read-only).\nNext steps",
+    );
+    expect(visible).not.toContain(
+      "Goal brief — invoice-notes-api v1\n\nContext from inspectionGoal brief",
+    );
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const completed = events.find((event) => event.type === "response.completed");
+    expect(completed?.type).toBe("response.completed");
+    if (completed?.type === "response.completed") {
+      const message = completed.response.output.find((item) => item.type === "message");
+      expect(message?.type).toBe("message");
+      if (message?.type === "message") {
+        const content = message.content[0];
+        expect(content?.type).toBe("output_text");
+        if (content?.type === "output_text") {
+          expect(content.text).toBe(visible);
+        }
+      }
+    }
+  });
+
   test("MiniMax reasoning_details склеивает overlap/correction chunks без дублей", () => {
     const acc = adapter.createStreamAccumulator();
 

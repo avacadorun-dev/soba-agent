@@ -329,6 +329,68 @@ function mergeProviderContentDelta(
 }
 
 /**
+ * Convert merged visible text snapshots into a true append-only delta.
+ * MiniMax (and some OpenRouter proxies) may re-send cumulative/corrected bodies
+ * that do not strictly prefix the previous visible text after <think> stripping.
+ * Falling back to the full nextText would re-emit the whole answer into the UI.
+ */
+function diffVisibleContentDelta(
+  previousText: string,
+  nextText: string,
+  model: string | undefined,
+): string {
+  if (!nextText) return "";
+  if (!previousText) return nextText;
+  if (nextText === previousText) return "";
+  if (nextText.startsWith(previousText)) {
+    return nextText.slice(previousText.length);
+  }
+  // Corrected/shorter snapshot of the same answer — do not re-emit.
+  if (previousText.startsWith(nextText)) {
+    return "";
+  }
+
+  // Prefer MiniMax-aware merge then take the true suffix; also apply to any model
+  // when the snapshots clearly overlap so a non-prefix correction does not dump
+  // the full nextText again.
+  const merged = isMiniMaxModel(model)
+    ? mergeProviderContentDelta(previousText, nextText, model)
+    : previousText + nextText;
+  if (merged.startsWith(previousText)) {
+    return merged.slice(previousText.length);
+  }
+  if (previousText.startsWith(merged) || merged === previousText) {
+    return "";
+  }
+
+  const maxOverlap = Math.min(previousText.length, nextText.length);
+  for (let length = maxOverlap; length >= 8; length--) {
+    if (previousText.endsWith(nextText.slice(0, length))) {
+      return nextText.slice(length);
+    }
+  }
+
+  let commonPrefixLength = 0;
+  while (
+    commonPrefixLength < maxOverlap
+    && previousText[commonPrefixLength] === nextText[commonPrefixLength]
+  ) {
+    commonPrefixLength++;
+  }
+  if (commonPrefixLength >= 8) {
+    return nextText.slice(commonPrefixLength);
+  }
+
+  // Last resort for MiniMax: never re-append a full re-snapshot of long text.
+  // Prefer silence over doubling the visible answer in the stream.
+  if (isMiniMaxModel(model) && nextText.length >= Math.max(32, previousText.length * 0.5)) {
+    return "";
+  }
+
+  return nextText;
+}
+
+/**
  * Convert OpenResponses content to OpenAI message content (string or array).
  */
 function convertContentToOpenAI(
@@ -953,10 +1015,14 @@ function parseOpenAIChunk(
 
         const previousText = accumulator.textContent.get(index) ?? "";
         const nextText = parsed.visibleText;
-        accumulator.textContent.set(index, nextText);
-        const delta = nextText.startsWith(previousText)
-          ? nextText.slice(previousText.length)
-          : nextText;
+        const delta = diffVisibleContentDelta(previousText, nextText, chunk.model);
+        // Track the text already shown to the UI so subsequent diffs stay append-only.
+        // MiniMax may send a shorter corrected snapshot; never shrink the streamed view.
+        if (delta) {
+          accumulator.textContent.set(index, previousText + delta);
+        } else if (nextText.startsWith(previousText) && nextText.length > previousText.length) {
+          accumulator.textContent.set(index, nextText);
+        }
 
         if (
           !accumulator.sentMessageItemAdded.has(index) &&
