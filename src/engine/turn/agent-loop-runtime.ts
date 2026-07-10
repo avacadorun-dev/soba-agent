@@ -16,6 +16,7 @@ import {
 import { DefaultTrustController, type TrustController } from "../permissions/trust-controller";
 import { ToolCallExecutor } from "../tool-calls/tool-call-executor";
 import type { ProjectCommandFileReader } from "../verification/types";
+import { WorkModeController } from "../work-mode/work-mode-controller";
 import { AgentLoopEventBus } from "./agent-loop-event-bus";
 import type { SkillSource } from "./skill-source";
 import type { ProjectContextReader } from "./turn-prompt-preparation";
@@ -50,6 +51,7 @@ export interface AgentLoopRuntimeServices {
   tools: ToolRegistry;
   options: AgentLoopOptions;
   trustManager: TrustController;
+  workModeController: WorkModeController;
   budgetTracker: BudgetTracker;
   contextManager: ContextManager | undefined;
   backgroundScheduler: BackgroundScheduler | undefined;
@@ -61,6 +63,8 @@ export interface AgentLoopRuntimeServices {
   projectCommandFiles: ProjectCommandFileReader | undefined;
   eventBus: AgentLoopEventBus;
   toolExecutor: ToolCallExecutor;
+  clarificationAvailable(): boolean;
+  setClarificationAvailable(available: boolean): void;
   getAutoCompactOverride(): { enabled: boolean } | undefined;
   setAutoCompactOverride(override: { enabled: boolean }): void;
 }
@@ -69,12 +73,14 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
   const options = { ...DEFAULT_LOOP_OPTIONS, ...input.options };
   const trustManager = input.trustManager ?? new DefaultTrustController({ repoRoot: input.cwd });
   trustManager.setRepoRoot(input.cwd);
+  const workModeController = new WorkModeController();
   const budgetTracker =
     input.budgetTracker ??
     new BudgetTracker({ totalBudget: options.tokenBudget });
   const autoCompactState = {
     override: input.autoCompactOverride,
   };
+  const clarificationState = { available: false };
 
   const eventBus = new AgentLoopEventBus({
     shouldEmit: () => options.emitEvents,
@@ -100,6 +106,7 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     permissionBroker,
     toolContext: input.createToolContext,
     emit,
+    getWorkMode: () => workModeController.getWorkMode(),
   });
 
   return {
@@ -107,6 +114,7 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     tools: input.tools,
     options,
     trustManager,
+    workModeController,
     budgetTracker,
     contextManager: input.contextManager,
     backgroundScheduler: input.backgroundScheduler,
@@ -118,6 +126,10 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     projectCommandFiles: input.projectCommandFiles,
     eventBus,
     toolExecutor,
+    clarificationAvailable: () => clarificationState.available,
+    setClarificationAvailable: (available) => {
+      clarificationState.available = available;
+    },
     getAutoCompactOverride: () => autoCompactState.override,
     setAutoCompactOverride: (override) => {
       autoCompactState.override = override;

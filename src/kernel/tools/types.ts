@@ -6,6 +6,7 @@
  */
 
 import type { FunctionCallOutputItemParam, LocalShellCallOutputItemParam } from "../model/openresponses-types";
+import type { AskUserArgs, ClarificationOutcome } from "./ask-user";
 
 // ─── Tool Definition ───
 
@@ -89,6 +90,8 @@ export interface ToolContext {
   session?: unknown;
   /** Maximum timeout any bash tool call may request, in seconds */
   bashMaxTimeoutSeconds?: number;
+  /** Optional interactive clarification bridge supplied by the active host. */
+  requestClarification?: (request: AskUserArgs) => Promise<ClarificationOutcome>;
 }
 
 /**

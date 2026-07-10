@@ -1,4 +1,5 @@
 import type { FlightRecordData } from "../../kernel/transcript/types";
+import { filterToolsForWorkMode } from "../../kernel/work-mode/public";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
 import type { WorkingNarrationEmitter } from "./narration";
 import { prepareTurnPrompt } from "./turn-prompt-preparation";
@@ -18,10 +19,13 @@ export async function prepareAgentTurnPromptContext(input: {
     "context_scan",
     "Checking project instructions, available skills, and memory before choosing the next action.",
   );
+  const workMode = runtime.workModeController.getWorkMode();
   const preparedPrompt = await prepareTurnPrompt({
     cwd,
     userText,
     selectedTools: runtime.tools.getNames(),
+    workMode,
+    clarificationAvailable: runtime.clarificationAvailable(),
     contextReader: runtime.projectContextReader,
     skillManager: runtime.skillManager,
     projectMemory: runtime.projectMemory,
@@ -42,14 +46,21 @@ export async function prepareAgentTurnPromptContext(input: {
       userInput: userText,
       taskKind,
       model,
-      selectedTools: runtime.tools.getNames(),
+      workMode,
+      selectedTools: filterToolsForWorkMode(runtime.tools.getNames(), workMode, {
+        clarificationAvailable: runtime.clarificationAvailable(),
+      }),
       contextFiles: contextFiles.map((file) => file.path),
       systemPrompt,
     },
   });
   narrate(
     "plan",
-    "Proceeding in small steps: inspect relevant context, act with tools, then verify before completion.",
+    workMode === "plan"
+      ? "Plan mode is active: inspect and design only; mutations stay blocked until /plan off."
+      : workMode === "goal"
+        ? "Goal mode is active: clarify objective and success criteria only; mutations stay blocked until /plan off."
+        : "Proceeding in small steps: inspect relevant context, act with tools, then verify before completion.",
   );
 
   return preparedPrompt;

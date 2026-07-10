@@ -14,6 +14,7 @@ import { type CheckpointArgs, type CheckpointEvent } from "../../kernel/tools/ch
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolResult } from "../../kernel/tools/types";
 import type { InputImageContent, InputTextContent, UserMessageItemParam } from "../../kernel/transcript/types";
+import { isRestrictedWorkMode, type WorkMode } from "../../kernel/work-mode/public";
 import type { AutoVerifierToolCall } from "../verification/auto-verifier";
 import type { TaskKind } from "../verification/verification-policy";
 import type { AgentTurnError, CheckpointWorkPlanState } from "./types";
@@ -272,6 +273,7 @@ export function getAutonomousFollowUpReason(
   hasMutatedFiles: boolean,
   hasUsedTools: boolean,
   taskKind: TaskKind = "unknown",
+  workMode: WorkMode = "agent",
 ): string | null {
   if (assistantMessages.length === 0) {
     return null;
@@ -297,6 +299,13 @@ export function getAutonomousFollowUpReason(
       )
       .join("\n    ");
     return `Active tool errors must be resolved before finishing. Fix their cause with tools, or use status blocked only if a concrete external blocker makes recovery impossible:\n    ${errorList}`;
+  }
+
+  // Plan/goal are inspect+design modes. After tools without mutations, a visible
+  // plan/goal brief is a valid terminal response — do not auto-continue just to
+  // force finish. Mutation-driven verification and active errors still apply above.
+  if (isRestrictedWorkMode(workMode) && !hasMutatedFiles) {
+    return null;
   }
 
   if (taskKind === "read_only_question" && !hasMutatedFiles) {
@@ -412,6 +421,7 @@ export function buildRequest(
   temperature: number,
   ephemeralMessages: Array<{ role: "developer"; content: string }> = [],
   allowParallelToolCalls = true,
+  allowedToolNames?: ReadonlySet<string>,
 ): CreateResponseParams {
   const input = session.buildInput();
   const items = input.items as ItemParam[];
@@ -435,7 +445,10 @@ export function buildRequest(
       ...tools
         .getOpenResponsesTools()
         .filter(
-          (tool) => tool.type !== "function" || tool.name !== FINISH_TOOL_NAME,
+          (tool) =>
+            tool.type !== "function" ||
+            (tool.name !== FINISH_TOOL_NAME &&
+              (allowedToolNames === undefined || allowedToolNames.has(tool.name))),
         ),
       FINISH_TOOL,
     ],

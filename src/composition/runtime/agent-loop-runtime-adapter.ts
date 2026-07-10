@@ -25,6 +25,7 @@ import type { PersistentSessionLifecycleService } from "../../infrastructure/per
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
 import type { PermissionMode } from "../../kernel/permissions/trust";
 import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
+import { normalizeWorkModeId } from "../../kernel/work-mode/public";
 import {
   buildProviderConfigOptions,
   providerHasCredentials,
@@ -135,15 +136,21 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
 
   async setSessionMode(input: SetSessionModeInput): Promise<RuntimeSessionInfo> {
     this.assertActiveSession(input.sessionId);
-    if (!isPermissionMode(input.mode)) {
-      throw new Error(`Unsupported session mode "${input.mode}".`);
+    if (isPermissionMode(input.mode)) {
+      this.loop.getTrustManager().setPermissionMode(input.mode);
+      return this.activeSessionInfo();
     }
-    this.loop.getTrustManager().setPermissionMode(input.mode);
-    return this.activeSessionInfo();
+    const workMode = normalizeWorkModeId(input.mode);
+    if (workMode) {
+      this.loop.setWorkMode(workMode);
+      return this.activeSessionInfo();
+    }
+    throw new Error(`Unsupported session mode "${input.mode}".`);
   }
 
   async runTurn(input: UserTurnInput): Promise<TurnResult> {
     this.assertActiveSession(input.sessionId);
+    this.setClarificationAvailable(input.clarificationAvailable === true);
     const command = commandTextFromTurn(input);
     if (command && this.commandExecutor) {
       const result = await this.commandExecutor({
@@ -152,13 +159,22 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
         emit: (event) => this.emitRuntimeEvent(event),
       });
       if (result.handled) {
+        this.setClarificationAvailable(false);
         return emptyCommandTurnResult();
       }
       if (result.prompt) {
-        return this.loop.runTurn(result.prompt);
+        try {
+          return await this.loop.runTurn(result.prompt);
+        } finally {
+          this.setClarificationAvailable(false);
+        }
       }
     }
-    return this.loop.runTurn(runtimeBlocksToUserContent(input.content));
+    try {
+      return await this.loop.runTurn(runtimeBlocksToUserContent(input.content));
+    } finally {
+      this.setClarificationAvailable(false);
+    }
   }
 
   cancelTurn(sessionId: string): void {
@@ -189,6 +205,11 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
     if (sessionId !== this.session.getSessionId()) {
       throw new Error(`Runtime session ${sessionId} is not active.`);
     }
+  }
+
+  private setClarificationAvailable(available: boolean): void {
+    (this.loop as AgentLoop & { setClarificationAvailable?: (value: boolean) => void })
+      .setClarificationAvailable?.(available);
   }
 
   private activeSessionInfo(): RuntimeSessionInfo {

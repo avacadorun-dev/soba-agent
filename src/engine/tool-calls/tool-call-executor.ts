@@ -2,6 +2,12 @@ import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import { createToolErrorResult } from "../../kernel/tools/errors";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
+import {
+  isCommandAllowedInPlanMode,
+  isRestrictedWorkMode,
+  isToolAllowedInPlanMode,
+  type WorkMode,
+} from "../../kernel/work-mode/public";
 import type { PermissionBroker, PermissionDecisionReceipt } from "../permissions/permission-broker";
 import type { AgentEvent } from "../turn/types";
 
@@ -11,6 +17,7 @@ export interface ToolCallExecutorOptions {
   toolContext: () => ToolContext;
   emit: (event: AgentEvent) => void;
   createId?: () => string;
+  getWorkMode?: () => WorkMode;
 }
 
 export interface ToolExecutionResult {
@@ -33,6 +40,7 @@ export class ToolCallExecutor {
   private readonly toolContext: () => ToolContext;
   private readonly emit: (event: AgentEvent) => void;
   private readonly createId: () => string;
+  private readonly getWorkMode: () => WorkMode;
   private readonly activeToolAbortControllers = new Set<AbortController>();
   private directShellAbortController: AbortController | null = null;
 
@@ -42,6 +50,7 @@ export class ToolCallExecutor {
     this.toolContext = options.toolContext;
     this.emit = options.emit;
     this.createId = options.createId ?? createRuntimeId;
+    this.getWorkMode = options.getWorkMode ?? (() => "agent");
   }
 
   abortActiveTool(): boolean {
@@ -82,6 +91,31 @@ export class ToolCallExecutor {
       toolName: toolCall.name,
       args: parsedArgs,
     });
+
+    const planModeDenial = this.evaluatePlanModeDenial(toolCall, parsedArgs);
+    if (planModeDenial) {
+      const result = createToolErrorResult({
+        code: "plan_mode_blocked",
+        category: "validation",
+        message: planModeDenial.reason,
+        nextAction: "Stay in plan mode with read-only tools, or ask the user to run /plan off before implementing.",
+        fingerprint: `validation:plan_mode_blocked:${toolCall.name}`,
+      });
+      this.emitToolResultAndEnd(toolCall, result, startTime);
+      return {
+        toolCall,
+        parsedArgs,
+        result,
+        startTime,
+        durationMs: Date.now() - startTime,
+        cwd: context.cwd,
+        permission: planModeDenial.receipt,
+        denied: {
+          description: planModeDenial.description,
+          reason: planModeDenial.reason,
+        },
+      };
+    }
 
     const permissionDecision = await this.permissionBroker.authorizeToolCall(toolCall, parsedArgs);
     if (!permissionDecision.approved) {
@@ -273,6 +307,52 @@ export class ToolCallExecutor {
       toolName: toolCall.name,
       durationMs: Date.now() - startTime,
     });
+  }
+
+  private evaluatePlanModeDenial(
+    toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
+    parsedArgs: Record<string, unknown>,
+  ): { reason: string; description: string; receipt: PermissionDecisionReceipt } | null {
+    if (!isRestrictedWorkMode(this.getWorkMode())) return null;
+
+    const toolDecision = isToolAllowedInPlanMode(toolCall.name);
+    if (!toolDecision.allowed) {
+      return this.planModeDenialReceipt(toolCall, parsedArgs, toolDecision.reason);
+    }
+
+    if (toolCall.name === "bash" && typeof parsedArgs.command === "string") {
+      const commandDecision = isCommandAllowedInPlanMode(parsedArgs.command);
+      if (!commandDecision.allowed) {
+        return this.planModeDenialReceipt(toolCall, parsedArgs, commandDecision.reason);
+      }
+    }
+
+    return null;
+  }
+
+  private planModeDenialReceipt(
+    toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
+    parsedArgs: Record<string, unknown>,
+    reason: string,
+  ): { reason: string; description: string; receipt: PermissionDecisionReceipt } {
+    const command = typeof parsedArgs.command === "string" ? parsedArgs.command : undefined;
+    const description =
+      toolCall.name === "bash" && command !== undefined ? `bash: ${command}` : toolCall.name;
+    return {
+      reason,
+      description,
+      receipt: {
+        toolCallId: toolCall.call_id,
+        toolName: toolCall.name,
+        decision: "deny",
+        approved: false,
+        trustLevel: "normal",
+        approvalKind: toolCall.name === "bash" && command !== undefined ? "command" : "tool",
+        approvalValue: command ?? toolCall.name,
+        description,
+        reason,
+      },
+    };
   }
 }
 

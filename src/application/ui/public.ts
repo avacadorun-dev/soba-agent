@@ -1,9 +1,17 @@
 import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
+import type { WorkMode } from "../../kernel/work-mode/public";
 import type { ModelDefinition, ProviderDefinition, TestResult } from "../providers/public";
 import type { PermissionMode } from "../trust/trust-manager";
 
 export { CURRENT_SESSION_VERSION } from "../../kernel/session/version";
 export type { InputImageContent, InputTextContent, SessionInfo } from "../../kernel/transcript/types";
+export type { WorkMode } from "../../kernel/work-mode/public";
+export {
+  isRestrictedWorkMode,
+  isWorkMode,
+  normalizeWorkModeId,
+  WORK_MODES,
+} from "../../kernel/work-mode/public";
 export { detectLocale, I18n, isLocale, resetI18n } from "../../shared/i18n/i18n";
 export type { Locale, TranslationKey } from "../../shared/i18n/types";
 export type {
@@ -21,6 +29,11 @@ export {
   parseRuntimeCommandInput,
   RUNTIME_COMMANDS,
 } from "../command-service";
+export type {
+  PlanCommandController,
+  PlanCommandView,
+} from "../commands/plan";
+export { executePlanCommand } from "../commands/plan";
 export type {
   SobaConfig,
   TuiThemeName,
@@ -108,6 +121,8 @@ export interface RuntimeAgentContextView {
 
 export interface RuntimeAgentHandle {
   getTrustManager?(): RuntimeAgentTrustController;
+  getWorkMode?(): WorkMode;
+  setWorkMode?(mode: WorkMode): void;
   getModel(): string;
   getSessionManager(): RuntimeAgentSessionView;
   getContextManager(): RuntimeAgentContextView | undefined;

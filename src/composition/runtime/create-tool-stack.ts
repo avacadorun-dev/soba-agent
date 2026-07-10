@@ -16,6 +16,7 @@ import { createMemoryTools } from "../../infrastructure/tools/local/memory-tools
 import { readTool } from "../../infrastructure/tools/local/read";
 import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
 import { writeTool } from "../../infrastructure/tools/local/write";
+import { askUserTool } from "../../kernel/tools/ask-user";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
 
 export function createToolStack(delegation?: RuntimeToolDelegation): ToolRegistry {
@@ -28,6 +29,7 @@ export function createToolStack(delegation?: RuntimeToolDelegation): ToolRegistr
   registry.register(delegation ? createDelegatedSearchFilesTool(delegation) : searchFilesTool);
   registry.register(delegation ? createDelegatedInspectFileTool(delegation) : inspectFileTool);
   registry.register(checkpointTool);
+  registry.register(askUserTool);
   for (const memoryTool of createMemoryTools()) {
     registry.register(memoryTool);
   }

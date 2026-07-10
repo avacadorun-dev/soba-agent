@@ -6,6 +6,7 @@
 
 import type { ItemParam, ResponseResource, Usage } from "../../kernel/model/openresponses-types";
 import type { PermissionAlternative } from "../../kernel/permissions/trust";
+import type { AskUserArgs, ClarificationOutcome } from "../../kernel/tools/ask-user";
 import type { ToolResult } from "../../kernel/tools/types";
 import type { EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import type { WorkingNarrationEventType } from "./narration";
@@ -47,6 +48,7 @@ export type AgentEventType =
   | "loop_guard"
   | "budget_update"
   | "dangerous_confirmation"
+  | "clarification_request"
   | "turn_stop_reason"
   | "compaction_start"
   | "compaction_done"
@@ -153,6 +155,14 @@ export interface DangerousConfirmationEvent extends BaseAgentEvent {
 }
 
 export type ApprovalDecision = "deny" | "once" | "session" | "repo" | "full";
+
+export interface ClarificationRequestEvent extends BaseAgentEvent {
+  type: "clarification_request";
+  request: AskUserArgs;
+  /** Claim synchronously before awaiting UI work. Unclaimed requests resolve unavailable. */
+  claim(): void;
+  resolve(outcome: ClarificationOutcome): void;
+}
 
 /**
  * Emitted when the agent loop decides to stop a turn.
@@ -269,6 +279,7 @@ export type AgentEvent =
   | LoopGuardEvent
   | BudgetUpdateEvent
   | DangerousConfirmationEvent
+  | ClarificationRequestEvent
   | TurnStopReasonEvent
   | CompactionStartEvent
   | CompactionDoneEvent

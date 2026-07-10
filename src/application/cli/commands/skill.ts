@@ -1,10 +1,11 @@
 import type { CommandResult } from "../public";
 import {
   executePermissionsCommand,
+  executePlanCommand,
   executeProjectTrustCommand,
   executeSkillCommand,
 } from "../public";
-import type { CommandContext } from "./index";
+import type { CommandAgentPort, CommandContext } from "./index";
 
 export async function handleSkill(args: string[], ctx: CommandContext): Promise<CommandResult> {
   const view = await executeSkillCommand({ args, commands: ctx.skillCommands });
@@ -164,6 +165,43 @@ export function handlePermissions(args: string[], ctx: CommandContext): CommandR
     type: "info",
     timestamp: Date.now(),
     message: ctx.i18n.t("tui.permissions.changed", { mode: view.mode }),
+  });
+  return { handled: true };
+}
+
+export function handlePlan(args: string[], ctx: CommandContext): CommandResult {
+  const agentLoop = ctx.agentLoop as CommandAgentPort | undefined;
+  const controller =
+    agentLoop?.getWorkMode && agentLoop.setWorkMode
+      ? {
+          getWorkMode: () => agentLoop.getWorkMode!(),
+          setWorkMode: agentLoop.setWorkMode!.bind(agentLoop),
+        }
+      : undefined;
+  const view = executePlanCommand({ args, controller });
+
+  if (view.kind === "not_configured" || view.kind === "usage") {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.plan.usage"),
+    });
+    return { handled: true };
+  }
+
+  if (view.kind === "current") {
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: ctx.i18n.t("tui.plan.current", { mode: view.mode }),
+    });
+    return { handled: true };
+  }
+
+  ctx.renderer.emit({
+    type: "info",
+    timestamp: Date.now(),
+    message: ctx.i18n.t("tui.plan.changed", { mode: view.mode }),
   });
   return { handled: true };
 }

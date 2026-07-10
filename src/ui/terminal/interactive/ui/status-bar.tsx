@@ -6,9 +6,11 @@ export function StatusBar(props: { store: TuiStore; width: number }) {
   const theme = () => getTuiTheme(props.store.themeName());
   const label = () => {
     const frame = props.store.noodleFrame();
+    const mode = props.store.workMode();
+    const modeBadge = mode === "plan" ? " [plan]" : mode === "goal" ? " [goal]" : "";
     return frame === null
-      ? `${props.store.isIdle() ? "∿" : "∼"} ${props.store.status()}`
-      : `${SYNTHWAVE_NOODLE_FRAMES[frame]} ${props.store.getThinkingLabel()}`;
+      ? `${props.store.isIdle() ? "∿" : "∼"} ${props.store.status()}${modeBadge}`
+      : `${SYNTHWAVE_NOODLE_FRAMES[frame]} ${props.store.getThinkingLabel()}${modeBadge}`;
   };
   return (
     <box
@@ -18,11 +20,13 @@ export function StatusBar(props: { store: TuiStore; width: number }) {
     >
       <text wrapMode="none" truncate
         fg={
-          props.store.noodleFrame() === null
-            ? props.store.isIdle()
-              ? theme().success
-              : theme().warning
-            : theme().primary
+          props.store.workMode() === "plan" || props.store.workMode() === "goal"
+            ? theme().warning
+            : props.store.noodleFrame() === null
+              ? props.store.isIdle()
+                ? theme().success
+                : theme().warning
+              : theme().primary
         }
       >
         {label()}

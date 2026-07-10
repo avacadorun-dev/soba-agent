@@ -1,6 +1,7 @@
 import type { FunctionCallField, ItemParam, MessageField } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { DebugEntry, FlightRecordData } from "../../kernel/transcript/types";
+import type { WorkMode } from "../../kernel/work-mode/public";
 import type { CompletionController } from "../completion/completion-controller";
 import type { EvidenceApproval, EvidenceProofSink } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
@@ -34,6 +35,7 @@ export async function handleAgentTurnCompletionStage(input: {
   evidenceLedger: EvidenceLedger;
   errors: AgentTurnError[];
   taskKind: TaskKind;
+  workMode: WorkMode;
   allowUnverifiedCompletion: boolean;
   runAutoVerification(opportunity: string): Promise<boolean>;
   session: SessionPort;
@@ -61,6 +63,7 @@ export async function handleAgentTurnCompletionStage(input: {
     evidenceLedger,
     errors,
     taskKind,
+    workMode,
     allowUnverifiedCompletion,
     runAutoVerification,
     session,
@@ -134,6 +137,7 @@ export async function handleAgentTurnCompletionStage(input: {
       errors,
       turnIndex,
       taskKind,
+      workMode,
       iteration,
       autonomousFollowUps,
       maxAutonomousFollowUps,
@@ -167,6 +171,7 @@ async function handleTextOnlyResponse(input: {
   errors: AgentTurnError[];
   turnIndex: number;
   taskKind: TaskKind;
+  workMode: WorkMode;
   iteration: number;
   autonomousFollowUps: number;
   maxAutonomousFollowUps: number;
@@ -189,6 +194,7 @@ async function handleTextOnlyResponse(input: {
     errors: input.errors,
     turn: input.turnIndex,
     taskKind: input.taskKind,
+    workMode: input.workMode,
     iteration: input.iteration,
     autonomousFollowUps: input.autonomousFollowUps,
     maxAutonomousFollowUps: input.maxAutonomousFollowUps,

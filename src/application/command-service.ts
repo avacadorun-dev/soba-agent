@@ -92,6 +92,13 @@ export const RUNTIME_COMMANDS = [
     surfaces: ["print", "tui", "acp"],
   },
   {
+    id: "plan",
+    name: "/plan",
+    descriptionKey: "command.description.plan",
+    usage: "/plan [on|off|toggle|plan|planning|goal|agent]",
+    surfaces: ["print", "tui", "acp"],
+  },
+  {
     id: "notifications",
     name: "/notifications",
     descriptionKey: "command.description.notifications",

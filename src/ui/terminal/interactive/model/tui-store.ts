@@ -6,7 +6,16 @@ import type {
   RuntimeEvent,
   TranslationKey,
 } from "../../../../application/ui/public";
-import { CURRENT_SESSION_VERSION, I18n, isTuiThemeName, type PermissionMode, TrustManager, type TuiThemeName } from "../../../../application/ui/public";
+import {
+  CURRENT_SESSION_VERSION,
+  executePlanCommand,
+  I18n,
+  isTuiThemeName,
+  type PermissionMode,
+  TrustManager,
+  type TuiThemeName,
+  type WorkMode,
+} from "../../../../application/ui/public";
 import { SYNTHWAVE_NOODLE_FRAMES } from "../../output/agent-status-line";
 import { registerKeysCommand } from "../commands/keys-command";
 import { registerModelCommand } from "../commands/model-command";
@@ -66,6 +75,7 @@ export class TuiStore {
   readonly localeRevision: Accessor<number>;
   readonly queuedMessages: Accessor<QueuedMessage[]>;
   readonly permissionMode: Accessor<PermissionMode>;
+  readonly workMode: Accessor<WorkMode>;
   readonly sidebarMode: Accessor<SidebarMode>;
   readonly sidebarCollapsed: Accessor<boolean>;
   readonly activePane: Accessor<ActivePane>;
@@ -100,6 +110,7 @@ export class TuiStore {
   private readonly setLocaleRevision: Setter<number>;
   private readonly setQueuedMessages: Setter<QueuedMessage[]>;
   private readonly setPermissionMode: Setter<PermissionMode>;
+  private readonly setWorkMode: Setter<WorkMode>;
   private readonly setIsSearchOpen: Setter<boolean>;
   private readonly setHighlightedMessageIndex: Setter<number>;
   private readonly setSidebarMode: Setter<SidebarMode>;
@@ -159,6 +170,7 @@ export class TuiStore {
     );
     [this.queuedMessages, this.setQueuedMessages] = createSignal<QueuedMessage[]>([]);
     [this.permissionMode, this.setPermissionMode] = createSignal(this.trustManager.getPermissionMode());
+    [this.workMode, this.setWorkMode] = createSignal<WorkMode>(options.agentLoop.getWorkMode?.() ?? "agent");
     [this.sidebarMode, this.setSidebarMode] = createSignal<SidebarMode>("session");
     [this.sidebarCollapsed, this.setSidebarCollapsed] = createSignal(false);
     [this.activePane, this.setActivePane] = createSignal<ActivePane>("input");
@@ -501,6 +513,10 @@ export class TuiStore {
     }
     if (blocks.length === 0 && /^\/permissions(?:\s|$)/.test(input)) {
       this.handlePermissionsCommand(input);
+      return;
+    }
+    if (blocks.length === 0 && /^\/plan(?:\s|$)/.test(input)) {
+      this.handlePlanCommand(input);
       return;
     }
     if (blocks.length === 0 && input.startsWith("/")) {
@@ -1019,6 +1035,34 @@ export class TuiStore {
       return;
     }
     this.add({ type: "error", content: this.l("tui.permissions.usage") });
+  }
+
+  private handlePlanCommand(input: string): void {
+    const args = input.trim().split(/\s+/).slice(1);
+    const agentLoop = this.options.agentLoop;
+    const controller =
+      agentLoop.getWorkMode && agentLoop.setWorkMode
+        ? {
+            getWorkMode: () => agentLoop.getWorkMode?.() ?? this.workMode(),
+            setWorkMode: (mode: WorkMode) => {
+              agentLoop.setWorkMode?.(mode);
+              this.setWorkMode(mode);
+            },
+          }
+        : {
+            getWorkMode: () => this.workMode(),
+            setWorkMode: (mode: WorkMode) => this.setWorkMode(mode),
+          };
+    const view = executePlanCommand({ args, controller });
+    if (view.kind === "usage" || view.kind === "not_configured") {
+      this.add({ type: "error", content: this.l("tui.plan.usage") });
+      return;
+    }
+    if (view.kind === "current") {
+      this.add({ type: "info", content: this.l("tui.plan.current", { mode: view.mode }) });
+      return;
+    }
+    this.add({ type: "info", content: this.l("tui.plan.changed", { mode: view.mode }) });
   }
 
   private add(message: TuiMessageInput): TuiMessage {

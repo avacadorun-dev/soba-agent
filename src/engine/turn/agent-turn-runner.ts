@@ -31,6 +31,7 @@ import type {
   AgentTurnResult,
   CheckpointWorkPlanState,
 } from "./types";
+import { allowedToolNamesForRuntime } from "./work-mode-tools";
 export interface AgentLoopState {
   totalUsage: Usage;
   turnCount: number;
@@ -207,6 +208,7 @@ export async function runAgentTurn(
         stream: runtime.options.stream,
         ephemeralMessages,
         allowParallelToolCalls: !needsVerification,
+        allowedToolNames: allowedToolNamesForRuntime(runtime),
         turn: state.turnCount,
         iteration,
         totalUsage: state.totalUsage,
@@ -275,6 +277,7 @@ export async function runAgentTurn(
         evidenceLedger,
         errors,
         taskKind,
+        workMode: runtime.workModeController.getWorkMode(),
         allowUnverifiedCompletion,
         runAutoVerification: runAutoVerificationAt,
         session: session,

@@ -8,6 +8,7 @@ import type { ContextCapsuleMemorySink } from "../../../kernel/memory/context-ca
 import type { OpenResponsesClient } from "../../../kernel/model/model-gateway";
 import type { TrustController } from "../../../kernel/permissions/trust";
 import type { ToolRegistry } from "../../../kernel/tools/tool-registry";
+import type { WorkMode } from "../../../kernel/work-mode/public";
 import type { I18n } from "../../../shared/i18n/i18n";
 import type { PortableCapsuleServiceFactory } from "../../capsules";
 import type { CommandResult, RuntimeCommandMetadata } from "../../command-service";
@@ -39,7 +40,7 @@ import {
 } from "./general";
 import { handleMcp } from "./mcp";
 import { handleBudget, handleSession, handleSessions } from "./session";
-import { handlePermissions, handleProjectTrust, handleSkill } from "./skill";
+import { handlePermissions, handlePlan, handleProjectTrust, handleSkill } from "./skill";
 
 // ─── Types ───
 
@@ -84,6 +85,8 @@ export interface CommandAgentPort {
   setSessionManager(session: RuntimeSessionHandle): void;
   getAutoCompactOverride(): { enabled: boolean } | undefined;
   setAutoCompactOverride(override: { enabled: boolean }): void;
+  getWorkMode?(): WorkMode;
+  setWorkMode?(mode: WorkMode): void;
 }
 
 export interface CommandContextPolicyPort {
@@ -126,6 +129,7 @@ const COMMAND_HANDLERS: Record<
   lang: handleLang,
   theme: handleTheme,
   permissions: handlePermissions,
+  plan: handlePlan,
   skill: handleSkill,
   "project-trust": handleProjectTrust,
   mcp: handleMcp,

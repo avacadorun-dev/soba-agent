@@ -1,4 +1,9 @@
 import type { OpenResponsesClientConfig } from "../../kernel/model/model-gateway";
+import {
+  filterToolsForWorkMode,
+  systemGuidelinesForWorkMode,
+  type WorkMode,
+} from "../../kernel/work-mode/public";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SkillSource } from "./skill-source";
@@ -22,11 +27,17 @@ export async function prepareTurnPrompt(input: {
   cwd: string;
   userText: string;
   selectedTools: string[];
+  workMode?: WorkMode;
+  clarificationAvailable?: boolean;
   contextReader?: ProjectContextReader;
   skillManager?: SkillSource;
   projectMemory?: ProjectMemorySource;
   modelConfig: OpenResponsesClientConfig;
 }): Promise<PreparedTurnPrompt> {
+  const workMode = input.workMode ?? "agent";
+  const selectedTools = filterToolsForWorkMode(input.selectedTools, workMode, {
+    clarificationAvailable: input.clarificationAvailable,
+  });
   const contextFiles = (await input.contextReader?.read(input.cwd)) ?? [];
   const projectInstructions = contextFiles.map((file) => file.content);
   const skills = input.skillManager?.getCatalogForPrompt() ?? [];
@@ -38,7 +49,8 @@ export async function prepareTurnPrompt(input: {
     : "";
   const systemPrompt = buildSystemPrompt({
     cwd: input.cwd,
-    selectedTools: input.selectedTools,
+    selectedTools,
+    extraGuidelines: systemGuidelinesForWorkMode(workMode),
     contextFiles,
     skills,
     projectMemorySection,

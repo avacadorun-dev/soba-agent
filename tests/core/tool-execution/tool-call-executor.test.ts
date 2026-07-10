@@ -40,6 +40,7 @@ function makeExecutor(input: {
   trustManager?: TrustManager;
   events?: AgentEvent[];
   confirmation?: () => ApprovalDecision | Promise<ApprovalDecision>;
+  getWorkMode?: () => "agent" | "plan" | "goal";
 }): ToolCallExecutor {
   const trustManager = input.trustManager ?? new TrustManager({ repoRoot: "/repo" });
   return new ToolCallExecutor({
@@ -50,6 +51,7 @@ function makeExecutor(input: {
     }),
     toolContext: () => ({ cwd: "/repo" }),
     emit: (event) => input.events?.push(event),
+    getWorkMode: input.getWorkMode,
   });
 }
 
@@ -85,6 +87,94 @@ describe("ToolCallExecutor", () => {
       description: 'strict({"input":"bad"})',
     });
     expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
+  });
+
+  test("blocks mutation tools in plan mode before trust checks", async () => {
+    let executed = false;
+    const registry = new ToolRegistry();
+    registry.register(makeTool("write", async () => {
+      executed = true;
+      return { content: [{ type: "text", text: "should not run" }], isError: false };
+    }));
+    const events: AgentEvent[] = [];
+    const executor = makeExecutor({
+      registry,
+      events,
+      getWorkMode: () => "plan",
+      confirmation: () => "full",
+    });
+
+    const result = await executor.executeToolCall(
+      toolCall("write", '{"path":"a.ts","content":"x"}'),
+    );
+
+    expect(executed).toBe(false);
+    expect(result.result.isError).toBe(true);
+    expect(result.result.error?.code).toBe("plan_mode_blocked");
+    expect(result.denied?.reason).toContain("Plan mode blocks mutation tool");
+    expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
+  });
+
+  test("blocks mutation tools in goal mode before trust checks", async () => {
+    let executed = false;
+    const registry = new ToolRegistry();
+    registry.register(makeTool("edit", async () => {
+      executed = true;
+      return { content: [{ type: "text", text: "should not run" }], isError: false };
+    }));
+    const executor = makeExecutor({
+      registry,
+      getWorkMode: () => "goal",
+      confirmation: () => "full",
+    });
+
+    const result = await executor.executeToolCall(
+      toolCall("edit", '{"path":"a.ts","oldText":"a","newText":"b"}'),
+    );
+
+    expect(executed).toBe(false);
+    expect(result.result.isError).toBe(true);
+    expect(result.result.error?.code).toBe("plan_mode_blocked");
+  });
+
+  test("blocks mutating bash commands in plan mode", async () => {
+    let executed = false;
+    const registry = new ToolRegistry();
+    registry.register(makeTool("bash", async () => {
+      executed = true;
+      return { content: [{ type: "text", text: "should not run" }], isError: false };
+    }));
+    const executor = makeExecutor({
+      registry,
+      getWorkMode: () => "plan",
+      confirmation: () => "full",
+    });
+
+    const result = await executor.executeToolCall(toolCall("bash", '{"command":"rm -rf dist"}'));
+
+    expect(executed).toBe(false);
+    expect(result.result.error?.code).toBe("plan_mode_blocked");
+    expect(result.denied?.description).toBe("bash: rm -rf dist");
+  });
+
+  test("blocks every bash command in plan mode", async () => {
+    let executed = false;
+    const registry = new ToolRegistry();
+    registry.register(makeTool("bash", async () => {
+      executed = true;
+      return { content: [{ type: "text", text: "ok" }], isError: false };
+    }));
+    const executor = makeExecutor({
+      registry,
+      getWorkMode: () => "plan",
+      confirmation: () => "full",
+    });
+
+    const result = await executor.executeToolCall(toolCall("bash", '{"command":"git status --short"}'));
+
+    expect(executed).toBe(false);
+    expect(result.result.error?.code).toBe("plan_mode_blocked");
+    expect(result.denied?.description).toBe("bash: git status --short");
   });
 
   test("denies dangerous commands before execution", async () => {

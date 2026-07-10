@@ -336,6 +336,7 @@ function SessionMode(props: { store: TuiStore }) {
       <text fg={theme().text} wrapMode="none" truncate>
         {props.store.permissionMode()}
       </text>
+      <KV key="work" value={props.store.workMode()} store={props.store} />
       <text> </text>
 
       <Section label="limits" store={props.store} />

@@ -106,6 +106,11 @@ export type {
   PermissionCommandView,
 } from "../commands/permissions";
 export { executePermissionsCommand } from "../commands/permissions";
+export type {
+  PlanCommandController,
+  PlanCommandView,
+} from "../commands/plan";
+export { executePlanCommand } from "../commands/plan";
 export type { ProjectTrustCommandView } from "../commands/project-trust";
 export { executeProjectTrustCommand } from "../commands/project-trust";
 export type {

@@ -2164,6 +2164,121 @@ describe("AgentLoop", () => {
     }
   });
 
+  test("plan mode: inspection tools + plan brief не требует finish auto-continue", async () => {
+    const planText = [
+      "## Implementation plan",
+      "1. Inspect package.json and test layout",
+      "2. Add route handler for invoice notes",
+      "",
+      "### Open questions",
+      "- Should notes be versioned?",
+      "",
+      "### Risks",
+      "- Auth middleware order",
+      "",
+      "### Verification",
+      "- bun test",
+    ].join("\n");
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("inspect_file", '{"path":"package.json"}'),
+      makeTextResponse(planText, "commentary"),
+      makeFinishResponse("Не должен вызываться"),
+    ];
+    let responseIndex = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("inspect_file"));
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: true,
+    });
+    loop.setWorkMode("plan");
+
+    const result = await loop.runTurn(
+      "Составь план реализации invoice notes API. Не меняй файлы.",
+    );
+
+    expect(requests).toHaveLength(2);
+    expect(result.errors).toHaveLength(0);
+    const syntheticNudges = session
+      .buildInput()
+      .items.filter(
+        (item) =>
+          item.type === "message" &&
+          item.role === "user" &&
+          item.content.some(
+            (content) =>
+              content.type === "input_text" &&
+              content.text.includes("Tool-assisted turns must end through finish"),
+          ),
+      );
+    expect(syntheticNudges).toHaveLength(0);
+    const assistant = result.items.at(-1);
+    expect(assistant?.type).toBe("message");
+    if (assistant?.type === "message" && assistant.role === "assistant") {
+      expect(
+        assistant.content[0]?.type === "output_text" &&
+          assistant.content[0].text,
+      ).toBe(planText);
+    }
+  });
+
+  test("agent mode: inspection tools + non-final plan-like text всё ещё auto-continue к finish", async () => {
+    const requests: CreateResponseParams[] = [];
+    const responses = [
+      makeToolCallResponse("inspect_file", '{"path":"package.json"}'),
+      makeTextResponse(
+        "Inspected package.json and tests. Next I will implement the route.",
+        "commentary",
+      ),
+      makeFinishResponse("Implementation plan ready."),
+    ];
+    let responseIndex = 0;
+    const client = {
+      ...makeClient(responses),
+      create: mock(async (params: CreateResponseParams) => {
+        requests.push(params);
+        const response = responses[responseIndex];
+        responseIndex = Math.min(responseIndex + 1, responses.length - 1);
+        return response;
+      }),
+    } as OpenResponsesClient;
+    const session = SessionManager.inMemory("/test");
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("inspect_file"));
+    const loop = new AgentLoop(client, session, tools, "/test", {
+      emitEvents: true,
+      maxAutonomousFollowUps: 3,
+    });
+
+    const result = await loop.runTurn("Implement invoice notes API");
+
+    expect(requests.length).toBeGreaterThanOrEqual(3);
+    expect(result.errors).toHaveLength(0);
+    const syntheticNudges = session
+      .buildInput()
+      .items.filter(
+        (item) =>
+          item.type === "message" &&
+          item.role === "user" &&
+          item.content.some(
+            (content) =>
+              content.type === "input_text" &&
+              content.text.includes("Tool-assisted turns must end through finish"),
+          ),
+      );
+    expect(syntheticNudges.length).toBeGreaterThan(0);
+  });
+
   test("после инструментов без изменения файлов принимает повторяющийся commentary как финальный ответ", async () => {
     const requests: CreateResponseParams[] = [];
     const responses = [

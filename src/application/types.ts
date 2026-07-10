@@ -1,5 +1,6 @@
 import type { ItemParam, ResponseResource, Usage } from "../kernel/model/openresponses-types";
 import type { PermissionAlternative } from "../kernel/permissions/trust";
+import type { AskUserArgs, ClarificationOutcome } from "../kernel/tools/ask-user";
 import type { ToolResult } from "../kernel/tools/types";
 import type { SessionInfo } from "../kernel/transcript/types";
 import type { CommandResult, ListCommandsInput, RuntimeCommandMetadata } from "./command-service";
@@ -27,6 +28,7 @@ export type RuntimeEventType =
   | "loop_guard"
   | "budget_update"
   | "dangerous_confirmation"
+  | "clarification_request"
   | "turn_stop_reason"
   | "compaction_start"
   | "compaction_done"
@@ -126,6 +128,13 @@ export interface RuntimeDangerousConfirmationEvent extends BaseRuntimeEvent {
   reason: string;
   alternatives?: PermissionAlternative[];
   resolve: (decision: RuntimeApprovalDecision) => void;
+}
+
+export interface RuntimeClarificationRequestEvent extends BaseRuntimeEvent {
+  type: "clarification_request";
+  request: AskUserArgs;
+  claim(): void;
+  resolve(outcome: ClarificationOutcome): void;
 }
 
 export interface RuntimeTurnStopReasonEvent extends BaseRuntimeEvent {
@@ -259,6 +268,7 @@ export type RuntimeEvent =
   | RuntimeLoopGuardEvent
   | RuntimeBudgetUpdateEvent
   | RuntimeDangerousConfirmationEvent
+  | RuntimeClarificationRequestEvent
   | RuntimeTurnStopReasonEvent
   | RuntimeCompactionStartEvent
   | RuntimeCompactionDoneEvent
@@ -316,6 +326,8 @@ export interface UserTurnInput {
   content: RuntimeContentBlock[];
   source: RuntimeSource;
   command?: RuntimeCommandInput;
+  /** Host advertises support for a structured clarification form in this turn. */
+  clarificationAvailable?: boolean;
 }
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void;

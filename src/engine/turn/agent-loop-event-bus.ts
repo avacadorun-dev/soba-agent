@@ -1,6 +1,7 @@
+import type { AskUserArgs, ClarificationOutcome } from "../../kernel/tools/ask-user";
 import type { FlightRecordData } from "../../kernel/transcript/types";
 import { runtimeFlightRecords } from "./agent-loop-event-recording";
-import type { AgentEvent, DangerousConfirmationEvent } from "./types";
+import type { AgentEvent, ClarificationRequestEvent, DangerousConfirmationEvent } from "./types";
 
 export interface AgentLoopEventBusOptions {
   shouldEmit(): boolean;
@@ -66,6 +67,29 @@ export class AgentLoopEventBus {
 
     // Permission prompts must bypass the ordinary emitEvents flag.
     this.dispatch(recordingEvent);
+  }
+
+  requestClarification(request: AskUserArgs): Promise<ClarificationOutcome> {
+    return new Promise((resolve) => {
+      let claimed = false;
+      let settled = false;
+      const settle = (outcome: ClarificationOutcome) => {
+        if (settled) return;
+        settled = true;
+        resolve(outcome);
+      };
+      const event: ClarificationRequestEvent = {
+        type: "clarification_request",
+        timestamp: Date.now(),
+        request,
+        claim: () => {
+          claimed = true;
+        },
+        resolve: settle,
+      };
+      this.dispatch(event);
+      if (!claimed) settle({ status: "unavailable" });
+    });
   }
 
   private recordRuntimeFlight(event: AgentEvent): void {

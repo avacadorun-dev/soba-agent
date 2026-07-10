@@ -16,6 +16,7 @@ import type {
   DebugEntry,
   FlightRecordData,
 } from "../../kernel/transcript/types";
+import type { WorkMode } from "../../kernel/work-mode/public";
 import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
@@ -23,6 +24,7 @@ import type { EvidenceProofSink } from "../evidence";
 import type { ProjectMemorySource } from "../memory/memory-injector";
 import type { TrustController } from "../permissions/trust-controller";
 import type { ProjectCommandFileReader } from "../verification/types";
+import type { WorkModeController } from "../work-mode/work-mode-controller";
 import {
   type AgentLoopRuntimeServices,
   createAgentLoopRuntime,
@@ -123,6 +125,23 @@ export class AgentLoop {
     return this.runtime.trustManager;
   }
 
+  /** Get work-mode controller (agent vs plan). */
+  getWorkModeController(): WorkModeController {
+    return this.runtime.workModeController;
+  }
+
+  getWorkMode(): WorkMode {
+    return this.runtime.workModeController.getWorkMode();
+  }
+
+  setWorkMode(mode: WorkMode): void {
+    this.runtime.workModeController.setWorkMode(mode);
+  }
+
+  setClarificationAvailable(available: boolean): void {
+    this.runtime.setClarificationAvailable(available);
+  }
+
   /** Get budget tracker */
   getBudgetTracker(): BudgetTracker {
     return this.runtime.budgetTracker;
@@ -149,6 +168,7 @@ export class AgentLoop {
       sessionId: this.session.getSessionId(),
       session: this.session,
       bashMaxTimeoutSeconds: this.runtime.options.bashMaxTimeoutSeconds,
+      requestClarification: (request) => this.runtime.eventBus.requestClarification(request),
     };
   }
 

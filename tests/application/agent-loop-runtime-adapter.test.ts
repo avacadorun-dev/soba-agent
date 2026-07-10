@@ -45,6 +45,7 @@ describe("AgentLoopRuntimeAdapter rich content", () => {
 
   test("applies supported ACP session modes to the trust manager", async () => {
     let permissionMode = "ask";
+    let workMode = "agent";
     const loop = {
       runTurn: async () => ({}),
       setSessionManager: () => {},
@@ -55,6 +56,9 @@ describe("AgentLoopRuntimeAdapter rich content", () => {
           permissionMode = mode;
         },
       }),
+      setWorkMode: (mode: string) => {
+        workMode = mode;
+      },
     };
     const session = {
       getSessionId: () => "session_1",
@@ -71,7 +75,15 @@ describe("AgentLoopRuntimeAdapter rich content", () => {
 
     await adapter.setSessionMode({ sessionId: "session_1", mode: "repo", enabled: true });
     expect(permissionMode).toBe("repo");
-    await expect(adapter.setSessionMode({ sessionId: "session_1", mode: "planning", enabled: true }))
-      .rejects.toThrow('Unsupported session mode "planning".');
+    await adapter.setSessionMode({ sessionId: "session_1", mode: "plan", enabled: true });
+    expect(workMode).toBe("plan");
+    await adapter.setSessionMode({ sessionId: "session_1", mode: "planning", enabled: true });
+    expect(workMode).toBe("plan");
+    await adapter.setSessionMode({ sessionId: "session_1", mode: "goal", enabled: true });
+    expect(workMode).toBe("goal");
+    await adapter.setSessionMode({ sessionId: "session_1", mode: "agent", enabled: true });
+    expect(workMode).toBe("agent");
+    await expect(adapter.setSessionMode({ sessionId: "session_1", mode: "architect", enabled: true }))
+      .rejects.toThrow('Unsupported session mode "architect".');
   });
 });

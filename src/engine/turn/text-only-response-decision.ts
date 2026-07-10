@@ -4,6 +4,7 @@ import type {
   DebugEntry,
   ItemParam as SessionItemParam,
 } from "../../kernel/transcript/types";
+import type { WorkMode } from "../../kernel/work-mode/public";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import type { TaskKind } from "../verification/verification-policy";
 import type { WorkingNarrationEventType } from "./narration";
@@ -30,6 +31,7 @@ export interface TextOnlyResponseDecisionInput {
   errors: AgentTurnError[];
   turn: number;
   taskKind: TaskKind;
+  workMode: WorkMode;
   iteration: number;
   autonomousFollowUps: number;
   maxAutonomousFollowUps: number;
@@ -72,6 +74,7 @@ export async function decideTextOnlyResponse(
     state.hasMutatedFiles,
     state.hasUsedTools,
     input.taskKind,
+    input.workMode,
   );
 
   const hadSecurityDenialThisTurn = input.errors.some(
