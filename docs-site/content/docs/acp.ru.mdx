@@ -1,6 +1,6 @@
 ---
 title: "ACP и Zed"
-description: "Текущая реализация SOBA Agent как ACP v1 server: запуск через soba acp, поддержанные методы, sessions, permissions, tool updates, evidence metadata и ограничения."
+description: "SOBA Agent как ACP v1 server: запуск через soba acp, sessions, permissions, plan mode, интерактивные уточнения, tool updates и ограничения."
 ---
 
 SOBA умеет работать как Agent Client Protocol server для редакторов, которые запускают agent по stdio. Практический
@@ -47,11 +47,25 @@ SOBA также читает `clientCapabilities` и включает допол
 | Client capability | Что делает SOBA |
 |---|---|
 | `session/request_permission` | Запрашивает разрешение dangerous operations через редактор |
+| `elicitation.form` | Показывает варианты уточнения для plan/goal mode через нативную форму ACP |
 | `fs/read_text_file` | Может делегировать чтение файла редактору |
 | `fs/write_text_file` | Может делегировать запись файла редактору |
 | `terminal: true` или terminal methods | Может делегировать terminal execution редактору |
 
 Если capability не объявлена, SOBA использует собственный runtime path или отказывает действие безопасным способом.
+
+### Plan mode и интерактивные уточнения
+
+ACP client может переключить session в `plan`, `planning`, `goal` или `agent` через `session/set_mode`. В `plan` и
+`goal` режимах SOBA не меняет repository, memory, config или Git state и не даёт модели `bash`: доступны только
+native inspection tools и подготовка плана.
+
+Если client рекламирует нестабильную capability `elicitation.form`, SOBA дополнительно даёт модели `ask_user`. Во время
+планирования adapter отправляет `elicitation/create` с одной form: от двух до пяти button-like enum choices и, если
+нужно, полем **Other**. Выбор возвращается как tool result и позволяет закончить план в том же turn.
+
+Без `elicitation.form` `ask_user` не попадает в tool list. Модель завершает ответ обычным текстом с открытыми вопросами;
+SOBA не пытается имитировать форму или блокировать turn.
 
 ## 3. Server Methods
 

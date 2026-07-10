@@ -1,0 +1,54 @@
+---
+title: Plan 与 goal 模式
+description: 在 SOBA 的只读计划模式中安全地设计变更，并且只在准备实施时切回 agent 模式。
+---
+
+Plan mode 将设计与实施分开。SOBA 可以检查项目并输出实施计划，但不会修改文件、Git 状态、Project Memory、配置，也不会运行 shell 命令。
+
+---
+
+## 1. 切换模式
+
+在 TUI 中使用 `/plan`：
+
+```text
+/plan                 # 显示当前模式
+/plan on              # 进入 plan mode
+/plan goal            # 澄清目标和成功标准
+/plan off             # 回到普通 agent mode
+/plan toggle          # 在 plan 与 agent 之间切换
+```
+
+`plan` 关注实施简报：范围、文件、风险、检查和待决问题。`goal` 关注问题定义、成功标准、约束以及不在范围内的内容。`agent` 是正常模式，在常规权限检查后可以修改内容。
+
+## 2. 允许的操作
+
+在 plan 和 goal mode 中，SOBA 只能使用原生检查工具：`read`、`ls`、`search_files`、`inspect_file`、
+`read_project_memory` 和 `checkpoint`。它也可以用完成的计划或 goal brief 结束 turn。
+
+以下能力被刻意禁止：
+
+- 文件和内存修改工具：`write`、`edit`、`write_project_memory`；
+- `bash`，即使是看起来只读的 `git status` 或 `bun test`；
+- 未注册/custom 工具以及疑似会修改内容的 MCP 工具。
+
+这是有意采用的严格安全边界。shell allowlist 很容易通过脚本、重定向、Git 子命令或解释器绕过。请自行通过 `!command` 运行诊断；只有在明确希望 agent 实施并验证变更时，才切换到 `/plan off`。
+
+## 3. 用按钮澄清决策
+
+当当前 client 支持 structured clarification 时，SOBA 可以在计划过程中调用 `ask_user`。它会显示一个简短问题、两到五个选项，并在需要时提供 **Other** 文本字段。选择结果会回到同一 agent turn，因此最终计划会直接反映该决定。
+
+第一版适用于声明不稳定 `elicitation.form` capability 的 ACP client。没有该 capability 的 client 不会把此工具提供给模型；SOBA 会在最终计划中列出未解决的问题。终端 TUI 目前保留文本 fallback。
+
+## 4. 推荐工作流
+
+```text
+/plan on
+检查仓库并提出最小、安全的实施计划。
+当发布策略不明确时，请求用户选择。
+
+/plan off
+实施已批准的计划并运行所需检查。
+```
+
+当错误假设会改变设计、用户必须在方案之间选择，或在修改 workspace 前需要可审阅的实施简报时，请使用 plan mode。

@@ -1,9 +1,9 @@
 ---
 title: Quick Start
-description: "Start SOBA Agent v0.6.5: install, provider, TUI, proof receipts, Project Memory, MCP, skills, and verification."
+description: "Start SOBA Agent v0.6.6: install, provider, TUI, plan mode, proof receipts, Project Memory, MCP, skills, and verification."
 ---
 
-This guide takes you from a clean install to a working SOBA v0.6.5 workflow. It is the practical path: install, verify
+This guide takes you from a clean install to a working SOBA v0.6.6 workflow. It is the practical path: install, verify
 the provider, start the TUI, run a bounded task, inspect evidence proof receipts, save Project Memory, connect MCP, use
 skills, and finish with real checks.
 
@@ -95,6 +95,7 @@ Useful first commands:
 /budget
 /permissions ask
 /auto-compact on
+/plan on
 ```
 
 For a disposable repository, you can switch to repo-scoped permissions:
@@ -105,6 +106,8 @@ For a disposable repository, you can switch to repo-scoped permissions:
 
 `repo` suppresses prompts only for dangerous operations that stay inside the current repository. Use `/permissions full`
 only when you want to trust all dangerous operations for the current session, including external commands.
+
+Use `/plan on` when you want a read-only implementation plan before making changes. See [Plan and goal modes](/en/docs/plan-mode).
 
 ---
 

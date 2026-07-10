@@ -1,9 +1,9 @@
 ---
 title: 快速开始
-description: "快速启动 SOBA Agent v0.6.5：安装、provider、TUI、proof receipts、Project Memory、MCP、skills 和验证。"
+description: "快速启动 SOBA Agent v0.6.6：安装、provider、TUI、plan mode、proof receipts、Project Memory、MCP、skills 和验证。"
 ---
 
-本指南从干净安装开始，带你完成 SOBA v0.6.5 的可用工作流：安装、检查 provider、启动 TUI、执行有边界的任务、
+本指南从干净安装开始，带你完成 SOBA v0.6.6 的可用工作流：安装、检查 provider、启动 TUI、执行有边界的任务、
 查看 evidence proof receipts、保存 Project Memory、连接 MCP、使用 skills，并用真实检查收尾。
 
 ---
@@ -91,6 +91,7 @@ soba -i --lang zh --theme graphite
 /budget
 /permissions ask
 /auto-compact on
+/plan on
 ```
 
 一次性仓库可以使用 repo-scoped permissions：
@@ -101,6 +102,8 @@ soba -i --lang zh --theme graphite
 
 `repo` 只会跳过当前仓库内 dangerous 操作的确认。只有当你要在当前 session 中信任所有 dangerous 操作
 （包括外部命令）时，才使用 `/permissions full`。
+
+当你希望在修改项目之前先获得只读实施计划时，使用 `/plan on`。参见 [Plan 与 goal 模式](/zh/docs/v0.6/plan-mode)。
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 title: Быстрый старт
-description: "Актуальный быстрый старт SOBA v0.6.5: запуск, provider, TUI, proof receipts, Project Memory, MCP, capsules и проверки."
+description: "Актуальный быстрый старт SOBA v0.6.6: запуск, provider, TUI, plan mode, proof receipts, Project Memory, MCP, capsules и проверки."
 ---
 
-Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.5 workflow. Он не заменяет справочник, а показывает
+Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.6 workflow. Он не заменяет справочник, а показывает
 минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, посмотреть proof receipts, сохранить
 память проекта и проверить MCP.
 
@@ -95,6 +95,7 @@ soba -i --lang ru --theme graphite
 /budget
 /permissions
 /auto-compact on
+/plan on
 ```
 
 Рекомендуемый режим разрешений для первого проекта:
@@ -111,6 +112,8 @@ soba -i --lang ru --theme graphite
 
 `repo` убирает запросы только для dangerous-операций внутри текущего репозитория. `/permissions full` стоит включать
 только когда вы хотите доверить все dangerous-операции до конца текущей сессии, включая внешние команды.
+
+`/plan on` включает read-only режим для подготовки плана до изменения проекта. Подробнее: [Plan и goal mode](/ru/docs/plan-mode).
 
 ---
 

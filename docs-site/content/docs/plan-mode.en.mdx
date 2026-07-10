@@ -1,0 +1,64 @@
+---
+title: Plan and goal modes
+description: Design safely with SOBA's read-only plan and goal modes, then switch to agent mode only when ready to implement.
+---
+
+Plan mode separates design from implementation. It lets SOBA inspect a project and produce an implementation plan without
+changing files, Git state, project memory, configuration, or running shell commands.
+
+---
+
+## 1. Switch modes
+
+Use `/plan` inside the TUI:
+
+```text
+/plan                 # show the current mode
+/plan on              # enter plan mode
+/plan goal            # clarify objective and success criteria
+/plan off             # return to normal agent mode
+/plan toggle          # switch between plan and agent mode
+```
+
+`plan` focuses on an implementation brief: scope, files, risks, checks, and open decisions. `goal` focuses on the
+problem statement, success criteria, constraints, and what is out of scope. `agent` is the normal mode that can make
+changes after the usual permission checks.
+
+## 2. What is allowed
+
+In plan and goal modes SOBA can use native inspection tools such as `read`, `ls`, `search_files`, `inspect_file`,
+`read_project_memory`, and `checkpoint`. It can also finish with a written plan or goal brief.
+
+The following remain unavailable by design:
+
+- file and memory mutation tools (`write`, `edit`, `write_project_memory`);
+- `bash`, including apparently read-only commands such as `git status` or `bun test`;
+- unregistered/custom tools and likely-mutating MCP tools.
+
+This strict boundary is intentional. Shell allowlists are easy to bypass through scripts, redirects, Git subcommands, or
+interpreters. Run diagnostics yourself with `!command`, or switch to `/plan off` when you explicitly want the agent to
+implement and verify changes.
+
+## 3. Ask for a decision with buttons
+
+When the active client supports structured clarification, SOBA can call `ask_user` while planning. It presents one
+concise question with two to five choices and, when useful, an **Other** text field. The selected answer returns to the
+same agent turn, so the completed plan reflects the decision instead of leaving it as an open question.
+
+The first implementation is available through ACP clients that advertise unstable `elicitation.form` support. Clients
+without that capability do not receive the tool; SOBA writes unresolved questions in its final plan instead. The terminal
+TUI deliberately keeps the text fallback for now.
+
+## 4. Recommended workflow
+
+```text
+/plan on
+Review the repository and propose the smallest safe implementation plan.
+Ask for a choice if the release strategy is ambiguous.
+
+/plan off
+Implement the approved plan and run the required checks.
+```
+
+Use plan mode whenever a wrong assumption would change the design, the user needs to choose among alternatives, or you
+want a reviewable implementation brief before touching the workspace.
