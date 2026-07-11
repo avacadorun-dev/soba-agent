@@ -112,10 +112,12 @@ export function SobaOrbitCanvas() {
     const project = (point: Point3D) => {
       const distance = 680;
       const scale = distance / (distance - point.z);
+      const viewportScale = Math.max(0.68, Math.min(1, width / 650));
       return {
-        x: width / 2 + point.x * scale,
-        y: height / 2 + point.y * scale,
+        x: width / 2 + point.x * scale * viewportScale,
+        y: height / 2 + point.y * scale * viewportScale,
         scale,
+        viewportScale,
         depth: point.z,
       };
     };
@@ -167,7 +169,7 @@ export function SobaOrbitCanvas() {
       const isDark = document.documentElement.classList.contains("dark");
       const background = cssColor("--color-fd-background", isDark ? "hsl(220, 17%, 7%)" : "#F7F7F2");
       const foreground = cssColor("--color-fd-foreground", isDark ? "hsl(215, 18%, 87%)" : "#171717");
-      const primary = cssColor("--color-fd-primary", isDark ? "hsl(214, 17%, 73%)" : "#244C66");
+      const primary = cssColor("--color-fd-primary", isDark ? "#6ED49B" : "#286A50");
       const muted = cssColor("--color-fd-muted", isDark ? "hsl(220, 16%, 11%)" : "#ECEBE3");
       const border = cssColor("--color-fd-border", isDark ? "hsl(217, 16%, 22%)" : "#D5D2C6");
       const mutedForeground = cssColor(
@@ -187,8 +189,8 @@ export function SobaOrbitCanvas() {
         height * 0.42,
         Math.max(width, height) * 0.58,
       );
-      glow.addColorStop(0, isDark ? "rgba(180, 196, 215, 0.2)" : "rgba(58, 89, 112, 0.18)");
-      glow.addColorStop(0.38, isDark ? "rgba(180, 196, 215, 0.055)" : "rgba(58, 89, 112, 0.06)");
+      glow.addColorStop(0, isDark ? "rgba(110, 212, 155, 0.2)" : "rgba(40, 106, 80, 0.18)");
+      glow.addColorStop(0.38, isDark ? "rgba(110, 212, 155, 0.055)" : "rgba(40, 106, 80, 0.06)");
       glow.addColorStop(1, "transparent");
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, width, height);
@@ -225,13 +227,13 @@ export function SobaOrbitCanvas() {
       ctx.globalAlpha = 1;
 
       const core = project(rotate({ x: 0, y: 0, z: 0 }, yaw, pitch));
-      const coreRadius = 58 * centerPulse;
+      const coreRadius = 58 * centerPulse * core.viewportScale;
       const coreGradient = ctx.createRadialGradient(core.x - 16, core.y - 18, 8, core.x, core.y, coreRadius * 1.55);
       coreGradient.addColorStop(0, foreground);
       coreGradient.addColorStop(0.36, primary);
-      coreGradient.addColorStop(1, isDark ? "rgba(180, 196, 215, 0.02)" : "rgba(58, 89, 112, 0.02)");
+      coreGradient.addColorStop(1, isDark ? "rgba(110, 212, 155, 0.02)" : "rgba(40, 106, 80, 0.02)");
 
-      ctx.shadowColor = isDark ? "rgba(180, 196, 215, 0.32)" : "rgba(58, 89, 112, 0.24)";
+      ctx.shadowColor = isDark ? "rgba(110, 212, 155, 0.32)" : "rgba(40, 106, 80, 0.24)";
       ctx.shadowBlur = 35;
       ctx.fillStyle = coreGradient;
       ctx.beginPath();
@@ -265,7 +267,7 @@ export function SobaOrbitCanvas() {
       points
         .sort((a, b) => a.projected.depth - b.projected.depth)
         .forEach(({ node, projected }) => {
-          const r = Math.max(34, 44 * projected.scale);
+          const r = Math.max(30, 44 * projected.scale * projected.viewportScale);
           ctx.shadowColor = "rgba(0, 0, 0, 0.18)";
           ctx.shadowBlur = 20 * projected.scale;
           ctx.fillStyle = muted;

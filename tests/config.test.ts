@@ -165,10 +165,10 @@ describe("Config loader", () => {
 
   test("тема загружается из файла и SOBA_THEME", async () => {
     const path = uniqueConfigPath("theme");
-    writeConfigFile(path, JSON.stringify({ theme: "ember" }));
+    writeConfigFile(path, JSON.stringify({ theme: "clay" }));
 
     const fileConfig = await loadConfigFromFile(path);
-    expect(fileConfig?.theme).toBe("ember");
+    expect(fileConfig?.theme).toBe("clay");
 
     process.env.SOBA_THEME = "aurora";
     expect(loadConfigFromEnv().theme).toBe("aurora");

@@ -28,7 +28,7 @@ function UserMessage(props: { content: string; store: TuiStore }) {
   return (
     <box style={{ marginBottom: BLOCK.marginBottom }}>
       <text wrapMode="word">
-        <span style={{ fg: theme().secondary }}>◆ </span>
+        <span style={{ fg: theme().primary, bold: true }}>› </span>
         <span style={{ fg: theme().text }}>{props.content}</span>
       </text>
     </box>
@@ -66,7 +66,7 @@ function NarrationMessage(props: { message: Extract<TuiMessage, { type: "narrati
   return (
     <box style={{ marginBottom: BLOCK.marginBottom }}>
       <text wrapMode="word">
-        <span style={{ fg: theme().secondary }}>• </span>
+        <span style={{ fg: theme().secondary }}>· </span>
         <span style={{ fg: theme().muted }}>{props.message.content}</span>
       </text>
     </box>
@@ -403,7 +403,7 @@ export function MessageList(props: {
               {turnSeparator}
               <box
                 style={{
-                  backgroundColor: isHighlighted() ? theme().primary : undefined,
+                  backgroundColor: isHighlighted() ? theme().panel : undefined,
                 }}
               >
                 <Message

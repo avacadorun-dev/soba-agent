@@ -1,15 +1,15 @@
 /* === SOBA Ink Theme (Light) === */
 
 @theme {
-  --soba-ink-background: #F7F7F2;
-  --soba-ink-panel: #ECEBE3;
-  --soba-ink-border: #D5D2C6;
-  --soba-ink-text: #171717;
-  --soba-ink-muted: #5E625C;
-  --soba-ink-dim: #A09D92;
-  --soba-ink-primary: #244C66;
-  --soba-ink-secondary: #6B4E71;
-  --soba-ink-success: #3F7052;
+  --soba-ink-background: #F2F0E9;
+  --soba-ink-panel: #E5E1D6;
+  --soba-ink-border: #C9C3B4;
+  --soba-ink-text: #171714;
+  --soba-ink-muted: #626057;
+  --soba-ink-dim: #999487;
+  --soba-ink-primary: #286A50;
+  --soba-ink-secondary: #1E5147;
+  --soba-ink-success: #286A50;
   --soba-ink-error: #9B3D44;
   --soba-ink-warning: #71540B;
 

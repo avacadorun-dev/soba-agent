@@ -16,7 +16,6 @@ export type { CompactionConfig } from "../../kernel/compaction/config";
 
 export const TUI_THEME_NAMES = [
   "graphite",
-  "ember",
   "aurora",
   "synthwave",
   "paper",

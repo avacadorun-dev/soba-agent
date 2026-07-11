@@ -1,22 +1,22 @@
 /* === SOBA Graphite Theme (Dark) === */
 
 .dark {
-  --color-fd-background: hsl(220, 17%, 7%);
-  --color-fd-foreground: hsl(215, 18%, 87%);
-  --color-fd-muted: hsl(220, 16%, 11%);
-  --color-fd-muted-foreground: hsl(215, 9%, 53%);
-  --color-fd-popover: hsl(220, 16%, 13%);
-  --color-fd-popover-foreground: hsl(215, 18%, 87%);
-  --color-fd-card: hsl(220, 16%, 11%);
-  --color-fd-card-foreground: hsl(215, 18%, 87%);
-  --color-fd-border: hsl(217, 16%, 22%);
-  --color-fd-primary: hsl(214, 17%, 73%);
-  --color-fd-primary-foreground: hsl(220, 17%, 7%);
-  --color-fd-secondary: hsl(220, 16%, 11%);
-  --color-fd-secondary-foreground: hsl(215, 18%, 87%);
-  --color-fd-accent: hsl(214, 17%, 73%);
-  --color-fd-accent-foreground: hsl(220, 17%, 7%);
-  --color-fd-ring: hsl(214, 17%, 73%);
+  --color-fd-background: #11110F;
+  --color-fd-foreground: #EFECE2;
+  --color-fd-muted: #1A1916;
+  --color-fd-muted-foreground: #9B978C;
+  --color-fd-popover: #1D1C18;
+  --color-fd-popover-foreground: #EFECE2;
+  --color-fd-card: #1A1916;
+  --color-fd-card-foreground: #EFECE2;
+  --color-fd-border: #35322C;
+  --color-fd-primary: #6ED49B;
+  --color-fd-primary-foreground: #11110F;
+  --color-fd-secondary: #1A1916;
+  --color-fd-secondary-foreground: #EFECE2;
+  --color-fd-accent: #6ED49B;
+  --color-fd-accent-foreground: #11110F;
+  --color-fd-ring: #6ED49B;
 
   --color-fd-success: hsl(138, 18%, 59%);
   --color-fd-warning: hsl(41, 47%, 58%);

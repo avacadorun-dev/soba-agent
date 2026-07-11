@@ -283,6 +283,9 @@ function Home() {
       <main className="landing-shell">
         <section className="hero-section">
           <div className="hero-bg" aria-hidden />
+          <div className="hero-coordinate hero-coordinate-side" aria-hidden>
+            LOCAL / VERIFIABLE / OPEN
+          </div>
           <div className="hero-grid mx-auto grid items-start px-6 lg:px-8">
             <div className="hero-copy">
               <div className="hero-badge">
@@ -305,7 +308,7 @@ function Home() {
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-fd-muted-foreground sm:text-xl">{t(copy.lead)}</p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-4">
+              <div className="hero-actions mt-8 flex flex-wrap items-center gap-4">
                 <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="hero-cta hero-cta-primary">
                   {t(copy.primaryCta)}
                   <ArrowRight className="size-4" />
@@ -331,17 +334,22 @@ function Home() {
                 </a>
               </div>
 
-              <div className="mt-6 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
-                {localizedProof.map((item) => (
+              <div className="hero-proof-ledger mt-6 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+                {localizedProof.map((item, index) => (
                   <div key={item} className="proof-pill">
-                    <CheckCircle2 className="size-4" />
+                    <span className="proof-index">0{index + 1}</span>
                     <span>{item}</span>
+                    <CheckCircle2 className="size-4" />
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="hero-visual-card">
+              <div className="hero-visual-header" aria-hidden>
+                <span>SOBA / SYSTEM MAP</span>
+                <span className="visual-live-dot">LIVE</span>
+              </div>
               <SobaOrbitCanvas />
               <div className="hero-visual-caption">
                 <span>OpenResponses</span>
@@ -356,10 +364,11 @@ function Home() {
           </div>
         </section>
 
-        <section className="border-y border-fd-border bg-fd-muted/20 py-8">
+        <section className="stats-band border-y border-fd-border bg-fd-muted/20 py-8">
           <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-6 lg:grid-cols-4 lg:px-8">
-            {stats.map((stat) => (
+            {stats.map((stat, index) => (
               <div key={stat.label.en} className="stat-card">
+                <span className="stat-index">0{index + 1}</span>
                 <div className="text-2xl font-bold text-fd-foreground sm:text-3xl">{stat.value}</div>
                 <div className="mt-1 text-sm text-fd-muted-foreground">{t(stat.label)}</div>
               </div>
@@ -370,7 +379,7 @@ function Home() {
         <section className="section-block">
           <div className="mx-auto grid max-w-7xl gap-10 px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
             <div className="section-heading lg:sticky lg:top-24 lg:self-start">
-              <p className="eyebrow">{t(copy.orbitEyebrow)}</p>
+              <p className="eyebrow"><span>01</span>{t(copy.orbitEyebrow)}</p>
               <h2>{t(copy.orbitTitle)}</h2>
               <p>{t(copy.orbitText)}</p>
             </div>
@@ -409,13 +418,15 @@ function Home() {
         <section className="section-block border-t border-fd-border">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
             <div className="section-heading mx-auto max-w-3xl text-center">
+              <p className="eyebrow"><span>02</span>SOBA / DIFFERENCE</p>
               <h2>{t(copy.featuresTitle)}</h2>
             </div>
             <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => {
+              {features.map((feature, index) => {
                 const Icon = feature.icon;
                 return (
                   <div key={feature.title.en} className="feature-card landing-feature-card">
+                    <span className="feature-number">{String(index + 1).padStart(2, "0")}</span>
                     <div className="feature-icon">
                       <Icon className="size-5" />
                     </div>
@@ -431,7 +442,7 @@ function Home() {
         <section className="section-block border-t border-fd-border">
           <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
             <div className="section-heading">
-              <p className="eyebrow">{t(copy.terminalEyebrow)}</p>
+              <p className="eyebrow"><span>03</span>{t(copy.terminalEyebrow)}</p>
               <h2>{t(copy.terminalTitle)}</h2>
               <p>{t(copy.terminalText)}</p>
               <div className="mt-8">

@@ -675,33 +675,19 @@ export function resolveCompactionConfig(
  * ANSI helpers for the setup banner (no external deps).
  */
 const _BOLD = "\x1b[1m";
-const _GREEN_DEEP = "\x1b[38;2;34;80;50m"; // #225032 — deep forest
-const _GREEN_DARK = "\x1b[38;2;56;116;74m"; // #38744A — dark green
-const _GREEN = "\x1b[38;2;85;155;106m"; // #559B6A — mid forest
-const _GREEN_BRIGHT = "\x1b[38;2;126;196;148m"; // #7EC494 — vibrant green
-const _GREEN_GLOW = "\x1b[38;2;163;230;175m"; // #A3E6AF — soft glow
-const _CYAN = "\x1b[38;2;110;158;184m"; // #6E9EB8 — info
-const _YELLOW = "\x1b[38;2;227;179;65m"; // #E3B341 — gold accent
-const _DIM = "\x1b[38;2;108;123;102m"; // #6C7B66 — muted
+const _GREEN = "\x1b[38;2;110;212;155m"; // #6ED49B — SOBA verification green
+const _CYAN = "\x1b[38;2;98;213;242m"; // #62D5F2 — operator cyan
+const _YELLOW = "\x1b[38;2;221;183;106m"; // #DDB76A — calm warning
+const _DIM = "\x1b[38;2;146;157;150m"; // #929D96 — readable secondary text
 const _RESET = "\x1b[0m";
 
-/** Inner content width (visible chars between the ║ decorations). */
-const CW = 50;
+const SETUP_RULE = "─".repeat(58);
 
 /** Strip ANSI codes, return visible character count. */
 function vw(text: string): number {
   return text.replace(/\x1b\[[0-9;]*m/g, "").length;
 }
 
-/** Right-pad ANSI-coloured string to exactly `w` visible chars. */
-function pad(text: string, w: number): string {
-  return text + " ".repeat(Math.max(0, w - vw(text)));
-}
-
-/**
- * Truncate an ANSI-coloured string so its visible width ≤ `w`.
- * Adds `…` (single char) at the truncation point.
- */
 function trunc(text: string, w: number): string {
   if (vw(text) <= w) return text;
   let result = "";
@@ -722,119 +708,34 @@ function trunc(text: string, w: number): string {
   return result + "…";
 }
 
-/**
- * Wrap content in the border frame: `  ║  content  ║`.
- */
-function frame(content: string): string {
-  return `  ${_DIM}║${_RESET}  ${content}  ${_DIM}║${_RESET}`;
+function printSetupBanner(i18n: I18n): void {
+  console.log();
+  console.log(`  ${_BOLD}SOBA${_RESET}${_GREEN}${_BOLD} ›${_RESET}`);
+  console.log(`  ${_DIM}ENGINEERING AGENT${_RESET}`);
+  console.log();
+  console.log(`  ${_BOLD}${i18n.t("config.setup.title")}${_RESET}`);
+  console.log(`  ${i18n.t("config.setup.welcome")}`);
+  console.log(`  ${_DIM}provider  ·  credentials  ·  model${_RESET}`);
+  console.log();
+  console.log(`  ${_DIM}${SETUP_RULE}${_RESET}`);
 }
 
-/** ═ line segments. */
-const _HBAR = "═".repeat(50);
-
-/**
- * Print the SOBA AGENT ASCII art banner for first-time setup.
- *
- * Uses a 5-shade green gradient for a modern 3D brand look.
- * Each letter is 9 chars wide × 7 rows tall, all aligned to 50-char container.
- */
-function printSetupBanner(): void {
-  // ── Row colours (top → bottom gradient) ──
-  const gc = [_GREEN_DEEP, _GREEN_DARK, _GREEN, _GREEN_BRIGHT, _GREEN_GLOW];
-
-  // ── S (9 wide, 7 tall) ──
-  const s: string[] = [
-    "          ",
-    " ▄▄▄▄▄▄▄▄ ",
-    " ██▀▀▀▀▀▀▀ ",
-    " ▀▀▀▀▄▄▄▄█ ",
-    " ▄▄▄▄▄▄▄██ ",
-    " ██▀▀▀▀▀▀▀ ",
-    " ▀▀▀▀▀▀▀▀▀ ",
-  ];
-  // ── O (9 wide, 7 tall) ──
-  const o: string[] = [
-    "          ",
-    " ▄▄▄▄▄▄▄▄ ",
-    " ██▀▀▀▀▀▀█ ",
-    " ██      ██",
-    " ██      ██",
-    " ██▄▄▄▄▄▄█ ",
-    " ▀▀▀▀▀▀▀▀ ",
-  ];
-  // ── B (9 wide, 7 tall) ──
-  const b: string[] = [
-    "          ",
-    " ▄▄▄▄▄▄▄▄ ",
-    " ██▀▀▀▀▀▀█ ",
-    " ██▄▄▄▄▄▄█ ",
-    " ██▀▀▀▀▀▀█ ",
-    " ██▄▄▄▄▄▄█ ",
-    " ▀▀▀▀▀▀▀▀ ",
-  ];
-  // ── A (9 wide, 7 tall) ──
-  const a: string[] = [
-    "          ",
-    "  ▄▄▄▄▄▄▄ ",
-    "  ██▀▀▀▀▀█ ",
-    " ██▄▄▄▄▄██",
-    " ██▀▀▀▀▀██",
-    " ██      ██",
-    " ▀▀      ▀▀",
-  ];
-
-  // ── Build gradient-coloured rows ──
-  const artRows: string[] = [];
-  for (let i = 1; i < s.length; i++) {
-    // Use gradient colours: map row index to gradient array
-    const ci = Math.min(i, gc.length) - 1;
-    const c = ci >= 0 ? gc[ci] : gc[gc.length - 1];
-    const raw = `${c}${s[i]} ${o[i]} ${b[i]} ${a[i]}${_RESET}`;
-    artRows.push(frame(pad(raw, CW)));
-  }
-
-  // ── Print banner ──
+function printSetupStep(step: number, label: string): void {
   console.log();
-  console.log(`  ${_DIM}╔══${_RESET}${_GREEN}${_HBAR}${_RESET}${_DIM}══╗${_RESET}`);
-  console.log(frame("".padEnd(CW)));
-  for (const row of artRows) console.log(row);
-  console.log(frame("".padEnd(CW)));
-
-  // ── AGENT sub-title with diamonds ──
-  const agentLine = `          ${_YELLOW}◆${_RESET} ${_CYAN}◈${_RESET} ${_YELLOW}◆${_RESET}${_DIM}  ${_RESET}${_BOLD}${_GREEN_GLOW}A${_RESET}${_BOLD}${_GREEN_BRIGHT}G${_RESET}${_BOLD}${_GREEN}E${_RESET}${_BOLD}${_GREEN_DARK}N${_RESET}${_BOLD}${_GREEN_DEEP}T${_RESET}${_DIM}  ${_RESET}${_YELLOW}◆${_RESET} ${_CYAN}◈${_RESET} ${_YELLOW}◆${_RESET}            `;
-  console.log(frame(agentLine));
-
-  // ── FIRST TIME SETUP label ──
-  const setupLabel = `              ${_DIM}${_BOLD}F I R S T   T I M E   S E T U P${_RESET}              `;
-  console.log(frame(pad(setupLabel, CW)));
-
-  console.log(frame("".padEnd(CW)));
-  console.log(`  ${_DIM}╚══${_RESET}${_GREEN}${_HBAR}${_RESET}${_DIM}══╝${_RESET}`);
-  console.log();
+  console.log(`  ${_GREEN}${_BOLD}0${step}${_RESET}${_DIM} / 03${_RESET}  ${_BOLD}${label.toUpperCase()}${_RESET}`);
+  console.log(`  ${_DIM}${"─".repeat(36)}${_RESET}`);
 }
 
-/**
- * Print a nice completion panel after setup succeeds.
- */
-function printSetupComplete(config: SobaConfig): void {
-  const divider = `  ${_DIM}╠══${_RESET}${_GREEN}${_HBAR}${_RESET}${_DIM}══╣${_RESET}`;
-
-  const modelLabel = `${_BOLD}${_GREEN}Model${_RESET}${_DIM}:${_RESET} ${config.model}`;
-  const apiLabel = `${_BOLD}${_CYAN}API${_RESET}${_DIM}:${_RESET} ${config.baseUrl}`;
-  const configLabel = `${_BOLD}${_YELLOW}Config${_RESET}${_DIM}:${_RESET} ${getConfigPath()}`;
-
-  const setupMsg = `${_GREEN_BRIGHT}${_BOLD}✦  S E T U P   C O M P L E T E  ✦${_RESET}`;
-
+function printSetupComplete(config: SobaConfig, i18n: I18n): void {
   console.log();
-  console.log(`  ${_DIM}╔══${_RESET}${_GREEN}${_HBAR}${_RESET}${_DIM}══╗${_RESET}`);
-  console.log(frame(pad(setupMsg, CW)));
-  console.log(divider);
-  console.log(frame(pad(trunc(modelLabel, CW), CW)));
-  console.log(frame(pad(trunc(apiLabel, CW), CW)));
-  console.log(frame(pad(trunc(configLabel, CW), CW)));
-  console.log(`  ${_DIM}╚══${_RESET}${_GREEN}${_HBAR}${_RESET}${_DIM}══╝${_RESET}`);
+  console.log(`  ${_GREEN}${_BOLD}✓  ${i18n.t("config.setup.done", { model: config.model, baseUrl: config.baseUrl })}${_RESET}`);
+  console.log(`  ${_DIM}${SETUP_RULE}${_RESET}`);
+  console.log(`  ${_DIM}MODEL   ${_RESET}${trunc(config.model, 48)}`);
+  console.log(`  ${_DIM}API     ${_RESET}${trunc(config.baseUrl, 48)}`);
+  console.log(`  ${_DIM}CONFIG  ${_RESET}${trunc(getConfigPath(), 48)}`);
+  console.log(`  ${_DIM}${SETUP_RULE}${_RESET}`);
   console.log();
-  console.log(`  ${_BOLD}${_GREEN_GLOW}SOBA AGENT${_RESET}${_DIM} is ready. Use ${_RESET}${_GREEN}soba${_RESET}${_DIM} to start coding.${_RESET} 🚀`);
+  console.log(`  ${_BOLD}Run ${_GREEN}soba${_RESET}${_BOLD} to start.${_RESET}`);
   console.log();
 }
 
@@ -860,25 +761,25 @@ export async function firstTimeSetup(
 
   const question = (prompt: string): Promise<string> =>
     new Promise((resolve) => readline.question(prompt, resolve));
+  const ask = (label: string): Promise<string> =>
+    question(`  ${_GREEN}${_BOLD}›${_RESET} ${label.trim()} `);
 
-  printSetupBanner();
+  printSetupBanner(i18n);
 
   // Picker-style provider selection.
-  console.log(`\n${_BOLD}${i18n.t("config.setup.chooseProvider")}${_RESET}\n`);
+  printSetupStep(1, i18n.t("config.setup.chooseProvider"));
   BUILTIN_PROVIDERS.forEach((p, idx) => {
     console.log(
-      `  ${_CYAN}${idx + 1}${_RESET}) ${_BOLD}${p.name}${_RESET}  ${_DIM}(${p.id})${_RESET}`,
+      `  ${_CYAN}${String(idx + 1).padStart(2, "0")}${_RESET}  ${_BOLD}${p.name.padEnd(32)}${_RESET}${_DIM}${p.id}${_RESET}`,
     );
   });
   console.log(
-    `  ${_CYAN}5${_RESET}) ${_BOLD}${i18n.t("config.setup.customOption")}${_RESET}  ${_DIM}(OpenAI-compatible URL)${_RESET}`,
+    `  ${_CYAN}${String(BUILTIN_PROVIDERS.length + 1).padStart(2, "0")}${_RESET}  ${_BOLD}${i18n.t("config.setup.customOption")}${_RESET}`,
   );
 
   let providerIdx = -1;
   while (providerIdx < 0) {
-    const raw = await question(
-      `\n${i18n.t("config.setup.chooseProviderPrompt", { max: BUILTIN_PROVIDERS.length + 1 })} `,
-    );
+    const raw = await ask(i18n.t("config.setup.chooseProviderPrompt", { max: BUILTIN_PROVIDERS.length + 1 }));
     const n = Number.parseInt(raw.trim(), 10);
     if (Number.isFinite(n) && n >= 1 && n <= BUILTIN_PROVIDERS.length) {
       providerIdx = n - 1;
@@ -893,6 +794,7 @@ export async function firstTimeSetup(
   }
 
   const provider: ProviderDefinition = BUILTIN_PROVIDERS[providerIdx]!;
+  printSetupStep(2, `${provider.name} / API KEY`);
 
   // Try reading the API key from the environment first. If the provider
   // expects an env var but it's not set, prompt the user to type the key.
@@ -904,9 +806,7 @@ export async function firstTimeSetup(
     if (!apiKey) {
       apiKey =
         (
-          await question(
-            `\n${i18n.t("config.setup.apiKeyPrompt", { var: provider.apiKeyEnv, provider: provider.name })} `,
-          )
+          await ask(i18n.t("config.setup.apiKeyPrompt", { var: provider.apiKeyEnv, provider: provider.name }))
         ).trim() || null;
     }
   } else {
@@ -916,7 +816,7 @@ export async function firstTimeSetup(
   // Discover the live model catalogue. If discovery fails (no key,
   // network, parse), the user must type a model id manually.
   console.log(
-    `\n🔍 ${i18n.t("config.setup.discoveringModels")} (${provider.name})`,
+    `\n  ${_CYAN}◌${_RESET} ${i18n.t("config.setup.discoveringModels")} ${_DIM}${provider.name}${_RESET}`,
   );
   const discovery = await discoverModels(provider, apiKey);
 
@@ -940,9 +840,7 @@ export async function firstTimeSetup(
     console.log(`\n${i18n.t("config.setup.typeModelIdManually")}\n`);
   }
 
-  console.log(
-    `${_BOLD}${i18n.t("config.setup.chooseModelFor", { provider: provider.name })}${_RESET}\n`,
-  );
+  printSetupStep(3, i18n.t("config.setup.chooseModelFor", { provider: provider.name }));
   const preview = available.slice(0, 20);
   preview.forEach((m, idx) => {
     const marker = m.id === suggestedDefault ? ` ${_GREEN}*${_RESET}` : "";
@@ -950,7 +848,7 @@ export async function firstTimeSetup(
       ? ` ${_DIM}(${formatContext(m.contextWindow)} ctx)${_RESET}`
       : "";
     console.log(
-      `  ${_CYAN}${idx + 1}${_RESET}) ${_BOLD}${m.name}${_RESET}  ${_DIM}(${m.id})${_RESET}${cw}${marker}`,
+      `  ${_CYAN}${String(idx + 1).padStart(2, "0")}${_RESET}  ${_BOLD}${m.name}${_RESET}  ${_DIM}${m.id}${_RESET}${cw}${marker}`,
     );
   });
   if (available.length > preview.length) {
@@ -961,9 +859,7 @@ export async function firstTimeSetup(
 
   let chosenId: string;
   while (true) {
-    const raw = await question(
-      `\n${i18n.t("config.setup.chooseModelPrompt", { default: suggestedDefault ?? "" })} `,
-    );
+    const raw = await ask(i18n.t("config.setup.chooseModelPrompt", { default: suggestedDefault ?? "" }));
     const trimmed = raw.trim();
     if (!trimmed) {
       chosenId = suggestedDefault ?? "";
@@ -1049,7 +945,7 @@ export async function firstTimeSetup(
     model: chosenModel.id,
     registry: registry.snapshotState(),
   };
-  printSetupComplete(viewConfig);
+  printSetupComplete(viewConfig, i18n);
   return viewConfig;
 }
 
@@ -1077,6 +973,10 @@ async function firstTimeSetupCustom(
   });
   const question = (prompt: string): Promise<string> =>
     new Promise((resolve) => readline.question(prompt, resolve));
+  const ask = (label: string): Promise<string> =>
+    question(`  ${_GREEN}${_BOLD}›${_RESET} ${label.trim()} `);
+
+  printSetupStep(2, "CUSTOM ENDPOINT / API KEY");
 
   // Fall back to DeepSeek as the default suggestion for the wizard,
   // since DEFAULT_CONFIG.baseUrl is now empty (resolved from registry).
@@ -1086,10 +986,10 @@ async function firstTimeSetupCustom(
     "https://api.deepseek.com";
   const baseUrl =
     (
-      await question(i18n.t("config.setup.apiUrl", { default: defaultBaseUrl }))
+      await ask(i18n.t("config.setup.apiUrl", { default: defaultBaseUrl }))
     ).trim() || defaultBaseUrl;
 
-  const apiKey = (await question(i18n.t("config.setup.apiKey"))).trim() || null;
+  const apiKey = (await ask(i18n.t("config.setup.apiKey"))).trim() || null;
   const apiKeyEnv = apiKey ? null : "CUSTOM_API_KEY";
 
   // Build a transient ProviderDefinition so we can reuse the same
@@ -1104,7 +1004,8 @@ async function firstTimeSetupCustom(
     adapter: "openai",
   };
 
-  console.log(`\n🔍 ${i18n.t("config.setup.discoveringModels")}`);
+  printSetupStep(3, i18n.t("config.setup.chooseModelFor", { provider: "Custom" }));
+  console.log(`  ${_CYAN}◌${_RESET} ${i18n.t("config.setup.discoveringModels")}`);
   const discovery = await discoverModels(transient, apiKey);
   let available: ModelDefinition[] = [];
   if (discovery.ok) {
@@ -1126,9 +1027,7 @@ async function firstTimeSetupCustom(
     console.log(`\n${i18n.t("config.setup.typeModelIdManually")}\n`);
   }
 
-  const raw = await question(
-    `\n${i18n.t("config.setup.chooseModelPrompt", { default: existingConfig.model || "" })} `,
-  );
+  const raw = await ask(i18n.t("config.setup.chooseModelPrompt", { default: existingConfig.model || "" }));
   const chosenId = raw.trim() || existingConfig.model || "";
 
   const chosenModel: ModelDefinition = available.find(
@@ -1186,7 +1085,7 @@ async function firstTimeSetupCustom(
     model: chosenModel.id,
     registry: registry.snapshotState(),
   };
-  printSetupComplete(viewConfig);
+  printSetupComplete(viewConfig, i18n);
   return viewConfig;
 }
 

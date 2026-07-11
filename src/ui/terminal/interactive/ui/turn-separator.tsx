@@ -36,7 +36,7 @@ export function TurnSeparator(props: {
 
     return (
       <>
-        <span style={{ fg: labelColor }}>{labelText}</span>
+        <span style={{ fg: labelColor, bold: true }}>{labelText}</span>
         <span style={{ fg: dashColor }}>{boxChar.repeat(rightLen)}</span>
         <span style={{ fg: dashColor }}>{indicatorText}</span>
       </>

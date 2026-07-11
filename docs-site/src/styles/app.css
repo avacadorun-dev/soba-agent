@@ -844,3 +844,535 @@ html > body[data-scroll-locked] {
     flex-direction: column;
   }
 }
+
+/* Landing art direction — editorial systems manifesto */
+.landing-shell {
+  --landing-gutter: clamp(1.5rem, 4vw, 4rem);
+  background: var(--color-fd-background);
+}
+
+.landing-shell ::selection {
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+}
+
+.hero-section {
+  --hero-grid-unit: 64px;
+  --hero-content-max: 80rem;
+  min-height: calc(100svh - 4rem);
+  border-bottom: 0;
+  isolation: isolate;
+}
+
+.hero-section::before {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  width: min(31vw, 30rem);
+  height: 100%;
+  border-left: 1px solid var(--color-fd-border);
+  background: color-mix(in oklab, var(--color-fd-primary) 5%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.hero-bg {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-fd-border) 48%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-fd-border) 48%, transparent) 1px, transparent 1px);
+  background-size: var(--hero-grid-unit) var(--hero-grid-unit);
+  mask-image: linear-gradient(90deg, black, black 74%, transparent);
+  opacity: 0.62;
+}
+
+.hero-grid {
+  z-index: 1;
+  min-height: calc(100svh - 4rem);
+  align-items: center;
+  padding-top: 5.75rem;
+  padding-bottom: 5rem;
+}
+
+.hero-copy {
+  max-width: 43rem;
+}
+
+.hero-badge {
+  border-radius: 0;
+  padding: 0.5rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-fd-primary);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-fd-foreground);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  backdrop-filter: none;
+}
+
+.hero-badge svg {
+  color: var(--color-fd-primary);
+}
+
+.hero-copy h1 {
+  margin-top: 2rem;
+  font-size: clamp(4.75rem, 7.2vw, 7.7rem) !important;
+  font-weight: 830;
+  letter-spacing: -0.072em !important;
+  line-height: 0.82 !important;
+}
+
+.hero-copy h1 .headline-line {
+  width: fit-content;
+}
+
+.hero-copy h1 .headline-accent {
+  position: relative;
+  color: var(--color-fd-foreground);
+}
+
+.hero-copy h1 .headline-accent:last-child::after {
+  display: inline-block;
+  width: 0.72em;
+  height: 0.12em;
+  margin-left: 0.12em;
+  background: var(--color-fd-primary);
+  content: "";
+  transform: translateY(-0.12em);
+}
+
+.hero-copy > p {
+  max-width: 37rem;
+  margin-top: 2rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: clamp(1.05rem, 1.25vw, 1.22rem);
+  line-height: 1.7;
+}
+
+.hero-actions {
+  gap: 0.7rem !important;
+}
+
+.hero-cta {
+  min-height: 3.15rem;
+  border-radius: 0;
+  padding: 0.8rem 1.15rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.hero-cta-primary {
+  position: relative;
+  padding-right: 1.35rem;
+  box-shadow: 0.4rem 0.4rem 0 color-mix(in oklab, var(--color-fd-foreground) 18%, transparent);
+}
+
+.hero-cta-primary:hover {
+  box-shadow: 0.15rem 0.15rem 0 color-mix(in oklab, var(--color-fd-foreground) 18%, transparent);
+  transform: translate(0.25rem, 0.25rem);
+}
+
+.hero-cta-secondary {
+  background: color-mix(in oklab, var(--color-fd-background) 86%, transparent);
+}
+
+.hero-proof-ledger {
+  max-width: 39rem;
+  gap: 0 !important;
+  border-top: 1px solid var(--color-fd-border);
+  border-left: 1px solid var(--color-fd-border);
+}
+
+.proof-pill {
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 0;
+  border-right: 1px solid var(--color-fd-border);
+  border-bottom: 1px solid var(--color-fd-border);
+  border-radius: 0;
+  padding: 0.74rem 0.8rem;
+  background: color-mix(in oklab, var(--color-fd-background) 76%, transparent);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  backdrop-filter: blur(12px);
+}
+
+.proof-index {
+  color: var(--color-fd-primary);
+  font-size: 0.62rem;
+}
+
+.proof-pill svg {
+  width: 0.85rem;
+  color: var(--color-fd-success);
+}
+
+.hero-visual-card {
+  min-height: 38rem;
+  overflow: visible;
+  border-radius: 0;
+  background: var(--color-fd-background);
+  box-shadow: 1rem 1rem 0 color-mix(in oklab, var(--color-fd-primary) 74%, transparent);
+  transform: rotate(1.1deg);
+}
+
+.hero-visual-card canvas {
+  overflow: hidden;
+}
+
+.hero-visual-card::before {
+  position: absolute;
+  z-index: 3;
+  inset: 0.6rem -0.65rem -0.65rem 0.6rem;
+  border-right: 1px solid var(--color-fd-border);
+  border-bottom: 1px solid var(--color-fd-border);
+  content: "";
+  pointer-events: none;
+}
+
+.hero-visual-card::after {
+  background: linear-gradient(180deg, transparent 68%, color-mix(in oklab, var(--color-fd-background) 92%, transparent));
+}
+
+.hero-visual-header {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-fd-border);
+  padding: 0.72rem 0.85rem;
+  background: color-mix(in oklab, var(--color-fd-background) 90%, transparent);
+  color: var(--color-fd-muted-foreground);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+.visual-live-dot {
+  color: var(--color-fd-primary);
+}
+
+.visual-live-dot::before {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  box-shadow: 0 0 0 0.22rem color-mix(in oklab, var(--color-fd-primary) 18%, transparent);
+}
+
+.hero-visual-caption {
+  right: 0.75rem;
+  bottom: 0.75rem;
+  border-radius: 0;
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+}
+
+.hero-coordinate {
+  position: absolute;
+  z-index: 2;
+  color: var(--color-fd-muted-foreground);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.hero-coordinate-side {
+  right: 1rem;
+  bottom: 5rem;
+  writing-mode: vertical-rl;
+}
+
+.stats-band {
+  position: relative;
+  z-index: 2;
+  padding: 0 !important;
+  background: var(--color-fd-foreground) !important;
+  color: var(--color-fd-background);
+}
+
+.stats-band > div {
+  gap: 0 !important;
+}
+
+.stat-card {
+  position: relative;
+  min-height: 9rem;
+  border: 0;
+  border-right: 1px solid color-mix(in oklab, var(--color-fd-background) 22%, transparent);
+  border-radius: 0;
+  padding: 1.5rem;
+  background: transparent;
+}
+
+.stat-card > div:first-of-type {
+  color: var(--color-fd-background) !important;
+  font-size: clamp(1.7rem, 3vw, 2.55rem);
+  letter-spacing: -0.04em;
+}
+
+.stat-card > div:last-child {
+  color: color-mix(in oklab, var(--color-fd-background) 62%, transparent);
+}
+
+.stat-index {
+  display: block;
+  margin-bottom: 1.5rem;
+  color: var(--color-fd-primary);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.65rem;
+}
+
+.section-block {
+  position: relative;
+  padding: clamp(5rem, 9vw, 9rem) 0;
+}
+
+.section-block + .section-block {
+  border-color: color-mix(in oklab, var(--color-fd-border) 75%, transparent) !important;
+}
+
+.section-heading .eyebrow,
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+}
+
+.eyebrow > span {
+  display: inline-grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+}
+
+.section-heading h2 {
+  max-width: 19ch;
+  font-size: clamp(2.65rem, 5vw, 5rem);
+  font-weight: 820;
+  letter-spacing: -0.064em;
+  line-height: 0.94;
+}
+
+.section-heading p:not(.eyebrow) {
+  max-width: 38rem;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.architecture-panel {
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.architecture-row {
+  border-radius: 0;
+  padding: 1rem 1.15rem;
+  background: var(--color-fd-foreground);
+  color: color-mix(in oklab, var(--color-fd-background) 66%, transparent);
+}
+
+.architecture-row strong {
+  color: var(--color-fd-background);
+}
+
+.architecture-agent-core,
+.workflow-card,
+.landing-feature-card {
+  border-radius: 0;
+}
+
+.architecture-agent-core {
+  background:
+    linear-gradient(135deg, transparent 49.6%, color-mix(in oklab, var(--color-fd-border) 68%, transparent) 50%, transparent 50.4%),
+    radial-gradient(circle at 50% 42%, color-mix(in oklab, var(--color-fd-primary) 20%, transparent), transparent 48%),
+    color-mix(in oklab, var(--color-fd-muted) 52%, transparent);
+}
+
+.workflow-card {
+  border-left: 3px solid var(--color-fd-primary);
+}
+
+.workflow-card:hover,
+.landing-feature-card:hover {
+  border-color: var(--color-fd-primary);
+  box-shadow: 0.55rem 0.55rem 0 color-mix(in oklab, var(--color-fd-primary) 30%, transparent);
+  transform: translate(-0.25rem, -0.25rem);
+}
+
+.workflow-icon,
+.feature-icon {
+  border-radius: 0;
+}
+
+.landing-feature-card {
+  min-height: 15rem;
+  padding: 1.5rem;
+  border-top: 3px solid var(--color-fd-border);
+}
+
+.landing-feature-card:nth-child(3n + 1) {
+  border-top-color: var(--color-fd-primary);
+}
+
+.feature-number {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  color: var(--color-fd-muted-foreground);
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.62rem;
+}
+
+.landing-feature-card h3 {
+  margin-top: 1.7rem;
+  font-size: 1.13rem;
+}
+
+.landing-feature-card p {
+  margin-top: 0.7rem;
+}
+
+.terminal-showcase {
+  min-height: 38rem;
+  border-radius: 0;
+  box-shadow: 0.8rem 0.8rem 0 var(--color-fd-primary);
+  transform: rotate(-0.8deg);
+}
+
+.landing-footer {
+  border-top: 1px solid var(--color-fd-primary);
+  padding: 2.3rem 0;
+}
+
+@media (min-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(30rem, 0.82fr);
+    gap: clamp(6rem, 8vw, 8rem);
+  }
+
+  .hero-visual-card {
+    transform: translate(2rem, 3rem) rotate(1.1deg);
+  }
+
+  html[lang="en"] .hero-copy h1 {
+    font-size: clamp(4.75rem, 6.4vw, 6.8rem) !important;
+  }
+
+  .section-block:nth-of-type(4) .section-heading {
+    margin-left: 0;
+    text-align: left;
+  }
+}
+
+@media (max-width: 1023px) {
+  .hero-section::before,
+  .hero-coordinate-side {
+    display: none;
+  }
+
+  .hero-grid {
+    gap: 4rem;
+    padding-top: 5rem;
+  }
+
+  .hero-visual-card {
+    min-height: 34rem;
+    transform: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-grid {
+    padding-top: 4.5rem;
+    padding-bottom: 4rem;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(3.45rem, 15.8vw, 4.5rem) !important;
+    line-height: 0.86 !important;
+  }
+
+  .hero-badge {
+    max-width: 100%;
+    font-size: 0.57rem;
+    letter-spacing: 0.035em;
+  }
+
+  .hero-copy h1 .headline-accent:last-child::after {
+    display: none;
+  }
+
+  .hero-actions .hero-cta {
+    flex: 1 1 calc(50% - 0.5rem);
+    justify-content: center;
+    padding-inline: 0.8rem;
+    font-size: 0.7rem;
+  }
+
+  .hero-visual-card {
+    min-height: 29rem;
+    box-shadow: 0.55rem 0.55rem 0 color-mix(in oklab, var(--color-fd-primary) 74%, transparent);
+  }
+
+  .stat-card {
+    min-height: 8rem;
+    padding: 1rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--color-fd-background) 22%, transparent);
+  }
+
+  .stat-index {
+    margin-bottom: 1rem;
+  }
+
+  .section-heading h2 {
+    font-size: clamp(2.55rem, 12vw, 3.6rem);
+  }
+
+  .architecture-core-row {
+    gap: 0.75rem;
+  }
+
+  .landing-feature-card {
+    min-height: auto;
+  }
+
+  .terminal-showcase {
+    min-height: 32rem;
+    transform: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .hero-visual-card {
+    transform: translateY(3rem) rotate(0.7deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-cta,
+  .workflow-card,
+  .landing-feature-card {
+    transition: none;
+  }
+}

@@ -13,17 +13,15 @@ export function shouldUseCompactSidebarLogo(width: number): boolean {
   return width <= SIDEBAR_COMPACT_LOGO_MAX_WIDTH;
 }
 
-/** Compact colored "SOBA Agent" for narrow sidebar (width <= 20). */
+/** Compact product wordmark for narrow sidebars. */
 function CompactLogo(props: { store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
 
   return (
     <text wrapMode="none" truncate>
-      <span style={{ fg: theme().primary, bold: true }}>S</span>
-      <span style={{ fg: theme().secondary, bold: true }}>O</span>
-      <span style={{ fg: theme().success, bold: true }}>B</span>
-      <span style={{ fg: theme().warning, bold: true }}>A</span>
-      <span style={{ fg: theme().muted, bold: true }}> Agent</span>
+      <span style={{ fg: theme().text, bold: true }}>SOBA</span>
+      <span style={{ fg: theme().primary, bold: true }}> ›</span>
+      <span style={{ fg: theme().muted }}> AGENT</span>
     </text>
   );
 }
@@ -34,43 +32,14 @@ function FullLogo(props: { store: TuiStore }) {
   return (
     <>
       <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>
-          ╔═══════════════════════╗
-        </span>
+        <span style={{ fg: theme().text, bold: true }}>SOBA</span>
+        <span style={{ fg: theme().primary, bold: true }}> ›</span>
       </text>
       <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>║{"   "}</span>
-        <span style={{ fg: theme().primary, bold: true }}>
-          {" "}
-          █▀▀ █▀█ █▀▄ █▀█
-        </span>
-        <span style={{ fg: theme().primary, bold: true }}>{"    "}║</span>
+        <span style={{ fg: theme().muted }}>ENGINEERING AGENT</span>
       </text>
       <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>║{"   "}</span>
-        <span style={{ fg: theme().secondary, bold: true }}>
-          {" "}
-          ▀▀█ █ █ █▀▄ █▀█
-        </span>
-        <span style={{ fg: theme().primary, bold: true }}>{"    "}║</span>
-      </text>
-      <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>║{"   "}</span>
-        <span style={{ fg: theme().primary, bold: true }}>
-          {" "}
-          ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀
-        </span>
-        <span style={{ fg: theme().primary, bold: true }}>{"    "}║</span>
-      </text>
-      <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>║{"         "}</span>
-        <span style={{ fg: theme().secondary, bold: true }}>AGENT</span>
-        <span style={{ fg: theme().primary, bold: true }}>{"         "}║</span>
-      </text>
-      <text wrapMode="none" truncate>
-        <span style={{ fg: theme().primary, bold: true }}>
-          ╚═══════════════════════╝
-        </span>
+        <span style={{ fg: theme().border }}>────────────────────────</span>
       </text>
     </>
   );
@@ -167,8 +136,9 @@ const MODE_LABELS: Record<SidebarMode, string> = {
 function ModeLabel(props: { mode: SidebarMode; store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   return (
-    <text fg={theme().primary} wrapMode="none" truncate>
-      <b>[ {MODE_LABELS[props.mode]} ]</b>
+    <text wrapMode="none" truncate>
+      <span style={{ fg: theme().primary }}>● </span>
+      <span style={{ fg: theme().text, bold: true }}>{MODE_LABELS[props.mode].toUpperCase()}</span>
     </text>
   );
 }
@@ -178,7 +148,7 @@ function ModeLabel(props: { mode: SidebarMode; store: TuiStore }) {
 function Section(props: { label: string; store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   return (
-    <text fg={theme().secondary} wrapMode="none" truncate>
+    <text fg={theme().muted} wrapMode="none" truncate>
       <b>{props.label.toUpperCase()}</b>
     </text>
   );

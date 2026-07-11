@@ -9,7 +9,7 @@ export function StatusBar(props: { store: TuiStore; width: number }) {
     const mode = props.store.workMode();
     const modeBadge = mode === "plan" ? " [plan]" : mode === "goal" ? " [goal]" : "";
     return frame === null
-      ? `${props.store.isIdle() ? "∿" : "∼"} ${props.store.status()}${modeBadge}`
+      ? `● ${props.store.status()}${modeBadge}`
       : `${SYNTHWAVE_NOODLE_FRAMES[frame]} ${props.store.getThinkingLabel()}${modeBadge}`;
   };
   return (

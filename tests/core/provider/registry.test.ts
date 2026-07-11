@@ -574,7 +574,7 @@ describe("ProviderRegistry persistence", () => {
     // Seed the file with an unrelated top-level key.
     await Bun.write(
       configPath,
-      JSON.stringify({ lang: "ru", theme: "ember", unrelated: { x: 1 } }, null, 2),
+      JSON.stringify({ lang: "ru", theme: "clay", unrelated: { x: 1 } }, null, 2),
     );
     const reg = newProviderRegistryAt(configPath);
     reg.setActive("deepseek", "deepseek-chat");
@@ -582,7 +582,7 @@ describe("ProviderRegistry persistence", () => {
 
     const onDisk = JSON.parse(await Bun.file(configPath).text()) as Record<string, unknown>;
     expect(onDisk.lang).toBe("ru");
-    expect(onDisk.theme).toBe("ember");
+    expect(onDisk.theme).toBe("clay");
     expect((onDisk.unrelated as { x: number }).x).toBe(1);
     expect((onDisk.registry as ProviderRegistryState).defaultProvider).toBe("deepseek");
   });

@@ -806,9 +806,9 @@ describe("OpenTUI Solid store", () => {
     await store.submit("inspect project");
     store.onAgentEvent(event({ type: "turn_end", stopReason: "completed" }));
     await store.submit("/session");
-    await store.submit("/theme ember");
+    await store.submit("/theme clay");
 
-    expect(store.historyNavigate(1)).toBe("/theme ember");
+    expect(store.historyNavigate(1)).toBe("/theme clay");
     expect(store.historyNavigate(1)).toBe("/session");
     expect(store.historyNavigate(1)).toBe("inspect project");
   });
@@ -856,7 +856,7 @@ describe("OpenTUI Solid store", () => {
       agentLoop,
       toolNames: [],
       executeCommand: async (_input, output) => {
-        output({ type: "theme_changed", timestamp: Date.now(), theme: "ember" });
+        output({ type: "theme_changed", timestamp: Date.now(), theme: "clay" });
         return { handled: true };
       },
       debug: false,
@@ -868,10 +868,10 @@ describe("OpenTUI Solid store", () => {
       autoCompact: true,
     });
 
-    await store.submit("/theme ember");
+    await store.submit("/theme clay");
 
-    expect(store.themeName()).toBe("ember");
-    expect(store.status()).toBe("theme: ember");
+    expect(store.themeName()).toBe("clay");
+    expect(store.status()).toBe("theme: clay");
   });
 
   test("/compact no-op сбрасывает статус TUI после skipped event", async () => {

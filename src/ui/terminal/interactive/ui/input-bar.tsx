@@ -222,7 +222,7 @@ export function InputBar(props: { store: TuiStore }) {
       </box>
       <box height={TEXTAREA_HEIGHT} backgroundColor={theme().background} style={{ flexDirection: "row", paddingLeft: 1 }}>
         <text fg={props.store.confirmation() ? theme().warning : theme().secondary} style={{ paddingTop: 1 }}>
-          &gt;{" "}
+          <b>›</b>{" "}
         </text>
         <textarea
           ref={(ref: TextareaRenderable) => {
