@@ -166,6 +166,18 @@ function repositoryUrl(): string {
   return match ? `https://github.com/${match[1]}` : "https://github.com/avacadorun-dev/soba-agent";
 }
 
+function packageVersion(): string {
+  const packageJson = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8")) as {
+    version?: string;
+  };
+
+  if (!packageJson.version) {
+    throw new Error("package.json does not define a version.");
+  }
+
+  return packageJson.version;
+}
+
 function releaseTags(): string[] {
   const output = runGit(["tag", "--list", "v[0-9]*", "--sort=v:refname"]);
 
@@ -202,6 +214,19 @@ function isReleaseCommit(subject: string): boolean {
 
 function isGeneratedChangelogCommit(subject: string): boolean {
   return /\bgenerated changelog\b/i.test(subject);
+}
+
+function inferredNextTag(): string | undefined {
+  const version = packageVersion();
+  const expectedTag = `v${version}`;
+  const headSubject = runGit(["log", "-1", "--format=%s", "HEAD"]);
+  const releaseMatch = headSubject.match(/^(?:chore:\s*)?release:?\s+v?(\d+\.\d+\.\d+)$/i);
+
+  if (releaseMatch?.[1] !== version || releaseTags().includes(expectedTag)) {
+    return undefined;
+  }
+
+  return expectedTag;
 }
 
 function buildSections(options: { nextTag?: string } = {}): ChangelogSection[] {
@@ -419,7 +444,8 @@ function writeGeneratedFiles(expected: Record<string, string>): void {
 }
 
 const repoUrl = repositoryUrl();
-const sections = buildSections({ nextTag });
+const effectiveNextTag = nextTag ?? inferredNextTag();
+const sections = buildSections({ nextTag: effectiveNextTag });
 
 if (releaseNotesTag) {
   process.stdout.write(renderReleaseNotes(releaseNotesTag, sections, repoUrl));
