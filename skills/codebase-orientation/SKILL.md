@@ -1,12 +1,12 @@
 ---
 name: codebase-orientation
-description: Build a focused map of an unfamiliar codebase before changing it.
+description: Build an evidence-based map of an unfamiliar repository or subsystem before planning or changing it. Use for architecture questions, onboarding, ownership discovery, or the first task in an unfamiliar area.
 soba:
   version: 1
   triggers:
-    - codebase orientation
-    - unfamiliar repository
-    - architecture scan
+    - orient in codebase
+    - map architecture
+    - find implementation boundary
   memory-policy: read
 ---
 
@@ -14,47 +14,49 @@ soba:
 
 ## Purpose
 
-Create a concise, evidence-based map of the repository so subsequent work starts from real project structure instead of assumptions.
+Discover only the architecture, workflows, and constraints needed to act confidently in the requested area.
 
 ## Triggers
 
-Use this skill when the user asks to understand a codebase, start a new area of work, explain architecture, or make changes in an unfamiliar repository.
+Apply this workflow to architecture explanations, onboarding, ownership discovery, or implementation work in an unfamiliar repository or subsystem.
 
 ## Inputs To Inspect
 
-- Project instructions.
-- README and phase or design docs that match the request.
-- Package scripts and runtime configuration.
-- Source directory layout.
-- Tests that cover the requested area.
-- Recently changed files when the request follows ongoing work.
+- Project and directory-specific instructions.
+- Top-level documentation, manifests, task definitions, and runtime configuration.
+- Entry points and source layout near the requested behavior.
+- Representative tests, fixtures, and public contracts.
+- Relevant recent changes and project memory when available.
 
 ## Procedure
 
-1. Read project instructions first.
-2. Inspect top-level structure and identify the likely ownership boundary for the task.
-3. Read only the docs, source files, and tests needed to understand that boundary.
-4. Summarize the module roles, data flow, commands, and risk areas.
-5. Name the next implementation or verification step when the user asked for action.
+1. Translate the request into a bounded area, behavior, or data flow to understand.
+2. Inspect the top-level structure and project-defined commands without assuming a language, build system, or repository shape.
+3. Locate entry points, ownership boundaries, dependencies, state transitions, and external interfaces relevant to that boundary.
+4. Read representative implementation and tests on both sides of important boundaries.
+5. Trace one concrete path through the system to validate the emerging map.
+6. Summarize confirmed module roles, data flow, extension points, verification commands, and risk areas.
+7. Separate observed facts from assumptions and name the next useful action when the request includes implementation.
 
 ## Verification Contract
 
-The orientation summary must cite inspected files or commands and must distinguish confirmed facts from assumptions. It must not claim behavior that was not observed in source, tests, or docs.
+Support the map with inspected files, symbols, configuration, or command output. Do not infer architecture from directory names alone. Validate important relationships from both producer and consumer sides when practical.
 
 ## Failure Recovery
 
-If the repository lacks docs, inspect package scripts, entry points, and tests. If multiple architectures are plausible, state the competing hypotheses and read one more targeted file for each before deciding.
+When documentation is absent or stale, work outward from executable entry points, task definitions, and tests. When multiple ownership hypotheses remain plausible, inspect one discriminating artifact for each before choosing.
 
 ## Memory Policy
 
-Read memory as a hypothesis when available. Do not write memory unless a stable project convention is verified across source and tests.
+Read memory as a navigation hint and confirm it against current artifacts. Write no memory unless the user asks or a stable convention is verified across multiple project sources.
 
 ## Stop Conditions
 
-Stop when the user has a usable map of the requested area or when missing files, missing dependencies, or inaccessible generated artifacts block accurate orientation.
+Stop when the user has a focused, actionable map of the requested area. Stop as blocked only when inaccessible generated code, dependencies, or external systems are essential to the map.
 
 ## Anti-Patterns
 
-- Do not scan the entire repository without a task boundary.
-- Do not summarize directory names as architecture without reading representative files.
-- Do not start implementation before project instructions and relevant tests are understood.
+- Do not inventory the entire repository without a task boundary.
+- Do not confuse file layout with runtime architecture.
+- Do not present documentation claims as current behavior without corroboration.
+- Do not start broad refactoring during orientation.

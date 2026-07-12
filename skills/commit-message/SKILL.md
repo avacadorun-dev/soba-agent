@@ -1,12 +1,12 @@
 ---
 name: commit-message
-description: Generate conventional commit messages from staged changes.
+description: Draft an accurate commit message from a specified or staged change set using the repository's established style. Use when asked for commit wording, including conventional commits only when requested or evidenced by project history.
 soba:
   version: 1
   triggers:
-    - commit message
-    - staged changes
-    - conventional commit
+    - draft commit message
+    - summarize staged changes
+    - conventional commit request
   memory-policy: none
 ---
 
@@ -14,46 +14,49 @@ soba:
 
 ## Purpose
 
-Generate concise, accurate conventional commit messages from the changes that are already staged.
+Describe one commit's actual intent and impact in the style expected by its repository.
 
 ## Triggers
 
-Use this skill when the user asks for a commit message, wants conventional commit wording, or asks to summarize staged changes for a commit.
+Apply this workflow when the user asks for commit wording based on staged changes, a supplied patch, or an explicit commit range.
 
 ## Inputs To Inspect
 
-- Project instructions for commit style.
-- `git diff --cached --stat`.
-- `git diff --cached`.
-- Recent commit style when project instructions are silent.
+- Project instructions, commit template, and contribution guidance.
+- The exact change set the message should describe.
+- Recent repository commit style when explicit rules are absent.
+- Tests, migrations, or compatibility changes visible in the change set.
 
 ## Procedure
 
-1. Confirm that staged changes exist.
-2. Inspect the staged diff and identify the dominant change type: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`, `build`, or `ci`.
-3. Choose a scope only when the project has a clear module or package boundary.
-4. Write a subject in imperative mood, without a trailing period.
-5. Add a body only when the reason, risk, migration, or multi-part change would be unclear from the subject alone.
-6. Include issue references or breaking-change footers only when present in the evidence.
+1. Resolve the exact change boundary and confirm it contains meaningful changes.
+2. Identify the dominant user or maintainer outcome rather than listing files.
+3. Match the repository's established subject format, language, capitalization, scope, and length.
+4. Use Conventional Commits only when the user requests it or repository evidence establishes it.
+5. Write a concise imperative subject where that matches project style; otherwise follow the local convention.
+6. Add a body only to explain motivation, non-obvious behavior, risk, migration, or multiple tightly related parts.
+7. Add references, acknowledgements, or breaking-change markers only when supported by the request or change evidence.
+8. Offer multiple options only when the change genuinely supports different emphasis.
 
 ## Verification Contract
 
-The proposed message must match the staged diff, use a conventional commit type, and avoid mentioning unstaged or inferred work.
+Ensure every claim is visible in the resolved change set and the message follows the discovered repository convention. Exclude unstaged, unrelated, or merely planned work unless the user explicitly selected it.
 
 ## Failure Recovery
 
-If staged changes are absent, state that no commit message can be generated from staged changes and suggest staging files first. If the diff is too large or ambiguous, provide 2-3 options with the tradeoff for each.
+If no change set can be resolved, state what is missing instead of inventing a message. If the change mixes unrelated outcomes, flag that a split may produce clearer history and provide messages per coherent unit when useful.
 
 ## Memory Policy
 
-Do not write project memory. Read memory only if the active task already surfaced a relevant project-specific commit convention.
+Do not write memory. Treat current project instructions and repository history as the source of commit conventions.
 
 ## Stop Conditions
 
-Stop after providing the requested commit message options or after identifying that there are no staged changes to summarize.
+Stop after providing message text ready to use, or after identifying the missing change boundary needed for an accurate message.
 
 ## Anti-Patterns
 
-- Do not invent ticket numbers, breaking changes, or motivations.
-- Do not describe unstaged files.
-- Do not use vague subjects such as "update files" or "fix stuff".
+- Do not force Conventional Commits onto a repository that does not use them.
+- Do not invent issue identifiers, motivations, test results, or breaking changes.
+- Do not reduce a behavioral change to a vague file-operation subject.
+- Do not create a commit unless the user explicitly asks for that separate action.

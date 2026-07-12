@@ -1,12 +1,12 @@
 ---
 name: pr-description
-description: Generate structured pull request descriptions from branch changes.
+description: Draft an evidence-based pull request or merge request description from a resolved change set and project template. Use for reviewer summaries, change-request bodies, risk notes, or verification sections without publishing anything.
 soba:
   version: 1
   triggers:
-    - pull request description
-    - pr body
-    - merge request summary
+    - draft pull request description
+    - write merge request body
+    - summarize change for review
   memory-policy: none
 ---
 
@@ -14,49 +14,50 @@ soba:
 
 ## Purpose
 
-Create a reviewer-ready pull request description from branch commits, diffs, and project-specific requirements.
+Give reviewers the context, behavioral summary, evidence, and risk needed to evaluate a proposed change efficiently.
 
 ## Triggers
 
-Use this skill when the user asks for a PR description, merge request body, release-oriented change summary, or reviewer checklist.
+Apply this workflow when the user asks for text describing a pull request, merge request, or equivalent review proposal.
 
 ## Inputs To Inspect
 
-- Project instructions for PR format.
-- Current branch name.
-- Comparison base requested by the user or the repository default.
-- Commit log for the branch.
-- Changed files, diff stat, and relevant detailed diffs.
-- Test or verification evidence from the current task when available.
+- The requested source and target refs or supplied change set.
+- Project contribution instructions and change-request template.
+- Commits, changed paths, and representative detailed diffs.
+- Requirements, issue references, migrations, screenshots, and verification evidence actually available.
+- Known limitations and follow-up work within the selected scope.
 
 ## Procedure
 
-1. Determine the base branch or comparison range.
-2. Inspect branch commits and changed file statistics.
-3. Read detailed diffs for files that define the main behavior change.
-4. Group changes by purpose and user impact.
-5. List verification that actually ran, preserving command names.
-6. Call out breaking changes, migrations, risks, or follow-up work only when supported by evidence.
-7. Format the PR body using project instructions or a compact default structure: Summary, Changes, Verification, Risk.
+1. Resolve and state the exact comparison boundary.
+2. Read the changes that define behavior, not only commit subjects or statistics.
+3. Explain why the change exists only when the motivation is supported by the request or project evidence.
+4. Group implementation details by outcome and reviewer concern.
+5. Record verification that actually ran, preserving meaningful command or operation names and results.
+6. Surface compatibility, migration, security, data, rollout, and operational risk when the change implicates them.
+7. Follow the repository template; otherwise use a compact structure suited to the change, such as Summary, Changes, Verification, and Risk.
+8. Keep absent sections out rather than filling them with boilerplate.
 
 ## Verification Contract
 
-The PR description must match the inspected branch diff and must not claim tests, screenshots, migrations, issues, or breaking changes that were not observed.
+Ensure every statement matches the resolved change set or explicit user-provided context. Do not claim passing checks, screenshots, issue closure, compatibility, or deployment state without evidence.
 
 ## Failure Recovery
 
-If the base branch cannot be determined, inspect local branches and ask for the intended base only if the ambiguity changes the result. If the branch has many unrelated changes, group by directory and make the scope visible.
+If the comparison base is ambiguous, inspect repository defaults and ask only when plausible bases materially differ. If the range mixes unrelated work, make the mixed scope visible and organize it into coherent reviewer units.
 
 ## Memory Policy
 
-Do not write project memory. Read memory only if it was already injected and contains a PR template or reviewer convention.
+Do not write memory. Use current project templates and instructions as the authority for format.
 
 ## Stop Conditions
 
-Stop after producing the requested PR description or after identifying that a missing comparison base prevents a correct description.
+Stop after producing copy-ready description text, or after identifying the unavailable comparison boundary that prevents an accurate description.
 
 ## Anti-Patterns
 
-- Do not invent verification results.
-- Do not include boilerplate checklists unless the project expects them.
-- Do not hide unreviewed or high-risk areas.
+- Do not publish, open, update, or submit a change request unless explicitly asked.
+- Do not invent tests, links, screenshots, migrations, or risk assessments.
+- Do not paste a file list in place of explaining behavior.
+- Do not include empty boilerplate checklists the project does not require.

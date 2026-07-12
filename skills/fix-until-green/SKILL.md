@@ -1,12 +1,12 @@
 ---
 name: fix-until-green
-description: Iterate on failing verification until the target checks pass or a real blocker is found.
+description: Iteratively diagnose and resolve failing project verification until the requested checks pass or a concrete external blocker remains. Use after tests, static checks, builds, packaging, or validation fail during authorized implementation work.
 soba:
   version: 1
   triggers:
-    - fix until green
-    - failing verification
-    - recovery loop
+    - fix failing checks
+    - recover verification
+    - iterate until green
   memory-policy: read-write
 ---
 
@@ -14,48 +14,49 @@ soba:
 
 ## Purpose
 
-Use verification failures as diagnostic evidence and keep iterating until the requested checks pass or a concrete blocker is reached.
+Use verification feedback to make bounded forward progress without hiding failures or expanding the task carelessly.
 
 ## Triggers
 
-Use this skill when a test, lint, type-check, build, or other verification command fails after an attempted change.
+Apply this workflow after a relevant project check fails during work the user authorized the agent to change.
 
 ## Inputs To Inspect
 
-- The exact failing command and output.
-- Recent mutations in the current task.
-- Relevant source and test files.
-- Project instructions for verification commands.
-- Prior recovery attempts in the current turn.
+- The exact command or operation, exit state, and smallest useful diagnostic.
+- Recent task-related changes and the last known verification state.
+- The implementation, configuration, fixtures, and environment implicated by the diagnostic.
+- Project instructions and prior attempts in the current recovery loop.
 
 ## Procedure
 
-1. Capture the failing command and the specific diagnostic.
-2. Form one narrow hypothesis from the diagnostic.
-3. Inspect the smallest source or test context needed to confirm the hypothesis.
-4. Apply one focused recovery change.
-5. Rerun the same failing command.
-6. If it passes, run the broader required verification for the task.
-7. If it fails differently, repeat from the new diagnostic. If it fails identically, change strategy instead of repeating.
+1. Record the failing check and classify the failure as product, test, configuration, environment, dependency, or unknown.
+2. Form one falsifiable hypothesis from the current evidence.
+3. Inspect the smallest context that can confirm or reject it.
+4. Apply one focused change only when it is inside the user's authorized scope.
+5. Rerun the narrowest check that preserves the original failure signal.
+6. On a new failure, update the classification and hypothesis; on an identical failure, change strategy before rerunning.
+7. Once the target passes, run broader checks required by the change's blast radius.
+8. Review all recovery edits and revert no user work; separate unrelated pre-existing failures in the report.
 
 ## Verification Contract
 
-The original failing command must pass before claiming recovery. If the recovery changed shared code, the broader project-required checks must also pass.
+Require the original target check to pass without weakening its intended coverage. When recovery changes shared behavior, require proportionate surrounding verification. Preserve exact evidence for any remaining failure.
 
 ## Failure Recovery
 
-After repeated no-progress attempts, stop and report the exact blocker, diagnostics, attempted fixes, and next decision needed. Do not mask the failure by changing the verification target.
+Reduce noisy output to the first causal diagnostic, isolate nondeterminism, and compare against a clean or known-good path when safe. If failures are environmental or external, stop mutating product code unless evidence links it to the failure.
 
 ## Memory Policy
 
-Write memory only after a verified failure-to-fix lesson is stable, general to this project, and free of secrets. Do not store raw logs or speculative hypotheses.
+Read memory as a hypothesis. Write only a verified, reusable project-specific recovery lesson after the loop succeeds; exclude transient logs, machine state, secrets, and failed guesses.
 
 ## Stop Conditions
 
-Stop when verification is green, when a real external blocker prevents progress, or when continuing would require an unapproved risky change.
+Stop when the requested checks pass with proportionate follow-up verification. Stop as blocked when progress requires unavailable external state, new authorization, or a product decision; otherwise continue with a changed hypothesis.
 
 ## Anti-Patterns
 
-- Do not rerun the same failing command without a changed input or hypothesis.
-- Do not delete tests to make verification pass.
-- Do not declare success from partial verification when the original command still fails.
+- Do not rerun unchanged failures without a new hypothesis or input.
+- Do not delete, skip, quarantine, or weaken checks merely to obtain green output.
+- Do not make unrelated refactors inside a recovery loop.
+- Do not treat a partial pass as recovery of the original target.

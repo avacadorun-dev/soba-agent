@@ -24,7 +24,7 @@ export interface SystemPromptOptions {
   /** Pre-rendered Project Memory section. Built by memory-injector. */
   projectMemorySection?: string;
   /** Skills loaded from markdown files */
-  skills?: Array<{ name: string; description: string; location: string }>;
+  skills?: Array<{ name: string; description: string; location: string; triggers?: string[] }>;
 }
 
 const TOOL_SNIPPETS: Record<string, string> = {
@@ -92,7 +92,7 @@ const CORE_GUIDELINES = [
   "Use edit for precise changes with exact text replacement, including multiple non-overlapping edits in one call",
   "Use write only for new files or complete rewrites",
   "Use checkpoint only for meaningful milestones or plan pivots in long tasks; it does not finish the turn",
-  "Use read_project_memory/write_project_memory. For durable facts, include source receipts when known: file, lines, lastVerified, confidence, staleIfFilesChange. Never modify .soba/memory/** directly",
+  "Use allowed project memory tools. For durable facts, include source receipts when known: file, lines, lastVerified, confidence, staleIfFilesChange. Never modify .soba/memory/** directly",
   "Be concise in your responses",
   "Show file paths clearly when working with files",
   "TRUST DIALOG DENIALS ARE FINAL: If the security system denies a bash command or tool call, this is the user's decision — not a transient error. Stop the ENTIRE sub-goal that required the denied operation. Do NOT try alternative commands, script wrappers (bun -e, node -e, python -c), file moves (mv to /tmp), or any workaround. Simply state what was blocked and ask how to proceed.",
@@ -132,13 +132,14 @@ function buildProjectContext(files: Array<{ path: string; content: string }>): s
   return section;
 }
 
-function buildSkillsSection(skills: Array<{ name: string; description: string; location: string }>): string {
+function buildSkillsSection(skills: Array<{ name: string; description: string; location: string; triggers?: string[] }>): string {
   if (skills.length === 0) return "";
   const lines = [
     "",
     "The following skills provide specialized instructions for specific tasks.",
     "Use activate_skill only when the current task clearly matches a skill's description.",
     "Do not activate skills for generic exploration. Project instructions and core safety, completion, verification, and tool-selection rules override skill examples.",
+    "Use triggers only as routing hints, not exact-language requirements. Deactivate a skill when it no longer applies to the current session.",
     "The full skill content will be available in the next request after activation.",
     "",
     "<available_skills>",
@@ -147,6 +148,9 @@ function buildSkillsSection(skills: Array<{ name: string; description: string; l
     lines.push("  <skill>");
     lines.push(`    <name>${skill.name}</name>`);
     lines.push(`    <description>${skill.description}</description>`);
+    if (skill.triggers && skill.triggers.length > 0) {
+      lines.push(`    <triggers>${skill.triggers.join(" | ")}</triggers>`);
+    }
     lines.push(`    <location>${skill.location}</location>`);
     lines.push("  </skill>");
   }

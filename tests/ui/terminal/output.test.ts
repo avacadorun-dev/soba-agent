@@ -287,6 +287,10 @@ describe("Tool summary", () => {
     expect(formatToolSummary("activate_skill", { name: "commit-message" })).toBe("Activate skill: commit-message");
   });
 
+  test("deactivate_skill показывает имя", () => {
+    expect(formatToolSummary("deactivate_skill", { name: "commit-message" })).toBe("Deactivate skill: commit-message");
+  });
+
   test("неизвестный инструмент капитализируется", () => {
     expect(formatToolSummary("custom_tool", {})).toBe("Custom_tool");
   });

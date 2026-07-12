@@ -8,6 +8,7 @@ export * from "../../infrastructure/mcp/secret-store";
 export * from "../../infrastructure/mcp/security";
 export { syncMcpToolsIntoRegistry } from "../../infrastructure/mcp/tool-registry-sync";
 export * from "../../infrastructure/persistence/sessions/session-manager";
+export { resolveBundledSkillsPath } from "../../infrastructure/persistence/skills/bundled-skill-source";
 export { createFilesystemProjectTrustStore } from "../../infrastructure/persistence/skills/project-trust-storage";
 export {
   computeSkillContentHashOnDisk,

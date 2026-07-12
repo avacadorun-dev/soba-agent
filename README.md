@@ -174,7 +174,10 @@ Skills are reusable workflows that live with the project or the user environment
 ```text
 /skill list
 /skill:commit-message Suggest a conventional commit message for staged changes.
+/skill deactivate commit-message
 ```
+
+Activated skills are session-scoped, restored on session resume, and can be deactivated explicitly when they no longer apply. Bundled skills are included in both package and standalone binary distributions.
 
 Project skills require trust:
 

@@ -1,4 +1,5 @@
 import { commandService, type ListCommandsInput, type RuntimeCommandMetadata } from "../../application/command-service";
+import type { SkillManager } from "../../application/skills/skill-manager";
 import type {
   CreateSessionInput,
   ListSessionsInput,
@@ -31,20 +32,29 @@ import {
   providerHasCredentials,
   usableModelForProvider,
 } from "./create-provider-stack";
+import { reconcileActiveSkills } from "./create-skill-stack";
 
 export class AgentLoopRuntimeAdapter implements SobaRuntime {
   private readonly loop: AgentLoop;
   private session: SessionManager;
   private readonly sessionLifecycle: PersistentSessionLifecycleService;
   private readonly providerRegistry: ProviderRegistry;
+  private readonly skillManager?: SkillManager;
   private commandExecutor?: RuntimeCommandExecutor;
   private readonly runtimeListeners = new Set<RuntimeEventListener>();
 
-  constructor(loop: AgentLoop, session: SessionManager, sessionLifecycle: PersistentSessionLifecycleService, providerRegistry: ProviderRegistry) {
+  constructor(
+    loop: AgentLoop,
+    session: SessionManager,
+    sessionLifecycle: PersistentSessionLifecycleService,
+    providerRegistry: ProviderRegistry,
+    skillManager?: SkillManager,
+  ) {
     this.loop = loop;
     this.session = session;
     this.sessionLifecycle = sessionLifecycle;
     this.providerRegistry = providerRegistry;
+    this.skillManager = skillManager;
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSessionInfo> {
@@ -222,6 +232,9 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   private activateSession(session: SessionManager): void {
     this.session = session;
     this.loop.setSessionManager(session);
+    if (this.skillManager) {
+      reconcileActiveSkills(this.skillManager, session);
+    }
   }
 }
 

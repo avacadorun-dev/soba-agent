@@ -13,6 +13,32 @@ import { computeSkillContentHashOnDisk, FilesystemSkillValidationFilesystem, val
 
 const repoSkillsDir = join(process.cwd(), "skills");
 const forbiddenLintToolExamples = ["eslint", "prettier"];
+const GENERAL_ENGINEERING_SKILLS = [
+  "bug-fix",
+  "code-review",
+  "codebase-orientation",
+  "context-handoff",
+  "feature-implementation",
+  "fix-until-green",
+  "lint-fix",
+  "memory-capture",
+  "test-authoring",
+  "version-bump",
+];
+const forbiddenEcosystemDefaults = [
+  "package.json",
+  "npm ",
+  "pnpm ",
+  "yarn ",
+  "bun ",
+  "pytest",
+  "cargo ",
+  "go test",
+  "mvn ",
+  "gradle",
+  "eslint",
+  "prettier",
+];
 const genericTriggers = new Set(["task", "code", "work", "help", "general"]);
 
 function listBundledSkillNames(): string[] {
@@ -64,9 +90,9 @@ describe("Bundled skill eval baseline", () => {
       },
     });
 
-    expect(content).toContain("Project instructions");
-    expect(content).toContain("tools already configured by the project");
-    expect(content).toContain("project's configured command");
+    expect(content).toContain("Project and directory-specific instructions");
+    expect(content).toContain("project's own configured workflow");
+    expect(content).toContain("configured automatic fixes");
     for (const forbiddenTool of forbiddenLintToolExamples) {
       expect(lowerContent).not.toContain(forbiddenTool);
     }
@@ -112,8 +138,8 @@ describe("Bundled skill eval baseline", () => {
     expect(activation.success).toBe(true);
     expect(messages).toHaveLength(1);
     expect(reviewContent).toContain("SOBA Active Skill: code-review");
-    expect(reviewContent).toContain("Present findings first");
-    expect(reviewContent).toContain("Do not modify files unless the user explicitly asks");
+    expect(reviewContent).toContain("Report findings first");
+    expect(reviewContent).toContain("Do not modify files unless the user separately requests a patch");
     expect(reviewContent.toLowerCase()).not.toContain("use edit");
     expect(reviewContent.toLowerCase()).not.toContain("use write");
     expect(result.status).toBe("pass");
@@ -158,6 +184,16 @@ Missing the rest of the protocol sections.
       for (const trigger of triggers) {
         expect(trigger.length).toBeGreaterThanOrEqual(4);
         expect(genericTriggers.has(trigger.toLowerCase())).toBe(false);
+      }
+    }
+  });
+
+  test("general engineering skills stay language and ecosystem neutral", () => {
+    for (const skillName of GENERAL_ENGINEERING_SKILLS) {
+      const lowerContent = readSkill(skillName).toLowerCase();
+
+      for (const ecosystemDefault of forbiddenEcosystemDefaults) {
+        expect(lowerContent).not.toContain(ecosystemDefault);
       }
     }
   });

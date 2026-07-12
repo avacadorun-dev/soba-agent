@@ -1,12 +1,12 @@
 ---
 name: lint-fix
-description: Fix linting and formatting failures using the project's existing tooling.
+description: Resolve formatting, linting, or static-style failures with the project's own configured workflow and a scoped diff. Use when a style gate fails or the user asks to make existing code-quality checks pass.
 soba:
   version: 1
   triggers:
-    - lint failure
-    - format failure
-    - style check
+    - fix lint failure
+    - fix formatting check
+    - resolve style diagnostics
   memory-policy: read
 ---
 
@@ -14,50 +14,50 @@ soba:
 
 ## Purpose
 
-Resolve linting and formatting failures with the tools already configured by the project.
+Restore the project's existing code-quality gates without imposing a language, formatter, linter, or style not chosen by the project.
 
 ## Triggers
 
-Use this skill when the user asks to fix lint errors, format code, make style checks pass, or recover from a failed lint command.
+Apply this workflow to diagnostics from configured formatting, linting, or style validation, or to an explicit request to run and repair those checks.
 
 ## Inputs To Inspect
 
-- Project instructions and package manager requirements.
-- `package.json` scripts.
-- Formatter or linter config files already present in the repository.
-- Runtime, formatter, and linter configuration when the project identifies them as canonical.
-- The failing command output.
-- The files changed in the current task.
+- Project and directory-specific instructions.
+- Configured task definitions, manifests, hooks, and tool configuration.
+- The exact failing operation and diagnostics.
+- Nearby source context and task-related workspace changes.
+- Relevant behavioral checks when a proposed cleanup can alter semantics.
 
 ## Procedure
 
-1. Read project instructions first and treat them as authoritative.
-2. Identify the existing lint and format commands from scripts or config.
-3. Run the narrowest relevant check first when a failing command is already known.
-4. Apply automatic fixes only through the project's configured command.
-5. Manually fix remaining diagnostics by editing the smallest affected code paths.
-6. Rerun the same check that failed, then run the broader project verification if the change can affect shared behavior.
-7. Review the diff to ensure automatic fixes did not touch unrelated files.
+1. Discover the authoritative project command and configuration from repository evidence.
+2. Reproduce the narrowest relevant diagnostic before editing when practical.
+3. Classify each issue as safely mechanical, context-dependent, behavioral, generated, or configuration-related.
+4. Apply configured automatic fixes only to a controlled scope and only when their diff can be reviewed.
+5. Repair remaining diagnostics with the smallest semantics-preserving edits.
+6. Investigate the underlying design when a rule exposes a real correctness or maintainability problem; do not suppress it reflexively.
+7. Rerun the original check, then run behavioral or contract verification if semantics may have changed.
+8. Review the final diff and separate incidental formatter churn from the requested work.
 
 ## Verification Contract
 
-The original failing lint or format command must pass after the fix. If code behavior changed to satisfy linting, run the relevant tests or type checks as required by the project.
+Require the original project check to pass and the resulting diff to remain scoped. If satisfying a diagnostic changes behavior, require the relevant behavioral verification as well.
 
 ## Failure Recovery
 
-If the configured command is missing, inspect project scripts and config before choosing a fallback. If an automatic fix changes unrelated files, separate those changes from the task or report them clearly. If a diagnostic reveals a design issue, fix the underlying code rather than suppressing the rule.
+If no canonical command is documented, infer it from checked-in configuration and automation rather than installing a preferred tool. If automatic fixes expand scope, narrow their target or retain only task-related edits without overwriting user changes.
 
 ## Memory Policy
 
-Read project memory for known lint conventions if it is already available. Write memory only after a repeated project-specific lint recovery pattern is verified and does not contain secrets.
+Read memory as a hint for project-specific conventions and verify it against current configuration. Write only a stable recurring recovery rule confirmed by successful checks.
 
 ## Stop Conditions
 
-Stop when the failing lint or format command passes and the diff is scoped, or when a missing dependency, missing script, or conflicting project instruction blocks a correct fix.
+Stop when the requested style gate passes with a reviewed scoped diff, or when missing dependencies, contradictory configuration, or inaccessible generated inputs prevent a correct repair.
 
 ## Anti-Patterns
 
-- Do not introduce a new linting or formatting tool.
-- Do not disable rules just to silence diagnostics.
-- Do not run broad automatic formatting before understanding the configured workflow.
-- Do not report success without rerunning the failing command.
+- Do not introduce or replace tooling merely to solve a local diagnostic.
+- Do not disable rules, add blanket ignores, or reclassify errors without a supported reason.
+- Do not format unrelated files indiscriminately.
+- Do not report success without rerunning the failing project check.

@@ -46,6 +46,16 @@ export interface ActivatedSkillRef {
   contentHash: string;
 }
 
+export interface SkillMemoryAccess {
+  read: boolean;
+  write: boolean;
+}
+
+export interface SkillToolPolicyDecision {
+  allowed: boolean;
+  reason?: string;
+}
+
 export interface SkillActivationEntry extends SessionEntryBase {
   type: "skill_activation";
   action: "activate" | "deactivate";

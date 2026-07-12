@@ -5,7 +5,11 @@
  * Coordinates between SkillCatalog, SkillDiscovery, and ProjectTrustStore.
  */
 
-import type { ActivatedSkillRef } from "../../kernel/transcript/types-v2";
+import type {
+  ActivatedSkillRef,
+  SkillMemoryAccess,
+  SkillToolPolicyDecision,
+} from "../../kernel/transcript/types-v2";
 import type { SkillCatalog } from "./catalog";
 import type { SkillDiscovery } from "./discovery";
 import type { ProjectTrustStore } from "./project-trust-store";
@@ -44,11 +48,12 @@ export class SkillManager {
   /**
    * Get catalog entries for system prompt.
    */
-  getCatalogForPrompt(): Array<{ name: string; description: string; location: string }> {
+  getCatalogForPrompt(): Array<{ name: string; description: string; location: string; triggers: string[] }> {
     return this.catalog.getModelInvocable().map((skill) => ({
       name: skill.name,
       description: skill.description,
       location: skill.skillPath,
+      triggers: skill.frontmatter.soba?.triggers ?? [],
     }));
   }
 
@@ -102,6 +107,34 @@ export class SkillManager {
     return Array.from(this.activeSkills.values());
   }
 
+  /** Resolve active skill memory permissions. Multiple skills combine by union. */
+  getMemoryAccess(): SkillMemoryAccess {
+    const activeEntries = this.getCurrentActiveEntries();
+    if (activeEntries.length === 0) {
+      return { read: true, write: true };
+    }
+
+    let read = false;
+    let write = false;
+    for (const skill of activeEntries) {
+      const policy = skill.frontmatter.soba?.memoryPolicy ?? "read-write";
+      read ||= policy === "read" || policy === "read-write";
+      write ||= policy === "write" || policy === "read-write";
+    }
+    return { read, write };
+  }
+
+  evaluateToolPolicy(toolName: string): SkillToolPolicyDecision {
+    const access = this.getMemoryAccess();
+    if (toolName === "read_project_memory" && !access.read) {
+      return { allowed: false, reason: "Active skill memory policy does not allow reading project memory." };
+    }
+    if (toolName === "write_project_memory" && !access.write) {
+      return { allowed: false, reason: "Active skill memory policy does not allow writing project memory." };
+    }
+    return { allowed: true };
+  }
+
   /**
    * Get a skill from the catalog.
    */
@@ -124,6 +157,10 @@ export class SkillManager {
 
       if (!skill.trusted) {
         continue; // Trust revoked
+      }
+
+      if (!this.matchesCurrentRevision(ref, skill)) {
+        continue; // Never substitute a different revision under the same name
       }
 
       const content = this.readSkillContent(skill.skillPath);
@@ -160,6 +197,25 @@ export class SkillManager {
     }
   }
 
+  /** Restore only refs that still resolve to the exact trusted catalog revision. */
+  restoreActiveSkills(skills: ActivatedSkillRef[]): { restored: ActivatedSkillRef[]; rejected: ActivatedSkillRef[] } {
+    this.activeSkills.clear();
+    const restored: ActivatedSkillRef[] = [];
+    const rejected: ActivatedSkillRef[] = [];
+
+    for (const ref of skills) {
+      const skill = this.catalog.get(ref.name);
+      if (!skill || !skill.enabled || !skill.trusted || !this.matchesCurrentRevision(ref, skill)) {
+        rejected.push(ref);
+        continue;
+      }
+      this.activeSkills.set(ref.name, ref);
+      restored.push(ref);
+    }
+
+    return { restored, rejected };
+  }
+
   /**
    * Apply activation/deactivation entries.
    */
@@ -171,5 +227,23 @@ export class SkillManager {
         this.activeSkills.delete(entry.skill.name);
       }
     }
+  }
+
+  private getCurrentActiveEntries(): SkillCatalogEntry[] {
+    const entries: SkillCatalogEntry[] = [];
+    for (const ref of this.activeSkills.values()) {
+      const skill = this.catalog.get(ref.name);
+      if (skill?.enabled && skill.trusted && this.matchesCurrentRevision(ref, skill)) {
+        entries.push(skill);
+      }
+    }
+    return entries;
+  }
+
+  private matchesCurrentRevision(ref: ActivatedSkillRef, skill: SkillCatalogEntry): boolean {
+    return (
+      (skill.revision === undefined || ref.revision === skill.revision) &&
+      (skill.contentHash === undefined || ref.contentHash === skill.contentHash)
+    );
   }
 }

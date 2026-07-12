@@ -119,7 +119,7 @@ export function observeToolExecutionResult(
   });
 
   const checkpointEvent = observeCheckpoint(input);
-  observeSkillActivation(input);
+  observeSkillLifecycle(input);
   observeMutationAndVerificationEvidence(input);
   observeVerificationResult(input);
   appendToolOutput(input);
@@ -152,9 +152,12 @@ function observeCheckpoint(
   return checkpointEvent;
 }
 
-function observeSkillActivation(input: ToolExecutionObservationInput): void {
+function observeSkillLifecycle(input: ToolExecutionObservationInput): void {
   const { toolCall, execution } = input;
-  if (execution.result.isError || toolCall.name !== "activate_skill") return;
+  if (
+    execution.result.isError ||
+    (toolCall.name !== "activate_skill" && toolCall.name !== "deactivate_skill")
+  ) return;
 
   let skillName: string | null = null;
   try {
@@ -165,6 +168,16 @@ function observeSkillActivation(input: ToolExecutionObservationInput): void {
   }
 
   if (!skillName) return;
+  if (toolCall.name === "deactivate_skill") {
+    input.emit({
+      type: "skill_deactivated",
+      timestamp: Date.now(),
+      skillName,
+      reason: "deactivated by model",
+    });
+    return;
+  }
+
   const skill = input.skillManager?.getSkill(skillName);
   if (!skill) return;
 
@@ -239,6 +252,10 @@ function observeVerificationResult(input: ToolExecutionObservationInput): void {
     return;
   }
   if (verificationOutcome.kind !== "passed" || !state.recoveryReflectionDraft) {
+    return;
+  }
+  if (input.skillManager?.getMemoryAccess?.().write === false) {
+    state.recoveryReflectionDraft = null;
     return;
   }
 

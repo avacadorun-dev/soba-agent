@@ -1,12 +1,12 @@
 ---
 name: bug-fix
-description: Diagnose, patch, and verify a bug with minimal scoped changes.
+description: Investigate reported defects and, when a fix is requested, make the smallest verified correction. Use for regressions, runtime failures, incorrect behavior, or failing checks with an unknown cause.
 soba:
   version: 1
   triggers:
-    - bug fix
-    - failing behavior
-    - regression
+    - diagnose defect
+    - fix bug
+    - investigate regression
   memory-policy: read-write
 ---
 
@@ -14,48 +14,50 @@ soba:
 
 ## Purpose
 
-Fix a reported defect by reproducing or localizing the failure, applying the smallest correct change, and verifying the result.
+Turn a reported symptom into a supported cause, then correct it only when the user's request includes implementation.
 
 ## Triggers
 
-Use this skill when the user reports broken behavior, failing tests, runtime errors, regressions, or asks to patch a defect.
+Apply this workflow to incorrect behavior, regressions, runtime failures, or failing checks whose cause is not yet established.
 
 ## Inputs To Inspect
 
-- Project instructions.
-- The failing command, stack trace, log, or reproduction steps.
-- Relevant source files and adjacent tests.
-- Existing issue-specific docs or comments.
-- Project memory only as a hypothesis, never as proof.
+- Project instructions and expected behavior.
+- Reproduction steps, diagnostics, logs, and environment details relevant to the failure.
+- The smallest responsible implementation path and nearby tests.
+- Recent related changes when history is available.
+- Project memory as a lead, never as proof.
 
 ## Procedure
 
-1. Read project instructions and identify the expected verification workflow.
-2. Reproduce the failure when practical, or inspect the provided failure evidence.
-3. Trace from symptom to the smallest responsible code path.
-4. State the fix intent before changing files.
-5. Apply a minimal patch that addresses the cause, not only the symptom.
-6. Add or update a focused test when the defect is not already covered and the project has a test pattern.
-7. Run the targeted verification first, then broader checks when the change touches shared behavior.
+1. Separate the expected behavior, observed behavior, and conditions that trigger the difference.
+2. Reproduce the failure with the narrowest practical check; if reproduction is unsafe or unavailable, inspect the strongest existing evidence.
+3. Trace evidence from the symptom toward a causal boundary and test competing hypotheses before editing.
+4. If the user requested diagnosis only, report the supported cause and stop without mutation.
+5. If a fix is requested, state the intended behavior change and apply the smallest change that addresses the cause.
+6. Add or strengthen a regression check when the project has an appropriate verification pattern.
+7. Rerun the failing scenario, then expand verification according to the change's blast radius.
+8. Review the final diff for accidental scope growth.
 
 ## Verification Contract
 
-The failing scenario must pass after the fix, and the final response must name the command or evidence that verifies it. A code mutation cannot finish as complete without successful verification unless the user explicitly accepts unverified changes.
+Demonstrate that the original failing scenario now succeeds and that the relevant surrounding behavior still holds. Name the exact check or observable evidence. Report unverified changes explicitly; never substitute confidence for evidence.
 
 ## Failure Recovery
 
-If the first fix fails, use the new failure as diagnostic evidence, narrow the hypothesis, and avoid repeating the same command without a changed input or changed hypothesis. If the failure cannot be reproduced, state what evidence was inspected and what remains uncertain.
+Use each new diagnostic to revise the hypothesis. If reproduction remains unavailable, triangulate from source, contracts, and related tests and label the remaining uncertainty. Distinguish product defects from environment, dependency, fixture, or requirement problems before changing production code.
 
 ## Memory Policy
 
-Write memory only after a verified fail-then-fix pattern reveals a stable project-specific lesson. Never store secrets, one-off stack traces, or speculative causes.
+Read memory only as context. Write a lesson only after a verified fail-to-fix sequence reveals a stable project-specific rule; exclude secrets, raw logs, and speculative causes.
 
 ## Stop Conditions
 
-Stop when the defect is fixed and verified, when the requested reproduction is impossible due to missing external state, or when the user decision is required.
+Stop when the requested diagnosis is supported, or when the requested fix passes proportionate verification. Stop as blocked only when missing external state or a material product decision prevents further safe progress.
 
 ## Anti-Patterns
 
-- Do not broaden the patch into unrelated refactors.
-- Do not mark completion from reasoning alone.
-- Do not ignore a failing verification command after the change.
+- Do not patch before establishing a plausible causal link.
+- Do not broaden a defect fix into unrelated cleanup.
+- Do not weaken tests or checks to make the symptom disappear.
+- Do not claim a fix when the original scenario was not exercised or clearly marked unverified.

@@ -72,7 +72,7 @@ export async function executeModelTurn(input: {
     input.allowedToolNames,
   );
 
-  const systemPromptTokens = Math.ceil(input.systemPrompt.length / 4);
+  const systemPromptTokens = estimatePromptEnvelopeTokens(input.systemPrompt, input.ephemeralMessages);
   const toolSchemaTokens = Math.ceil(JSON.stringify(request.tools).length / 4);
 
   const checkResult = await input.contextController.performPreInferenceCheck({
@@ -170,6 +170,16 @@ export async function executeModelTurn(input: {
   }
 
   return { action: "break", systemPromptTokens, toolSchemaTokens };
+}
+
+export function estimatePromptEnvelopeTokens(
+  systemPrompt: string,
+  ephemeralMessages: Array<{ role: "developer"; content: string }>,
+): number {
+  return Math.ceil(systemPrompt.length / 4) + ephemeralMessages.reduce(
+    (total, message) => total + Math.ceil(message.content.length / 4),
+    0,
+  );
 }
 
 function stopForCancellation(

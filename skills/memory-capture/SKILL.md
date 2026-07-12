@@ -1,60 +1,62 @@
 ---
 name: memory-capture
-description: Capture stable project lessons only after verification and filtering.
+description: Persist a concise project-specific lesson only when it is verified, reusable, non-sensitive, and not already recorded. Use when the user asks Soba to remember something or successful work reveals a stable convention worth future retrieval.
 soba:
   version: 1
   triggers:
-    - capture memory
-    - project lesson
-    - remember convention
-  memory-policy: write
+    - remember project convention
+    - capture verified lesson
+    - persist project knowledge
+  memory-policy: read-write
 ---
 
 # Memory Capture
 
 ## Purpose
 
-Persist only stable, useful, verified project lessons that will reduce future mistakes.
+Convert durable project knowledge into safe, searchable memory without storing transient task state or unsupported conclusions.
 
 ## Triggers
 
-Use this skill when the user asks to remember a convention, when a repeated recovery pattern has been verified, or when a stable project-specific lesson should be captured.
+Apply this workflow to explicit remember requests and to verified recurring project lessons that would materially improve later work.
 
 ## Inputs To Inspect
 
-- The verified behavior or convention.
-- Evidence that the lesson is stable across the project.
-- The command or test that proved it.
-- Existing memory entries to avoid duplicates.
-- Potential secrets or one-off data that must be excluded.
+- The candidate lesson and its intended future use.
+- Current source, tests, documentation, configuration, or successful verification supporting it.
+- Existing memory entries and their provenance.
+- Scope, expiry conditions, and potential sensitive content.
 
 ## Procedure
 
-1. Confirm the lesson is project-specific, stable, and useful for future work.
-2. Confirm it is supported by source, tests, docs, or successful verification.
-3. Check existing memory for duplicates.
-4. Filter out secrets, tokens, personal data, raw logs, speculative causes, and one-off incidents.
-5. Store the lesson with problem, cause, fix or convention, and verification evidence.
-6. Keep the entry concise and searchable with tags.
+1. State the candidate lesson as a project-specific rule, fact, or recovery pattern.
+2. Confirm that it is stable beyond the current incident and likely to change future decisions.
+3. Tie it to observable project evidence and distinguish direct fact from a supported inference.
+4. Search existing memory for duplicates, contradictions, or a more current entry.
+5. Remove credentials, tokens, personal data, machine-specific paths, raw logs, and unnecessary proprietary content.
+6. Record the smallest self-contained entry with scope, rule, rationale when useful, evidence, and invalidation conditions.
+7. Use concise retrieval terms or tags supported by the project's memory mechanism.
+8. Report whether the entry was stored, updated, deduplicated, or rejected and why.
 
 ## Verification Contract
 
-A memory entry may be captured only when the lesson has observable evidence and no secret-like content. Duplicate or speculative lessons must be skipped with a clear reason.
+Store only claims supported by inspectable project evidence or an explicit user instruction to remember a preference. Preserve provenance without embedding sensitive payloads. Reject speculation and one-off observations.
 
 ## Failure Recovery
 
-If evidence is missing, do not store the lesson. If the lesson contains sensitive data, rewrite it as a generic pattern or skip it. If a duplicate exists, reference the existing lesson instead of creating another entry.
+If evidence is weak, keep the candidate in the current handoff rather than durable memory. If entries conflict, prefer current authoritative project artifacts and mark or replace stale memory only when the memory mechanism supports it safely.
 
 ## Memory Policy
 
-Write memory only through the project memory mechanism. Never store credentials, private user data, raw stack traces with tokens, or unverified guesses.
+Write only through the product's project-memory mechanism. Keep user preferences distinct from project facts and never broaden one user's local preference into a repository convention without evidence.
 
 ## Stop Conditions
 
-Stop after storing a verified filtered lesson, skipping a duplicate, or explaining why the candidate is unsafe or unstable.
+Stop after safely storing or updating one durable lesson, identifying an existing equivalent, or explaining why the candidate is transient, duplicate, sensitive, or unverified.
 
 ## Anti-Patterns
 
-- Do not store secrets or environment values.
-- Do not store preferences that apply only to the current user unless explicitly requested.
-- Do not store a lesson just because a command failed once.
+- Do not store secrets, personal data, raw diagnostics, or full conversation history.
+- Do not preserve plans, current progress, or unresolved hypotheses as durable truth.
+- Do not create memory merely because an operation failed once.
+- Do not omit evidence or the conditions under which a lesson stops applying.

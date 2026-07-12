@@ -323,8 +323,14 @@ export function validateSkill(skillPath: string, options: SkillValidationOptions
   errors.push(...sobaValidation.errors);
   warnings.push(...sobaValidation.warnings);
 
+  const requiredSections = new Set(sobaValidation.metadata?.requiredSections ?? []);
   if (options.scope === "bundled") {
-    errors.push(...validateBundledRequiredSections(body, skillMdPath));
+    for (const section of BUNDLED_REQUIRED_SECTIONS) {
+      requiredSections.add(section);
+    }
+  }
+  if (requiredSections.size > 0) {
+    errors.push(...validateRequiredSections(body, skillMdPath, [...requiredSections], options.scope === "bundled"));
   }
 
   // Check for symlinks and path traversal
@@ -517,7 +523,12 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim().length > 0);
 }
 
-function validateBundledRequiredSections(body: string, path: string): SkillDiagnostic[] {
+function validateRequiredSections(
+  body: string,
+  path: string,
+  requiredSections: string[],
+  bundled: boolean,
+): SkillDiagnostic[] {
   const sections = new Set(
     body
       .split("\n")
@@ -526,10 +537,10 @@ function validateBundledRequiredSections(body: string, path: string): SkillDiagn
       .map(normalizeSectionName),
   );
 
-  return BUNDLED_REQUIRED_SECTIONS.filter((section) => !sections.has(normalizeSectionName(section))).map((section) => ({
-    code: "MISSING_BUNDLED_SKILL_SECTION",
+  return requiredSections.filter((section) => !sections.has(normalizeSectionName(section))).map((section) => ({
+    code: bundled ? "MISSING_BUNDLED_SKILL_SECTION" : "MISSING_REQUIRED_SKILL_SECTION",
     severity: "error",
-    message: `Bundled skill must contain section: ${section}`,
+    message: `${bundled ? "Bundled skill" : "Skill"} must contain section: ${section}`,
     path,
   }));
 }

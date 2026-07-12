@@ -58,6 +58,10 @@ export function formatToolSummary(toolName: string, args: Record<string, unknown
       const name = typeof args.name === "string" ? args.name : "";
       return name ? `Activate skill: ${name}` : "Activate skill";
     }
+    case "deactivate_skill": {
+      const name = typeof args.name === "string" ? args.name : "";
+      return name ? `Deactivate skill: ${name}` : "Deactivate skill";
+    }
     default:
       return capitalizeTool(toolName);
   }

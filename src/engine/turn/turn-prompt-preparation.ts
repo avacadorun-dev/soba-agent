@@ -7,6 +7,7 @@ import {
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SkillSource } from "./skill-source";
+import { filterToolsForSkillPolicy } from "./work-mode-tools";
 
 export interface ProjectContextReader {
   read(cwd: string): Array<{ path: string; content: string }> | Promise<Array<{ path: string; content: string }>>;
@@ -35,13 +36,17 @@ export async function prepareTurnPrompt(input: {
   modelConfig: OpenResponsesClientConfig;
 }): Promise<PreparedTurnPrompt> {
   const workMode = input.workMode ?? "agent";
-  const selectedTools = filterToolsForWorkMode(input.selectedTools, workMode, {
-    clarificationAvailable: input.clarificationAvailable,
-  });
+  const selectedTools = filterToolsForSkillPolicy(
+    filterToolsForWorkMode(input.selectedTools, workMode, {
+      clarificationAvailable: input.clarificationAvailable,
+    }),
+    input.skillManager,
+  );
   const contextFiles = (await input.contextReader?.read(input.cwd)) ?? [];
   const projectInstructions = contextFiles.map((file) => file.content);
   const skills = input.skillManager?.getCatalogForPrompt() ?? [];
-  const projectMemorySection = input.projectMemory
+  const memoryAccess = input.skillManager?.getMemoryAccess?.() ?? { read: true, write: true };
+  const projectMemorySection = input.projectMemory && memoryAccess.read
     ? buildProjectMemorySection(input.projectMemory, {
         maxTokens: 2_000,
         query: input.userText,

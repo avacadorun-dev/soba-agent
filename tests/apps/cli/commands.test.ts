@@ -228,6 +228,42 @@ describe("slash commands", () => {
     expect(session.getActiveSkillRefs()).toHaveLength(1);
   });
 
+  test("/skill deactivate removes and persists a session-scoped activation", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    const ref = {
+      name: "commit-message",
+      scope: "bundled" as const,
+      revision: "rev-1",
+      contentHash: "hash-1",
+    };
+    session.appendSkillActivation({ action: "activate", skill: ref });
+    let active = true;
+    const output: Array<{ type: string; message?: string }> = [];
+
+    const result = await executeCommand("/skill deactivate commit-message", {
+      session,
+      config: { ...DEFAULT_CONFIG },
+      i18n: new I18n("en"),
+      renderer: { emit: (event: { type: string; message?: string }) => output.push(event) },
+      skillManager: {
+        getActiveSkills: () => active ? [ref] : [],
+        deactivate: () => {
+          active = false;
+          return true;
+        },
+      } as unknown as SkillManager,
+    } as unknown as CommandContext);
+
+    expect(result).toEqual({ handled: true });
+    expect(active).toBe(false);
+    expect(session.getActiveSkillRefs()).toEqual([]);
+    expect(output[0]).toMatchObject({
+      type: "skill_deactivated",
+      skillName: "commit-message",
+      reason: "deactivated by user",
+    });
+  });
+
   test("/capsule create создаёт portable capsule в .soba/capsules", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "soba-capsule-command-create-"));
     try {

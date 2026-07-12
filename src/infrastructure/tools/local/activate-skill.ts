@@ -11,13 +11,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SkillCatalog } from "../../../application/skills/catalog";
-import type { ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import type { ActivatedSkillRef } from "../../../kernel/transcript/types-v2";
 
 export interface ActivateSkillToolOptions {
   catalog: SkillCatalog;
   /** Callback to persist activation in session */
-  onActivate: (ref: ActivatedSkillRef) => void;
+  onActivate: (ref: ActivatedSkillRef, context: ToolContext) => void;
   /** Callback to check if skill is already active */
   isActive: (name: string, revision: string) => boolean;
 }
@@ -46,7 +46,7 @@ export function createActivateSkillTool(options: ActivateSkillToolOptions): Tool
       },
       required: ["name"],
     },
-    async execute(args, _context): Promise<ToolResult> {
+    async execute(args, context): Promise<ToolResult> {
       const { name } = args;
 
       // Try to activate the skill
@@ -89,7 +89,7 @@ export function createActivateSkillTool(options: ActivateSkillToolOptions): Tool
       };
 
       // Persist activation
-      options.onActivate(ref);
+      options.onActivate(ref, context);
 
       const resources = listResources(skill.skillPath);
       return {
@@ -99,6 +99,53 @@ export function createActivateSkillTool(options: ActivateSkillToolOptions): Tool
             text: `Activated skill '${skill.name}' (revision ${skill.revision}) from ${skill.scope} scope.\n\nDescription: ${skill.description}\nPath: ${skill.skillPath}\nResources: ${resources.length > 0 ? resources.join(", ") : "none"}\n\nThe full skill content will be available in the next request.`,
           },
         ],
+        isError: false,
+      };
+    },
+  };
+}
+
+export interface DeactivateSkillToolOptions {
+  getActiveSkill: (name: string) => ActivatedSkillRef | undefined;
+  deactivate: (name: string) => boolean;
+  onDeactivate: (ref: ActivatedSkillRef, context: ToolContext) => void;
+}
+
+export interface DeactivateSkillArgs {
+  name: string;
+}
+
+/** Create the deactivate_skill control tool for session-scoped skill lifecycle. */
+export function createDeactivateSkillTool(options: DeactivateSkillToolOptions): ToolDefinition<DeactivateSkillArgs> {
+  return {
+    name: "deactivate_skill",
+    label: "Deactivate Skill",
+    toolType: "function",
+    semantics: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
+    description:
+      "Deactivate a session-scoped skill when it no longer applies. This stops its full instructions from being injected into later model requests.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "The name of the active skill to deactivate",
+        },
+      },
+      required: ["name"],
+    },
+    async execute(args, context): Promise<ToolResult> {
+      const ref = options.getActiveSkill(args.name);
+      if (!ref || !options.deactivate(args.name)) {
+        return {
+          content: [{ type: "text", text: `Skill '${args.name}' is not active.` }],
+          isError: true,
+        };
+      }
+
+      options.onDeactivate(ref, context);
+      return {
+        content: [{ type: "text", text: `Deactivated skill '${args.name}'.` }],
         isError: false,
       };
     },

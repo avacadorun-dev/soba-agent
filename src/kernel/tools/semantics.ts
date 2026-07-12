@@ -30,6 +30,7 @@ export const BUILTIN_TOOL_SEMANTICS: Readonly<Record<string, ToolSemantics>> = {
   checkpoint: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
   ask_user: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
   activate_skill: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
+  deactivate_skill: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
   finish: { effects: ["control"], parallelSafe: false, restrictedMode: "allow" },
 };
 

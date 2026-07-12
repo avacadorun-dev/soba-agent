@@ -10,6 +10,7 @@ import {
   getMcpConfigPath,
   loadMcpConfig,
   McpSecretStore,
+  resolveBundledSkillsPath,
   validateSkillOnDisk,
 } from "../../composition/cli/public";
 import { firstTimeSetup, loadConfig, validateConfig } from "../../composition/config/config-loader";
@@ -160,7 +161,7 @@ async function setupProjectTrust(options: RunInitCommandOptions & { cwd: string;
   const discovery = new SkillDiscovery({
     projectPath: options.cwd,
     userSkillsPath: join(options.sobaDir, "skills"),
-    bundledSkillsPath: process.env.SOBA_BUNDLED_SKILLS_PATH ?? join(process.cwd(), "skills"),
+    bundledSkillsPath: resolveBundledSkillsPath({ sobaDir: options.sobaDir }),
     trustStore,
     files: new FilesystemSkillValidationFilesystem(),
     validateSkill: validateSkillOnDisk,

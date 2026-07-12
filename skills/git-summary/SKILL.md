@@ -1,12 +1,12 @@
 ---
 name: git-summary
-description: Generate structured summaries of git branches, commits, or date ranges.
+description: Summarize a Git working tree, branch, commit range, or time window from repository evidence. Use for change reports, branch overviews, release notes input, or explanations of what changed in Git history.
 soba:
   version: 1
   triggers:
-    - git summary
-    - branch summary
-    - commit summary
+    - summarize git changes
+    - explain branch history
+    - report commit range
   memory-policy: none
 ---
 
@@ -14,47 +14,48 @@ soba:
 
 ## Purpose
 
-Create evidence-based summaries of git activity for branches, commits, or date ranges.
+Turn a precisely resolved Git comparison into a concise account of behavior, impact, and risk.
 
 ## Triggers
 
-Use this skill when the user asks what changed, asks for a branch summary, asks for a status report based on git history, or requests a commit-level explanation.
+Apply this workflow when the user explicitly asks to summarize Git state or history. Do not activate it for ordinary code understanding that does not depend on Git evidence.
 
 ## Inputs To Inspect
 
-- Project instructions for reporting style.
-- Current branch name.
-- Relevant `git log` output.
-- Relevant `git diff --stat` or `git diff --name-status`.
-- Specific commit hashes or date ranges provided by the user.
+- The requested working-tree state, refs, commit range, or time window.
+- Project reporting conventions and repository default branch when relevant.
+- Commit metadata, changed paths, diff statistics, and representative detailed diffs.
+- Verification, migration, or release artifacts contained in the selected range.
 
 ## Procedure
 
-1. Determine the requested comparison base, commit range, or time window.
-2. Inspect commits without merge noise unless merge commits are explicitly relevant.
-3. Inspect changed files and line statistics.
-4. Group changes by user-visible purpose: features, fixes, tests, docs, refactors, config, or maintenance.
-5. Call out breaking changes, migrations, risk, and follow-up items only when the evidence supports them.
-6. Keep the summary proportional to the amount of change.
+1. Resolve the comparison endpoints and state whether working-tree changes are included.
+2. Inspect commit topology and metadata at the granularity needed for the request.
+3. Inspect path and line-level change statistics, then read representative diffs that define behavior.
+4. Group related changes by outcome rather than repeating commit subjects or directory names.
+5. Distinguish user-visible behavior, internal restructuring, tests, documentation, configuration, and generated artifacts.
+6. Call out compatibility changes, migrations, notable risk, and verification only when supported by the range.
+7. Keep commit hashes and file lists available for traceability without overwhelming the summary.
 
 ## Verification Contract
 
-Every claim in the summary must be traceable to inspected git output. File lists, commit counts, and branch names must match the commands that were run.
+Make every factual claim traceable to the selected Git range and inspected diff. Report the actual endpoints and whether the working tree was included. Do not infer test execution merely because tests changed.
 
 ## Failure Recovery
 
-If the requested base branch or commit is missing, inspect available branches or ask for the intended base. If the history is too large, summarize by directory and commit clusters, then note the range inspected.
+If a ref is unavailable, inspect local repository evidence and ask only when alternative bases would materially change the result. For large histories, partition by subsystem or coherent commit clusters and state any sampling or exclusions.
 
 ## Memory Policy
 
-Do not write project memory. Read memory only if it was already injected and contains a reporting convention relevant to the requested summary.
+Do not write memory. Confirm any injected reporting convention against current project instructions.
 
 ## Stop Conditions
 
-Stop after delivering the requested summary with enough evidence for the user to review or after identifying a missing git range that blocks a correct answer.
+Stop after delivering a proportionate summary for the resolved range, or after identifying the missing ref or repository state required for correctness.
 
 ## Anti-Patterns
 
-- Do not infer product intent that is not visible in commit messages or diffs.
-- Do not include uncommitted work unless the user asks for it.
-- Do not hide uncertainty about the comparison base.
+- Do not silently choose a comparison base when multiple plausible bases produce different stories.
+- Do not equate commit messages with verified implementation behavior.
+- Do not include uncommitted changes unless the scope includes them.
+- Do not invent product intent, verification, or release impact.

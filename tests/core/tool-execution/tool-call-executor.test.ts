@@ -41,6 +41,7 @@ function makeExecutor(input: {
   events?: AgentEvent[];
   confirmation?: () => ApprovalDecision | Promise<ApprovalDecision>;
   getWorkMode?: () => "agent" | "plan" | "goal";
+  evaluateToolPolicy?: (toolName: string) => { allowed: boolean; reason?: string };
 }): ToolCallExecutor {
   const trustManager = input.trustManager ?? new TrustManager({ repoRoot: "/repo" });
   return new ToolCallExecutor({
@@ -52,6 +53,7 @@ function makeExecutor(input: {
     toolContext: () => ({ cwd: "/repo" }),
     emit: (event) => input.events?.push(event),
     getWorkMode: input.getWorkMode,
+    evaluateToolPolicy: input.evaluateToolPolicy,
   });
 }
 
@@ -113,6 +115,30 @@ describe("ToolCallExecutor", () => {
     expect(result.result.error?.code).toBe("plan_mode_blocked");
     expect(result.denied?.reason).toContain("Plan mode blocks mutation tool");
     expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
+  });
+
+  test("enforces active skill tool policy before trust checks", async () => {
+    let executed = false;
+    const registry = new ToolRegistry();
+    registry.register(makeTool("write_project_memory", async () => {
+      executed = true;
+      return { content: [{ type: "text", text: "should not run" }], isError: false };
+    }));
+    const executor = makeExecutor({
+      registry,
+      confirmation: () => "full",
+      evaluateToolPolicy: () => ({
+        allowed: false,
+        reason: "Active skill memory policy does not allow writing project memory.",
+      }),
+    });
+
+    const result = await executor.executeToolCall(toolCall("write_project_memory", '{"target":"capsule"}'));
+
+    expect(executed).toBe(false);
+    expect(result.result.error?.code).toBe("skill_policy_blocked");
+    expect(result.permission.approved).toBe(false);
+    expect(result.denied?.reason).toContain("does not allow writing");
   });
 
   test("blocks mutation tools in goal mode before trust checks", async () => {

@@ -176,12 +176,20 @@ describe("System Prompt", () => {
   test("skill catalog guidance discourages broad activation", () => {
     const prompt = buildSystemPrompt({
       cwd: "/project",
-      skills: [{ name: "code-review", description: "Review code changes.", location: "/skills/code-review" }],
+      skills: [{
+        name: "code-review",
+        description: "Review code changes.",
+        location: "/skills/code-review",
+        triggers: ["review changes", "assess readiness"],
+      }],
     });
 
     expect(prompt).toContain("Use activate_skill only when the current task clearly matches");
     expect(prompt).toContain("Do not activate skills for generic exploration");
     expect(prompt).toContain("core safety, completion, verification, and tool-selection rules override skill examples");
+    expect(prompt).toContain("<triggers>review changes | assess readiness</triggers>");
+    expect(prompt).toContain("Use triggers only as routing hints");
+    expect(prompt).toContain("Deactivate a skill when it no longer applies");
   });
 
   test("extraGuidelines добавляются в конец guidelines", () => {

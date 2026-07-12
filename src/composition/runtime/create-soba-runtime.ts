@@ -207,7 +207,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
   const portableCapsuleServiceFactory = createFilesystemPortableCapsuleService;
   const fallbackCompactor = new EngineCompactFallbackCompactor();
-  const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry);
+  const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry, skillManager);
   const commandExecutor = commandExecutorFactory?.({
     client,
     config,

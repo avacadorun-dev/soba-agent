@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: Review code changes with findings first and no file mutation unless explicitly requested.
+description: Review a patch, change set, branch, commit, or selected files for concrete defects and risks without mutating them. Use when asked for review, readiness assessment, or findings on proposed code changes.
 soba:
   version: 1
   triggers:
-    - code review
-    - review diff
-    - inspect changes
+    - review changes
+    - inspect patch
+    - assess readiness
   memory-policy: none
 ---
 
@@ -14,48 +14,50 @@ soba:
 
 ## Purpose
 
-Find concrete bugs, regressions, missing tests, and maintainability risks in code changes.
+Identify actionable correctness, security, compatibility, operability, and test risks in a specified change set.
 
 ## Triggers
 
-Use this skill when the user asks for a review, asks to inspect a diff, or asks whether a change is ready.
+Apply this workflow when the user requests review or a readiness assessment of code, configuration, tests, documentation that defines behavior, or a version-control change set.
 
 ## Inputs To Inspect
 
-- Project instructions.
-- The requested diff, files, branch, or commit range.
-- Nearby tests and contracts for changed behavior.
-- Build or verification output when provided.
-- Public API or schema changes touched by the diff.
+- Project instructions and the requested review boundary.
+- The full relevant change set, including new and deleted files.
+- Contracts, callers, consumers, and tests adjacent to changed behavior.
+- Generated artifacts, schemas, migrations, or public interfaces affected by the change.
+- Verification output when available.
 
 ## Procedure
 
-1. Read project instructions first.
-2. Inspect the changed files and nearby tests before forming findings.
-3. Prioritize defects that can affect users, data, security, compatibility, or CI.
-4. Present findings first, ordered by severity, with file and line references.
-5. Include open questions only when they materially affect correctness.
-6. Add a short summary after findings, not before them.
-7. Do not modify files unless the user explicitly asks for a patch.
+1. Resolve the review scope and comparison basis from the request and workspace evidence.
+2. Read the changed behavior in context rather than judging isolated lines.
+3. Trace important inputs through success, failure, boundary, and cleanup paths.
+4. Check assumptions about data, state, concurrency, permissions, compatibility, and error handling where relevant.
+5. Inspect whether tests exercise the changed contract and meaningful failure modes.
+6. Report findings first, ordered by impact; include a precise location, failing scenario, and why existing checks may miss it.
+7. Add concise open questions only when the answer could change correctness.
+8. If no findings remain, say so and name residual risks or verification gaps.
 
 ## Verification Contract
 
-Every finding must point to inspected code and explain the concrete failing scenario. If no issues are found, say that clearly and name residual test gaps or risk.
+Ground every finding in inspected artifacts and a concrete failure mode. Prefer reproducing or checking a suspected issue when safe and read-only. Distinguish confirmed defects from conditional risks and questions.
 
 ## Failure Recovery
 
-If the diff is missing, inspect git status or ask for the target range. If line references are unstable, cite the smallest function or file context and explain the affected logic.
+If the requested change set is unavailable or ambiguous, inspect available workspace state and resolve the smallest likely scope. Ask only when choosing the wrong boundary would materially change the review. If stable line references are unavailable, cite the narrowest symbol or section.
 
 ## Memory Policy
 
-Memory capture is out of scope for review findings. Read memory only if it is already available and contains a known project review convention.
+Do not write project memory from review findings. Read injected memory only for verified project conventions and confirm it against current artifacts.
 
 ## Stop Conditions
 
-Stop after delivering findings-first review output, or after identifying that the requested diff or files are unavailable.
+Stop after delivering findings-first review output for the resolved scope, or after explaining which unavailable artifact prevents a meaningful review.
 
 ## Anti-Patterns
 
-- Do not lead with praise or a summary before findings.
-- Do not nitpick style when correctness issues exist.
-- Do not modify files during a review unless explicitly requested.
+- Do not modify files unless the user separately requests a patch.
+- Do not report stylistic preferences as defects without a project rule or concrete cost.
+- Do not infer a bug from unfamiliar code without tracing its contract.
+- Do not bury high-impact findings under summaries or praise.

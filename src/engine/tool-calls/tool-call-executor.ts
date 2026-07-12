@@ -19,6 +19,7 @@ export interface ToolCallExecutorOptions {
   emit: (event: AgentEvent) => void;
   createId?: () => string;
   getWorkMode?: () => WorkMode;
+  evaluateToolPolicy?: (toolName: string) => { allowed: boolean; reason?: string };
 }
 
 export interface ToolExecutionResult {
@@ -43,6 +44,7 @@ export class ToolCallExecutor {
   private readonly emit: (event: AgentEvent) => void;
   private readonly createId: () => string;
   private readonly getWorkMode: () => WorkMode;
+  private readonly evaluateToolPolicy: (toolName: string) => { allowed: boolean; reason?: string };
   private readonly activeToolAbortControllers = new Set<AbortController>();
   private directShellAbortController: AbortController | null = null;
 
@@ -53,6 +55,7 @@ export class ToolCallExecutor {
     this.emit = options.emit;
     this.createId = options.createId ?? createRuntimeId;
     this.getWorkMode = options.getWorkMode ?? (() => "agent");
+    this.evaluateToolPolicy = options.evaluateToolPolicy ?? (() => ({ allowed: true }));
   }
 
   abortActiveTool(): boolean {
@@ -98,6 +101,31 @@ export class ToolCallExecutor {
       toolName: toolCall.name,
       args: parsedArgs,
     });
+
+    const toolPolicy = this.evaluateToolPolicy(toolCall.name);
+    if (!toolPolicy.allowed) {
+      const reason = toolPolicy.reason ?? `Tool "${toolCall.name}" is blocked by the active skill policy.`;
+      const result = createToolErrorResult({
+        code: "skill_policy_blocked",
+        category: "validation",
+        message: reason,
+        nextAction: "Follow the active skill policy or deactivate the skill before using this tool.",
+        fingerprint: `validation:skill_policy_blocked:${toolCall.name}`,
+      });
+      const denial = this.policyDenialReceipt(toolCall, parsedArgs, reason);
+      this.emitToolResultAndEnd(toolCall, result, startTime);
+      return {
+        toolCall,
+        parsedArgs,
+        result,
+        startTime,
+        durationMs: Date.now() - startTime,
+        cwd: context.cwd,
+        permission: denial.receipt,
+        semantics,
+        denied: { description: denial.description, reason },
+      };
+    }
 
     const planModeDenial = this.evaluatePlanModeDenial(toolCall, parsedArgs);
     if (planModeDenial) {
@@ -329,20 +357,20 @@ export class ToolCallExecutor {
 
     const toolDecision = isToolAllowedInPlanMode(toolCall.name, this.registry.getSemantics(toolCall.name));
     if (!toolDecision.allowed) {
-      return this.planModeDenialReceipt(toolCall, parsedArgs, toolDecision.reason);
+      return this.policyDenialReceipt(toolCall, parsedArgs, toolDecision.reason);
     }
 
     if (toolCall.name === "bash" && typeof parsedArgs.command === "string") {
       const commandDecision = isCommandAllowedInPlanMode(parsedArgs.command);
       if (!commandDecision.allowed) {
-        return this.planModeDenialReceipt(toolCall, parsedArgs, commandDecision.reason);
+        return this.policyDenialReceipt(toolCall, parsedArgs, commandDecision.reason);
       }
     }
 
     return null;
   }
 
-  private planModeDenialReceipt(
+  private policyDenialReceipt(
     toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
     parsedArgs: Record<string, unknown>,
     reason: string,

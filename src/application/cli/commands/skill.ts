@@ -8,6 +8,28 @@ import {
 import type { CommandAgentPort, CommandContext } from "./index";
 
 export async function handleSkill(args: string[], ctx: CommandContext): Promise<CommandResult> {
+  if (args[0]?.toLowerCase() === "deactivate" || args[0]?.toLowerCase() === "off") {
+    const name = args[1];
+    const ref = name ? ctx.skillManager?.getActiveSkills().find((skill) => skill.name === name) : undefined;
+    if (!name || !ref || !ctx.skillManager?.deactivate(name)) {
+      ctx.renderer.emit({
+        type: "error",
+        timestamp: Date.now(),
+        message: name ? `Skill '${name}' is not active.` : "Usage: /skill deactivate <name>",
+      });
+      return { handled: true };
+    }
+
+    ctx.session.appendSkillActivation({ action: "deactivate", skill: ref });
+    ctx.renderer.emit({
+      type: "skill_deactivated",
+      timestamp: Date.now(),
+      skillName: name,
+      reason: "deactivated by user",
+    });
+    return { handled: true };
+  }
+
   const view = await executeSkillCommand({ args, commands: ctx.skillCommands });
 
   if (view.kind === "not_configured") {

@@ -107,6 +107,7 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     toolContext: input.createToolContext,
     emit,
     getWorkMode: () => workModeController.getWorkMode(),
+    evaluateToolPolicy: (toolName) => input.skillManager?.evaluateToolPolicy?.(toolName) ?? { allowed: true },
   });
 
   return {

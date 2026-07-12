@@ -37,11 +37,11 @@ export const TOOL_META: Record<
   ls: { icon: "▤", color: "secondary" },
   checkpoint: { icon: "◆", color: "success" },
   activate_skill: { icon: "⚡", color: "success" },
+  deactivate_skill: { icon: "○", color: "muted" },
 } as const;
 
 /** Resolve icon/color for a tool, falling back to a generic arrow. */
 export function getToolMeta(toolName: string) {
   return TOOL_META[toolName] ?? { icon: "→", color: "warning" as const };
 }
-
 
