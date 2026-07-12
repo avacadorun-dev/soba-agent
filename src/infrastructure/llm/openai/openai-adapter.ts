@@ -285,11 +285,19 @@ function mergeProviderContentDelta(
     return previous;
   }
 
+  // Some compatible providers switch from token deltas to a cumulative snapshot
+  // anchored hundreds (or thousands) of characters back. A long, distinctive
+  // prefix is safe to match across the whole previous value; short prefixes stay
+  // limited to the tail to avoid treating an ordinary repeated word as a rewind.
   const searchStart = Math.max(0, previous.length - 240);
-  for (let length = Math.min(24, incoming.length); length >= 8; length--) {
+  const looksLikeSnapshot =
+    incoming.length >= Math.max(32, previous.length * 0.25);
+  for (let length = Math.min(64, incoming.length); length >= 8; length--) {
     const repeatedPrefix = incoming.slice(0, length);
     const repeatedAt = previous.lastIndexOf(repeatedPrefix);
-    if (repeatedAt >= searchStart) {
+    const isDistinctiveRewind =
+      length >= 24 && looksLikeSnapshot;
+    if (repeatedAt >= 0 && (repeatedAt >= searchStart || isDistinctiveRewind)) {
       const previousBoundary = previous[repeatedAt + length];
       const incomingBoundary = incoming[length];
       if (
@@ -318,7 +326,7 @@ function mergeProviderContentDelta(
   ) {
     commonPrefixLength++;
   }
-  if (commonPrefixLength >= 8) {
+  if (commonPrefixLength >= 8 && looksLikeSnapshot) {
     return incoming;
   }
 
@@ -326,60 +334,20 @@ function mergeProviderContentDelta(
 }
 
 /**
- * Convert merged visible text snapshots into a true append-only delta.
- * Some compatible endpoints may re-send cumulative/corrected bodies that do
- * not strictly prefix the previous visible text after <think> stripping.
- * Falling back to the full nextText would re-emit the whole answer into the UI.
+ * Convert a canonical provider snapshot into a true append-only UI delta.
+ * Once a provider rewrites already-streamed text, no append can represent that
+ * correction faithfully. In that case we emit nothing and let the final done
+ * event replace the interactive TUI block with the canonical value.
  */
 function diffVisibleContentDelta(
-  previousText: string,
-  nextText: string,
+  streamedText: string,
+  canonicalText: string,
 ): string {
-  if (!nextText) return "";
-  if (!previousText) return nextText;
-  if (nextText === previousText) return "";
-  if (nextText.startsWith(previousText)) {
-    return nextText.slice(previousText.length);
-  }
-  // Corrected/shorter snapshot of the same answer — do not re-emit.
-  if (previousText.startsWith(nextText)) {
-    return "";
-  }
-
-  // Merge cumulative/corrected snapshots without relying on a model identity.
-  const merged = mergeProviderContentDelta(previousText, nextText);
-  if (merged.startsWith(previousText)) {
-    return merged.slice(previousText.length);
-  }
-  if (previousText.startsWith(merged) || merged === previousText) {
-    return "";
-  }
-
-  const maxOverlap = Math.min(previousText.length, nextText.length);
-  for (let length = maxOverlap; length >= 8; length--) {
-    if (previousText.endsWith(nextText.slice(0, length))) {
-      return nextText.slice(length);
-    }
-  }
-
-  let commonPrefixLength = 0;
-  while (
-    commonPrefixLength < maxOverlap
-    && previousText[commonPrefixLength] === nextText[commonPrefixLength]
-  ) {
-    commonPrefixLength++;
-  }
-  if (commonPrefixLength >= 8) {
-    return nextText.slice(commonPrefixLength);
-  }
-
-  // Last resort: never re-append a full re-snapshot of long text.
-  // Prefer silence over doubling the visible answer in the stream.
-  if (nextText.length >= Math.max(32, previousText.length * 0.5)) {
-    return "";
-  }
-
-  return nextText;
+  if (!canonicalText || canonicalText === streamedText) return "";
+  if (!streamedText) return canonicalText;
+  return canonicalText.startsWith(streamedText)
+    ? canonicalText.slice(streamedText.length)
+    : "";
 }
 
 /**
@@ -698,13 +666,18 @@ interface StreamAccumulator {
   id: string;
   model: string;
   rawTextContent: Map<number, string>;
+  /** Canonical visible text after applying provider snapshots/corrections. */
   textContent: Map<number, string>;
+  /** Append-only prefix already emitted through response.output_text.delta. */
+  streamedTextContent: Map<number, string>;
   functionCallArguments: Map<
     number,
     { id: string; name: string; args: string }
   >;
   reasoningContent: Map<number, string>;
   taggedReasoningContent: Map<number, string>;
+  /** Append-only reasoning prefix already emitted to the UI. */
+  streamedReasoningContent: Map<number, string>;
   itemIds: Map<number, string>;
   finishReason: string | null;
   sentResponseCreated: boolean;
@@ -741,13 +714,14 @@ function getStreamMessageItemId(
 function buildReasoningDeltaEvents(
   accumulator: StreamAccumulator,
   index: number,
-  previous: string,
-  next: string,
+  canonicalReasoning: string,
 ): StreamingEvent[] {
-  const delta = next.startsWith(previous) ? next.slice(previous.length) : next;
+  const streamedReasoning = accumulator.streamedReasoningContent.get(index) ?? "";
+  const delta = diffVisibleContentDelta(streamedReasoning, canonicalReasoning);
   if (!delta) {
     return [];
   }
+  accumulator.streamedReasoningContent.set(index, streamedReasoning + delta);
   return [
     {
       type: "response.reasoning.delta",
@@ -888,9 +862,11 @@ function parseOpenAIChunk(
     }
 
     accumulator.textContent.clear();
+    accumulator.streamedTextContent.clear();
     accumulator.rawTextContent.clear();
     accumulator.reasoningContent.clear();
     accumulator.taggedReasoningContent.clear();
+    accumulator.streamedReasoningContent.clear();
 
     return events;
   }
@@ -998,21 +974,16 @@ function parseOpenAIChunk(
         accumulator.rawTextContent.set(index, nextRawText);
 
         const parsed = getVisibleAndReasoningContent(nextRawText);
-        const previousTaggedReasoning =
-          accumulator.taggedReasoningContent.get(index) ?? "";
         if (parsed.reasoningContent) {
           accumulator.taggedReasoningContent.set(index, parsed.reasoningContent);
         }
 
-        const previousText = accumulator.textContent.get(index) ?? "";
         const nextText = parsed.visibleText;
-        const delta = diffVisibleContentDelta(previousText, nextText);
-        // Track the text already shown to the UI so subsequent diffs stay append-only.
-        // A provider may send a shorter corrected snapshot; never shrink the streamed view.
+        accumulator.textContent.set(index, nextText);
+        const streamedText = accumulator.streamedTextContent.get(index) ?? "";
+        const delta = diffVisibleContentDelta(streamedText, nextText);
         if (delta) {
-          accumulator.textContent.set(index, previousText + delta);
-        } else if (nextText.startsWith(previousText) && nextText.length > previousText.length) {
-          accumulator.textContent.set(index, nextText);
+          accumulator.streamedTextContent.set(index, streamedText + delta);
         }
 
         if (
@@ -1055,8 +1026,7 @@ function parseOpenAIChunk(
             ...buildReasoningDeltaEvents(
               accumulator,
               index,
-              previousTaggedReasoning,
-              parsed.reasoningContent,
+              getCombinedStreamReasoning(accumulator, index) ?? "",
             ),
           );
         }
@@ -1065,14 +1035,16 @@ function parseOpenAIChunk(
       // Capture provider-native reasoning content.
       if (choice.delta?.reasoning_content) {
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
-        const nextReasoning = previousReasoning + choice.delta.reasoning_content;
+        const nextReasoning = mergeProviderContentDelta(
+          previousReasoning,
+          choice.delta.reasoning_content,
+        );
         accumulator.reasoningContent.set(index, nextReasoning);
         events.push(
           ...buildReasoningDeltaEvents(
             accumulator,
             index,
-            previousReasoning,
-            nextReasoning,
+            getCombinedStreamReasoning(accumulator, index) ?? "",
           ),
         );
       }
@@ -1088,8 +1060,7 @@ function parseOpenAIChunk(
           ...buildReasoningDeltaEvents(
             accumulator,
             index,
-            previousReasoning,
-            nextReasoning,
+            getCombinedStreamReasoning(accumulator, index) ?? "",
           ),
         );
       }
@@ -1624,9 +1595,11 @@ export class OpenAIAdapter implements ProviderAdapter {
       model: "",
       rawTextContent: new Map(),
       textContent: new Map(),
+      streamedTextContent: new Map(),
       functionCallArguments: new Map(),
       reasoningContent: new Map(),
       taggedReasoningContent: new Map(),
+      streamedReasoningContent: new Map(),
       itemIds: new Map(),
       finishReason: null,
       sentResponseCreated: false,

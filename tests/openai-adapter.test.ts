@@ -1005,6 +1005,93 @@ describe("OpenAIAdapter stream parsing", () => {
     }
   });
 
+  test("DeepSeek long rewind snapshots stay canonical without duplicating the append-only stream", () => {
+    const acc = adapter.createStreamAccumulator();
+    const streamedDeltas: string[] = [];
+    const anchor = "Query**, **Tailwind CSS 4**, **Radix UI/shadcn-ui**";
+    const intro = `Project stack: ${"x".repeat(300)} TanStack Router`;
+    const staleSnapshot = `${anchor}. ${"stale branch ".repeat(40)}`;
+    const correctedSnapshot = `${anchor}. Corrected catalogue and ${"final summary ".repeat(24)}`;
+
+    // Captures the real failure shape: ordinary token deltas, a cumulative
+    // snapshot anchored far back, then a shorter correction from that anchor.
+    for (const content of [intro, "Query", staleSnapshot, correctedSnapshot]) {
+      const events = adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-deepseek-rewind",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "deepseek/deepseek-v4-flash",
+          choices: [
+            {
+              index: 0,
+              delta: { content },
+              finish_reason: content === correctedSnapshot ? "stop" : null,
+            },
+          ],
+        }),
+        acc,
+      );
+      for (const event of events) {
+        if (event.type === "response.output_text.delta") {
+          streamedDeltas.push(event.delta);
+        }
+      }
+    }
+
+    const streamed = streamedDeltas.join("");
+    expect(streamed.match(/Query\*\*/g)).toHaveLength(1);
+    expect(streamed).not.toContain(correctedSnapshot);
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const completed = events.find((event) => event.type === "response.completed");
+    expect(completed?.type).toBe("response.completed");
+    if (completed?.type === "response.completed") {
+      const message = completed.response.output.find((item) => item.type === "message");
+      expect(message?.type).toBe("message");
+      if (message?.type === "message") {
+        const content = message.content[0];
+        expect(content?.type).toBe("output_text");
+        if (content?.type === "output_text") {
+          expect(content.text).toBe(`${intro}${correctedSnapshot}`);
+          expect(content.text.match(/Query\*\*/g)).toHaveLength(1);
+          expect(content.text).not.toContain("stale branch");
+        }
+      }
+    }
+  });
+
+  test("a short intentional repetition of an earlier long phrase remains a normal delta", () => {
+    const acc = adapter.createStreamAccumulator();
+    const phrase = "A deliberately repeated phrase with a distinctive prefix";
+    const first = `${phrase} ${"filler ".repeat(80)}`;
+    const second = `${phrase} appears again.`;
+
+    for (const content of [first, second]) {
+      adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-intentional-repetition",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "generic-compatible-model",
+          choices: [{ index: 0, delta: { content }, finish_reason: null }],
+        }),
+        acc,
+      );
+    }
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const completed = events.find((event) => event.type === "response.completed");
+    expect(completed?.type).toBe("response.completed");
+    if (completed?.type === "response.completed") {
+      const message = completed.response.output.find((item) => item.type === "message");
+      expect(message?.type).toBe("message");
+      if (message?.type === "message" && message.content[0]?.type === "output_text") {
+        expect(message.content[0].text).toBe(first + second);
+      }
+    }
+  });
+
   test("MiniMax reasoning_details склеивает overlap/correction chunks без дублей", () => {
     const acc = adapter.createStreamAccumulator();
 
@@ -1121,6 +1208,49 @@ describe("OpenAIAdapter stream parsing", () => {
       expect(done.item.reasoning_content).toBe(
         "Всё проходит. Запущу build для полной проверки.",
       );
+    }
+  });
+
+  test("DeepSeek reasoning rewind does not re-emit corrected snapshots", () => {
+    const acc = adapter.createStreamAccumulator();
+    const streamedDeltas: string[] = [];
+
+    for (const reasoningContent of [
+      "The user is asking about what this project is. Let me explore the",
+      "The user is asking about what this project",
+      " is about.",
+    ]) {
+      const events = adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-deepseek-reasoning-rewind",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "deepseek/deepseek-v4-flash",
+          choices: [
+            {
+              index: 0,
+              delta: { reasoning_content: reasoningContent },
+              finish_reason: null,
+            },
+          ],
+        }),
+        acc,
+      );
+      for (const event of events) {
+        if (event.type === "response.reasoning.delta") {
+          streamedDeltas.push(event.delta);
+        }
+      }
+    }
+
+    const streamed = streamedDeltas.join("");
+    expect(streamed.match(/The user is asking/g)).toHaveLength(1);
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const done = events.find((event) => event.type === "response.output_item.done");
+    expect(done?.type).toBe("response.output_item.done");
+    if (done?.type === "response.output_item.done" && done.item.type === "message") {
+      expect(done.item.reasoning_content).toBe("The user is asking about what this project is about.");
     }
   });
 
