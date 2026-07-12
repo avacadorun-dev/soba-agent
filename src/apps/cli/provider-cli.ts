@@ -45,7 +45,12 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ModelDefinition, ProviderDefinition } from "../../application/cli/public";
+import {
+  MODEL_COMPATIBILITY_FEATURES,
+  type ModelCompatibilityFeature,
+  type ModelDefinition,
+  type ProviderDefinition,
+} from "../../application/cli/public";
 import type { I18n } from "../../shared/i18n/i18n";
 
 // ─── Public types ───
@@ -497,6 +502,7 @@ function loadProviderFromFile(
       maxOutput: typeof mm.maxOutput === "number" ? mm.maxOutput : 4096,
       supportsStreaming: typeof mm.supportsStreaming === "boolean" ? mm.supportsStreaming : true,
       supportsThinking: typeof mm.supportsThinking === "boolean" ? mm.supportsThinking : false,
+      compatibility: readModelCompatibility(mm.compatibility),
     });
   }
   const defaultModel = typeof obj.defaultModel === "string" ? obj.defaultModel : models[0].id;
@@ -515,6 +521,14 @@ function loadProviderFromFile(
     models,
     defaultModel,
   };
+}
+
+function readModelCompatibility(value: unknown): ModelCompatibilityFeature[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const features = value.filter((feature): feature is ModelCompatibilityFeature =>
+    typeof feature === "string" && MODEL_COMPATIBILITY_FEATURES.includes(feature as ModelCompatibilityFeature)
+  );
+  return features.length > 0 ? features : undefined;
 }
 
 function providerHelp(t: (k: string, v?: Record<string, string | number>) => string): string {

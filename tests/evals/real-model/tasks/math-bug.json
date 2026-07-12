@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "math-addition-bug",
+  "fixture": "tests/evals/real-model/fixtures/math-bug",
+  "prompt": "Fix the implementation of add so the existing tests pass. Inspect the repository, make the smallest correct change, run the repository's bun run test script, and report completion only with evidence from the final workspace state.",
+  "allowedChanges": ["src/**"],
+  "acceptance": [["bun", "run", "{projectRoot}/tests/evals/real-model/acceptance/math-addition.ts", "{workspace}"]]
+}

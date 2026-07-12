@@ -74,7 +74,7 @@ function buildInlineDiff(
   oldText: string | null,
   newText: string | null,
 ): string | undefined {
-  if (operation === "renamed" && oldText === null && newText === null) return undefined;
+  if (oldText === null && newText === null) return undefined;
   if (operation === "created" || oldText === null) {
     return prefixLines("+", newText ?? "");
   }

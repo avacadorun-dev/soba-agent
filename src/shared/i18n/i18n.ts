@@ -8,11 +8,8 @@
  * - Compile-time key safety via TranslationKey
  */
 
-import enTranslations from "../../../locales/en.json";
-import ruTranslations from "../../../locales/ru.json";
-import zhTranslations from "../../../locales/zh.json";
+import { BUILTIN_TRANSLATIONS, DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./locale-catalog";
 import type { Locale, TranslationKey } from "./types";
-import { SUPPORTED_LOCALES } from "./types";
 
 /** Translations dictionary: flat key → localized string. */
 export type Translations = Record<string, string>;
@@ -29,12 +26,6 @@ export interface I18nOptions {
   loadTranslations?: TranslationLoader;
   fallbackToBuiltin?: boolean;
 }
-
-const BUILTIN_TRANSLATIONS: Record<Locale, Translations> = {
-  en: enTranslations,
-  ru: ruTranslations,
-  zh: zhTranslations,
-};
 
 /** Interpolate {var} placeholders in a template string. */
 function interpolate(template: string, vars?: Record<string, string | number>): string {
@@ -62,7 +53,7 @@ export function detectLocale(env: LocaleEnvironment = {}): Locale {
   const langPart = sysLocale.split("_")[0]?.split(".")[0]?.toLowerCase();
   if (langPart && isLocale(langPart)) return langPart;
 
-  return "en";
+  return DEFAULT_LOCALE;
 }
 
 /** Type guard: check if a string is a valid Locale. */
@@ -75,8 +66,8 @@ export function isLocale(value: string): value is Locale {
  *
  * Usage:
  *   const i18n = new I18n("ru");
- *   i18n.t("cli.help.title");                       // "SOBA Agent — консольный..."
- *   i18n.t("tool.write.written", { path: "x.ts" });  // "Файл x.ts записан"
+ *   i18n.t("cli.help.title");
+ *   i18n.t("tool.write.written", { path: "x.ts" });
  *   i18n.setLocale("en");                            // switch to English
  */
 export class I18n {
@@ -90,8 +81,8 @@ export class I18n {
     this.fallbackToBuiltin = options.fallbackToBuiltin ?? options.loadTranslations === undefined;
     this.locale = locale;
     // Pre-load en (fallback) and current locale
-    this.loadLocale("en");
-    if (locale !== "en") {
+    this.loadLocale(DEFAULT_LOCALE);
+    if (locale !== DEFAULT_LOCALE) {
       this.loadLocale(locale);
     }
   }
@@ -133,7 +124,7 @@ export class I18n {
     }
 
     // Fallback to English
-    const enTranslations = this.cache.get("en");
+    const enTranslations = this.cache.get(DEFAULT_LOCALE);
     if (enTranslations) {
       const value = enTranslations[key];
       if (value !== undefined) {
@@ -158,8 +149,8 @@ export class I18n {
   /** Reload all cached locales from disk (useful for development). */
   reload(): void {
     this.cache.clear();
-    this.loadLocale("en");
-    if (this.locale !== "en") {
+    this.loadLocale(DEFAULT_LOCALE);
+    if (this.locale !== DEFAULT_LOCALE) {
       this.loadLocale(this.locale);
     }
   }

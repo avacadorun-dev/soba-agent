@@ -1,3 +1,4 @@
+import { hasToolEffect, resolveToolSemantics, type ToolSemantics } from "../../kernel/tools/semantics";
 import type { FixUntilGreenDecision } from "../recovery";
 import type { AgentTurnError } from "../turn/types";
 import {
@@ -56,6 +57,7 @@ export interface EvidenceToolOutcome {
   durationMs?: number;
   cwd?: string;
   details?: Record<string, unknown>;
+  semantics?: ToolSemantics;
 }
 
 export interface VerificationCommandNotice {
@@ -92,9 +94,6 @@ export interface EvidenceLedgerSummary {
   entries: EvidenceEntry[];
 }
 
-const INSPECT_TOOL_NAMES = new Set(["read", "ls", "inspect_file"]);
-const MUTATION_TOOL_NAMES = new Set(["write", "edit"]);
-const SUCCESS_RESOLVES_TOOL_DIAGNOSTICS = new Set(["read_project_memory", "write_project_memory"]);
 const OUTPUT_PREVIEW_MAX_CHARS = 2_000;
 
 export class EvidenceLedger {
@@ -102,6 +101,7 @@ export class EvidenceLedger {
   private readonly successfulToolCallIds = new Set<string>();
 
   recordToolOutcome(outcome: EvidenceToolOutcome): EvidenceEntry {
+    const semantics = resolveToolSemantics(outcome.toolName, outcome.semantics);
     const shellMutation = outcome.toolName === "bash" ? this.recordShellMutation(outcome) : null;
 
     if (outcome.isError) {
@@ -120,7 +120,7 @@ export class EvidenceLedger {
 
     if (shellMutation) return shellMutation;
 
-    if (MUTATION_TOOL_NAMES.has(outcome.toolName)) {
+    if (hasToolEffect(semantics, "mutation")) {
       const files = readFiles(outcome.arguments);
       return this.addEntry({
         id: evidenceId("mutation", outcome.toolCallId),
@@ -174,7 +174,20 @@ export class EvidenceLedger {
       }
     }
 
-    if (INSPECT_TOOL_NAMES.has(outcome.toolName)) {
+    if (hasToolEffect(semantics, "search")) {
+      return this.addEntry({
+        id: evidenceId("search", outcome.toolCallId),
+        kind: "search",
+        status: "success",
+        timestamp: Date.now(),
+        toolCallId: outcome.toolCallId,
+        toolName: outcome.toolName,
+        iteration: outcome.iteration,
+        summary: `${outcome.toolName} searched project context`,
+      });
+    }
+
+    if (hasToolEffect(semantics, "inspect")) {
       const files = readFiles(outcome.arguments);
       const mutationIds = this.resolveDocsMutationsWithInspection(files, outcome.toolCallId);
       return this.addEntry({
@@ -488,10 +501,10 @@ export class EvidenceLedger {
   }
 
   private resolveActiveDiagnosticsForSuccessfulTool(outcome: EvidenceToolOutcome): string[] {
-    if (!SUCCESS_RESOLVES_TOOL_DIAGNOSTICS.has(outcome.toolName)) {
+    const semantics = resolveToolSemantics(outcome.toolName, outcome.semantics);
+    if (!hasToolEffect(semantics, "state_read") && !hasToolEffect(semantics, "state_mutation")) {
       return [];
     }
-
     const resolvedIds: string[] = [];
     for (const entry of this.entries) {
       if (entry.kind !== "diagnostic" || entry.status !== "active" || entry.toolName !== outcome.toolName) {

@@ -37,9 +37,12 @@ This page lists the SOBA Agent v0.6.x CLI surface available from the console.
 
 | Flag | Short | Description |
 |---|---|---|
-| `--model <id>` | `-m` | Override the model for one run |
+| `--model <id>` | `-m` | Override the model for one run; use `provider/model` to select a provider explicitly |
 | `--api-key <key>` | `-k` | Override the API key for one run |
 | `--base-url <url>` | — | Override the OpenAI-compatible base URL |
+
+An unqualified model ID stays on the configured default provider. A qualified value such as
+`openrouter/deepseek/deepseek-v4-flash` selects `openrouter` and sends `deepseek/deepseek-v4-flash` as its model ID.
 
 ### Limits
 
@@ -90,7 +93,9 @@ This page lists the SOBA Agent v0.6.x CLI surface available from the console.
 Proof bundles are persisted in `.soba/evidence/*.soba-proof.json` after accepted agent finishes.
 Current proof bundles include a compact evidence index, finish claims, changed files, checks, commands, permission receipts, risks, and review actions.
 Permission receipts record each executed tool call's trust level, approval kind, approval value, decision, reason, and safer alternatives when SOBA can suggest a least-privilege rewrite; `auto` means SOBA's trust policy allowed the call without prompting.
-`soba verify` validates the proof schema and checks that supported claim references point at known evidence, command, check, file mutation, or risk IDs.
+New receipts also contain `proofId`, `runId`, and a SHA-256 `integrity.digest`. `soba verify` validates schema and
+content integrity, supported claim references, command outcomes, mutation ordering, diff completeness, permissions, and
+secret redaction.
 
 | Command | Purpose |
 |---|---|
@@ -106,6 +111,10 @@ Permission receipts record each executed tool call's trust level, approval kind,
 | `soba explain-claim <claim> --proof <path>` | Explain one claim from a specific `.soba-proof.json` file |
 
 `soba prove`, `soba verify`, and `soba explain-claim` do not start the agent runtime and do not require provider credentials.
+
+`soba verify` uses stable policy exits: `0` verified, `1` invalid, `2` partially verified, `3` unverified, and `4`
+blocked. JSON output includes `accepted`, `outcome`, `reason`, and `exitCode`. Legacy receipts without integrity metadata
+remain readable, but are downgraded to `partially_verified` with reason `legacy_unsealed_proof` and exit code 2.
 
 ---
 

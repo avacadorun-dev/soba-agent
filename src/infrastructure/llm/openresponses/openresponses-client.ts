@@ -10,6 +10,7 @@
  */
 
 import type { SobaConfig } from "../../../application/config/types";
+import type { ModelCompatibilityFeature } from "../../../application/providers/types";
 import type {
   CompactResource,
   CompactResponseParams,
@@ -38,6 +39,7 @@ export interface OpenResponsesClientConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  modelCompatibility?: ModelCompatibilityFeature[];
   /** Maximum output tokens per response (text only). */
   maxOutputTokens: number;
   maxCompletionTokens: number;
@@ -143,6 +145,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     if (partial.baseUrl !== undefined) this.config.baseUrl = partial.baseUrl;
     if (partial.apiKey !== undefined) this.config.apiKey = partial.apiKey;
     if (partial.model !== undefined) this.config.model = partial.model;
+    if (partial.modelCompatibility !== undefined) this.config.modelCompatibility = [...partial.modelCompatibility];
     if (partial.maxOutputTokens !== undefined) this.config.maxOutputTokens = partial.maxOutputTokens;
     if (partial.maxCompletionTokens !== undefined) this.config.maxCompletionTokens = partial.maxCompletionTokens;
     if (partial.contextWindow !== undefined) this.config.contextWindow = partial.contextWindow;
@@ -381,6 +384,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       baseUrl: this.config.baseUrl,
       apiKey: this.config.apiKey,
       model: this.config.model,
+      compatibility: this.config.modelCompatibility,
     };
   }
 }

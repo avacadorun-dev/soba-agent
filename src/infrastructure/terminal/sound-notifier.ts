@@ -2,9 +2,9 @@
  * SoundNotifier — event listener that plays audio on agent events.
  *
  * Subscribes to AgentEvent and plays system sounds for:
- *   - turn_stop_reason "completed" → done.wav (агент перешёл в ожидание)
- *   - turn_error → error.wav (ошибка или аварийная остановка)
- *   - dangerous_confirmation → dangerous.wav (требуется разрешение)
+ *   - turn_stop_reason "completed" → done.wav
+ *   - turn_error → error.wav
+ *   - dangerous_confirmation → dangerous.wav
  *
  * Platform-specific playback:
  *   - macOS:   afplay <file>

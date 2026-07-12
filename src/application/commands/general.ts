@@ -1,3 +1,5 @@
+import { isLocale } from "../../shared/i18n/i18n";
+import type { Locale } from "../../shared/i18n/types";
 import type { RuntimeCommandMetadata } from "../command-service";
 import { RUNTIME_COMMANDS } from "../command-service";
 import type { SobaConfig, TuiThemeName } from "../config/types";
@@ -7,7 +9,7 @@ export interface ConfigCommandView {
   config: SobaConfig;
 }
 
-export type LangCommandView = { kind: "usage" } | { kind: "changed"; locale: "en" | "ru" | "zh" };
+export type LangCommandView = { kind: "usage" } | { kind: "changed"; locale: Locale };
 
 export type ThemeCommandView = { kind: "usage"; themes: readonly TuiThemeName[] } | { kind: "changed"; theme: TuiThemeName };
 
@@ -34,7 +36,7 @@ export function buildConfigCommandView(config: SobaConfig): ConfigCommandView {
 
 export function executeLangCommand(args: string[]): LangCommandView {
   const lang = args[0];
-  if (lang !== "en" && lang !== "ru" && lang !== "zh") {
+  if (!lang || !isLocale(lang)) {
     return { kind: "usage" };
   }
   return { kind: "changed", locale: lang };

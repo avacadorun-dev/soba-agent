@@ -1,4 +1,4 @@
-import type { FunctionCallField, ItemParam } from "../../kernel/model/openresponses-types";
+import type { FunctionCallField, ItemParam, Usage } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import { toolResultToOutputItem } from "../../kernel/tools/types";
 import type {
@@ -7,7 +7,7 @@ import type {
   ItemParam as SessionItemParam,
 } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
-import { acknowledgeErrors } from "../completion/completion-gate";
+import { acknowledgeErrors, type FinishCriterion } from "../completion/completion-gate";
 import { buildEvidenceBundle, type EvidenceApproval, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
@@ -35,6 +35,7 @@ export interface FinishCallHandlerInput {
   allItems: ItemParam[];
   turn: number;
   iteration: number;
+  usage: Usage;
   hasUsedTools: boolean;
   needsVerification: boolean;
   autonomousFollowUps: number;
@@ -136,20 +137,35 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
 
   const finishRequest = finishEvaluation.request;
   acknowledgeErrors(input.errors, finishRequest.acknowledgedErrorIds);
+  const linkedCriteria = linkImplicitCriteriaEvidence(
+    finishRequest.criteria,
+    input.evidenceLedger.getSummary().entries,
+  );
   input.evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
   const evidenceBundle = buildEvidenceBundle({
     sessionId: input.session.getSessionId(),
     turnId: `turn_${input.turn}`,
     completionStatus: finishRequest.status,
     summary: finishRequest.summary,
-    criteria: finishRequest.criteria,
+    criteria: linkedCriteria,
     ledger: input.evidenceLedger.getSummary(),
     approvals: input.approvalReceipts,
+    metrics: {
+      modelCalls: input.iteration + 1,
+      tokens: {
+        input: input.usage.input_tokens,
+        output: input.usage.output_tokens,
+        total: input.usage.total_tokens,
+      },
+    },
   });
   let proofPath: string | undefined;
+  let proofMetadata: { proofId?: string; runId?: string; digest?: string } | undefined;
   if (input.evidenceProofSink) {
     try {
-      proofPath = (await input.evidenceProofSink.saveEvidenceBundle(evidenceBundle)).path;
+      const receipt = await input.evidenceProofSink.saveEvidenceBundle(evidenceBundle);
+      proofPath = receipt.path;
+      proofMetadata = { proofId: receipt.proofId, runId: receipt.runId, digest: receipt.digest };
     } catch (error) {
       input.flight({
         kind: "runtime_event",
@@ -162,7 +178,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
       });
     }
   }
-  const evidenceFlightPayload = proofPath ? { ...evidenceBundle, proofPath } : evidenceBundle;
+  const evidenceFlightPayload = proofPath ? { ...evidenceBundle, proofPath, ...proofMetadata } : evidenceBundle;
   if (evidenceBundle.diff) {
     input.flight({
       kind: "diff_summary",
@@ -185,7 +201,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
       status: "accepted",
       completionStatus: finishRequest.status,
       summary: finishRequest.summary,
-      criteria: finishRequest.criteria,
+      criteria: linkedCriteria,
       acknowledgedErrorIds: finishRequest.acknowledgedErrorIds,
     },
   });
@@ -233,4 +249,21 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
   });
   input.emitStopReason("completed", "Model used the explicit finish control tool");
   return "break";
+}
+
+function linkImplicitCriteriaEvidence(
+  criteria: FinishCriterion[],
+  entries: ReturnType<EvidenceLedger["getSummary"]>["entries"],
+): FinishCriterion[] {
+  const recordedIds = entries.flatMap((entry) =>
+    entry.status === "success" && ["mutation", "verification", "inspect"].includes(entry.kind)
+      ? [entry.id]
+      : []
+  );
+  if (recordedIds.length === 0) return criteria;
+  return criteria.map((criterion) =>
+    (criterion.evidenceIds?.length ?? 0) > 0
+      ? criterion
+      : { ...criterion, evidenceIds: recordedIds.slice() }
+  );
 }

@@ -93,7 +93,15 @@ const sampleProvider: ProviderDefinition = {
   adapter: "openai",
   defaultModel: "my-llm-7b",
   models: [
-    { id: "my-llm-7b", name: "My LLM 7B", contextWindow: 16_000, maxOutput: 4_000, supportsStreaming: true, supportsThinking: false },
+    {
+      id: "my-llm-7b",
+      name: "My LLM 7B",
+      contextWindow: 16_000,
+      maxOutput: 4_000,
+      supportsStreaming: true,
+      supportsThinking: false,
+      compatibility: ["prefer_max_completion_tokens"],
+    },
     { id: "my-llm-13b", name: "My LLM 13B", contextWindow: 16_000, maxOutput: 4_000, supportsStreaming: true, supportsThinking: false },
   ],
 };
@@ -431,6 +439,9 @@ describe("provider add --from-file round-trip", () => {
     expect(reloaded).not.toBeNull();
     expect(reloaded!.customProviders[sampleProvider.id]).toBeDefined();
     expect((reloaded!.customProviders[sampleProvider.id] as { models: unknown[] }).models.length).toBe(2);
+    expect(reloaded!.customProviders[sampleProvider.id]?.models?.[0]?.compatibility).toEqual([
+      "prefer_max_completion_tokens",
+    ]);
   });
 });
 

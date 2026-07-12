@@ -422,18 +422,28 @@ describe("OpenAIAdapter.convertRequest", () => {
     expect(request.max_tokens).toBe(1000);
   });
 
-  test("MiniMax-M3 включает reasoning_split и использует max_completion_tokens", () => {
+  test("явные compatibility-флаги управляют wire-форматом независимо от имени модели", () => {
     const assistant = makeAssistantMsg("");
     assistant.reasoning_content = "Нужно прочитать файл перед ответом.";
 
     const request = adapter.convertRequest(
       {
-        model: "MiniMax-M3",
+        model: "vendor-neutral-model",
         input: [assistant, makeFunctionCall("call_read", "read", '{"path":"README.md"}')],
         max_output_tokens: 1000,
         stream: true,
       },
-      { ...config, baseUrl: "https://api.minimax.io/v1", model: "MiniMax-M3" },
+      {
+        ...config,
+        baseUrl: "https://compatible.example.test/v1",
+        model: "vendor-neutral-model",
+        compatibility: [
+          "adaptive_thinking",
+          "reasoning_split",
+          "reasoning_details_input",
+          "prefer_max_completion_tokens",
+        ],
+      },
     );
 
     expect(request.thinking).toEqual({ type: "adaptive" });
@@ -450,6 +460,22 @@ describe("OpenAIAdapter.convertRequest", () => {
         text: "Нужно прочитать файл перед ответом.",
       },
     ]);
+  });
+
+  test("имя модели не включает compatibility-поведение неявно", () => {
+    const request = adapter.convertRequest(
+      {
+        model: "MiniMax-M3",
+        input: [makeUserMsg("Hi")],
+        max_output_tokens: 1000,
+      },
+      { ...config, model: "MiniMax-M3" },
+    );
+
+    expect(request.thinking).toBeUndefined();
+    expect(request.reasoning_split).toBeUndefined();
+    expect(request.max_tokens).toBe(1000);
+    expect(request.max_completion_tokens).toBeUndefined();
   });
 
   test("запрос с temperature", () => {

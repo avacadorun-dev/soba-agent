@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { sealProofBundle } from "../../../application/evidence/public";
 
 export interface FilesystemEvidenceProofStorageOptions {
   projectRoot: string;
@@ -25,11 +26,18 @@ export class FilesystemEvidenceProofStorage {
     this.evidenceDir = resolve(options.evidenceDir ?? join(projectRoot, ".soba", "evidence"));
   }
 
-  saveEvidenceBundle<TBundle extends PersistableEvidenceBundle>(bundle: TBundle): { path: string } {
+  saveEvidenceBundle<TBundle extends PersistableEvidenceBundle>(bundle: TBundle): {
+    path: string;
+    proofId: string;
+    runId: string;
+    digest: string;
+  } {
     mkdirSync(this.evidenceDir, { recursive: true });
-    const path = join(this.evidenceDir, this.filenameFor(bundle));
-    writeFileSync(path, `${JSON.stringify(bundle, null, 2)}\n`, "utf-8");
-    return { path };
+    const sealed = sealProofBundle(bundle as Record<string, unknown>);
+    const path = join(this.evidenceDir, this.filenameFor(sealed as PersistableEvidenceBundle));
+    writeFileSync(path, `${JSON.stringify(sealed, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+    chmodSync(path, 0o600);
+    return { path, proofId: sealed.proofId, runId: sealed.runId, digest: sealed.integrity.digest };
   }
 
   getEvidenceDir(): string {

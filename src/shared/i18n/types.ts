@@ -5,9 +5,8 @@
  * All keys are defined here for compile-time safety.
  */
 
-export type Locale = "en" | "ru" | "zh";
-
-export const SUPPORTED_LOCALES: Locale[] = ["en", "ru", "zh"];
+export type { Locale } from "./locale-catalog";
+export { SUPPORTED_LOCALES } from "./locale-catalog";
 
 /**
  * Translation key — flat, dot-separated namespace.

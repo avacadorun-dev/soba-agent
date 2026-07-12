@@ -68,6 +68,7 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
     evaluator: new SkillEvaluator({
       storage: new FilesystemSkillEvaluationStorage({ evalRunsPath: join(sobaDir, "eval-runs") }),
       validateSkill: validateSkillOnDisk,
+      availableTools: input.toolRegistry.getNames(),
     }),
     catalog: skillCatalog,
     files: new FilesystemSkillFileOperations(),

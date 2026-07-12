@@ -22,7 +22,7 @@ export function runFilesystemVerifyCommand(input: {
   return {
     exitCode: verifyCommandExitCode(view),
     output,
-    stream: view.kind === "verification" && view.verification.valid ? "stdout" : "stderr",
+    stream: view.kind === "verification" && view.verification.accepted ? "stdout" : "stderr",
   };
 }
 

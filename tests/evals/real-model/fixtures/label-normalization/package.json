@@ -1,0 +1,8 @@
+{
+  "name": "soba-eval-label-normalization",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./tests/labels.check.ts"
+  }
+}

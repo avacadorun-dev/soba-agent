@@ -88,6 +88,7 @@ describe("prove command", () => {
     expect(proveCommandExitCode(view)).toBe(0);
     const rendered = renderProveCommandView(view);
     expect(rendered).toContain("SOBA Proof");
+    expect(rendered).toContain("Proof ID: legacy-unsealed");
     expect(rendered).toContain("Status: verified");
     expect(rendered).toContain("Claims: Proof persistence is implemented supported (ev_verification_bash_1)");
     expect(rendered).toContain("bun test passed exit=0 duration=42ms digest=sha256:abc123");

@@ -162,6 +162,7 @@ export type {
 } from "../mcp-runtime-controller";
 export type {
   CustomProviderMap,
+  ModelCompatibilityFeature,
   ModelDefinition,
   ProviderAdapterId,
   ProviderConfigMap,
@@ -175,6 +176,7 @@ export {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
   findBuiltinProvider,
+  MODEL_COMPATIBILITY_FEATURES,
 } from "../providers/public";
 export type {
   RuntimeSessionHandle,

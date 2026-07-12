@@ -1,0 +1,8 @@
+{
+  "name": "soba-eval-config-merge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./tests/config.check.ts"
+  }
+}

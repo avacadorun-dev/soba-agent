@@ -6,13 +6,14 @@ import {
   verifyCommandExitCode,
   verifyEvidenceProof,
 } from "../../src/application/commands/verify";
+import { sealProofBundle } from "../../src/application/evidence/public";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 
 describe("verify command", () => {
   const proof: EvidenceProofDocument = {
     path: "/repo/.soba/evidence/proof.soba-proof.json",
-    bundle: {
+    bundle: sealProofBundle({
       version: 1,
       sessionId: "sess_1",
       turnId: "turn_1",
@@ -60,6 +61,20 @@ describe("verify command", () => {
           mutationIds: ["ev_mutation_1"],
         },
       ],
+      diff: {
+        files: [{
+          path: "src/app.ts",
+          operation: "modified",
+          added: 3,
+          removed: 1,
+          mutationIds: ["ev_mutation_1"],
+          truncated: false,
+        }],
+        fileCount: 1,
+        added: 3,
+        removed: 1,
+        truncated: false,
+      },
       commands: [
         {
           id: "cmd_1",
@@ -103,7 +118,7 @@ describe("verify command", () => {
       risks: [],
       reviewActions: [],
       createdAt: "2026-06-30T10:20:30.000Z",
-    },
+    }),
   };
 
   test("verifies the latest proof as text by default", () => {
@@ -166,6 +181,17 @@ describe("verify command", () => {
     expect(result.issues.map((issue) => issue.code)).toContain("passed_check_without_passed_command");
   });
 
+  test("rejects a terminal command whose exit code is masked as null", () => {
+    const bundle = structuredClone(proof.bundle);
+    (bundle.commands as Array<Record<string, unknown>>)[0].status = "failed";
+    (bundle.commands as Array<Record<string, unknown>>)[0].exitCode = null;
+
+    const result = verifyEvidenceProof({ path: "proof.json", bundle });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.code)).toContain("missing_exit_code");
+  });
+
   test("rejects supported claims that reference missing evidence", () => {
     const result = verifyEvidenceProof({
       ...proof,
@@ -184,6 +210,16 @@ describe("verify command", () => {
 
     expect(result.valid).toBe(false);
     expect(result.issues.map((issue) => issue.code)).toContain("unknown_claim_evidence");
+  });
+
+  test("rejects a sealed changed-file proof with no diff summary", () => {
+    const withoutDiff = { ...proof.bundle };
+    delete withoutDiff.diff;
+    const sealed = sealProofBundle(withoutDiff);
+    const result = verifyEvidenceProof({ path: "proof.json", bundle: sealed });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.map((issue) => issue.code)).toContain("missing_diff");
   });
 
   test("rejects malformed approval receipts", () => {
@@ -219,33 +255,45 @@ describe("verify command", () => {
     );
   });
 
-  test("keeps legacy proofs valid with migration warnings", () => {
+  test("keeps legacy proofs readable but does not policy-accept them as verified", () => {
+    const legacyBundle: Record<string, unknown> = {
+      ...proof.bundle,
+      evidence: undefined,
+      claims: undefined,
+    };
+    delete legacyBundle.proofId;
+    delete legacyBundle.runId;
+    delete legacyBundle.integrity;
     const result = verifyEvidenceProof({
       ...proof,
-      bundle: {
-        ...proof.bundle,
-        evidence: undefined,
-        claims: undefined,
-      },
+      bundle: legacyBundle,
     });
 
     expect(result.valid).toBe(true);
+    expect(result.accepted).toBe(false);
     expect(result.result).toBe("valid_with_warnings");
-    expect(result.issues.map((issue) => issue.code)).toEqual(["missing_evidence_index", "missing_claims"]);
+    expect(result.outcome).toBe("partially_verified");
+    expect(result.reason).toBe("legacy_unsealed_proof");
+    expect(result.exitCode).toBe(2);
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "legacy_unsealed_proof",
+      "missing_evidence_index",
+      "missing_claims",
+    ]);
   });
 
-  test("keeps warnings separate from invalid errors", () => {
+  test("rejects verified proofs that retain risks", () => {
     const result = verifyEvidenceProof({
       ...proof,
-      bundle: {
+      bundle: sealProofBundle({
         ...proof.bundle,
         risks: [{ id: "risk_1", kind: "failed_check", severity: "warning", message: "Risk remains.", evidenceIds: [] }],
-      },
+      }),
     });
 
-    expect(result.valid).toBe(true);
-    expect(result.result).toBe("valid_with_warnings");
-    expect(result.summary.errors).toBe(0);
+    expect(result.valid).toBe(false);
+    expect(result.result).toBe("invalid");
+    expect(result.summary.errors).toBe(1);
     expect(result.issues.map((issue) => issue.code)).toContain("verified_with_risks");
   });
 
@@ -261,5 +309,34 @@ describe("verify command", () => {
     expect(view.kind).toBe("usage");
     expect(verifyCommandExitCode(view)).toBe(1);
     expect(renderVerifyCommandView(view)).toContain("Invalid --format value");
+  });
+
+  test("maps every terminal proof outcome to a stable reason and exit code", () => {
+    const cases = [
+      { status: "verified", outcome: "verified", reason: "proof_verified", exitCode: 0 },
+      { status: "partially_verified", outcome: "partially_verified", reason: "proof_partially_verified", exitCode: 2 },
+      { status: "unverified", outcome: "unverified", reason: "proof_unverified", exitCode: 3 },
+      { status: "blocked", outcome: "blocked", reason: "proof_blocked", exitCode: 4 },
+    ] as const;
+
+    for (const expected of cases) {
+      const result = verifyEvidenceProof({
+        ...proof,
+        bundle: sealProofBundle({ ...proof.bundle, status: expected.status }),
+      });
+      expect(result.outcome).toBe(expected.outcome);
+      expect(result.reason).toBe(expected.reason);
+      expect(result.exitCode).toBe(expected.exitCode);
+      expect(result.accepted).toBe(expected.status === "verified");
+    }
+  });
+
+  test("uses explicit evidence order when mutation and verification timestamps tie", () => {
+    const evidence = (proof.bundle.evidence as Array<Record<string, unknown>>).map((entry) => ({ ...entry, timestamp: 1 }));
+    const result = verifyEvidenceProof({ ...proof, bundle: sealProofBundle({ ...proof.bundle, evidence }) });
+
+    expect(result.valid).toBe(true);
+    expect(result.outcome).toBe("verified");
+    expect(result.issues.map((issue) => issue.code)).not.toContain("stale_or_missing_verification");
   });
 });

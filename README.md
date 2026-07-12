@@ -35,17 +35,24 @@ before risky operations, run the project's own checks, and leave behind receipts
 SOBA is a coding agent with a local workflow:
 
 - **Interactive TUI** for agent sessions, shell commands, slash commands, permissions, context, and model state.
-- **Proof receipts** in `.soba/evidence/*.soba-proof.json` so completed work has a local audit trail.
+- **Sealed Proof Bundle v1 receipts** in `.soba/evidence/*.soba-proof.json`, with stable run/proof IDs, recursive
+  redaction, and whole-receipt SHA-256 integrity.
 - **Proof claim mapping** through `soba verify` and `soba explain-claim`, making unsupported claims visible instead of
   hiding them in prose.
+- **Run metrics in sealed receipts** for model calls and input/output/total tokens, so eval consumers do not have to
+  infer usage from terminal output.
 - **Project Memory** in `.soba/memory/` with source receipts, stale checks, doctor output, and explanations.
 - **Bounded permissions** for dangerous operations, with permission receipts recorded in proof output.
 - **MCP support** for local `stdio` servers and remote `streamableHttp` endpoints.
 - **Skills** for reusable project workflows, plus eval, bench, and trace commands for improving them over time.
 - **Portable capsules** for compacting, resuming, and handing off long sessions.
 
-The current `0.6.x` line is focused on stabilization before larger `0.7.0` delegation features: installs, TUI behavior,
-proofs, memory provenance, permission handling, skills, and documentation should be dependable first.
+The current `0.6.x` line is focused on proof integrity, adversarial false-completion tests, and a real-model evaluation
+baseline. A pinned ordinary-agent versus SOBA comparison now covers three task classes and two repetitions with external
+acceptance outside producer workspaces, declared change scope, and six independently verified SOBA receipts. `0.7.0`
+targets a portable proof API, external run manifests,
+and a generic CI gate; safe workspaces come
+before any larger delegation loop.
 
 ## Install
 
@@ -128,6 +135,10 @@ soba -i
 
 If a claim is not backed by evidence, SOBA should keep that visible. The receipt is the handoff artifact, not just a
 transcript summary.
+
+New receipts are sealed before persistence. `soba verify` returns exit `0` only for an accepted `verified` proof;
+invalid, partially verified, unverified, and blocked outcomes return stable non-zero exit codes and machine-readable
+reasons. Legacy receipts without integrity metadata remain readable with a warning but are not tamper-evident.
 
 ## Project Memory
 

@@ -98,6 +98,24 @@ const CAPABILITY_REQUIREMENTS: Array<{
     },
   },
   {
+    id: "proof-integrity-v1",
+    source: "docs capability matrix: sealed Proof Bundle v1",
+    phrases: {
+      en: ["integrity.digest", "proof_digest_mismatch", "legacy_unsealed_proof"],
+      ru: ["integrity.digest", "proof_digest_mismatch", "legacy_unsealed_proof"],
+      zh: ["integrity.digest", "proof_digest_mismatch", "legacy_unsealed_proof"],
+    },
+  },
+  {
+    id: "proof-policy-outcomes",
+    source: "docs capability matrix: proof outcome reasons and exit codes",
+    phrases: {
+      en: ["proof_verified", "proof_partially_verified", "proof_unverified", "proof_blocked"],
+      ru: ["proof_verified", "proof_partially_verified", "proof_unverified", "proof_blocked"],
+      zh: ["proof_verified", "proof_partially_verified", "proof_unverified", "proof_blocked"],
+    },
+  },
+  {
     id: "project-memory-doctor",
     source: "docs capability matrix: memory doctor",
     phrases: {
@@ -265,6 +283,7 @@ function isSwitchCaseLiteral(literal: StringLiteral): boolean {
 function configKeyFacts(project: Project): Fact[] {
   const sourceFile = project.getSourceFileOrThrow("src/application/config/types.ts");
   const interfaces = ["SobaConfig", "SoundConfig"];
+  const internalSobaConfigKeys = new Set(["modelCompatibility"]);
   const facts: Fact[] = [];
 
   for (const interfaceName of interfaces) {
@@ -275,8 +294,12 @@ function configKeyFacts(project: Project): Fact[] {
         category: "config-key",
         value,
         source: `src/application/config/types.ts:${interfaceName}`,
-        required: interfaceName === "SobaConfig",
-        note: interfaceName === "SoundConfig" ? "nested sound config key" : undefined,
+        required: interfaceName === "SobaConfig" && !internalSobaConfigKeys.has(value),
+        note: interfaceName === "SoundConfig"
+          ? "nested sound config key"
+          : internalSobaConfigKeys.has(value)
+            ? "runtime-derived from the selected model's public compatibility metadata"
+            : undefined,
       });
     }
   }

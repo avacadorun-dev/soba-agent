@@ -585,6 +585,7 @@ describe("evaluateCompletion", () => {
     if (!decision.accepted) {
       expect(decision.reasons.join("\n")).toContain("criteria[].evidenceIds contains IDs");
       expect(decision.reasons.join("\n")).toContain("missing_ev");
+      expect(decision.reasons.join("\n")).toContain("ev_known");
     }
   });
 

@@ -1,0 +1,8 @@
+{
+  "name": "soba-eval-math-bug",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./tests/math.check.ts"
+  }
+}

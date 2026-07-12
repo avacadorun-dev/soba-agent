@@ -57,7 +57,10 @@ export async function executeObservedToolBatch(
 ): Promise<ToolBatchExecutionResult> {
   const iterationOutcomes: ToolOutcome[] = [];
   const checkpointEvents: CheckpointEvent[] = [];
-  const parallelReadOnlyExecutions = canExecuteReadOnlyBatchInParallel(input.toolCalls)
+  const parallelReadOnlyExecutions = canExecuteReadOnlyBatchInParallel(
+    input.toolCalls,
+    (toolName) => input.toolExecutor.getToolSemantics(toolName),
+  )
     ? await Promise.all(
         input.toolCalls.map((toolCall) =>
           input.toolExecutor.executeToolCall(toolCall, input.signal),

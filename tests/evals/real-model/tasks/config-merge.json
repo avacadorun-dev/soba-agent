@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "nested-config-merge",
+  "fixture": "tests/evals/real-model/fixtures/config-merge",
+  "prompt": "Fix mergeConfig so partial overrides of a nested section preserve that section's unspecified defaults and never mutate the defaults object. Inspect the repository, make the smallest correct change, run the repository's bun run test script, and report completion only with evidence from the final workspace state.",
+  "allowedChanges": ["src/**"],
+  "acceptance": [["bun", "run", "{projectRoot}/tests/evals/real-model/acceptance/config-merge.ts", "{workspace}"]]
+}

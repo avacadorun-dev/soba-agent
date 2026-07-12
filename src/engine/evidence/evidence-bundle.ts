@@ -2,7 +2,7 @@ import type { PermissionAlternative } from "../../kernel/permissions/trust";
 import type { FinishCriterion } from "../completion/completion-gate";
 import type { VerificationKind } from "../verification/verification-policy";
 import type { DiffReviewActionRecord } from "./diff-review";
-import type { EvidenceDiffSummary } from "./diff-summary";
+import { buildEvidenceDiffSummary, type EvidenceDiffSummary } from "./diff-summary";
 import type { EvidenceEntry, EvidenceKind, EvidenceLedgerSummary, EvidenceStatus } from "./evidence-ledger";
 
 export type EvidenceBundleStatus = "verified" | "partially_verified" | "unverified" | "blocked";
@@ -106,6 +106,15 @@ export interface EvidenceClaim {
   evidenceIds: string[];
 }
 
+export interface EvidenceRunMetrics {
+  modelCalls: number;
+  tokens: {
+    input: number;
+    output: number;
+    total: number;
+  };
+}
+
 export interface EvidenceBundle {
   version: 1;
   sessionId: string;
@@ -121,11 +130,15 @@ export interface EvidenceBundle {
   risks: EvidenceRisk[];
   diff?: EvidenceDiffSummary;
   reviewActions: DiffReviewActionRecord[];
+  metrics?: EvidenceRunMetrics;
   createdAt: string;
 }
 
 export interface EvidenceProofReceipt {
   path: string;
+  proofId?: string;
+  runId?: string;
+  digest?: string;
 }
 
 export interface EvidenceProofSink {
@@ -144,6 +157,7 @@ export interface BuildEvidenceBundleInput {
   approvals?: EvidenceApproval[];
   diff?: EvidenceDiffSummary;
   reviewActions?: DiffReviewActionRecord[];
+  metrics?: EvidenceRunMetrics;
   now?: () => Date;
 }
 
@@ -151,10 +165,21 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
   const commands = mergeCommands(commandsFromLedger(input.ledger.entries), input.commands ?? []);
   const checks = buildChecks(input.ledger, commands);
   const changedFiles = mergeChangedFiles(changedFilesFromLedger(input.ledger.entries), input.changedFiles ?? []);
+  const diff = input.diff ?? (changedFiles.length > 0
+    ? buildEvidenceDiffSummary({
+        files: changedFiles.map((file) => ({
+          path: file.path,
+          operation: file.operation,
+          added: file.added,
+          removed: file.removed,
+          mutationIds: file.mutationIds,
+        })),
+      })
+    : undefined);
   const risks = buildRisks(input.ledger, checks, changedFiles);
-  const status = decideBundleStatus(input.completionStatus, input.ledger, checks, risks);
   const evidence = evidenceReferencesFromLedger(input.ledger.entries);
   const claims = buildClaims(input.criteria ?? [], evidence, commands, checks, changedFiles, risks);
+  const status = decideBundleStatus(input.completionStatus, input.ledger, checks, risks, claims);
 
   return {
     version: 1,
@@ -169,8 +194,9 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
     checks,
     approvals: input.approvals ?? [],
     risks,
-    diff: input.diff,
+    diff,
     reviewActions: input.reviewActions ?? [],
+    metrics: input.metrics,
     createdAt: (input.now ?? (() => new Date()))().toISOString(),
   };
 }
@@ -244,7 +270,8 @@ function buildClaims(
 
 function commandsFromLedger(entries: EvidenceEntry[]): EvidenceCommandRun[] {
   return entries.flatMap((entry) => {
-    if (!entry.command) return [];
+    if (!entry.command || entry.kind === "diagnostic" || entry.kind === "recovery_attempt") return [];
+    if (entry.kind === "verification" && !entry.toolCallId) return [];
     return [
       {
         id: commandId(entry),
@@ -484,16 +511,27 @@ function decideBundleStatus(
   ledger: EvidenceLedgerSummary,
   checks: EvidenceCheck[],
   risks: EvidenceRisk[],
+  claims: EvidenceClaim[],
 ): EvidenceBundleStatus {
   if (completionStatus === "blocked") return "blocked";
-  if (!ledger.hasMutatedFiles) return risks.some((risk) => risk.severity === "error") ? "partially_verified" : "verified";
-  if (ledger.unverifiedMutationIds.length === 0 && checks.every((check) => check.status !== "failed" && check.status !== "not_run")) {
-    return "verified";
+  let evidenceStatus: EvidenceBundleStatus;
+  if (!ledger.hasMutatedFiles) {
+    evidenceStatus = risks.some((risk) => risk.severity === "error") ? "partially_verified" : "verified";
+  } else if (
+    ledger.unverifiedMutationIds.length === 0 &&
+    checks.every((check) => check.status !== "failed" && check.status !== "not_run")
+  ) {
+    evidenceStatus = "verified";
+  } else if (checks.some((check) => check.status !== "not_run" && check.status !== "not_required")) {
+    evidenceStatus = "partially_verified";
+  } else {
+    evidenceStatus = "unverified";
   }
-  if (checks.some((check) => check.status !== "not_run" && check.status !== "not_required")) {
-    return "partially_verified";
+
+  if (evidenceStatus !== "verified" || claims.every((claim) => claim.status === "supported")) {
+    return evidenceStatus;
   }
-  return "unverified";
+  return claims.some((claim) => claim.status === "supported") ? "partially_verified" : "unverified";
 }
 
 function commandStatusFromEntry(entry: EvidenceEntry): EvidenceCommandStatus {

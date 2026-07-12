@@ -17,6 +17,7 @@
  * - OpenAI streaming SSE chunks → StreamingEvent[]
  */
 
+import type { ModelCompatibilityFeature } from "../../../application/providers/types";
 import type {
   CompactResource,
   CompactResponseParams,
@@ -172,21 +173,20 @@ function extractTextFromContent(
     .join("\n");
 }
 
-function isMiniMaxModel(model: string | undefined): boolean {
-  return (model ?? "").toLowerCase().includes("minimax");
-}
-
-function isMiniMaxM3Model(model: string | undefined): boolean {
-  return (model ?? "").toLowerCase() === "minimax-m3";
-}
-
-function buildMiniMaxReasoningDetails(reasoningContent: string): OpenAIReasoningDetail[] {
+function buildReasoningDetails(reasoningContent: string): OpenAIReasoningDetail[] {
   return [
     {
       type: "reasoning.text",
       text: reasoningContent,
     },
   ];
+}
+
+function hasCompatibility(
+  config: ProviderConfig,
+  feature: ModelCompatibilityFeature,
+): boolean {
+  return config.compatibility?.includes(feature) === true;
 }
 
 function combineReasoningContent(
@@ -254,10 +254,8 @@ function splitThinkTaggedContent(content: string): {
 
 function getVisibleAndReasoningContent(
   rawContent: string,
-  model: string | undefined,
 ): { visibleText: string; reasoningContent?: string } {
-  const shouldSplitThinkTags = isMiniMaxModel(model) || /<think>/i.test(rawContent);
-  if (!shouldSplitThinkTags) {
+  if (!/<think>/i.test(rawContent)) {
     return { visibleText: rawContent };
   }
 
@@ -274,9 +272,8 @@ function getVisibleAndReasoningContent(
 function mergeProviderContentDelta(
   previous: string,
   incoming: string,
-  model: string | undefined,
 ): string {
-  if (!isMiniMaxModel(model) || !previous || !incoming) {
+  if (!previous || !incoming) {
     return previous + incoming;
   }
 
@@ -330,14 +327,13 @@ function mergeProviderContentDelta(
 
 /**
  * Convert merged visible text snapshots into a true append-only delta.
- * MiniMax (and some OpenRouter proxies) may re-send cumulative/corrected bodies
- * that do not strictly prefix the previous visible text after <think> stripping.
+ * Some compatible endpoints may re-send cumulative/corrected bodies that do
+ * not strictly prefix the previous visible text after <think> stripping.
  * Falling back to the full nextText would re-emit the whole answer into the UI.
  */
 function diffVisibleContentDelta(
   previousText: string,
   nextText: string,
-  model: string | undefined,
 ): string {
   if (!nextText) return "";
   if (!previousText) return nextText;
@@ -350,12 +346,8 @@ function diffVisibleContentDelta(
     return "";
   }
 
-  // Prefer MiniMax-aware merge then take the true suffix; also apply to any model
-  // when the snapshots clearly overlap so a non-prefix correction does not dump
-  // the full nextText again.
-  const merged = isMiniMaxModel(model)
-    ? mergeProviderContentDelta(previousText, nextText, model)
-    : previousText + nextText;
+  // Merge cumulative/corrected snapshots without relying on a model identity.
+  const merged = mergeProviderContentDelta(previousText, nextText);
   if (merged.startsWith(previousText)) {
     return merged.slice(previousText.length);
   }
@@ -381,9 +373,9 @@ function diffVisibleContentDelta(
     return nextText.slice(commonPrefixLength);
   }
 
-  // Last resort for MiniMax: never re-append a full re-snapshot of long text.
+  // Last resort: never re-append a full re-snapshot of long text.
   // Prefer silence over doubling the visible answer in the stream.
-  if (isMiniMaxModel(model) && nextText.length >= Math.max(32, previousText.length * 0.5)) {
+  if (nextText.length >= Math.max(32, previousText.length * 0.5)) {
     return "";
   }
 
@@ -448,7 +440,7 @@ function itemToOpenAIMessage(item: ItemParam): OpenAIMessage | null {
             role: "assistant",
             content: content || "",
           };
-          // DeepSeek: carry forward reasoning_content from previous response
+          // Carry forward provider-native reasoning from a previous response.
           if ((item as unknown as Record<string, unknown>).reasoning_content) {
             msg.reasoning_content = (item as unknown as Record<string, unknown>)
               .reasoning_content as string;
@@ -577,7 +569,7 @@ function convertItemsToMessages(items: ItemParam[]): OpenAIMessage[] {
         },
       };
 
-      // Extract reasoning_content from function_call item (DeepSeek thinking mode)
+      // Extract provider-native reasoning from a function-call item.
       const reasoningContent = (item as unknown as Record<string, unknown>)
         .reasoning_content as string | undefined;
 
@@ -592,7 +584,7 @@ function convertItemsToMessages(items: ItemParam[]): OpenAIMessage[] {
           lastMsg.reasoning_content = reasoningContent;
         }
       } else {
-        // Qwen requires content to be present (not omitted, not null)
+        // Keep content present for compatible endpoints that reject omission/null.
         const msg: OpenAIMessage = {
           role: "assistant",
           content: "",
@@ -612,12 +604,12 @@ function convertItemsToMessages(items: ItemParam[]): OpenAIMessage[] {
   return messages;
 }
 
-function applyMiniMaxMessageCompatibility(messages: OpenAIMessage[]): void {
+function applyReasoningDetailsCompatibility(messages: OpenAIMessage[]): void {
   for (const message of messages) {
     if (message.role !== "assistant" || !message.reasoning_content) {
       continue;
     }
-    message.reasoning_details = buildMiniMaxReasoningDetails(
+    message.reasoning_details = buildReasoningDetails(
       message.reasoning_content,
     );
     delete message.reasoning_content;
@@ -1002,11 +994,10 @@ function parseOpenAIChunk(
         const nextRawText = mergeProviderContentDelta(
           previousRawText,
           choice.delta.content,
-          chunk.model,
         );
         accumulator.rawTextContent.set(index, nextRawText);
 
-        const parsed = getVisibleAndReasoningContent(nextRawText, chunk.model);
+        const parsed = getVisibleAndReasoningContent(nextRawText);
         const previousTaggedReasoning =
           accumulator.taggedReasoningContent.get(index) ?? "";
         if (parsed.reasoningContent) {
@@ -1015,9 +1006,9 @@ function parseOpenAIChunk(
 
         const previousText = accumulator.textContent.get(index) ?? "";
         const nextText = parsed.visibleText;
-        const delta = diffVisibleContentDelta(previousText, nextText, chunk.model);
+        const delta = diffVisibleContentDelta(previousText, nextText);
         // Track the text already shown to the UI so subsequent diffs stay append-only.
-        // MiniMax may send a shorter corrected snapshot; never shrink the streamed view.
+        // A provider may send a shorter corrected snapshot; never shrink the streamed view.
         if (delta) {
           accumulator.textContent.set(index, previousText + delta);
         } else if (nextText.startsWith(previousText) && nextText.length > previousText.length) {
@@ -1071,7 +1062,7 @@ function parseOpenAIChunk(
         }
       }
 
-      // Capture reasoning_content (DeepSeek thinking mode)
+      // Capture provider-native reasoning content.
       if (choice.delta?.reasoning_content) {
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
         const nextReasoning = previousReasoning + choice.delta.reasoning_content;
@@ -1091,13 +1082,7 @@ function parseOpenAIChunk(
       );
       if (reasoningDetailsText) {
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
-        const nextReasoning = isMiniMaxModel(chunk.model)
-          ? mergeProviderContentDelta(
-              previousReasoning,
-              reasoningDetailsText,
-              chunk.model,
-            )
-          : previousReasoning + reasoningDetailsText;
+        const nextReasoning = mergeProviderContentDelta(previousReasoning, reasoningDetailsText);
         accumulator.reasoningContent.set(index, nextReasoning);
         events.push(
           ...buildReasoningDeltaEvents(
@@ -1410,8 +1395,6 @@ export class OpenAIAdapter implements ProviderAdapter {
         ? { stream_options: { include_usage: true } }
         : {}),
     };
-    const requestModel = String(request.model);
-
     // Tools
     const tools = convertTools(adjustedParams);
     if (tools) {
@@ -1447,10 +1430,16 @@ export class OpenAIAdapter implements ProviderAdapter {
       request.max_completion_tokens = adjustedParams.max_completion_tokens;
     }
 
-    if (isMiniMaxM3Model(requestModel)) {
+    if (hasCompatibility(config, "adaptive_thinking")) {
       request.thinking = { type: "adaptive" };
+    }
+    if (hasCompatibility(config, "reasoning_split")) {
       request.reasoning_split = true;
-      applyMiniMaxMessageCompatibility(messages);
+    }
+    if (hasCompatibility(config, "reasoning_details_input")) {
+      applyReasoningDetailsCompatibility(messages);
+    }
+    if (hasCompatibility(config, "prefer_max_completion_tokens")) {
       if (request.max_tokens && !request.max_completion_tokens) {
         request.max_completion_tokens = request.max_tokens;
         delete request.max_tokens;
@@ -1514,10 +1503,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       const choice = response.choices[0];
       const rawContent =
         typeof choice.message.content === "string" ? choice.message.content : "";
-      const parsedContent = getVisibleAndReasoningContent(
-        rawContent,
-        response.model ?? config.model,
-      );
+      const parsedContent = getVisibleAndReasoningContent(rawContent);
       const reasoningContent = combineReasoningContent(
         extractMessageReasoning(choice.message),
         parsedContent.reasoningContent,

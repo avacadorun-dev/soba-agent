@@ -14,9 +14,14 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { verifyEvidenceProof } from "../src/application/commands/verify";
 import { AgentLoop, createUserItem } from "../src/engine/turn/agent-loop";
 import type { AgentEvent } from "../src/engine/turn/types";
 import type { OpenResponsesClient } from "../src/infrastructure/llm/openresponses/openresponses-client";
+import { FilesystemEvidenceProofStorage } from "../src/infrastructure/persistence/evidence/proof-storage";
 import { SessionManager } from "../src/infrastructure/persistence/sessions/session-manager";
 import type {
   CreateResponseParams,
@@ -1502,7 +1507,12 @@ describe("AgentLoop", () => {
     const proofSink = {
       saveEvidenceBundle: mock(async (bundle: unknown) => {
         savedBundles.push(bundle);
-        return { path: "/test/.soba/evidence/proof.soba-proof.json" };
+        return {
+          path: "/test/.soba/evidence/proof.soba-proof.json",
+          proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
+          runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
+          digest: `sha256:${"c".repeat(64)}`,
+        };
       }),
     };
     const loop = new AgentLoop(
@@ -1549,7 +1559,109 @@ describe("AgentLoop", () => {
       .find((record) => record.data.kind === "evidence_bundle");
     expect(evidenceRecord?.data.payload).toMatchObject({
       proofPath: "/test/.soba/evidence/proof.soba-proof.json",
+      proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
+      runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
+      digest: `sha256:${"c".repeat(64)}`,
     });
+  });
+
+  test("persists an accepted finish as a sealed proof that the policy validator accepts", async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "soba-agent-proof-e2e-"));
+    const client = makeClient([
+      makeToolCallResponse("event-tool", '{"input":"x"}'),
+      makeToolCallResponse("finish", JSON.stringify({
+        summary: "Inspected the requested state.",
+        status: "completed",
+        criteria: [{
+          criterion: "Requested state was inspected",
+          evidenceIds: ["ev_inspect_call_1"],
+        }],
+        acknowledged_error_ids: [],
+      })),
+    ]);
+    const session = SessionManager.inMemory(projectRoot);
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("event-tool"));
+    const storage = new FilesystemEvidenceProofStorage({ projectRoot });
+    const loop = new AgentLoop(
+      client,
+      session,
+      tools,
+      projectRoot,
+      { emitEvents: false },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      storage,
+    );
+
+    await loop.runTurn("Inspect state");
+
+    const persisted = storage.readLatestEvidenceBundle();
+    expect(persisted).not.toBeNull();
+    const verification = verifyEvidenceProof(persisted!);
+    expect(verification.valid).toBe(true);
+    expect(verification.accepted).toBe(true);
+    expect(verification.outcome).toBe("verified");
+    expect(verification.exitCode).toBe(0);
+  });
+
+  test("links evidence-free finish criteria to recorded mutation and verification evidence", async () => {
+    const client = makeClient([
+      makeToolCallResponse("edit", '{"path":"src/app.ts","oldText":"a","newText":"b"}', "edit_1"),
+      makeToolCallResponse("bash", '{"input":"bun test"}', "bash_1"),
+      makeToolCallResponse("finish", JSON.stringify({
+        summary: "Changed and tested the file.",
+        status: "completed",
+        criteria: [{ criterion: "The requested change passes tests" }],
+        acknowledged_error_ids: [],
+      }), "finish_1"),
+    ]);
+    const tools = new ToolRegistry();
+    tools.register(makeDummyTool("edit"));
+    tools.register(makeDummyTool("bash"));
+    const savedBundles: Array<Record<string, unknown>> = [];
+    const loop = new AgentLoop(
+      client,
+      SessionManager.inMemory("/test"),
+      tools,
+      "/test",
+      { emitEvents: false },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        saveEvidenceBundle: async (bundle) => {
+          savedBundles.push(bundle as unknown as Record<string, unknown>);
+          return { path: "/test/proof.json" };
+        },
+      },
+    );
+
+    await loop.runTurn("Change and test src/app.ts");
+
+    expect(savedBundles).toHaveLength(1);
+    expect(savedBundles[0]?.status).toBe("verified");
+    expect(savedBundles[0]?.claims).toEqual([
+      {
+        id: "claim_1",
+        claim: "The requested change passes tests",
+        status: "supported",
+        evidenceIds: ["ev_mutation_edit_1", "ev_verification_bash_1"],
+      },
+    ]);
   });
 
   test("не эмитит события при emitEvents: false", async () => {
@@ -1963,7 +2075,7 @@ describe("AgentLoop", () => {
     ).toHaveLength(3);
   });
 
-  test("legacy finish без criteria после успешных gates завершается без loop-guard ошибки", async () => {
+  test("legacy finish без criteria связывается с recorded verification evidence", async () => {
     const responses = [
       makeToolCallResponse("bash", '{"input":"test"}', "verify_1"),
       makeLegacyFinishResponseWithoutCriteria(
@@ -2004,6 +2116,7 @@ describe("AgentLoop", () => {
       expect(text).toContain("Verification passed");
       expect(text).toContain("**Evidence**");
       expect(text).toContain("Status: verified");
+      expect(text).toContain("supported (ev_verification_verify_1)");
     }
   });
 

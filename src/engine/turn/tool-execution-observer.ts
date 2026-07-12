@@ -1,6 +1,7 @@
 import type { FunctionCallField, ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointEvent, extractCheckpointEvent } from "../../kernel/tools/checkpoint";
+import { hasToolEffect } from "../../kernel/tools/semantics";
 import { toolResultToOutputItem } from "../../kernel/tools/types";
 import { recordToolOutcome } from "../completion/completion-gate";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
@@ -12,7 +13,6 @@ import {
   type RecoveryReflectionDraft,
   writeRecoveryReflectionLesson,
 } from "../memory/reflection-memory-policy";
-import { isMutationToolName } from "../tool-calls/tool-batch-guard";
 import type { ToolExecutionResult } from "../tool-calls/tool-call-executor";
 import type { VerificationController } from "../verification/verification-controller";
 import type { ToolOutcome } from "./loop-guard";
@@ -91,6 +91,7 @@ export function observeToolExecutionResult(
       durationMs: execution.durationMs,
       cwd: execution.cwd,
       details: result.details,
+      semantics: execution.semantics,
     });
     appendToolOutput(input);
     return { outcome: toolOutcome(toolCall, result) };
@@ -114,6 +115,7 @@ export function observeToolExecutionResult(
     durationMs: execution.durationMs,
     cwd: execution.cwd,
     details: result.details,
+    semantics: execution.semantics,
   });
 
   const checkpointEvent = observeCheckpoint(input);
@@ -182,11 +184,11 @@ function observeMutationAndVerificationEvidence(
   const { parsedArgs, result } = execution;
   const producedVerificationEvidence = !result.isError &&
     !state.mutationSucceededInCurrentBatch &&
-    (toolCall.name === "read" ||
+    (hasToolEffect(execution.semantics, "inspect") ||
       (toolCall.name === "bash" &&
         isVerificationCommand(extractCommandArgument(parsedArgs))));
 
-  if (!result.isError && isMutationToolName(toolCall.name)) {
+  if (!result.isError && hasToolEffect(execution.semantics, "mutation")) {
     state.hasMutatedFiles = true;
     state.needsVerification = true;
     state.mutationSucceededInCurrentBatch = true;

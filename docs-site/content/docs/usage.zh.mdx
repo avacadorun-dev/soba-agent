@@ -317,4 +317,5 @@ soba --lang zh
 }
 ```
 
-翻译文件位于 `locales/`。如果要添加新语言，需要创建对应的 JSON 文件，并在 i18n 系统中注册它。
+翻译文件位于 `locales/`。添加语言时，创建对应 JSON 文件，并在 `src/shared/i18n/locale-catalog.ts` 中添加一个条目；
+locale 类型、验证、配置加载和命令用法都会从该 catalog 派生。

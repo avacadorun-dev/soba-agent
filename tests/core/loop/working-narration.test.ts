@@ -3,6 +3,7 @@ import { evaluateCompletion } from "../../../src/engine/completion/completion-ga
 import { AgentLoop } from "../../../src/engine/turn/agent-loop";
 import {
   createWorkingNarration,
+  isNonTrivialPrompt,
   sanitizeWorkingNarrationMessage,
 } from "../../../src/engine/turn/narration";
 import type { AgentEvent } from "../../../src/engine/turn/types";
@@ -54,6 +55,12 @@ function makeResponse(output: ResponseResource["output"], id: string): ResponseR
     prompt_cache_key: null,
   };
 }
+
+test("non-trivial prompt detection uses the extensible multilingual intent lexicon", () => {
+  expect(isNonTrivialPrompt("修复这个错误")).toBe(true);
+  expect(isNonTrivialPrompt("Repariere den Fehler", { bug_fix: ["repariere", "fehler"] })).toBe(true);
+  expect(isNonTrivialPrompt("ok")).toBe(false);
+});
 
 function makeToolCallResponse(name: string, args: Record<string, unknown>, callId: string): ResponseResource {
   return makeResponse(

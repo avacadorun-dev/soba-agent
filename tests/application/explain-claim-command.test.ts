@@ -13,6 +13,8 @@ describe("explain-claim command", () => {
     path: "/repo/.soba/evidence/proof.soba-proof.json",
     bundle: {
       version: 1,
+      proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
+      runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
       sessionId: "sess_1",
       turnId: "turn_1",
       status: "verified",
@@ -66,6 +68,8 @@ describe("explain-claim command", () => {
     expect(explainClaimCommandExitCode(view)).toBe(0);
     const rendered = renderExplainClaimCommandView(view);
     expect(rendered).toContain("SOBA Claim Explanation");
+    expect(rendered).toContain("Proof id: proof_aaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(rendered).toContain("Run id: run_bbbbbbbbbbbbbbbbbbbbbbbb");
     expect(rendered).toContain("Claim: Explain claim command is implemented");
     expect(rendered).toContain("ev_verification_1: verification success: Verification command passed: bun test");
     expect(rendered).toContain(`cmd_1: command passed: bun test exit=0 digest=${DIGEST}`);
@@ -85,6 +89,10 @@ describe("explain-claim command", () => {
     const rendered = JSON.parse(renderExplainClaimCommandView(view));
     expect(rendered).toMatchObject({
       proofPath: "proof.json",
+      proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
+      runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
+      sessionId: "sess_1",
+      turnId: "turn_1",
       id: "claim_1",
       status: "supported",
     });

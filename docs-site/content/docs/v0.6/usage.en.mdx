@@ -317,4 +317,5 @@ soba --lang en
 }
 ```
 
-Translations live in `locales/`. To add a new language, create the matching JSON file and register it in the i18n system.
+Translations live in `locales/`. To add a language, create its JSON file and add one entry to
+`src/shared/i18n/locale-catalog.ts`; locale types, validation, config loading, and command usage derive from that catalog.

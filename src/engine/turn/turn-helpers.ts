@@ -11,17 +11,18 @@ import type {
 } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointArgs, type CheckpointEvent } from "../../kernel/tools/checkpoint";
+import { resolveToolSemantics, type ToolSemantics } from "../../kernel/tools/semantics";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolResult } from "../../kernel/tools/types";
 import type { InputImageContent, InputTextContent, UserMessageItemParam } from "../../kernel/transcript/types";
 import { isRestrictedWorkMode, type WorkMode } from "../../kernel/work-mode/public";
 import type { AutoVerifierToolCall } from "../verification/auto-verifier";
+import { DEFAULT_FULL_VERIFICATION_PHRASES } from "../verification/task-intent-lexicon";
 import type { TaskKind } from "../verification/verification-policy";
+import { assistantTextMarkers, containsAssistantTextMarker } from "./assistant-text-lexicon";
 import type { AgentTurnError, CheckpointWorkPlanState } from "./types";
 
 export const FINISH_TOOL_NAME = "finish";
-
-const PARALLEL_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files"]);
 
 const FINISH_TOOL: FunctionToolParam = {
   type: "function",
@@ -207,15 +208,13 @@ export function isInvisibleAssistantMessage(message: MessageField): boolean {
   return !hasVisibleAssistantText([message]);
 }
 
-export function wantsFullVerification(text: string): boolean {
+export function wantsFullVerification(
+  text: string,
+  additionalPhrases: readonly string[] = [],
+): boolean {
   const normalized = text.toLowerCase();
-  return (
-    normalized.includes("full gate") ||
-    normalized.includes("full verification") ||
-    normalized.includes("release") ||
-    normalized.includes("перед коммит") ||
-    normalized.includes("полный gate") ||
-    normalized.includes("полную провер")
+  return [...DEFAULT_FULL_VERIFICATION_PHRASES, ...additionalPhrases].some((phrase) =>
+    normalized.includes(phrase.toLowerCase())
   );
 }
 
@@ -224,8 +223,11 @@ export function autoVerifierTimeoutSeconds(maxTimeoutSeconds: number): number {
   return Math.min(120, Math.floor(maxTimeoutSeconds));
 }
 
-export function canExecuteReadOnlyBatchInParallel(toolCalls: FunctionCallField[]): boolean {
-  return toolCalls.length > 1 && toolCalls.every((toolCall) => PARALLEL_READ_ONLY_TOOLS.has(toolCall.name));
+export function canExecuteReadOnlyBatchInParallel(
+  toolCalls: FunctionCallField[],
+  semanticsFor: (toolName: string) => ToolSemantics = (toolName) => resolveToolSemantics(toolName),
+): boolean {
+  return toolCalls.length > 1 && toolCalls.every((toolCall) => semanticsFor(toolCall.name).parallelSafe);
 }
 
 export function finishRequestToMessage(
@@ -343,19 +345,16 @@ function isTextOnlyFinalResponseCandidate(assistantMessages: MessageField[]): bo
 function looksLikeContinuation(text: string): boolean {
   const normalized = text.toLowerCase();
   if (/[：:]\s*$/.test(normalized)) return true;
-  return [
-    /\b(?:i\s+will|i'll|let\s+me|next\s+i|now\s+i|going\s+to|need\s+to|should\s+now|will\s+check|will\s+run|will\s+try|continue\s+with)\b/,
-    /\b(?:checking|running|trying|looking\s+at|investigating)\b/,
-    /\b(?:проверю|проверим|сейчас\s+провер|теперь\s+провер|запущу|попробую|посмотрю|разберу|продолжу|дальше|нужно|надо)\b/u,
-  ].some((pattern) => pattern.test(normalized));
+  return assistantTextMarkers("continuation").some((marker) =>
+    containsAssistantTextMarker(normalized, marker)
+  );
 }
 
 function looksLikeFinalText(text: string): boolean {
   const normalized = text.toLowerCase();
-  return [
-    /\b(?:done|completed|fixed|implemented|verified|works|working|checks?\s+pass|tests?\s+pass|all\s+set)\b/,
-    /\b(?:готово|готов|работает|выполнено|сделано|исправлено|добавлено|реализовано|проверено|проверка\s+завершена|тесты\s+проходят|проверки\s+прошли)\b/u,
-  ].some((pattern) => pattern.test(normalized));
+  return assistantTextMarkers("final").some((marker) =>
+    containsAssistantTextMarker(normalized, marker)
+  );
 }
 
 /**

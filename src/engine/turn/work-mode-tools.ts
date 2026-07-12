@@ -6,6 +6,7 @@ export function allowedToolNamesForRuntime(runtime: AgentLoopRuntimeServices): S
   return new Set(
     filterToolsForWorkMode(runtime.tools.getNames(), runtime.workModeController.getWorkMode(), {
       clarificationAvailable: runtime.clarificationAvailable(),
+      semanticsFor: (toolName) => runtime.tools.getSemantics(toolName),
     }),
   );
 }

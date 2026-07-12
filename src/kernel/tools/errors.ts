@@ -176,9 +176,15 @@ export function commandErrorInfo(options: {
 
 export function redactSecrets(text: string): string {
   return text
+    .replaceAll(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED PRIVATE KEY]")
     .replaceAll(/(authorization\s*:\s*bearer\s+)[^\s"'`]+/gi, "$1[REDACTED]")
     .replaceAll(/((?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)\s*[:=]\s*["']?)[^\s"'`]+/gi, "$1[REDACTED]")
-    .replaceAll(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]");
+    .replaceAll(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
+    .replaceAll(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, "[REDACTED]")
+    .replaceAll(/\bAKIA[A-Z0-9]{16}\b/g, "[REDACTED]")
+    .replaceAll(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, "[REDACTED]")
+    .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED]")
+    .replaceAll(/([a-z][a-z0-9+.-]*:\/\/)[^\s/:@]+:[^\s/@]+@/gi, "$1[REDACTED]@");
 }
 
 function readNodeErrorCode(error: unknown): string | undefined {

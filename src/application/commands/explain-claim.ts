@@ -19,6 +19,10 @@ export interface ExplainedClaimEvidence {
 
 export interface ExplainedClaim {
   proofPath: string;
+  proofId: string;
+  runId: string;
+  sessionId: string;
+  turnId: string;
   proofStatus: string;
   id: string;
   claim: string;
@@ -221,6 +225,10 @@ function explainClaim(proof: EvidenceProofDocument, claim: Record<string, unknow
   const index = buildEvidenceIndex(bundle);
   return {
     proofPath: proof.path,
+    proofId: stringField(bundle.proofId, "legacy-unsealed"),
+    runId: stringField(bundle.runId, "legacy-unsealed"),
+    sessionId: stringField(bundle.sessionId, "unknown"),
+    turnId: stringField(bundle.turnId, "unknown"),
     proofStatus: stringField(bundle.status, "unknown"),
     id: stringField(claim.id, "unknown"),
     claim: stringField(claim.claim, "unnamed claim"),
@@ -298,6 +306,10 @@ function renderExplanationText(explanation: ExplainedClaim): string {
   return [
     "SOBA Claim Explanation",
     `Proof: ${explanation.proofPath}`,
+    `Proof id: ${explanation.proofId}`,
+    `Run id: ${explanation.runId}`,
+    `Session: ${explanation.sessionId}`,
+    `Turn: ${explanation.turnId}`,
     `Proof status: ${explanation.proofStatus}`,
     `Claim: ${explanation.claim}`,
     `Claim id: ${explanation.id}`,
@@ -312,6 +324,10 @@ function renderExplanationMarkdown(explanation: ExplainedClaim): string {
     "# SOBA Claim Explanation",
     "",
     `- Proof: \`${explanation.proofPath}\``,
+    `- Proof id: \`${explanation.proofId}\``,
+    `- Run id: \`${explanation.runId}\``,
+    `- Session: \`${explanation.sessionId}\``,
+    `- Turn: \`${explanation.turnId}\``,
     `- Proof status: \`${explanation.proofStatus}\``,
     `- Claim: ${explanation.claim}`,
     `- Claim id: \`${explanation.id}\``,

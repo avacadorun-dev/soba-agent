@@ -436,7 +436,7 @@ describe("SessionManager", () => {
       turn: 1,
       iteration: 2,
       reason: "completed",
-      detail: "diagnostic",
+      detail: "diagnostic api_key=sk-abcdefghijklmnop",
     });
 
     expect(sm.getEntries()).toHaveLength(1);
@@ -445,7 +445,7 @@ describe("SessionManager", () => {
     const reopened = SessionManager.open(sm.getSessionFile()!);
     expect(reopened.getEntries()).toHaveLength(1);
     expect(reopened.getLeafId()).toBe(itemId);
-    expect(reopened.getDebugEntries()[0]?.data.detail).toBe("diagnostic");
+    expect(reopened.getDebugEntries()[0]?.data.detail).toBe("diagnostic api_key=[REDACTED]");
 
     rmSync(tmpDir, { recursive: true });
   });

@@ -15,6 +15,7 @@ export interface EvaluatorOptions {
   storage: SkillEvaluationStorage;
   validateSkill: SkillEvaluationValidator;
   evaluatorModel?: string;
+  availableTools?: readonly string[];
 }
 
 export interface EvalRunConfig {
@@ -121,11 +122,13 @@ export class SkillEvaluator {
   private readonly storage: SkillEvaluationStorage;
   private readonly validateSkill: SkillEvaluationValidator;
   private readonly evaluatorModel: string;
+  private readonly availableTools: readonly string[] | undefined;
 
   constructor(options: EvaluatorOptions) {
     this.storage = options.storage;
     this.validateSkill = options.validateSkill;
-    this.evaluatorModel = options.evaluatorModel || "gpt-4";
+    this.evaluatorModel = options.evaluatorModel ?? "deterministic-rules";
+    this.availableTools = options.availableTools ? [...new Set(options.availableTools)] : undefined;
   }
 
   /**
@@ -142,7 +145,7 @@ export class SkillEvaluator {
       throw new Error(`No eval cases found for skill '${draft.name}'`);
     }
 
-    const config = this.createConfig();
+    const config = this.createConfig(draft);
     const configHash = this.computeConfigHash(config);
     const runId = `eval_${revisionId}_${Date.now().toString(36)}`;
 
@@ -376,9 +379,8 @@ export class SkillEvaluator {
     const content = this.storage.readSkillMarkdown(draft.skillPath);
     if (content.length > 0) {
 
-      // Detect tool mentions in skill
-      const toolPatterns = ["bash", "read", "write", "edit"];
-      for (const tool of toolPatterns) {
+      // Detect mentions only for tools declared by the active runtime or eval cases.
+      for (const tool of _config.tools) {
         if (content.toLowerCase().includes(tool)) {
           toolCalls.push(tool);
         }
@@ -609,12 +611,15 @@ export class SkillEvaluator {
   /**
    * Create eval run config.
    */
-  private createConfig(): EvalRunConfig {
+  private createConfig(draft: DraftSkill): EvalRunConfig {
+    const tools = this.availableTools ?? [
+      ...new Set((draft.evalCases ?? []).flatMap((evalCase) => evalCase.expectedTools ?? [])),
+    ];
     return {
       model: this.evaluatorModel,
       temperature: 0.0,
       maxTokens: 4096,
-      tools: ["bash", "read", "write", "edit"],
+      tools: [...tools],
     };
   }
 
@@ -709,7 +714,7 @@ function tokenize(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
-      .split(/[^a-z0-9а-яё]+/i)
+      .split(/[^\p{L}\p{N}]+/u)
       .map((token) => token.trim())
       .filter((token) => token.length >= 4),
   );

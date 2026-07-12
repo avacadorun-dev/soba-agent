@@ -26,11 +26,17 @@ export interface KnowledgeStoreOptions {
   memoryDir?: string;
 }
 
-export type CapsuleType = "decision" | "error_fix" | "discovery" | "pattern" | "blocker" | "insight";
+export const CAPSULE_TYPES = ["decision", "error_fix", "discovery", "pattern", "blocker", "insight"] as const;
 
-export type CapsulePriority = "critical" | "high" | "medium" | "low";
+export type CapsuleType = (typeof CAPSULE_TYPES)[number];
 
-export type MemorySourceConfidence = "high" | "medium" | "low";
+export const CAPSULE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
+
+export type CapsulePriority = (typeof CAPSULE_PRIORITIES)[number];
+
+export const MEMORY_SOURCE_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
+
+export type MemorySourceConfidence = (typeof MEMORY_SOURCE_CONFIDENCE_VALUES)[number];
 
 export interface MemoryCapsuleSource {
   error?: string;

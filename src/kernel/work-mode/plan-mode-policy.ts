@@ -1,21 +1,18 @@
+import { BUILTIN_TOOL_SEMANTICS, resolveToolSemantics, type ToolSemantics } from "../tools/semantics";
 import { isRestrictedWorkMode, type WorkMode } from "./types";
 
-/** Built-in tools that are always available in restricted work modes. */
-export const PLAN_MODE_SAFE_TOOLS = new Set([
-  "read",
-  "ls",
-  "search_files",
-  "inspect_file",
-  "read_project_memory",
-  "checkpoint",
-  "ask_user",
-  "finish",
-]);
+/** Compatibility views derived from the canonical semantics catalogue. */
+export const PLAN_MODE_SAFE_TOOLS = new Set(
+  Object.entries(BUILTIN_TOOL_SEMANTICS)
+    .filter(([, semantics]) => semantics.restrictedMode === "allow")
+    .map(([name]) => name),
+);
 
-/** Built-in tools that must never run in plan mode. */
-export const PLAN_MODE_BLOCKED_TOOLS = new Set(["write", "edit", "write_project_memory"]);
-
-const PLAN_MODE_MUTATING_MCP_NAME = /(?:^|[_-])(write|edit|delete|remove|rm|create|update|patch|put|post|upload|apply|mutate|install|deploy|exec|execute|run_terminal|run_command|shell)(?:$|[_-])/i;
+export const PLAN_MODE_BLOCKED_TOOLS = new Set(
+  Object.entries(BUILTIN_TOOL_SEMANTICS)
+    .filter(([, semantics]) => semantics.restrictedMode === "deny")
+    .map(([name]) => name),
+);
 
 export interface PlanModeToolDecision {
   allowed: boolean;
@@ -30,39 +27,41 @@ export interface PlanModeCommandDecision {
 export function filterToolsForWorkMode(
   toolNames: readonly string[],
   mode: WorkMode,
-  options: { clarificationAvailable?: boolean } = {},
+  options: {
+    clarificationAvailable?: boolean;
+    semanticsFor?: (toolName: string) => ToolSemantics;
+  } = {},
 ): string[] {
   if (!isRestrictedWorkMode(mode)) return [...toolNames];
   return toolNames.filter((name) => {
     if (name === "ask_user" && !options.clarificationAvailable) return false;
-    return isToolAllowedInPlanMode(name).allowed;
+    return isToolAllowedInPlanMode(name, options.semanticsFor?.(name)).allowed;
   });
 }
 
-export function isToolAllowedInPlanMode(toolName: string): PlanModeToolDecision {
+export function isToolAllowedInPlanMode(
+  toolName: string,
+  declaredSemantics?: ToolSemantics,
+): PlanModeToolDecision {
+  const semantics = resolveToolSemantics(toolName, declaredSemantics);
   if (toolName === "finish") {
     return { allowed: true, reason: "Control tool finish is always available." };
   }
-  if (PLAN_MODE_BLOCKED_TOOLS.has(toolName)) {
+  if (semantics.restrictedMode === "deny") {
+    const mutationLabel = semantics.effects.some((effect) => effect === "mutation" || effect === "state_mutation")
+      ? "mutation "
+      : "";
     return {
       allowed: false,
-      reason: `Plan mode blocks mutation tool "${toolName}". Switch to agent mode (/plan off) to implement changes.`,
+      reason: `Plan mode blocks ${mutationLabel}tool "${toolName}" because its declared effects are not restricted-mode safe. Switch to agent mode (/plan off) to use it.`,
     };
   }
-  if (PLAN_MODE_SAFE_TOOLS.has(toolName)) {
+  if (semantics.restrictedMode === "allow") {
     return { allowed: true, reason: `Tool "${toolName}" is plan-safe.` };
   }
-  // MCP / custom tools: allow only when the name does not look mutating.
-  if (PLAN_MODE_MUTATING_MCP_NAME.test(toolName)) {
-    return {
-      allowed: false,
-      reason: `Plan mode blocks likely-mutating tool "${toolName}".`,
-    };
-  }
-  // Unknown custom tools default to deny for safety.
   return {
     allowed: false,
-    reason: `Plan mode blocks unregistered/custom tool "${toolName}" by default.`,
+    reason: `Plan mode blocks tool "${toolName}" without safe declared semantics.`,
   };
 }
 

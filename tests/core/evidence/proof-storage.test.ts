@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { proofDigest } from "../../../src/application/evidence/public";
 import { FilesystemEvidenceProofStorage } from "../../../src/infrastructure/persistence/evidence/proof-storage";
 
 describe("FilesystemEvidenceProofStorage", () => {
@@ -26,10 +27,67 @@ describe("FilesystemEvidenceProofStorage", () => {
     const receipt = storage.saveEvidenceBundle(bundle);
 
     expect(receipt.path).toContain(join(projectRoot, ".soba", "evidence"));
+    expect(receipt.proofId).toBe(persistedProofId(receipt.path));
     expect(receipt.path.endsWith(".soba-proof.json")).toBe(true);
     expect(receipt.path).not.toContain(":");
     const persisted = JSON.parse(readFileSync(receipt.path, "utf-8"));
-    expect(persisted).toEqual(bundle);
+    expect(persisted).toMatchObject(bundle);
+    expect(persisted.runId).toMatch(/^run_[a-f0-9]{24}$/);
+    expect(persisted.proofId).toMatch(/^proof_[a-f0-9]{24}$/);
+    expect(persisted.integrity).toEqual({ algorithm: "sha256", digest: proofDigest(persisted) });
+    expect(statSync(receipt.path).mode & 0o777).toBe(0o600);
+  });
+
+  test("redacts secrets before persistence and integrity hashing", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "soba-proof-redaction-"));
+    const storage = new FilesystemEvidenceProofStorage({ projectRoot });
+
+    const receipt = storage.saveEvidenceBundle({
+      version: 1,
+      sessionId: "sess_secret",
+      turnId: "turn_1",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      prompt: "Use api_key=sk-abcdefghijklmnop",
+      env: { SOBA_API_KEY: "sk-abcdefghijklmnop", PATH: "/usr/bin" },
+      output: "authorization: Bearer sk-abcdefghijklmnop",
+      extensions: {
+        github: "ghp_abcdefghijklmnopqrstuvwxyz123456",
+        aws: "AKIAABCDEFGHIJKLMNOP",
+        slack: "xoxb-1234567890-abcdefghijkl",
+        jwt: "eyJheader.payload.signature",
+        database: "postgres://admin:hunter2@localhost/db",
+        pem: "-----BEGIN PRIVATE KEY-----\nsecret material\n-----END PRIVATE KEY-----",
+      },
+    });
+
+    const raw = readFileSync(receipt.path, "utf-8");
+    const persisted = JSON.parse(raw);
+    expect(raw).not.toContain("sk-abcdefghijklmnop");
+    expect(raw).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz123456");
+    expect(raw).not.toContain("AKIAABCDEFGHIJKLMNOP");
+    expect(raw).not.toContain("hunter2");
+    expect(raw).not.toContain("secret material");
+    expect(persisted.prompt).toBe("Use api_key=[REDACTED]");
+    expect(persisted.env).toEqual({ SOBA_API_KEY: "[REDACTED]", PATH: "/usr/bin" });
+    expect(persisted.integrity.digest).toBe(proofDigest(persisted));
+  });
+
+  test("restores owner-only permissions when overwriting an existing receipt", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "soba-proof-mode-"));
+    const storage = new FilesystemEvidenceProofStorage({ projectRoot });
+    const bundle = {
+      version: 1,
+      sessionId: "sess_mode",
+      turnId: "turn_1",
+      createdAt: "2026-07-12T00:00:00.000Z",
+    };
+
+    const first = storage.saveEvidenceBundle(bundle);
+    chmodSync(first.path, 0o644);
+    const overwritten = storage.saveEvidenceBundle(bundle);
+
+    expect(overwritten.path).toBe(first.path);
+    expect(statSync(overwritten.path).mode & 0o777).toBe(0o600);
   });
 
   test("reads the latest proof by filesystem mtime", () => {
@@ -55,3 +113,7 @@ describe("FilesystemEvidenceProofStorage", () => {
     expect(latest?.bundle.sessionId).toBe("latest");
   });
 });
+
+function persistedProofId(path: string): string {
+  return JSON.parse(readFileSync(path, "utf-8")).proofId as string;
+}

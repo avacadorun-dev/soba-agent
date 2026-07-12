@@ -61,6 +61,10 @@ describe("Evidence Bundle builder", () => {
         mutationIds: ["ev_mutation_edit_1"],
       },
     ]);
+    expect(bundle.diff).toMatchObject({
+      fileCount: 1,
+      files: [{ path: "src/app.ts", mutationIds: ["ev_mutation_edit_1"] }],
+    });
     expect(bundle.commands).toMatchObject([
       {
         command: "bun test",
@@ -127,6 +131,21 @@ describe("Evidence Bundle builder", () => {
     });
 
     expect(bundle.claims.map((claim) => claim.status)).toEqual(["supported", "unsupported", "unverified"]);
+  });
+
+  test("does not mark a bundle verified when its only completion claim has no evidence", () => {
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_unverified_claim",
+      completionStatus: "completed",
+      summary: "Claimed completion without a reference.",
+      criteria: [{ criterion: "Requested work is verified" }],
+      ledger: summary([]),
+      now: () => NOW,
+    });
+
+    expect(bundle.claims).toMatchObject([{ status: "unverified", evidenceIds: [] }]);
+    expect(bundle.status).toBe("unverified");
   });
 
   test("marks code mutations without verification as unverified", () => {
@@ -381,6 +400,53 @@ describe("Evidence Bundle builder", () => {
     expect(bundle.risks).toEqual([]);
   });
 
+  test("does not turn diagnostic and recovery metadata into duplicate command runs", () => {
+    const failed = verificationEntry({
+      id: "ev_verification_bash_1",
+      status: "failure",
+      toolCallId: "bash_1",
+      command: "bun test",
+      verificationKind: "test",
+      exitCode: 1,
+      outputDigest: `sha256:${"a".repeat(64)}`,
+    });
+    const entries: EvidenceEntry[] = [
+      failed,
+      {
+        ...failed,
+        id: "ev_diagnostic_bash_1",
+        kind: "diagnostic",
+        status: "resolved",
+        summary: "bash failed then was resolved",
+      },
+      {
+        id: "ev_recovery_attempt_1",
+        kind: "recovery_attempt",
+        status: "success",
+        timestamp: 3,
+        command: "bun test",
+        summary: "Fix-Until-Green recovering",
+      },
+    ];
+
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_command_dedup",
+      completionStatus: "completed_with_unverified_changes",
+      summary: "Recorded a failed verification attempt.",
+      ledger: summary(entries, { unresolvedVerificationFailureIds: ["ev_verification_bash_1"] }),
+      now: () => NOW,
+    });
+
+    expect(bundle.commands).toHaveLength(1);
+    expect(bundle.commands[0]).toMatchObject({
+      id: "cmd_bash_1",
+      status: "failed",
+      exitCode: 1,
+      outputDigest: `sha256:${"a".repeat(64)}`,
+    });
+  });
+
   test("represents skipped verification as a skipped check", () => {
     const entries: EvidenceEntry[] = [
       mutationEntry({
@@ -563,7 +629,7 @@ describe("Evidence Bundle builder", () => {
     });
 
     expect(formatEvidenceBundleForHandoff(bundle)).toBe(
-      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Checks: Tests passed (bun test)\n- Permissions: bash: bun test auto trust=safe\n- Risks: none",
+      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Permissions: bash: bun test auto trust=safe\n- Risks: none",
     );
   });
 

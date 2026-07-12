@@ -29,7 +29,7 @@ import {
 } from "../../engine/compaction/trigger-policy";
 import { discoverModels, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
-import type { I18n } from "../../shared/i18n/i18n";
+import { type I18n, isLocale } from "../../shared/i18n/i18n";
 
 /** Path to the config file: ~/.soba/config.json */
 export function getConfigPath(): string {
@@ -211,8 +211,7 @@ async function readConfigFile(
       config.bashMaxTimeoutSeconds = parsed.bashMaxTimeoutSeconds;
     if (typeof parsed.sessionDir === "string")
       config.sessionDir = parsed.sessionDir;
-    if (parsed.lang === "en" || parsed.lang === "ru" || parsed.lang === "zh")
-      config.lang = parsed.lang;
+    if (typeof parsed.lang === "string" && isLocale(parsed.lang)) config.lang = parsed.lang;
     if (isTuiThemeName(parsed.theme)) config.theme = parsed.theme;
     config.compaction = parseCompactionConfig(parsed.compaction);
     // Sound notifications block
@@ -351,11 +350,7 @@ export function loadConfigFromEnv(): Partial<SobaConfig> {
       10,
     );
   }
-  if (
-    process.env.SOBA_LANG === "en" ||
-    process.env.SOBA_LANG === "ru" ||
-    process.env.SOBA_LANG === "zh"
-  ) {
+  if (process.env.SOBA_LANG && isLocale(process.env.SOBA_LANG)) {
     overrides.lang = process.env.SOBA_LANG;
   }
   if (isTuiThemeName(process.env.SOBA_THEME))

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ToolSemantics } from "../../kernel/tools/semantics";
 import type { JsonSchema, JsonSchemaProperty, ToolDefinition, ToolResult } from "../../kernel/tools/types";
 import type { McpClient, McpTool, McpToolCallResult } from "./client";
 import { createDefaultMcpServerSecurity, type McpServerSecurity, redactMcpSensitiveText } from "./security";
@@ -133,6 +134,7 @@ function createToolDefinition(
     description: entry.tool.description ?? `MCP tool ${entry.tool.name} from server ${entry.serverId}.`,
     parameters: mapMcpInputSchema(entry.tool.inputSchema),
     toolType: "function",
+    semantics: inferMcpToolSemantics(entry.tool.annotations),
     async execute(args, _context, signal): Promise<ToolResult> {
       try {
         const client = await source.getClient(entry.serverId);
@@ -142,6 +144,28 @@ function createToolDefinition(
         return normalizeMcpToolError(error, entry.serverId, entry.tool.name, mapping.proxyName, entry.security);
       }
     },
+  };
+}
+
+export function inferMcpToolSemantics(annotations: unknown): ToolSemantics {
+  if (isRecord(annotations) && annotations.readOnlyHint === true) {
+    return {
+      effects: ["inspect"],
+      parallelSafe: true,
+      restrictedMode: "allow",
+    };
+  }
+  if (isRecord(annotations) && annotations.destructiveHint === true) {
+    return {
+      effects: ["mutation"],
+      parallelSafe: false,
+      restrictedMode: "deny",
+    };
+  }
+  return {
+    effects: ["execute"],
+    parallelSafe: false,
+    restrictedMode: "deny",
   };
 }
 

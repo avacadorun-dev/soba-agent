@@ -151,6 +151,9 @@ function renderProofText(proof: EvidenceProofDocument): string {
   return [
     "SOBA Proof",
     `Path: ${proof.path}`,
+    `Proof ID: ${stringField(bundle, "proofId", "legacy-unsealed")}`,
+    `Run ID: ${stringField(bundle, "runId", "legacy-unsealed")}`,
+    `Digest: ${integrityDigest(bundle)}`,
     `Status: ${stringField(bundle, "status", "unknown")}`,
     `Summary: ${stringField(bundle, "summary", "none")}`,
     `Session: ${stringField(bundle, "sessionId", "unknown")}`,
@@ -171,6 +174,9 @@ function renderProofMarkdown(proof: EvidenceProofDocument): string {
     "# SOBA Proof",
     "",
     `- Path: \`${proof.path}\``,
+    `- Proof ID: \`${stringField(bundle, "proofId", "legacy-unsealed")}\``,
+    `- Run ID: \`${stringField(bundle, "runId", "legacy-unsealed")}\``,
+    `- Digest: \`${integrityDigest(bundle)}\``,
     `- Status: \`${stringField(bundle, "status", "unknown")}\``,
     `- Summary: ${stringField(bundle, "summary", "none")}`,
     `- Session: \`${stringField(bundle, "sessionId", "unknown")}\``,
@@ -196,6 +202,10 @@ function renderProofMarkdown(proof: EvidenceProofDocument): string {
     markdownList(bundle.risks, formatRisk),
     "",
   ].join("\n");
+}
+
+function integrityDigest(bundle: Record<string, unknown>): string {
+  return isRecord(bundle.integrity) ? stringField(bundle.integrity, "digest", "legacy-unsealed") : "legacy-unsealed";
 }
 
 function stringField(record: Record<string, unknown>, key: string, fallback: string): string {

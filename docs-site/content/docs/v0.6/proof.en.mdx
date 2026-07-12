@@ -37,10 +37,26 @@ A proof receipt can include:
 - finish claims mapped to evidence ids;
 - risks and unverified areas;
 - permission receipts for tool calls;
-- safer alternatives for risky commands when SOBA can infer them.
+- safer alternatives for risky commands when SOBA can infer them;
+- run metrics with model-call and input/output/total token counts;
+- a `runId` deterministically derived from `sessionId` + `turnId`, and a content-addressed `proofId`;
+- a SHA-256 digest for the complete redacted receipt.
 
 This makes the final answer auditable. A claim such as "tests passed" should point to the command that actually ran. A
 claim that has no evidence should stay visibly unverified.
+
+When the completion gate accepts criteria without explicit evidence IDs, SOBA links them only to evidence already
+recorded in that turn: successful mutation, verification, and inspection entries. It does not invent evidence. If no
+matching record exists, the claim remains unverified.
+
+Newly written Proof Bundle v1 receipts are sealed before persistence. SOBA recursively redacts recognizable credentials,
+canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. `soba prove` shows the proof ID, run ID, and
+digest. Re-sealing the same session/turn identity preserves its run ID, while another turn gets a different run ID.
+Editing any covered field after sealing makes `soba verify` fail with `proof_digest_mismatch`.
+
+Older pre-integrity v1 receipts remain readable, but verification reports `legacy_unsealed_proof`: the structure can be
+inspected, but the file is not tamper-evident and is not policy-accepted as verified. Its policy outcome is
+`partially_verified` with exit code 2.
 
 ---
 
@@ -62,6 +78,24 @@ soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>
 ```
 
 These commands read persisted proof data only. They do not start the agent runtime and do not require API credentials.
+
+### Verification outcomes and exit codes
+
+`soba verify` checks schema version, IDs and references, command exit codes and output digests, mutation/verification
+ordering, diff completeness, permission consistency, secret redaction, and whole-receipt integrity. A well-formed
+`unverified` or `blocked` receipt is readable but does not pass policy.
+Sealed receipts with changed files must include the matching diff summary. Completion criteria without evidence IDs
+remain `unverified`; they cannot make the bundle verified merely because the producer exited successfully.
+
+| Outcome | Stable reason | Exit code |
+|---|---|---:|
+| `verified` | `proof_verified` | 0 |
+| invalid receipt | first validation issue code | 1 |
+| `partially_verified` | `proof_partially_verified` | 2 |
+| `unverified` | `proof_unverified` | 3 |
+| `blocked` | `proof_blocked` | 4 |
+
+Use `--format json` in scripts. It includes `accepted`, `outcome`, `reason`, `exitCode`, counts, and validation issues.
 
 ---
 
@@ -100,6 +134,12 @@ Instead of approving rm -rf dist && bun run build:
 ```
 
 This keeps local-first delegation bounded: the agent can work quickly, but risky scope stays visible.
+
+## Security limits
+
+Proof sealing reduces accidental credential persistence and detects later file edits. It does not prove that a command
+was executed on a trusted machine, and redaction is not a universal secret scanner. Avoid putting credentials in prompts
+or command arguments, keep `.soba/evidence/` private, and treat legacy unsealed receipts as informational.
 
 ---
 

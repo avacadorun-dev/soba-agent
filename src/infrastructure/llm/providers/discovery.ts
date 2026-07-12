@@ -18,7 +18,12 @@ import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../../../application/providers/model-defaults";
-import type { ModelDefinition, ProviderDefinition } from "../../../application/providers/types";
+import {
+  MODEL_COMPATIBILITY_FEATURES,
+  type ModelCompatibilityFeature,
+  type ModelDefinition,
+  type ProviderDefinition,
+} from "../../../application/providers/types";
 
 /** A single entry returned by `GET /v1/models`. */
 export interface DiscoveredModel {
@@ -89,9 +94,9 @@ export function getCachedModels(
  */
 function toModelDefinition(
   m: DiscoveredModel,
-  providerId: string,
 ): ModelDefinition {
   const raw = m.raw ?? {};
+  const compatibility = readCompatibility(raw);
   return {
     id: m.id,
     name: typeof raw.display_name === "string" ? raw.display_name : m.id,
@@ -103,14 +108,9 @@ function toModelDefinition(
       typeof raw.context_window === "number" ? raw.context_window : DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
     maxOutput:
       typeof raw.max_output_tokens === "number" ? raw.max_output_tokens : DEFAULT_SYNTHETIC_MAX_OUTPUT,
-    supportsStreaming: true,
-    supportsThinking:
-      providerId === "deepseek" ||
-      providerId === "kimi" ||
-      // OpenRouter has a /v1/models endpoint that doesn't expose
-      // reasoning, but most models behind it do — default to true so
-      // the picker shows the "thinking" badge by default.
-      providerId === "openrouter",
+    supportsStreaming: readCapability(raw, "streaming") ?? true,
+    supportsThinking: readCapability(raw, "thinking") ?? readCapability(raw, "reasoning") ?? false,
+    ...(compatibility.length > 0 ? { compatibility } : {}),
   };
 }
 
@@ -211,10 +211,9 @@ export async function discoverModels(
       }))
       .filter((m) => m.id);
 
-    // Vendor-specific preference order: prefer chat / coder / instruct
-    // variants when picking a default. The user's choice is still
-    // authoritative — this is only what the wizard highlights.
-    const suggest = pickSuggestedDefault(models, provider.id);
+    // Respect declared output capabilities and upstream order. The user's
+    // explicit choice remains authoritative; model names are never parsed.
+    const suggest = pickSuggestedDefault(models);
 
     const out: DiscoveryOutcome = {
       ok: true,
@@ -248,58 +247,61 @@ export async function discoverModels(
  */
 export function toModelDefinitions(
   result: DiscoveryResult,
-  provider: ProviderDefinition,
+  _provider: ProviderDefinition,
 ): ModelDefinition[] {
-  return result.models.map((m) => toModelDefinition(m, provider.id));
+  return result.models.map((m) => toModelDefinition(m));
 }
 
-export function isLikelyChatModelId(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  const blockedFragments = [
-    "audio",
-    "clip",
-    "content-safety",
-    "dall-e",
-    "diffusion",
-    "embed",
-    "embedding",
-    "guard",
-    "imagen",
-    "image",
-    "moderation",
-    "rerank",
-    "sora",
-    "speech",
-    "stable-diffusion",
-    "transcribe",
-    "tts",
-    "vision-embed",
-    "whisper",
-  ];
-  return !blockedFragments.some((fragment) => id.includes(fragment));
+export function supportsTextGeneration(model: DiscoveredModel): boolean {
+  const raw = model.raw;
+  if (!raw) return true;
+  const architecture = isRecord(raw.architecture) ? raw.architecture : undefined;
+  const declared = raw.output_modalities ?? raw.outputModalities ?? architecture?.output_modalities;
+  if (Array.isArray(declared)) {
+    return declared.some((value) => typeof value === "string" && value.toLowerCase() === "text");
+  }
+  if (typeof declared === "string") {
+    return declared.toLowerCase().split(/[^a-z]+/).includes("text");
+  }
+  return true;
 }
 
 /**
- * Pick the most "useful" default from a list of model ids. Pure
- * function so it's easy to unit-test. The heuristic favours coding /
- * chat / instruct variants over embedding / audio / image / preview
- * (preview is allowed as a last resort, e.g. qwen3-max-preview).
+ * Pick the first upstream model that declares text output. Upstream order and
+ * explicit provider defaults remain authoritative; names are not interpreted.
  */
 export function pickSuggestedDefault(
   models: DiscoveredModel[],
-  _providerId: string,
 ): string | null {
   if (models.length === 0) return null;
 
-  const chatModels = models.filter((model) => isLikelyChatModelId(model.id));
-  const candidates = chatModels.length > 0 ? chatModels : models;
-  const candidateIds = candidates.map((m) => m.id.toLowerCase());
-
-  // Generic preferences (any provider): chat > coder > instruct > first chat-like model.
-  const genericOrder = ["chat", "coder", "code", "instruct", "it"];
-  for (const tag of genericOrder) {
-    const hit = candidateIds.findIndex((id) => id.includes(tag));
-    if (hit >= 0) return candidates[hit]?.id ?? null;
-  }
+  const textModels = models.filter(supportsTextGeneration);
+  const candidates = textModels.length > 0 ? textModels : models;
   return candidates[0]?.id ?? null;
+}
+
+function readCapability(raw: Record<string, unknown>, capability: string): boolean | undefined {
+  for (const container of [raw, isRecord(raw.capabilities) ? raw.capabilities : undefined]) {
+    if (!container) continue;
+    for (const key of [`supports_${capability}`, `supports${capitalize(capability)}`, capability]) {
+      if (typeof container[key] === "boolean") return container[key];
+    }
+  }
+  return undefined;
+}
+
+function readCompatibility(raw: Record<string, unknown>): ModelCompatibilityFeature[] {
+  const declared = raw.soba_compatibility ?? raw.compatibility;
+  if (!Array.isArray(declared)) return [];
+  return declared.filter((value): value is ModelCompatibilityFeature =>
+    typeof value === "string" && MODEL_COMPATIBILITY_FEATURES.includes(value as ModelCompatibilityFeature)
+  );
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : `${value[0]?.toUpperCase()}${value.slice(1)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

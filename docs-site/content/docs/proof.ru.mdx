@@ -38,10 +38,26 @@ Proof receipt может включать:
 - finish claims, привязанные к evidence ids;
 - risks и unverified области;
 - permission receipts для tool calls;
-- safer alternatives для рискованных команд, если SOBA может предложить least-privilege rewrite.
+- safer alternatives для рискованных команд, если SOBA может предложить least-privilege rewrite;
+- метрики запуска: число model calls и input/output/total tokens;
+- `runId`, детерминированно выведенный из `sessionId` + `turnId`, и content-addressed `proofId`;
+- SHA-256 digest всего отредактированного receipt.
 
 Смысл простой: финальный ответ можно проверить. Если агент пишет "tests passed", рядом должен быть check,
 который реально запускался. Если подтверждений нет, claim должен оставаться явно unverified.
+
+Если completion gate принимает criteria без явных evidence IDs, SOBA связывает их только с уже записанными в этом
+turn успешными mutation, verification и inspection evidence. SOBA не придумывает evidence: если подходящей записи нет,
+claim остаётся unverified.
+
+Новые Proof Bundle v1 sealed перед записью: SOBA рекурсивно редактирует распознаваемые credentials, канонизирует JSON,
+выводит `proofId` и записывает `integrity.digest`. `soba prove` показывает proof ID, run ID и digest.
+Повторный sealing той же пары session/turn сохраняет run ID, а другой turn получает другой run ID. Изменение любого
+покрытого поля после sealing приводит к ошибке `proof_digest_mismatch` в `soba verify`.
+
+Старые v1 receipts без integrity metadata остаются читаемыми, но verification показывает
+`legacy_unsealed_proof`: структуру можно изучить, однако защита от изменения файла отсутствует.
+Такой receipt не принимается policy как verified: outcome — `partially_verified`, exit code — 2.
 
 ---
 
@@ -63,6 +79,24 @@ soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>
 ```
 
 Эти команды читают уже сохранённые proof-файлы. Они не запускают agent runtime и не требуют API ключей.
+
+### Outcomes и exit codes проверки
+
+`soba verify` проверяет версию schema, IDs и ссылки, exit codes и output digests команд, порядок
+mutation/verification, полноту diff, согласованность permissions, redaction секретов и integrity всего receipt.
+Корректно сформированный `unverified` или `blocked` receipt читается, но policy gate не проходит.
+Sealed receipt с changed files обязан содержать соответствующий diff summary. Completion criteria без evidence IDs
+остаются `unverified` и не могут сделать bundle verified только потому, что producer успешно завершился.
+
+| Outcome | Стабильная причина | Exit code |
+|---|---|---:|
+| `verified` | `proof_verified` | 0 |
+| невалидный receipt | код первой validation issue | 1 |
+| `partially_verified` | `proof_partially_verified` | 2 |
+| `unverified` | `proof_unverified` | 3 |
+| `blocked` | `proof_blocked` | 4 |
+
+Для скриптов используйте `--format json`: ответ содержит `accepted`, `outcome`, `reason`, `exitCode`, счётчики и issues.
 
 ---
 
@@ -101,6 +135,12 @@ least-privilege alternatives.
 ```
 
 Так local-first delegation остаётся bounded: агент работает быстро, но рискованный scope остаётся видимым.
+
+## Ограничения безопасности
+
+Proof sealing снижает риск случайного сохранения credentials и обнаруживает последующие правки файла. Он не доказывает,
+что команда выполнялась на доверенной машине, а redaction не является универсальным secret scanner. Не помещайте ключи
+в prompts и command arguments, держите `.soba/evidence/` приватным и считайте legacy unsealed receipts информационными.
 
 ---
 

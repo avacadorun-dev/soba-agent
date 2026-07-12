@@ -1,3 +1,12 @@
+import {
+  containsPotentialProofSecret,
+  PROOF_DIGEST_ALGORITHM,
+  PROOF_ID_PREFIX,
+  proofDigest,
+  RUN_ID_PREFIX,
+  stableRunId,
+} from "../evidence/public";
+
 export type VerifyFormat = "text" | "markdown" | "json";
 
 export type ProofVerificationSeverity = "error" | "warning";
@@ -22,7 +31,11 @@ export interface ProofVerificationIssue {
 export interface ProofVerificationResult {
   proofPath: string;
   valid: boolean;
+  accepted: boolean;
   result: "valid" | "valid_with_warnings" | "invalid";
+  outcome: "verified" | "partially_verified" | "unverified" | "blocked" | "invalid";
+  reason: string;
+  exitCode: 0 | 1 | 2 | 3 | 4;
   summary: {
     errors: number;
     warnings: number;
@@ -120,30 +133,44 @@ export function renderVerifyCommandView(view: VerifyCommandView): string {
 
 export function verifyCommandExitCode(view: VerifyCommandView): number {
   if (view.kind !== "verification") return 1;
-  return view.verification.valid ? 0 : 1;
+  return view.verification.exitCode;
 }
 
 export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerificationResult {
   const issues: ProofVerificationIssue[] = [];
   const bundle = proof.bundle;
 
+  validateContractMetadata(bundle, issues);
   validateTopLevel(bundle, issues);
   const evidenceIds = validateEvidenceIndex(bundle.evidence, issues);
   validateChangedFiles(bundle.changedFiles, issues);
   const commandIds = validateCommands(bundle.commands, issues);
   const checkIds = validateChecks(bundle.checks, commandIds, issues);
   validateApprovals(bundle.approvals, issues);
+  validateMetrics(bundle.metrics, issues);
   const riskIds = validateRisks(bundle.risks, issues);
   validateClaims(bundle.claims, knownEvidenceIds(bundle, evidenceIds, commandIds, checkIds, riskIds), issues);
+  validateEvidenceConsistency(bundle, issues);
   validateStatusConsistency(bundle, issues);
 
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.length - errors;
+  const outcome = proofOutcome(bundle, issues);
+  const exitCode = proofOutcomeExitCode(outcome);
+  const legacyDowngrade = outcome === "partially_verified" &&
+    stringField(bundle.status) === "verified" &&
+    issues.some((issue) => issue.code === "legacy_unsealed_proof");
 
   return {
     proofPath: proof.path,
     valid: errors === 0,
+    accepted: outcome === "verified",
     result: errors > 0 ? "invalid" : warnings > 0 ? "valid_with_warnings" : "valid",
+    outcome,
+    reason: errors > 0
+      ? (issues.find((issue) => issue.severity === "error")?.code ?? "invalid_proof")
+      : legacyDowngrade ? "legacy_unsealed_proof" : `proof_${outcome}`,
+    exitCode,
     summary: {
       errors,
       warnings,
@@ -157,6 +184,91 @@ export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerifica
     },
     issues,
   };
+}
+
+function proofOutcome(
+  bundle: Record<string, unknown>,
+  issues: ProofVerificationIssue[],
+): ProofVerificationResult["outcome"] {
+  if (issues.some((issue) => issue.severity === "error")) return "invalid";
+  const status = stringField(bundle.status);
+  if (status === "verified" && issues.some((issue) => issue.code === "legacy_unsealed_proof")) {
+    return "partially_verified";
+  }
+  return BUNDLE_STATUSES.has(status) ? status as Exclude<ProofVerificationResult["outcome"], "invalid"> : "invalid";
+}
+
+function proofOutcomeExitCode(outcome: ProofVerificationResult["outcome"]): ProofVerificationResult["exitCode"] {
+  switch (outcome) {
+    case "verified":
+      return 0;
+    case "invalid":
+      return 1;
+    case "partially_verified":
+      return 2;
+    case "unverified":
+      return 3;
+    case "blocked":
+      return 4;
+  }
+}
+
+function validateContractMetadata(bundle: Record<string, unknown>, issues: ProofVerificationIssue[]): void {
+  const proofId = stringField(bundle.proofId);
+  const runId = stringField(bundle.runId);
+  const integrity = isRecord(bundle.integrity) ? bundle.integrity : undefined;
+  const hasAnyMetadata = Boolean(proofId || runId || integrity);
+
+  if (!hasAnyMetadata) {
+    addWarning(
+      issues,
+      "legacy_unsealed_proof",
+      "$.integrity",
+      "Legacy proof has no content-integrity metadata; it remains readable but is not tamper-evident.",
+    );
+  } else if (!proofId || !runId || !integrity) {
+    addError(issues, "incomplete_contract_metadata", "$", "proofId, runId, and integrity must be present together.");
+  }
+
+  if (proofId && !new RegExp(`^${PROOF_ID_PREFIX}[a-f0-9]{24}$`).test(proofId)) {
+    addError(issues, "invalid_proof_id", "$.proofId", "Expected proof_<24 lowercase hex chars>.");
+  }
+  if (runId && !new RegExp(`^${RUN_ID_PREFIX}[a-f0-9]{24}$`).test(runId)) {
+    addError(issues, "invalid_run_id", "$.runId", "Expected run_<24 lowercase hex chars>.");
+  } else if (runId) {
+    const expectedRunId = stableRunId(stringField(bundle.sessionId), stringField(bundle.turnId));
+    if (runId !== expectedRunId) {
+      addError(
+        issues,
+        "run_id_identity_mismatch",
+        "$.runId",
+        "Run ID is not derived from the proof sessionId and turnId.",
+      );
+    }
+  }
+
+  if (integrity) {
+    if (integrity.algorithm !== PROOF_DIGEST_ALGORITHM) {
+      addError(issues, "unsupported_digest_algorithm", "$.integrity.algorithm", "Expected sha256.");
+    }
+    const recordedDigest = stringField(integrity.digest);
+    if (!SHA256_DIGEST_PATTERN.test(recordedDigest)) {
+      addError(issues, "invalid_proof_digest", "$.integrity.digest", "Expected sha256:<64 lowercase hex chars>.");
+    } else {
+      const computedDigest = proofDigest(bundle);
+      if (recordedDigest !== computedDigest) {
+        addError(issues, "proof_digest_mismatch", "$.integrity.digest", "Proof content does not match its digest.");
+      }
+      const expectedProofId = `${PROOF_ID_PREFIX}${recordedDigest.slice("sha256:".length, "sha256:".length + 24)}`;
+      if (proofId && proofId !== expectedProofId) {
+        addError(issues, "proof_id_digest_mismatch", "$.proofId", "Proof ID is not derived from the recorded digest.");
+      }
+    }
+  }
+
+  if (containsPotentialProofSecret(bundle)) {
+    addError(issues, "unredacted_secret", "$", "Proof contains a value that matches the secret-redaction contract.");
+  }
 }
 
 function parseVerifyArgs(args: string[]): ParsedVerifyArgs | Extract<VerifyCommandView, { kind: "usage" }> {
@@ -241,6 +353,9 @@ function renderVerificationText(verification: ProofVerificationResult): string {
     "SOBA Proof Verification",
     `Path: ${verification.proofPath}`,
     `Result: ${verification.result}`,
+    `Outcome: ${verification.outcome}`,
+    `Reason: ${verification.reason}`,
+    `Exit code: ${verification.exitCode}`,
     `Errors: ${verification.summary.errors}`,
     `Warnings: ${verification.summary.warnings}`,
     `Evidence: ${verification.summary.evidence}`,
@@ -267,6 +382,9 @@ function renderVerificationMarkdown(verification: ProofVerificationResult): stri
     "",
     `- Path: \`${verification.proofPath}\``,
     `- Result: \`${verification.result}\``,
+    `- Outcome: \`${verification.outcome}\``,
+    `- Reason: \`${verification.reason}\``,
+    `- Exit code: ${verification.exitCode}`,
     `- Errors: ${verification.summary.errors}`,
     `- Warnings: ${verification.summary.warnings}`,
     `- Evidence: ${verification.summary.evidence}`,
@@ -397,6 +515,128 @@ function validateChangedFiles(value: unknown, issues: ProofVerificationIssue[]):
   });
 }
 
+function validateEvidenceConsistency(bundle: Record<string, unknown>, issues: ProofVerificationIssue[]): void {
+  // Pre-contract receipts did not persist the evidence index. They remain
+  // readable with migration warnings, but cannot satisfy new linkage checks.
+  if (!Array.isArray(bundle.evidence)) return;
+  const evidence = recordArray(bundle.evidence);
+  const evidenceById = new Map(evidence.map((entry) => [stringField(entry.id), entry]));
+  const changedFiles = recordArray(bundle.changedFiles);
+
+  changedFiles.forEach((file, fileIndex) => {
+    const mutationIds = isStringArray(file.mutationIds) ? file.mutationIds : [];
+    if (mutationIds.length === 0) {
+      addError(
+        issues,
+        "changed_file_without_mutation",
+        `$.changedFiles[${fileIndex}].mutationIds`,
+        "Changed files must reference at least one mutation evidence ID.",
+      );
+    }
+    for (const mutationId of mutationIds) {
+      const mutation = evidenceById.get(mutationId);
+      if (!mutation) {
+        addError(
+          issues,
+          "unknown_changed_file_mutation",
+          `$.changedFiles[${fileIndex}].mutationIds`,
+          `No evidence with id "${mutationId}" exists.`,
+        );
+      } else if (stringField(mutation.kind) !== "mutation") {
+        addError(
+          issues,
+          "changed_file_reference_not_mutation",
+          `$.changedFiles[${fileIndex}].mutationIds`,
+          `Evidence "${mutationId}" is not mutation evidence.`,
+        );
+      } else if (stringField(bundle.status) === "verified" && stringField(mutation.status) !== "success") {
+        addError(
+          issues,
+          "verified_with_unverified_mutation",
+          `$.changedFiles[${fileIndex}].mutationIds`,
+          `Verified proof references mutation "${mutationId}" with status "${stringField(mutation.status) || "unknown"}".`,
+        );
+      }
+    }
+  });
+
+  if (stringField(bundle.status) === "verified") {
+    const codeMutationIds = new Set(
+      changedFiles
+        .filter((file) => !isDocumentationPath(stringField(file.path)))
+        .flatMap((file) => (isStringArray(file.mutationIds) ? file.mutationIds : [])),
+    );
+    for (const mutationId of codeMutationIds) {
+      const mutation = evidenceById.get(mutationId);
+      if (!mutation) continue;
+      const mutationTimestamp = numberField(mutation.timestamp);
+      const mutationIndex = evidence.findIndex((entry) => stringField(entry.id) === mutationId);
+      const hasFreshVerification = evidence.some(
+        (entry, entryIndex) =>
+          entryIndex > mutationIndex &&
+          stringField(entry.kind) === "verification" &&
+          stringField(entry.status) === "success" &&
+          isStringArray(entry.mutationIds) &&
+          entry.mutationIds.includes(mutationId) &&
+          numberField(entry.timestamp) >= mutationTimestamp,
+      );
+      if (!hasFreshVerification) {
+        addError(
+          issues,
+          "stale_or_missing_verification",
+          "$.evidence",
+          `Code mutation "${mutationId}" has no successful verification recorded after it.`,
+        );
+      }
+    }
+
+    const deniedToolCalls = new Set(
+      recordArray(bundle.approvals)
+        .filter((approval) => stringField(approval.decision) === "deny" || approval.approved === false)
+        .map((approval) => stringField(approval.toolCallId))
+        .filter(Boolean),
+    );
+    const bypassedCall = evidence.find(
+      (entry) => deniedToolCalls.has(stringField(entry.toolCallId)) && stringField(entry.status) === "success",
+    );
+    if (bypassedCall) {
+      addError(
+        issues,
+        "permission_denial_bypassed",
+        "$.approvals",
+        `Denied tool call "${stringField(bypassedCall.toolCallId)}" produced successful evidence.`,
+      );
+    }
+  }
+
+  if (changedFiles.length > 0 && !isRecord(bundle.diff) && isRecord(bundle.integrity)) {
+    addError(issues, "missing_diff", "$.diff", "Sealed proofs with changed files must include a complete diff summary.");
+  }
+
+  if (isRecord(bundle.diff)) {
+    const diffFiles = recordArray(bundle.diff.files);
+    const changedPaths = new Set(changedFiles.map((file) => stringField(file.path)).filter(Boolean));
+    const diffPaths = new Set(diffFiles.map((file) => stringField(file.path)).filter(Boolean));
+    if (bundle.diff.fileCount !== diffFiles.length) {
+      addError(issues, "diff_file_count_mismatch", "$.diff.fileCount", "Diff fileCount must equal diff.files length.");
+    }
+    const missingFromDiff = [...changedPaths].filter((path) => !diffPaths.has(path));
+    const missingFromChangedFiles = [...diffPaths].filter((path) => !changedPaths.has(path));
+    if (missingFromDiff.length > 0 || missingFromChangedFiles.length > 0) {
+      addError(
+        issues,
+        "incomplete_diff",
+        "$.diff.files",
+        `Diff and changedFiles disagree${missingFromDiff.length ? `; absent from diff: ${missingFromDiff.join(", ")}` : ""}${missingFromChangedFiles.length ? `; absent from changedFiles: ${missingFromChangedFiles.join(", ")}` : ""}.`,
+      );
+    }
+  }
+}
+
+function isDocumentationPath(path: string): boolean {
+  return /(?:^|\/)(?:docs?|documentation)(?:\/|$)/i.test(path) || /\.(?:md|mdx|txt|rst|adoc)$/i.test(path);
+}
+
 function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set<string> {
   const ids = new Set<string>();
   forEachRecord(value, "$.commands", issues, (command, path) => {
@@ -416,11 +656,15 @@ function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set
     if (command.exitCode !== undefined && command.exitCode !== null && !isInteger(command.exitCode)) {
       addError(issues, "invalid_exit_code", `${path}.exitCode`, "Expected an integer or null.");
     }
-    if (status === "passed" && command.exitCode !== undefined && command.exitCode !== 0) {
+    const terminal = status === "passed" || status === "failed";
+    if (terminal && !isInteger(command.exitCode)) {
+      addError(issues, "missing_exit_code", `${path}.exitCode`, "Terminal commands must include an integer exit code.");
+    }
+    if (status === "passed" && isInteger(command.exitCode) && command.exitCode !== 0) {
       addError(issues, "passed_command_nonzero_exit", `${path}.exitCode`, "A passed command must have exitCode 0 when exitCode is recorded.");
     }
     if (status === "failed" && command.exitCode === 0) {
-      addWarning(issues, "failed_command_zero_exit", `${path}.exitCode`, "A failed command recorded exitCode 0.");
+      addError(issues, "failed_command_zero_exit", `${path}.exitCode`, "A failed command cannot record exitCode 0.");
     }
     if (command.durationMs !== undefined && !isNonNegativeNumber(command.durationMs)) {
       addError(issues, "invalid_duration", `${path}.durationMs`, "Expected a non-negative number.");
@@ -435,8 +679,8 @@ function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set
       if (typeof command.outputDigest !== "string" || !SHA256_DIGEST_PATTERN.test(command.outputDigest)) {
         addError(issues, "invalid_output_digest", `${path}.outputDigest`, "Expected sha256:<64 lowercase hex chars>.");
       }
-    } else if (status === "passed" || status === "failed") {
-      addWarning(issues, "missing_output_digest", `${path}.outputDigest`, "Command has a terminal status but no output digest.");
+    } else if (terminal) {
+      addError(issues, "missing_output_digest", `${path}.outputDigest`, "Terminal commands must include an output digest.");
     }
   });
   return ids;
@@ -479,6 +723,9 @@ function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): vo
     if (approval.approved !== undefined && typeof approval.approved !== "boolean") {
       addError(issues, "invalid_approval_approved", `${path}.approved`, "Expected approved to be a boolean.");
     }
+    if (decision === "deny" && approval.approved === true) {
+      addError(issues, "approved_denial", path, "A denied permission cannot be marked approved.");
+    }
     if (approval.trustLevel !== undefined) {
       if (typeof approval.trustLevel !== "string" || !APPROVAL_TRUST_LEVELS.has(approval.trustLevel)) {
         addError(issues, "invalid_approval_trust_level", `${path}.trustLevel`, "Expected safe, normal, or dangerous.");
@@ -500,6 +747,26 @@ function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): vo
     }
     validateApprovalAlternatives(approval.alternatives, `${path}.alternatives`, issues);
   });
+}
+
+function validateMetrics(value: unknown, issues: ProofVerificationIssue[]): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) {
+    addError(issues, "invalid_metrics", "$.metrics", "Expected metrics to be an object.");
+    return;
+  }
+  if (!isNonNegativeInteger(value.modelCalls)) {
+    addError(issues, "invalid_model_calls", "$.metrics.modelCalls", "Expected a non-negative integer.");
+  }
+  if (!isRecord(value.tokens)) {
+    addError(issues, "invalid_token_metrics", "$.metrics.tokens", "Expected token metrics to be an object.");
+    return;
+  }
+  for (const field of ["input", "output", "total"] as const) {
+    if (!isNonNegativeInteger(value.tokens[field])) {
+      addError(issues, "invalid_token_metric", `$.metrics.tokens.${field}`, "Expected a non-negative integer.");
+    }
+  }
 }
 
 function validateApprovalAlternatives(value: unknown, path: string, issues: ProofVerificationIssue[]): void {
@@ -590,16 +857,16 @@ function validateStatusConsistency(bundle: Record<string, unknown>, issues: Proo
 
   if (status === "verified") {
     if (risks.length > 0) {
-      addWarning(issues, "verified_with_risks", "$.status", "Proof is marked verified but still records risks.");
+      addError(issues, "verified_with_risks", "$.status", "Proof is marked verified but still records risks.");
     }
     if (checks.some((check) => ["failed", "skipped", "not_run"].includes(stringField(check.status)))) {
-      addWarning(issues, "verified_with_unpassed_checks", "$.checks", "Proof is marked verified but includes checks that did not pass.");
+      addError(issues, "verified_with_unpassed_checks", "$.checks", "Proof is marked verified but includes checks that did not pass.");
     }
     if (changedFiles.length > 0 && checks.length === 0) {
-      addWarning(issues, "verified_without_checks", "$.checks", "Proof changed files but records no checks.");
+      addError(issues, "verified_without_checks", "$.checks", "Proof changed files but records no checks.");
     }
-    if (claims.some((claim) => stringField(claim.status) === "unsupported")) {
-      addWarning(issues, "verified_with_unsupported_claims", "$.claims", "Proof is marked verified but includes unsupported claims.");
+    if (claims.some((claim) => stringField(claim.status) !== "supported")) {
+      addError(issues, "verified_with_unsupported_claims", "$.claims", "Verified proofs may contain only supported claims.");
     }
   }
 
@@ -710,12 +977,20 @@ function stringField(value: unknown): string {
   return typeof value === "string" && value.length > 0 ? value : "";
 }
 
+function numberField(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function isInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isInteger(value) && value >= 0;
 }
 
 function isNonNegativeNumber(value: unknown): value is number {

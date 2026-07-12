@@ -26,14 +26,18 @@ changes after the usual permission checks.
 
 ## 2. What is allowed
 
-In plan and goal modes SOBA can use native inspection tools such as `read`, `ls`, `search_files`, `inspect_file`,
-`read_project_memory`, and `checkpoint`. It can also finish with a written plan or goal brief.
+In plan and goal modes SOBA can use inspection tools such as `read`, `ls`, `search_files`, `inspect_file`,
+`read_project_memory`, and `checkpoint`. Read-only MCP tools are also available when the server declares
+`annotations.readOnlyHint: true`. It can finish with a written plan or goal brief.
 
 The following remain unavailable by design:
 
 - file and memory mutation tools (`write`, `edit`, `write_project_memory`);
 - `bash`, including apparently read-only commands such as `git status` or `bun test`;
-- unregistered/custom tools and likely-mutating MCP tools.
+- custom or MCP tools without explicitly safe semantics, including tools with `destructiveHint: true`.
+
+SOBA uses declared tool effects rather than guessing from a tool name. Built-ins carry canonical semantics; MCP
+`readOnlyHint` maps to inspection, while destructive or unannotated MCP tools fail closed in restricted modes.
 
 This strict boundary is intentional. Shell allowlists are easy to bypass through scripts, redirects, Git subcommands, or
 interpreters. Run diagnostics yourself with `!command`, or switch to `/plan off` when you explicitly want the agent to

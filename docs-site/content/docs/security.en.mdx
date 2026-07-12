@@ -10,7 +10,7 @@ actions.
 
 ## 1. Trust levels
 
-Every tool call or shell command gets one of three levels (`src/core/trust/trust-manager.ts`):
+Every tool call or shell command gets one of three levels:
 
 | Level | Behavior | Examples |
 |---------|-----------|---------|
@@ -34,7 +34,7 @@ The three modes are set through `TrustManager.setPermissionMode()`:
 
 ## 3. Shell command classification
 
-Full rule list: `DEFAULT_COMMAND_RULES` in `src/core/trust/trust-manager.ts`.
+The built-in rule list is maintained by the runtime trust policy.
 
 ### Dangerous: confirmation required
 
@@ -68,8 +68,7 @@ Redirects: `> /dev/null`
 
 ## 4. Approving dangerous operations
 
-When the agent calls a dangerous command, the user sees a prompt with these choices
-(`src/ui/terminal/interactive/lib/trust-dialog-manager.ts`, `ApprovalDecision` in `src/core/loop/types.ts`):
+When the agent calls a dangerous command, the user sees a prompt with these choices:
 
 | Decision | Action |
 |---------|----------|
@@ -87,15 +86,13 @@ the proof permission receipt so later `soba prove` and `soba verify` output can 
 
 ## 5. Direct shell commands (`!`)
 
-In the TUI, `!command` runs a command directly, without AI in the middle. The safety check still runs before execution
-(`src/core/loop/agent-loop.ts` — `_directShellAbortController`).
+In the TUI, `!command` runs a command directly, without AI in the middle. The safety check still runs before execution.
 
 ---
 
 ## 6. Project Trust for skills
 
-Skills from `.soba/skills/` must be approved before first use in a project
-(`src/core/skills/project-trust-store.ts`).
+Skills from `.soba/skills/` must be approved before first use in a project.
 
 Storage: `~/.soba/project-trust.json`.
 
@@ -128,3 +125,12 @@ All agent actions are written to the session JSONL. To inspect shell commands:
 ```bash
 grep '"name":"bash"' ~/.soba/sessions/<session-id>.jsonl
 ```
+
+Conversation items in session JSONL preserve user/model content for resume and must be treated as sensitive local data.
+Flight/debug sidecars redact secret-bearing keys and recognizable credentials embedded in persisted prompt/output strings,
+but this is not a reason to paste credentials into a session.
+
+Proof receipts add a separate local audit artifact in `.soba/evidence/`. New receipts are recursively redacted, sealed
+with a SHA-256 digest, and stored with owner-only permissions on POSIX systems. `soba verify` detects tampering and rejects
+successful evidence associated with a denied tool call. This does not make the workspace a sandbox and does not replace
+careful credential handling; redaction cannot recognize every possible secret format.

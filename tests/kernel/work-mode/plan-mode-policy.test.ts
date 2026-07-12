@@ -42,6 +42,19 @@ describe("plan mode policy", () => {
     expect(isToolAllowedInPlanMode("custom_mystery_tool").allowed).toBe(false);
   });
 
+  test("uses declared semantics for custom tools instead of guessing from names", () => {
+    expect(isToolAllowedInPlanMode("anything", {
+      effects: ["inspect"],
+      parallelSafe: true,
+      restrictedMode: "allow",
+    }).allowed).toBe(true);
+    expect(isToolAllowedInPlanMode("harmless_name", {
+      effects: ["mutation"],
+      parallelSafe: false,
+      restrictedMode: "deny",
+    }).allowed).toBe(false);
+  });
+
   test("exposes plan and goal mode system guidelines", () => {
     const planGuidelines = planModeSystemGuidelines();
     expect(planGuidelines.length).toBeGreaterThan(0);

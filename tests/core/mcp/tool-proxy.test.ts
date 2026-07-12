@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { McpClient, McpTool, McpToolCallResult } from "../../../src/infrastructure/mcp/client";
 import {
   buildMcpToolDefinitions,
+  inferMcpToolSemantics,
   mapMcpInputSchema,
   normalizeMcpToolResult,
   proxyToolName,
@@ -9,6 +10,16 @@ import {
 import type { ToolDefinition } from "../../../src/kernel/tools/types";
 
 describe("MCP tool proxy", () => {
+  test("derives effects from MCP annotations without tool-name heuristics", () => {
+    expect(inferMcpToolSemantics({ readOnlyHint: true })).toEqual({
+      effects: ["inspect"],
+      parallelSafe: true,
+      restrictedMode: "allow",
+    });
+    expect(inferMcpToolSemantics({ destructiveHint: true }).effects).toEqual(["mutation"]);
+    expect(inferMcpToolSemantics(undefined).restrictedMode).toBe("deny");
+  });
+
   test("proxy exposes expected names", async () => {
     const source = new FakeProxySource({
       alpha: [{ name: "echo", description: "Echo input" }],

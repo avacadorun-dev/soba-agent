@@ -1,6 +1,9 @@
 import type { TranslationKey } from "../shared/i18n/types";
+import { SUPPORTED_LOCALES } from "../shared/i18n/types";
 
 export type RuntimeCommandSurface = "print" | "tui" | "acp";
+
+const ALL_RUNTIME_COMMAND_SURFACES = ["print", "tui", "acp"] as const satisfies readonly RuntimeCommandSurface[];
 
 export interface RuntimeCommandMetadata {
   /** Stable command id without the leading slash. */
@@ -18,59 +21,59 @@ export const RUNTIME_COMMANDS = [
     name: "/compact",
     descriptionKey: "command.description.compact",
     usage: "/compact [instructions]",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "rewind",
     name: "/rewind",
     descriptionKey: "command.description.rewind",
     usage: "/rewind [checkpoint-id]",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "session",
     name: "/session",
     descriptionKey: "command.description.session",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "sessions",
     name: "/sessions",
     descriptionKey: "command.description.sessions",
     usage: "/sessions list|resume <id>|load <id>|close [id]|delete <id>",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "capsule",
     name: "/capsule",
     descriptionKey: "command.description.capsule",
     usage: "/capsule [checkpoint-id] | create <objective> | export <checkpoint-id> <path> | load <path>",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "auto-compact",
     name: "/auto-compact",
     descriptionKey: "command.description.autoCompact",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "budget",
     name: "/budget",
     descriptionKey: "command.description.budget",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "config",
     name: "/config",
     descriptionKey: "command.description.config",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "lang",
     name: "/lang",
     descriptionKey: "command.description.lang",
-    usage: "/lang <en|ru|zh>",
-    surfaces: ["print", "tui", "acp"],
+    usage: `/lang <${SUPPORTED_LOCALES.join("|")}>`,
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "theme",
@@ -89,14 +92,14 @@ export const RUNTIME_COMMANDS = [
     name: "/permissions",
     descriptionKey: "command.description.permissions",
     usage: "/permissions [ask|repo|full|clear]",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "plan",
     name: "/plan",
     descriptionKey: "command.description.plan",
     usage: "/plan [on|off|toggle|plan|planning|goal|agent]",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "notifications",
@@ -109,21 +112,21 @@ export const RUNTIME_COMMANDS = [
     name: "/skill",
     descriptionKey: "command.description.skill",
     usage: "/skill list|new|edit|eval|bench|trace|promote|history|rollback|rm",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "project-trust",
     name: "/project-trust",
     descriptionKey: "command.description.projectTrust",
     usage: "/project-trust status|approve|revoke",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "mcp",
     name: "/mcp",
     descriptionKey: "command.description.mcp",
     usage: "/mcp status|reload|start <server>|stop <server>|restart <server>|auth status|login|logout <server>|secret list|set|unset",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "clear",
@@ -135,7 +138,7 @@ export const RUNTIME_COMMANDS = [
     id: "help",
     name: "/help",
     descriptionKey: "command.description.help",
-    surfaces: ["print", "tui", "acp"],
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
     id: "exit",

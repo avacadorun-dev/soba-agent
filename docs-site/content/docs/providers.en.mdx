@@ -48,7 +48,7 @@ SOBA v0.6.x ships with four built-in providers. All of them use the OpenAI-compa
 
 ### 2.1. Dynamic discovery
 
-On startup, SOBA calls `GET {baseUrl}/models` for the active provider. The result is cached in the current process. SOBA then chooses a suitable default model, with a preference for coding-oriented models.
+On startup, SOBA calls `GET {baseUrl}/models` for the active provider. The result is cached in the current process. For an automatic default, SOBA skips models that explicitly declare non-text output and otherwise preserves the provider's order. It does not infer capabilities from words such as `chat`, `code`, or a vendor name in the model ID.
 
 The cache lives only in memory. To refresh it, restart SOBA or open the TUI model picker with `F2` or `/model`.
 
@@ -149,7 +149,33 @@ soba provider add my-api \
 | `--from-file <path>` | No | Load provider definition from a JSON file |
 | `--set-active` | No | Make the provider active right after adding it |
 
-### 4.3. Manage custom providers
+### 4.3. Model compatibility metadata
+
+Most OpenAI-compatible models need no special settings. If a model needs a different wire format, define it in JSON passed with `--from-file`; SOBA never enables such behavior from the provider or model name:
+
+```json
+{
+  "id": "my-api",
+  "name": "My API",
+  "baseUrl": "https://my-llm.company.com/v1",
+  "apiKeyEnv": "MY_LLM_KEY",
+  "adapter": "openai",
+  "defaultModel": "company-model",
+  "models": [{
+    "id": "company-model",
+    "name": "Company Model",
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "supportsStreaming": true,
+    "supportsThinking": true,
+    "compatibility": ["adaptive_thinking", "reasoning_split"]
+  }]
+}
+```
+
+Supported compatibility features are `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, and `prefer_max_completion_tokens`. `supportsThinking` is display/capability metadata; it does not implicitly enable any wire-format feature. Dynamic discovery accepts the same list from upstream `soba_compatibility` or `compatibility` metadata and ignores unknown values.
+
+### 4.4. Manage custom providers
 
 ```bash
 # Show provider definition
@@ -164,7 +190,7 @@ soba provider remove ollama
 
 There is no `update` command yet. To change URL or models, remove the custom provider and add it again.
 
-### 4.4. Storage
+### 4.5. Storage
 
 Custom providers are stored in `registry.customProviders` in `~/.soba/config.json`:
 

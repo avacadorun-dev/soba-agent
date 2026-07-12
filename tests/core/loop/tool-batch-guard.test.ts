@@ -36,6 +36,19 @@ describe("tool batch guard", () => {
 
     expect(decision).toEqual({ action: "allow" });
   });
+
+  test("recognizes custom mutation tools through declared semantics", () => {
+    const decision = evaluateToolBatch(
+      [
+        makeFunctionCall("custom_patch", { path: "src/a.ts" }, "patch_1"),
+        makeFunctionCall("bash", { command: "bun test" }, "verify_1"),
+      ],
+      (name) => name === "custom_patch"
+        ? { effects: ["mutation"], parallelSafe: false, restrictedMode: "deny" }
+        : { effects: ["execute"], parallelSafe: false, restrictedMode: "deny" },
+    );
+    expect(decision.action).toBe("reject");
+  });
 });
 
 function makeFunctionCall(

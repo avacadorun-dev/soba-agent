@@ -49,7 +49,7 @@ import {
   isSessionMigrationEntry,
   isSkillActivationEntry,
 } from "../../../kernel/transcript/types-v2";
-import { redactFlightRecordData } from "./flight-record";
+import { redactDebugRecordData, redactFlightRecordData } from "./flight-record";
 
 // ─── Constants ───
 
@@ -461,7 +461,7 @@ export class SessionManager {
     const entry: DebugEntry = {
       type: "debug",
       timestamp: new Date().toISOString(),
-      data,
+      data: redactDebugRecordData(data),
     };
     this.fileEntries.push(entry);
     this._persist(entry);

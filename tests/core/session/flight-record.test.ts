@@ -21,7 +21,12 @@ describe("Session flight records", () => {
       payload: {
         toolName: "bash",
         apiKey: "sk-secret",
-        nested: { token: "secret-token", visible: "ok" },
+        nested: {
+          token: "secret-token",
+          tokensUsed: 321,
+          visible: "authorization: Bearer sk-abcdefghijklmnop",
+          output: "database=postgres://admin:hunter2@localhost/app",
+        },
       },
     });
 
@@ -29,10 +34,17 @@ describe("Session flight records", () => {
     expect(session.getFlightRecords()).toHaveLength(1);
     expect(JSON.stringify(session.getFlightRecords())).not.toContain("sk-secret");
     expect(JSON.stringify(session.getFlightRecords())).not.toContain("secret-token");
+    expect(JSON.stringify(session.getFlightRecords())).not.toContain("sk-abcdefghijklmnop");
+    expect(JSON.stringify(session.getFlightRecords())).not.toContain("hunter2");
     expect(session.getFlightRecords()[0]?.data.payload).toEqual({
       toolName: "bash",
       apiKey: "[REDACTED]",
-      nested: { token: "[REDACTED]", visible: "ok" },
+      nested: {
+        token: "[REDACTED]",
+        tokensUsed: 321,
+        visible: "authorization: Bearer [REDACTED]",
+        output: "database=postgres://[REDACTED]@localhost/app",
+      },
     });
 
     const reopened = SessionManager.open(session.getSessionFile()!, tmpDir);

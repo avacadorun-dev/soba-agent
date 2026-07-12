@@ -9,6 +9,8 @@
  *           developer message handling, and native compaction contract.
  */
 
+import type { ModelCompatibilityFeature } from "../../../application/providers/types";
+
 import type {
   CompactResource,
   CompactResponseParams,
@@ -26,6 +28,7 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  compatibility?: readonly ModelCompatibilityFeature[];
 }
 
 /**

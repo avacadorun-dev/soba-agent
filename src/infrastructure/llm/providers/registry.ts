@@ -45,7 +45,7 @@ import {
   type OpenResponsesClient,
   type OpenResponsesClientConfig,
 } from "../openresponses/openresponses-client";
-import { discoverModels, getCachedModels } from "./discovery";
+import { discoverModels, getCachedModels, toModelDefinitions } from "./discovery";
 
 /** Default path to the user config file. */
 export function getProviderRegistryConfigPath(): string {
@@ -302,28 +302,7 @@ export class ProviderRegistry {
     if (findBuiltinProvider(providerId)) {
       const cached = getCachedModels(provider, this.resolveApiKey(providerId));
       if (cached && cached.ok) {
-        return cached.models
-          .filter((m) => m.id)
-          .map((m) => ({
-            id: m.id,
-            name:
-              typeof m.raw?.display_name === "string"
-                ? (m.raw.display_name as string)
-                : m.id,
-            contextWindow:
-              typeof m.raw?.context_window === "number"
-                ? (m.raw.context_window as number)
-                : DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-            maxOutput:
-              typeof m.raw?.max_output_tokens === "number"
-                ? (m.raw.max_output_tokens as number)
-                : DEFAULT_SYNTHETIC_MAX_OUTPUT,
-            supportsStreaming: true,
-            supportsThinking:
-              providerId === "deepseek" ||
-              providerId === "kimi" ||
-              providerId === "openrouter",
-          }));
+        return toModelDefinitions(cached, provider);
       }
       return [];
     }
@@ -550,6 +529,7 @@ export class ProviderRegistry {
       baseUrl,
       apiKey,
       model: model.id,
+      modelCompatibility: model.compatibility ? [...model.compatibility] : undefined,
       maxOutputTokens: model.maxOutput,
       maxCompletionTokens: 0,
       contextWindow: model.contextWindow,

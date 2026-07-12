@@ -1,4 +1,4 @@
-import type { FunctionCallField, ItemParam, MessageField } from "../../kernel/model/openresponses-types";
+import type { FunctionCallField, ItemParam, MessageField, Usage } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { DebugEntry, FlightRecordData } from "../../kernel/transcript/types";
 import type { WorkMode } from "../../kernel/work-mode/public";
@@ -42,6 +42,7 @@ export async function handleAgentTurnCompletionStage(input: {
   allItems: ItemParam[];
   turnIndex: number;
   iteration: number;
+  usage: Usage;
   hasUsedTools: boolean;
   needsVerification: boolean;
   hasMutatedFiles: boolean;
@@ -70,6 +71,7 @@ export async function handleAgentTurnCompletionStage(input: {
     allItems,
     turnIndex,
     iteration,
+    usage,
     hasUsedTools,
     needsVerification,
     hasMutatedFiles,
@@ -106,6 +108,7 @@ export async function handleAgentTurnCompletionStage(input: {
       allItems,
       turn: turnIndex,
       iteration,
+      usage,
       hasUsedTools,
       needsVerification,
       autonomousFollowUps,

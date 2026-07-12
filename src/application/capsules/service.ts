@@ -264,7 +264,7 @@ function portableCapsuleFileName(capsule: PortableCapsule): string {
 function slugify(value: string): string {
   const slug = value
     .toLowerCase()
-    .replace(/[^a-z0-9а-яё]+/gi, "-")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return slug || "capsule";

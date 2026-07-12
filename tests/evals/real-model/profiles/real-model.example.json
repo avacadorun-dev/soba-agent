@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "replace-with-pinned-profile",
+  "comparisonMode": "agent_comparison",
+  "provider": "replace-with-provider-id",
+  "model": "replace-with-model-id",
+  "revision": "replace-with-model-revision-or-date",
+  "repetitions": 3,
+  "tasks": ["tests/evals/real-model/tasks/math-bug.json"],
+  "baseline": {
+    "command": ["replace-with-baseline-agent", "--model", "{model}", "{prompt}"]
+  },
+  "sobaGated": {
+    "command": [
+      "bun",
+      "run",
+      "{projectRoot}/src/cli.ts",
+      "--no-session",
+      "--model",
+      "{model}",
+      "--max-agent-iterations",
+      "12",
+      "{prompt}"
+    ]
+  }
+}

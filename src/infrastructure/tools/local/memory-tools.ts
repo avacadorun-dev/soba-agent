@@ -1,6 +1,8 @@
 import { basename, relative, resolve } from "node:path";
 import { detectPotentialSecret, sanitizePortableText } from "../../../application/capsules/sanitizer";
 import {
+  CAPSULE_PRIORITIES,
+  CAPSULE_TYPES,
   type CapsuleListFilters,
   type CapsulePriority,
   type CapsuleType,
@@ -25,8 +27,6 @@ const DEFAULT_ENTRY_CONTENT_BYTES = 4 * 1024;
 const ENV_PLACEHOLDER_PATTERN = /\$\{ENV:[a-zA-Z_][a-zA-Z0-9_]*\}/;
 const CAPSULE_EXAMPLE =
   '{"target":"capsule","capsule":{"type":"decision","summary":"Short durable fact","detail":"Specific reusable context.","priority":"high","tags":["architecture"]}}';
-const CAPSULE_TYPES: CapsuleType[] = ["decision", "error_fix", "discovery", "pattern", "blocker", "insight"];
-const CAPSULE_PRIORITIES: CapsulePriority[] = ["critical", "high", "medium", "low"];
 
 export type ReadProjectMemoryKind = "all" | "knowledge" | "capsules";
 export type WriteProjectMemoryTarget = "capsule" | "knowledge";
@@ -149,12 +149,12 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
           },
           capsuleType: {
             type: "string",
-            enum: ["decision", "error_fix", "discovery", "pattern", "blocker", "insight"],
+            enum: [...CAPSULE_TYPES],
             description: "Capsule type filter.",
           },
           priority: {
             type: "string",
-            enum: ["critical", "high", "medium", "low"],
+            enum: [...CAPSULE_PRIORITIES],
             description: "Capsule priority filter.",
           },
           from: {
@@ -214,7 +214,7 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
             properties: {
               type: {
                 type: "string",
-                enum: CAPSULE_TYPES,
+                enum: [...CAPSULE_TYPES],
                 description: "Capsule type.",
               },
               summary: {
@@ -227,7 +227,7 @@ export function createMemoryTools(options: { createMemory?: (context: ToolContex
               },
               priority: {
                 type: "string",
-                enum: CAPSULE_PRIORITIES,
+                enum: [...CAPSULE_PRIORITIES],
                 description: "Memory priority.",
               },
               tags: {

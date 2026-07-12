@@ -2,7 +2,12 @@ import type { SobaConfig } from "../../application/config/types";
 import type { ModelDefinition, ProviderDefinition } from "../../application/providers/types";
 import type { RuntimeSessionConfigOption } from "../../application/types";
 import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
-import { discoverModels, isLikelyChatModelId, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
+import {
+  discoverModels,
+  getCachedModels,
+  supportsTextGeneration,
+  toModelDefinitions,
+} from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 
 export interface ProviderStackInput {
@@ -25,10 +30,22 @@ export async function createProviderStack(input: ProviderStackInput): Promise<Pr
   const hasRegistry = Boolean(persistedRegistry);
   let cliProviderId: string | undefined;
   if (input.modelExplicitlyPassed || (!hasRegistry && input.config.model)) {
-    for (const provider of providerRegistry.getAllProviders()) {
-      if (providerRegistry.getModel(provider.id, input.config.model)) {
-        cliProviderId = provider.id;
-        break;
+    const providers = providerRegistry.getAllProviders();
+    const qualifiedProvider = providers.find((provider) => input.config.model.startsWith(`${provider.id}/`));
+    if (qualifiedProvider) {
+      const normalizedModel = input.config.model.slice(qualifiedProvider.id.length + 1);
+      if (normalizedModel && providerRegistry.getModel(qualifiedProvider.id, normalizedModel)) {
+        cliProviderId = qualifiedProvider.id;
+        input.config.model = normalizedModel;
+      }
+    } else {
+      const activeProviderId = providerRegistry.getActiveProvider().id;
+      if (providerRegistry.getModel(activeProviderId, input.config.model)) {
+        cliProviderId = activeProviderId;
+      } else {
+        cliProviderId = providers.find((provider) =>
+          providerRegistry.getModelsFor(provider.id).some((model) => model.id === input.config.model)
+        )?.id;
       }
     }
   }
@@ -42,7 +59,7 @@ export async function createProviderStack(input: ProviderStackInput): Promise<Pr
     providerRegistry.setApiKey(providerRegistry.getActiveProvider().id, input.config.apiKey);
   }
   await selectFallbackProviderWithCredentials(providerRegistry);
-  await selectChatModelForActiveProvider(providerRegistry);
+  await selectTextModelForActiveProvider(providerRegistry);
 
   const client = new OpenResponsesClientProxy(providerRegistry);
   const explicitBaseUrlOverride = input.baseUrlOverride ?? (input.baseUrlExplicitlyPassed ? input.config.baseUrl : undefined);
@@ -108,10 +125,29 @@ async function selectFallbackProviderWithCredentials(providerRegistry: ProviderR
   }
 }
 
-async function selectChatModelForActiveProvider(providerRegistry: ProviderRegistry): Promise<void> {
+async function selectTextModelForActiveProvider(providerRegistry: ProviderRegistry): Promise<void> {
   const activeProvider = providerRegistry.getActiveProvider();
+  await refreshModelsForProvider(providerRegistry, activeProvider);
   const activeModel = providerRegistry.getActiveModel();
-  if (activeModel.id && isLikelyChatModelId(activeModel.id)) return;
+  if (activeModel.id) {
+    const discovery = getCachedModels(
+      activeProvider,
+      providerRegistry.resolveApiKey(activeProvider.id),
+    );
+    const discoveredActive = discovery?.ok
+      ? discovery.models.find((model) => model.id === activeModel.id)
+      : undefined;
+    if (!discoveredActive || supportsTextGeneration(discoveredActive)) return;
+    const suggested = discovery?.ok
+      ? providerRegistry
+        .getModelsFor(activeProvider.id)
+        .find((model) => model.id === discovery.suggestedDefault)
+      : undefined;
+    if (suggested) {
+      providerRegistry.setActive(activeProvider.id, suggested.id);
+      return;
+    }
+  }
   const model = await usableModelForProvider(providerRegistry, activeProvider);
   if (model && model.id !== activeModel.id) {
     providerRegistry.setActive(activeProvider.id, model.id);
@@ -145,21 +181,14 @@ function fallbackProviderIds(providerRegistry: ProviderRegistry, activeProviderI
 export async function usableModelForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<ModelDefinition | null> {
   await refreshModelsForProvider(providerRegistry, provider);
   const existingModels = providerRegistry.getModelsFor(provider.id);
-  const chatModels = existingModels.filter((model) => isLikelyChatModelId(model.id));
-  const candidateModels = chatModels.length > 0 ? chatModels : existingModels;
   const existingModel =
-    candidateModels.find((model) => model.id === provider.defaultModel) ??
-    candidateModels.find((model) => model.id.toLowerCase().includes("chat")) ??
-    candidateModels.find((model) => model.id.toLowerCase().includes("code")) ??
-    candidateModels[0];
+    existingModels.find((model) => model.id === provider.defaultModel) ?? existingModels[0];
   if (existingModel) return existingModel;
 
   const discovery = await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
   if (!discovery.ok) return null;
   const discoveredModels = toModelDefinitions(discovery, provider);
-  const discoveredChatModels = discoveredModels.filter((model) => isLikelyChatModelId(model.id));
-  const discoveredCandidates = discoveredChatModels.length > 0 ? discoveredChatModels : discoveredModels;
-  return discoveredCandidates.find((model) => model.id === discovery.suggestedDefault) ?? discoveredCandidates[0] ?? null;
+  return discoveredModels.find((model) => model.id === discovery.suggestedDefault) ?? discoveredModels[0] ?? null;
 }
 
 async function refreshModelsForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<void> {

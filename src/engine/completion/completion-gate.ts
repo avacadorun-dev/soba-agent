@@ -189,8 +189,14 @@ export function evaluateCompletion(request: FinishRequest, state: CompletionStat
     reasons.push("Finish contains internal error acknowledgements that do not match active tool errors.");
   }
   if (unknownEvidenceIds.length > 0) {
+    const availableEvidenceIds = recentEvidenceIds(state.evidenceIds);
     reasons.push(
-      `criteria[].evidenceIds contains IDs that do not match recorded evidence: ${unknownEvidenceIds.join(", ")}. Omit evidenceIds unless you have exact public evidence IDs.`,
+      [
+        `criteria[].evidenceIds contains IDs that do not match recorded evidence: ${unknownEvidenceIds.join(", ")}.`,
+        availableEvidenceIds.length > 0
+          ? `Use matching public evidence IDs from this run, for example: ${availableEvidenceIds.join(", ")}.`
+          : "Omit evidenceIds unless you have exact public evidence IDs.",
+      ].join(" "),
     );
   }
   if (unacknowledgedErrors.length > 0 && request.status !== "blocked") {
@@ -225,6 +231,10 @@ function unknownCriterionEvidenceIds(request: FinishRequest, knownIds: Set<strin
       ),
     ),
   ];
+}
+
+function recentEvidenceIds(knownIds: Set<string> | undefined): string[] {
+  return [...(knownIds ?? [])].slice(-12);
 }
 
 function appendVerificationReasons(input: {

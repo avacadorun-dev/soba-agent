@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "deterministic-runner-test",
+  "comparisonMode": "agent_comparison",
+  "provider": "fixture",
+  "model": "deterministic",
+  "revision": "1",
+  "tasks": ["tests/evals/real-model/tasks/math-bug.json"],
+  "baseline": {
+    "command": ["bun", "run", "{projectRoot}/tests/evals/real-model/fake-producer.ts", "baseline"]
+  },
+  "sobaGated": {
+    "command": ["bun", "run", "{projectRoot}/tests/evals/real-model/fake-producer.ts", "gated"]
+  }
+}

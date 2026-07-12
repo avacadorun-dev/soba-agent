@@ -1,16 +1,22 @@
-import type { FlightRecordData } from "../../../kernel/transcript/types";
+import { redactSecrets } from "../../../kernel/tools/errors";
+import type { DebugEntry, FlightRecordData } from "../../../kernel/transcript/types";
 
 const REDACTED = "[REDACTED]";
 const MAX_STRING_LENGTH = 4_000;
 const MAX_DEPTH = 8;
 
-const SECRET_KEY_PATTERN = /(api[_-]?key|authorization|cookie|credential|password|secret|token)/i;
+const SECRET_KEY_PATTERN =
+  /(?:api[_-]?key|apiKey|authorization|cookie|credential|password|secret|access[_-]?token|accessToken|auth[_-]?token|authToken|refresh[_-]?token|refreshToken|(?:^|[_-])token$)/i;
 
 export function redactFlightRecordData(data: FlightRecordData): FlightRecordData {
   return {
     ...data,
     payload: redactFlightValue(data.payload, 0),
   };
+}
+
+export function redactDebugRecordData(data: DebugEntry["data"]): DebugEntry["data"] {
+  return redactFlightValue(data, 0) as DebugEntry["data"];
 }
 
 function redactFlightValue(value: unknown, depth: number): unknown {
@@ -29,6 +35,7 @@ function redactFlightValue(value: unknown, depth: number): unknown {
 }
 
 function truncateString(value: string): string {
-  if (value.length <= MAX_STRING_LENGTH) return value;
-  return `${value.slice(0, MAX_STRING_LENGTH)}\n[Flight record string truncated]`;
+  const redacted = redactSecrets(value);
+  if (redacted.length <= MAX_STRING_LENGTH) return redacted;
+  return `${redacted.slice(0, MAX_STRING_LENGTH)}\n[Flight record string truncated]`;
 }

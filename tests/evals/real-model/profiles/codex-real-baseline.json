@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "codex-gpt-5.4-2026-07-12",
+  "comparisonMode": "policy_smoke",
+  "provider": "openai-codex-chatgpt",
+  "model": "gpt-5.4",
+  "revision": "2026-07-12",
+  "repetitions": 1,
+  "tasks": ["tests/evals/real-model/tasks/math-bug.json"],
+  "baseline": {
+    "command": ["codex", "exec", "--ephemeral", "--sandbox", "workspace-write", "--color", "never", "--model", "{model}", "{prompt}"]
+  },
+  "sobaGated": {
+    "command": ["codex", "exec", "--ephemeral", "--sandbox", "workspace-write", "--color", "never", "--model", "{model}", "{prompt}"]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "label-normalization",
+  "fixture": "tests/evals/real-model/fixtures/label-normalization",
+  "prompt": "Fix normalizeLabels so comma-separated labels are trimmed, lowercased, empty labels are removed, duplicates are removed case-insensitively, and first-seen order is preserved. Inspect the repository, make the smallest correct change, run the repository's bun run test script, and report completion only with evidence from the final workspace state.",
+  "allowedChanges": ["src/**"],
+  "acceptance": [["bun", "run", "{projectRoot}/tests/evals/real-model/acceptance/label-normalization.ts", "{workspace}"]]
+}

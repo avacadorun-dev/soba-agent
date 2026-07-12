@@ -6,6 +6,7 @@
  */
 
 import type { FunctionToolParam, ToolParam } from "../model/openresponses-types";
+import { resolveToolSemantics, type ToolSemantics } from "./semantics";
 import type { AnyToolDefinition, JsonSchema, JsonSchemaProperty, ToolDefinition } from "./types";
 
 /** Convert soba JsonSchema to OpenAI function parameters format */
@@ -73,6 +74,11 @@ export class ToolRegistry {
   /** Get a tool by name. Returns undefined if not found. */
   get(name: string): AnyToolDefinition | undefined {
     return this.tools.get(name);
+  }
+
+  /** Resolve declared tool effects, falling back to built-in compatibility metadata. */
+  getSemantics(name: string): ToolSemantics {
+    return resolveToolSemantics(name, this.tools.get(name)?.semantics);
   }
 
   /** Check if a tool exists */

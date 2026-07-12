@@ -14,14 +14,16 @@ import type {
   MemoryIndex,
   MemorySourceConfidence,
 } from "../../../kernel/memory/types";
+import {
+  CAPSULE_PRIORITIES,
+  CAPSULE_TYPES,
+  MEMORY_SOURCE_CONFIDENCE_VALUES,
+} from "../../../kernel/memory/types";
 
 const CAPSULE_STORE_VERSION = 1;
 const DEFAULT_MAX_CAPSULES = 50;
 const LOW_PRIORITY_PRUNE_DAYS = 30;
 const CAPSULE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
-const CAPSULE_TYPES: CapsuleType[] = ["decision", "error_fix", "discovery", "pattern", "blocker", "insight"];
-const CAPSULE_PRIORITIES: CapsulePriority[] = ["critical", "high", "medium", "low"];
-const SOURCE_CONFIDENCE_VALUES: MemorySourceConfidence[] = ["high", "medium", "low"];
 
 export type CapsuleStoreErrorCode =
   | "unknown_capsule"
@@ -382,7 +384,10 @@ function validateCapsuleSource(value: unknown): void {
   if (value.commit !== undefined && (typeof value.commit !== "string" || value.commit.trim().length === 0)) {
     throw new CapsuleStoreError("invalid_capsule", "Memory capsule source commit must be a non-empty string");
   }
-  if (value.confidence !== undefined && !SOURCE_CONFIDENCE_VALUES.includes(value.confidence as MemorySourceConfidence)) {
+  if (
+    value.confidence !== undefined &&
+    !MEMORY_SOURCE_CONFIDENCE_VALUES.includes(value.confidence as MemorySourceConfidence)
+  ) {
     throw new CapsuleStoreError("invalid_capsule", "Memory capsule source confidence is invalid");
   }
   if (value.lastVerified !== undefined && (typeof value.lastVerified !== "string" || Number.isNaN(Date.parse(value.lastVerified)))) {
@@ -480,7 +485,7 @@ function scoreCapsule(capsule: MemoryCapsule, query: Required<CapsuleRelevanceQu
 }
 
 function tokenize(value: string): string[] {
-  return normalizeTags(value.split(/[^a-zA-Zа-яА-Я0-9_-]+/u));
+  return normalizeTags(value.split(/[^\p{L}\p{N}_-]+/u));
 }
 
 function priorityWeight(priority: CapsulePriority): number {

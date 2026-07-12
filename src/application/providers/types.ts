@@ -19,6 +19,15 @@
 /** Adapter identifier — selects the provider adapter implementation. */
 export type ProviderAdapterId = "openai" | "anthropic";
 
+export const MODEL_COMPATIBILITY_FEATURES = [
+  "adaptive_thinking",
+  "reasoning_split",
+  "reasoning_details_input",
+  "prefer_max_completion_tokens",
+] as const;
+
+export type ModelCompatibilityFeature = (typeof MODEL_COMPATIBILITY_FEATURES)[number];
+
 /**
  * A model exposed by a provider.
  */
@@ -35,6 +44,8 @@ export interface ModelDefinition {
   supportsStreaming: boolean;
   /** Whether the provider exposes explicit thinking/reasoning control. */
   supportsThinking: boolean;
+  /** Explicit wire-compatibility features; never inferred from vendor/model names. */
+  compatibility?: ModelCompatibilityFeature[];
 }
 
 /**

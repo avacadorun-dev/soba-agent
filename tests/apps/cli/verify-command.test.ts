@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { sealProofBundle } from "../../../src/application/evidence/public";
 
 const CLI_PATH = resolve("src/cli.ts");
 const DIGEST = `sha256:${"b".repeat(64)}`;
@@ -15,7 +16,7 @@ describe("soba verify CLI", () => {
       const proofPath = join(evidenceDir, "proof.soba-proof.json");
       writeFileSync(
         proofPath,
-        JSON.stringify({
+        JSON.stringify(sealProofBundle({
           version: 1,
           sessionId: "sess_cli",
           turnId: "turn_1",
@@ -47,7 +48,7 @@ describe("soba verify CLI", () => {
           risks: [],
           reviewActions: [],
           createdAt: "2026-06-30T10:20:30.000Z",
-        }),
+        })),
         "utf-8",
       );
 

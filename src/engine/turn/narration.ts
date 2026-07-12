@@ -1,3 +1,6 @@
+import type { TaskIntentLexiconExtension } from "../verification/task-intent-lexicon";
+import { inferTaskKindFromPrompt } from "../verification/verification-policy";
+
 export const WORKING_NARRATION_EVENT_TYPES = [
   "acknowledgement",
   "context_scan",
@@ -63,14 +66,14 @@ export function sanitizeWorkingNarrationMessage(message: string): string {
   return `${normalized.slice(0, MAX_NARRATION_MESSAGE_LENGTH - 1).trimEnd()}...`;
 }
 
-export function isNonTrivialPrompt(prompt: string): boolean {
+export function isNonTrivialPrompt(
+  prompt: string,
+  lexiconExtension: TaskIntentLexiconExtension = {},
+): boolean {
   const text = prompt.trim();
   if (text.length === 0) return false;
   if (text.length > 80) return true;
-  return (
-    /\b(add|build|change|fix|implement|update|write|edit|test|lint|debug|review|refactor)\b/i.test(text) ||
-    /(создай|добавь|измени|исправь|обнови|напиши|почини|проверь|сделай|ревью)/i.test(text)
-  );
+  return inferTaskKindFromPrompt(text, lexiconExtension) !== "unknown";
 }
 
 export function createWorkingNarrationGate(input: {

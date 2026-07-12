@@ -7,6 +7,7 @@
 
 import type { FunctionCallOutputItemParam, LocalShellCallOutputItemParam } from "../model/openresponses-types";
 import type { AskUserArgs, ClarificationOutcome } from "./ask-user";
+import type { ToolSemantics } from "./semantics";
 
 // ─── Tool Definition ───
 
@@ -108,6 +109,8 @@ export interface ToolDefinition<TArgs = Record<string, unknown>> {
   parameters: JsonSchema;
   /** OpenResponses tool type */
   toolType: "function" | "local_shell";
+  /** Declarative effects used by work-mode, concurrency, and evidence policies. */
+  semantics?: ToolSemantics;
   /** Execute the tool with given arguments */
   execute(args: TArgs, context: ToolContext, signal?: AbortSignal): Promise<ToolResult>;
   /** Prepare/re-normalize arguments before validation (e.g., parse JSON strings) */

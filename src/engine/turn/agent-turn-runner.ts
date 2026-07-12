@@ -284,6 +284,7 @@ export async function runAgentTurn(
         allItems,
         turnIndex,
         iteration,
+        usage: state.totalUsage,
         hasUsedTools,
         needsVerification,
         hasMutatedFiles,

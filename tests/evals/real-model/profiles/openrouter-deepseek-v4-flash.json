@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "openrouter-deepseek-v4-flash-2026-07-12",
+  "comparisonMode": "agent_comparison",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-v4-flash",
+  "revision": "2026-07-12",
+  "repetitions": 2,
+  "tasks": [
+    "tests/evals/real-model/tasks/math-bug.json",
+    "tests/evals/real-model/tasks/config-merge.json",
+    "tests/evals/real-model/tasks/label-normalization.json"
+  ],
+  "baseline": {
+    "command": [
+      "bun",
+      "run",
+      "{projectRoot}/tests/evals/real-model/ordinary-agent-producer.ts",
+      "--provider",
+      "{provider}",
+      "--model",
+      "{model}",
+      "--prompt",
+      "{prompt}"
+    ]
+  },
+  "sobaGated": {
+    "command": [
+      "bun",
+      "run",
+      "{projectRoot}/dist/cli.js",
+      "--no-session",
+      "--no-color",
+      "--no-stream",
+      "--model",
+      "openrouter/{model}",
+      "--max-agent-iterations",
+      "12",
+      "{prompt}"
+    ]
+  }
+}

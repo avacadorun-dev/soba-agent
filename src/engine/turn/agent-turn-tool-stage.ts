@@ -77,7 +77,7 @@ export async function handleAgentTurnToolStage(input: {
 }): Promise<AgentTurnToolStageResult> {
   input.appendToolCallGroupToSession(input.toolCalls);
 
-  const batchDecision = evaluateToolBatch(input.toolCalls);
+  const batchDecision = evaluateToolBatch(input.toolCalls, (toolName) => input.runtime.tools.getSemantics(toolName));
   if (batchDecision.action === "reject") {
     const rejectedBatchResult = handleRejectedToolBatch({
       batchDecision,

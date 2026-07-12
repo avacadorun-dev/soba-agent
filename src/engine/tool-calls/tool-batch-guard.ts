@@ -1,16 +1,18 @@
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
+import { hasToolEffect, resolveToolSemantics, type ToolSemantics } from "../../kernel/tools/semantics";
 import { isVerificationCommand } from "../evidence/evidence-ledger";
 
 export type ToolBatchGuardDecision =
   | { action: "allow" }
   | { action: "reject"; code: string; message: string };
 
-const MUTATION_TOOLS = new Set(["edit", "write"]);
-
-export function evaluateToolBatch(toolCalls: FunctionCallField[]): ToolBatchGuardDecision {
+export function evaluateToolBatch(
+  toolCalls: FunctionCallField[],
+  semanticsFor: (toolName: string) => ToolSemantics = (toolName) => resolveToolSemantics(toolName),
+): ToolBatchGuardDecision {
   if (toolCalls.length <= 1) return { action: "allow" };
 
-  const mutationCalls = toolCalls.filter((toolCall) => MUTATION_TOOLS.has(toolCall.name));
+  const mutationCalls = toolCalls.filter((toolCall) => hasToolEffect(semanticsFor(toolCall.name), "mutation"));
   if (mutationCalls.length === 0) return { action: "allow" };
 
   const verificationCalls = toolCalls.filter((toolCall) => {
@@ -31,7 +33,7 @@ export function evaluateToolBatch(toolCalls: FunctionCallField[]): ToolBatchGuar
 }
 
 export function isMutationToolName(toolName: string): boolean {
-  return MUTATION_TOOLS.has(toolName);
+  return hasToolEffect(resolveToolSemantics(toolName), "mutation");
 }
 
 function readCommandArgument(argumentsJson: string): string {

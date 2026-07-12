@@ -121,6 +121,9 @@ describe("verification policy", () => {
     expect(inferTaskKindFromPrompt("Сделай ревью изменений")).toBe("review");
     expect(inferTaskKindFromPrompt("Добавь поддержку флага --json")).toBe("feature");
     expect(inferTaskKindFromPrompt("Создай с нуля TypeScript/Bun CLI-проект NoteVault с README")).toBe("feature");
+    expect(inferTaskKindFromPrompt("修复失败的测试")).toBe("test_failure");
+    expect(inferTaskKindFromPrompt("更新项目文档")).toBe("docs_change");
+    expect(inferTaskKindFromPrompt("Repariere den Fehler", { bug_fix: ["repariere", "fehler"] })).toBe("bug_fix");
     expect(
       inferTaskKindFromPrompt(
         "Создай с нуля TypeScript/Bun CLI-проект NoteVault. Написать тесты. Добавить package scripts: test, typecheck, lint если линтер уместен.",
@@ -131,6 +134,8 @@ describe("verification policy", () => {
   test("detects explicit user permission for unverified completion", () => {
     expect(allowsUnverifiedCompletion("Сделай правку, можно без тестов")).toBe(true);
     expect(allowsUnverifiedCompletion("Implement it without verification")).toBe(true);
+    expect(allowsUnverifiedCompletion("可以跳过验证")).toBe(true);
+    expect(allowsUnverifiedCompletion("Implementiere ohne Prüfung", ["ohne prüfung"])).toBe(true);
     expect(allowsUnverifiedCompletion("Почини и проверь")).toBe(false);
   });
 

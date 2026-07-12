@@ -26,14 +26,19 @@ permission checks.
 
 ## 2. Что разрешено
 
-В plan и goal mode SOBA использует только нативные inspection tools: `read`, `ls`, `search_files`, `inspect_file`,
-`read_project_memory` и `checkpoint`. Он также может завершить turn готовым планом или goal brief.
+В plan и goal mode SOBA использует inspection tools: `read`, `ls`, `search_files`, `inspect_file`,
+`read_project_memory` и `checkpoint`. Read-only MCP tools также доступны, если сервер объявляет
+`annotations.readOnlyHint: true`. Turn можно завершить готовым планом или goal brief.
 
 Намеренно недоступны:
 
 - mutation tools для файлов и памяти (`write`, `edit`, `write_project_memory`);
 - `bash`, даже для на вид безопасных `git status` или `bun test`;
-- неизвестные/custom tools и MCP-инструменты, похожие на мутирующие.
+- custom или MCP tools без явно безопасной семантики, включая инструменты с `destructiveHint: true`.
+
+SOBA использует объявленные effects инструмента, а не пытается угадать поведение по имени. У built-in tools есть
+каноническая семантика; MCP `readOnlyHint` означает inspection, а destructive или неаннотированные MCP tools в
+restricted mode блокируются по fail-closed правилу.
 
 Это строгая граница безопасности. Shell allowlist легко обойти через scripts, redirects, Git subcommands или
 интерпретаторы. Запускайте диагностику сами через `!command`, либо явно переключайтесь на `/plan off`, когда агент

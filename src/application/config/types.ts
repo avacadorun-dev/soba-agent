@@ -10,7 +10,7 @@ import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../providers/model-defaults";
-import type { ProviderRegistryState } from "../providers/types";
+import type { ModelCompatibilityFeature, ProviderRegistryState } from "../providers/types";
 
 export type { CompactionConfig } from "../../kernel/compaction/config";
 
@@ -97,6 +97,8 @@ export interface SobaConfig {
    * Source of truth is `registry.defaultModel` when a registry is present.
    */
   model: string;
+  /** Adapter wire-compatibility features derived from the active ModelDefinition. */
+  modelCompatibility?: ModelCompatibilityFeature[];
   /**
    * Maximum output tokens per response. **Derived from the active model**
    * (`ModelDefinition.maxOutput`) — not read from disk. CLI flag

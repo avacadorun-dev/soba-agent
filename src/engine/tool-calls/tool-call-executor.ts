@@ -1,5 +1,6 @@
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import { createToolErrorResult } from "../../kernel/tools/errors";
+import type { ToolSemantics } from "../../kernel/tools/semantics";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext, ToolResult } from "../../kernel/tools/types";
 import {
@@ -28,6 +29,7 @@ export interface ToolExecutionResult {
   durationMs: number;
   cwd: string;
   permission: PermissionDecisionReceipt;
+  semantics: ToolSemantics;
   denied?: {
     description: string;
     reason: string;
@@ -79,10 +81,15 @@ export class ToolCallExecutor {
     this.activeToolAbortControllers.clear();
   }
 
+  getToolSemantics(toolName: string): ToolSemantics {
+    return this.registry.getSemantics(toolName);
+  }
+
   async executeToolCall(toolCall: FunctionCallField, turnSignal?: AbortSignal): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     const parsedArgs = safeParseArgs(toolCall.arguments);
     const context = this.toolContext();
+    const semantics = this.registry.getSemantics(toolCall.name);
 
     this.emit({
       type: "tool_call_start",
@@ -110,6 +117,7 @@ export class ToolCallExecutor {
         durationMs: Date.now() - startTime,
         cwd: context.cwd,
         permission: planModeDenial.receipt,
+        semantics,
         denied: {
           description: planModeDenial.description,
           reason: planModeDenial.reason,
@@ -135,6 +143,7 @@ export class ToolCallExecutor {
         durationMs: Date.now() - startTime,
         cwd: context.cwd,
         permission: permissionDecision.receipt,
+        semantics,
         denied: {
           description: permissionDecision.description,
           reason: permissionDecision.reason,
@@ -160,6 +169,7 @@ export class ToolCallExecutor {
         durationMs: Date.now() - startTime,
         cwd: context.cwd,
         permission: permissionDecision.receipt,
+        semantics,
       };
     }
 
@@ -183,6 +193,7 @@ export class ToolCallExecutor {
         durationMs: Date.now() - startTime,
         cwd: context.cwd,
         permission: permissionDecision.receipt,
+        semantics,
       };
     }
 
@@ -208,6 +219,7 @@ export class ToolCallExecutor {
       durationMs: Date.now() - startTime,
       cwd: context.cwd,
       permission: permissionDecision.receipt,
+      semantics,
     };
   }
 
@@ -315,7 +327,7 @@ export class ToolCallExecutor {
   ): { reason: string; description: string; receipt: PermissionDecisionReceipt } | null {
     if (!isRestrictedWorkMode(this.getWorkMode())) return null;
 
-    const toolDecision = isToolAllowedInPlanMode(toolCall.name);
+    const toolDecision = isToolAllowedInPlanMode(toolCall.name, this.registry.getSemantics(toolCall.name));
     if (!toolDecision.allowed) {
       return this.planModeDenialReceipt(toolCall, parsedArgs, toolDecision.reason);
     }

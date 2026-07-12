@@ -37,9 +37,24 @@ Proof receipt 可以包含：
 - 映射到 evidence ids 的 finish claims；
 - risks 和 unverified 区域；
 - tool calls 的 permission receipts；
-- 对危险命令的 safer alternatives，如果 SOBA 能推断出 least-privilege rewrite。
+- 对危险命令的 safer alternatives，如果 SOBA 能推断出 least-privilege rewrite；
+- 运行指标，包括 model calls 数量和 input/output/total tokens；
+- 由 `sessionId` + `turnId` 确定性派生的 `runId`，以及内容寻址的 `proofId`；
+- 整个脱敏 receipt 的 SHA-256 digest。
 
 目标是让最终回答可审计。比如 “tests passed” 应指向真实运行过的命令；没有证据的 claim 应明确保持 unverified。
+
+当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 只会把它们关联到该 turn 中已经记录且
+成功的 mutation、verification 和 inspection evidence。SOBA 不会虚构证据；没有匹配记录时，claim 仍为 unverified。
+
+新写入的 Proof Bundle v1 会在持久化前 sealing：SOBA 递归脱敏可识别 credentials、规范化 JSON、派生
+`proofId`，并写入 `integrity.digest`。`soba prove` 会显示 proof ID、run ID 和 digest。
+对同一 session/turn 再次 sealing 会保持相同的 run ID，而另一个 turn 会得到不同的 run ID。Sealing 后修改任何受覆盖字段，
+`soba verify` 都会以 `proof_digest_mismatch` 失败。
+
+旧的、没有 integrity metadata 的 v1 receipts 仍可读取，但 verification 会报告 `legacy_unsealed_proof`：
+可以检查结构，但文件不具备篡改检测能力。
+Policy 不会将这种 receipt 接受为 verified；其 outcome 为 `partially_verified`，exit code 为 2。
 
 ---
 
@@ -61,6 +76,24 @@ soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>
 ```
 
 这些命令只读取已保存的 proof 数据。它们不会启动 agent runtime，也不需要 API credentials。
+
+### Verification outcomes 和 exit codes
+
+`soba verify` 会检查 schema version、IDs 和引用、命令 exit code 与 output digest、mutation/verification 顺序、
+diff 完整性、permission 一致性、secret redaction，以及整个 receipt 的 integrity。格式正确的 `unverified`
+或 `blocked` receipt 可以读取，但不会通过 policy gate。
+包含 changed files 的 sealed receipt 必须带有匹配的 diff summary。没有 evidence IDs 的 completion criteria
+会保持 `unverified`；producer 成功退出本身不能让 bundle 变成 verified。
+
+| Outcome | 稳定原因 | Exit code |
+|---|---|---:|
+| `verified` | `proof_verified` | 0 |
+| 无效 receipt | 第一条 validation issue code | 1 |
+| `partially_verified` | `proof_partially_verified` | 2 |
+| `unverified` | `proof_unverified` | 3 |
+| `blocked` | `proof_blocked` | 4 |
+
+脚本中请使用 `--format json`；输出包含 `accepted`、`outcome`、`reason`、`exitCode`、计数和 validation issues。
 
 ---
 
@@ -99,6 +132,12 @@ Instead of approving rm -rf dist && bun run build:
 ```
 
 这让 local-first delegation 保持有边界：代理可以快速工作，但高风险范围始终可见。
+
+## 安全限制
+
+Proof sealing 可以降低意外持久化 credentials 的风险，并检测后续文件修改，但不能证明命令运行在可信机器上；
+redaction 也不是通用 secret scanner。不要把 credentials 放入 prompts 或 command arguments，保持
+`.soba/evidence/` 私密，并把 legacy unsealed receipts 仅当作信息参考。
 
 ---
 

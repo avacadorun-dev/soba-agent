@@ -48,7 +48,7 @@ SOBA v0.6.x 提供 4 个内置 providers。它们都使用 OpenAI-compatible ada
 
 ### 2.1. 动态发现
 
-启动时，SOBA 会对 active provider 调用 `GET {baseUrl}/models`。结果缓存在当前进程内。随后 SOBA 会选择一个合适的默认模型，并优先选择偏代码的模型。
+启动时，SOBA 会对 active provider 调用 `GET {baseUrl}/models`。结果缓存在当前进程内。自动选择默认模型时，SOBA 会跳过明确声明非文本输出的模型，其余情况保持 provider 返回的顺序。它不会根据模型 ID 中的 `chat`、`code` 或 vendor 名称推断能力。
 
 缓存只存在于内存中。要刷新它，请重启 SOBA，或在 TUI 里用 `F2` 或 `/model` 打开模型选择器。
 
@@ -149,7 +149,33 @@ soba provider add my-api \
 | `--from-file <path>` | 否 | 从 JSON 文件加载 provider 定义 |
 | `--set-active` | 否 | 添加后立即设为 active provider |
 
-### 4.3. 管理自定义 providers
+### 4.3. 模型兼容性元数据
+
+大多数 OpenAI-compatible 模型不需要特殊设置。如果模型需要不同的 wire format，请在传给 `--from-file` 的 JSON 中显式声明；SOBA 不会根据 provider 或模型名称自动启用这些行为：
+
+```json
+{
+  "id": "my-api",
+  "name": "My API",
+  "baseUrl": "https://my-llm.company.com/v1",
+  "apiKeyEnv": "MY_LLM_KEY",
+  "adapter": "openai",
+  "defaultModel": "company-model",
+  "models": [{
+    "id": "company-model",
+    "name": "Company Model",
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "supportsStreaming": true,
+    "supportsThinking": true,
+    "compatibility": ["adaptive_thinking", "reasoning_split"]
+  }]
+}
+```
+
+支持的 compatibility features 是 `adaptive_thinking`、`reasoning_split`、`reasoning_details_input` 和 `prefer_max_completion_tokens`。`supportsThinking` 只是供界面使用的能力元数据，不会隐式启用任何 wire-format feature。动态 discovery 也会读取 upstream 的 `soba_compatibility` 或 `compatibility` 列表，并忽略未知值。
+
+### 4.4. 管理自定义 providers
 
 ```bash
 # 查看 provider 定义
@@ -164,7 +190,7 @@ soba provider remove ollama
 
 目前没有 `update` 命令。要修改 URL 或模型列表，请先删除自定义 provider，再重新添加。
 
-### 4.4. 存储位置
+### 4.5. 存储位置
 
 自定义 providers 保存在 `~/.soba/config.json` 的 `registry.customProviders` 中：
 

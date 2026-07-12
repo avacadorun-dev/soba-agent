@@ -37,9 +37,13 @@ description: Режимы запуска SOBA, top-level флаги, provider su
 
 | Флаг | Коротко | Описание |
 |---|---|---|
-| `--model <id>` | `-m` | Переопределить модель на один запуск |
+| `--model <id>` | `-m` | Переопределить модель на один запуск; `provider/model` явно выбирает provider |
 | `--api-key <key>` | `-k` | Переопределить API key на один запуск |
 | `--base-url <url>` | — | Переопределить OpenAI-compatible base URL |
+
+Model ID без квалификатора остаётся на настроенном default provider. Значение
+`openrouter/deepseek/deepseek-v4-flash` явно выбирает `openrouter` и передаёт ему model ID
+`deepseek/deepseek-v4-flash`.
 
 ### Лимиты
 
@@ -90,7 +94,9 @@ description: Режимы запуска SOBA, top-level флаги, provider su
 Proof bundles сохраняются в `.soba/evidence/*.soba-proof.json` после accepted finish агента.
 Текущие proof bundles включают компактный evidence index, finish claims, измененные файлы, checks, commands, permission receipts, risks и review actions.
 Permission receipts записывают trust level, approval kind, approval value, decision, reason и более безопасные альтернативы, когда SOBA может предложить least-privilege rewrite; `auto` означает, что trust policy SOBA разрешила вызов без запроса подтверждения.
-`soba verify` проверяет schema proof и контролирует, что ссылки supported claims указывают на известные evidence, command, check, file mutation или risk IDs.
+Новые receipts также содержат `proofId`, `runId` и SHA-256 `integrity.digest`. `soba verify` проверяет schema и
+content integrity, ссылки supported claims, outcomes команд, порядок mutations, полноту diff, permissions и redaction
+секретов.
 
 | Команда | Назначение |
 |---|---|
@@ -106,6 +112,10 @@ Permission receipts записывают trust level, approval kind, approval va
 | `soba explain-claim <claim> --proof <path>` | Объяснить claim из конкретного `.soba-proof.json` файла |
 
 `soba prove`, `soba verify` и `soba explain-claim` не запускают agent runtime и не требуют credentials провайдера.
+
+У `soba verify` стабильные policy exits: `0` verified, `1` invalid, `2` partially verified, `3` unverified и `4`
+blocked. JSON содержит `accepted`, `outcome`, `reason` и `exitCode`. Legacy receipts без integrity metadata остаются
+читаемыми, но понижаются до `partially_verified` с reason `legacy_unsealed_proof` и exit code 2.
 
 ---
 

@@ -534,9 +534,24 @@ describe("createSobaRuntime", () => {
       new Response(
         JSON.stringify({
           data: [
-            { id: "google/gemini-3.1-flash-image", context_window: 32768, max_output_tokens: 8192 },
-            { id: "minimax/minimax-m3", context_window: 200000, max_output_tokens: 16384 },
-            { id: "moonshotai/kimi-k2.7-code", context_window: 256000, max_output_tokens: 32768 },
+            {
+              id: "google/gemini-3.1-flash-image",
+              context_window: 32768,
+              max_output_tokens: 8192,
+              output_modalities: ["image"],
+            },
+            {
+              id: "minimax/minimax-m3",
+              context_window: 200000,
+              max_output_tokens: 16384,
+              output_modalities: ["image"],
+            },
+            {
+              id: "moonshotai/kimi-k2.7-code",
+              context_window: 256000,
+              max_output_tokens: 32768,
+              output_modalities: ["text"],
+            },
           ],
         }),
         { headers: { "Content-Type": "application/json" } },

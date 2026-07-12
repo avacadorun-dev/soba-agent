@@ -1,6 +1,6 @@
 ---
 name: regression-runner
-description: Автоматический прогон регресс-кейсов из docs/testing/regression-cases/. Выполняет unit-тесты, CLI-проверки и реальные API-вызовы. Сохраняет результаты в auto-result/ с датой.
+description: Автоматический regression gate: case-driven при наличии docs/testing/regression-cases/ или repository-native fallback без фиктивных результатов. Выполняет unit-, CLI-, docs- и при доступности real-model проверки.
 ---
 
 # Regression Test Runner
@@ -15,6 +15,39 @@ description: Автоматический прогон регресс-кейсо
 - По запросу разработчика — «прошей регресс», «regression run»
 
 ## Workflow
+
+### 0. Выбрать доступный режим
+
+Сначала проверить наличие case corpus:
+
+```bash
+test -d docs/testing/regression-cases && find docs/testing/regression-cases -maxdepth 1 -name '*.md' -print
+```
+
+- Если markdown-кейсы существуют, использовать case-driven workflow ниже.
+- Если директория отсутствует или в ней нет кейсов, **не создавать фиктивные 36 файлов** и не заявлять, что они
+  пройдены. Использовать repository-native fallback gate:
+
+```bash
+bun run lint
+bun run typecheck
+bun run check:boundaries
+bun test
+bun run build
+bun run docs:deps:check
+bun run docs:changelog:check
+bun run docs:version:check
+bun run docs:release-baseline:check
+bun run smoke:diagnostics
+(cd docs-site && bun run check && bun run build)
+```
+
+В fallback-отчёте явно записать `caseCorpus: absent`, результаты каждой команды, число тестов и статус live API.
+Отсутствие corpus — maintenance gap, но не повод выдумывать PASS/SKIP для несуществующих кейсов.
+
+Если задача требует release-ready real-model evidence, отсутствие рабочего SOBA provider считается
+`BLOCKED_LIVE_API`, а не `SKIP_API`. Credentials нельзя писать в отчёт или просить прислать в чат: пользователь
+настраивает их локально и сообщает только provider/model identity.
 
 ### 1. Подготовка (один раз)
 
@@ -41,11 +74,11 @@ ls docs/testing/regression-cases/*.md
 
 #### 1.1 Проверка подключения к API
 
-Прочитать `~/.soba/config.json` и проверить подключение:
+Локально проверить `~/.soba/config.json` и наличие выбранных provider/model, не выводя credential values в лог:
 
 ```bash
-# Прочитать конфиг
-read ~/.soba/config.json
+# Показать только безопасную сводку конфигурации своим локальным инструментом.
+# API keys, tokens и полное содержимое config в отчёт не копировать.
 ```
 
 Выполнить тестовый API-вызов:
@@ -56,15 +89,12 @@ bun run dist/cli.js --no-session --max-agent-iterations 1 "Say ok" 2>&1
 
 **Если API работает** → продолжить прогон.
 
-**Если API не работает** (ошибка подключения, invalid key, и т.д.) → запросить у пользователя:
+**Если API не работает** (provider/model не выбран, ошибка подключения, invalid key и т.д.) → записать
+`BLOCKED_LIVE_API` с безопасной причиной. Пользователь настраивает provider/model/credential локально и сообщает только
+несекретную identity; после этого тестовый вызов и real-model cases повторяются.
 
-1. URL API endpoint
-2. API key
-3. Модель
-
-Сохранить в `~/.soba/config.json` и повторить тестовый вызов.
-
-> **Важно:** Без рабочего API прогон регресса невозможен. Не пропускай API-кейсы — настрой подключение.
+> **Важно:** Repository-native fallback можно завершить без API, но release-ready real-model evidence остаётся
+> незакрытым. Не помечать API-кейсы как PASS или `SKIP_API`.
 
 ### 2. Пошаговый прогон (для каждого файла)
 

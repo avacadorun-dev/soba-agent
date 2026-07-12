@@ -199,6 +199,7 @@ const SOURCE_FACTS = {
     "model",
     "sidebar",
     "keys",
+    "plan",
   ]),
 
   cliSubcommands: new Map([
@@ -300,7 +301,6 @@ const SOURCE_FACTS = {
     ["SOBA_AUTO_APPROVE", "env-var"],
     ["/perm", "slash-command"],
     ["accept-edits", "permission-mode"],
-    ["plan", "permission-mode"],
     ["bypass", "permission-mode"],
     ["default", "permission-mode"],
     ["Ctrl+Shift+J", "hotkey"],
@@ -397,7 +397,7 @@ function extractClaims(content: string): Claim[] {
   }
 
   // Permission-mode names. Only inspect permission-related prose to avoid regular words like "short plan".
-  const permRe = /\b(accept-edits|plan|bypass)\b/gi;
+  const permRe = /\b(accept-edits|bypass)\b/gi;
   for (let i = 0; i < lines.length; i++) {
     if (!/permission|permissions|разрешен|режим|trust/i.test(lines[i])) continue;
     const matches = lines[i].matchAll(permRe);

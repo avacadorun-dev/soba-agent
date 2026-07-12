@@ -49,6 +49,7 @@ export async function prepareAgentTurnPromptContext(input: {
       workMode,
       selectedTools: filterToolsForWorkMode(runtime.tools.getNames(), workMode, {
         clarificationAvailable: runtime.clarificationAvailable(),
+        semanticsFor: (toolName) => runtime.tools.getSemantics(toolName),
       }),
       contextFiles: contextFiles.map((file) => file.path),
       systemPrompt,
