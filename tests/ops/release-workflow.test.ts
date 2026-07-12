@@ -4,12 +4,22 @@ import { join } from "node:path";
 
 const projectRoot = process.cwd();
 const releaseWorkflowPath = join(projectRoot, ".github/workflows/release.yml");
+const packageJsonPath = join(projectRoot, "package.json");
 
 function readReleaseWorkflow(): string {
   return readFileSync(releaseWorkflowPath, "utf8");
 }
 
 describe("Release workflow", () => {
+  test("keeps standalone binaries out of the npm package", () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      files?: string[];
+    };
+
+    expect(packageJson.files).toContain("dist/cli.js");
+    expect(packageJson.files).not.toContain("dist/");
+  });
+
   test("builds OpenTUI binaries on native platform runners", () => {
     const workflow = readReleaseWorkflow();
 

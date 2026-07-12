@@ -19,7 +19,7 @@
   },
   "files": [
     "bin/",
-    "dist/",
+    "dist/cli.js",
     "skills/",
     "src/audio/",
     "LICENSE",
