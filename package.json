@@ -1,6 +1,6 @@
 {
   "name": "soba-agent",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "description": "Local-first engineering agent with proof receipts, project memory provenance, MCP, skills, and terminal TUI.",
   "type": "module",
   "private": false,
