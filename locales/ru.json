@@ -127,7 +127,7 @@
   "tui.thinking": "думает",
   "tui.placeholder.default": "Спросите агента...",
   "tui.placeholder.dangerous": "Разрешить? y=разово s=сессия r=repo f=full n=отказ",
-  "tui.keys.help": "F1 справка F2 модель F3 поиск F6 сайдбар PgUp/PgDn прокрутка Cmd+C копировать Ctrl+C стоп/выход",
+  "tui.keys.help": "F1 справка F2 модель F3 поиск F6 сайдбар PgUp/PgDn прокрутка Выделить→копия Ctrl+C стоп/выход",
   "tui.keys.helpShort": "F2 модель F3 поиск F6 сайдбар Ctrl+C стоп/выход",
   "tui.keys.sidebarHide": "Ctrl+Shift+S — сайдбар свёрнут",
   "tui.keys.sidebarShow": "Ctrl+Shift+S — развернуть сайдбар",

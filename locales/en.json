@@ -127,7 +127,7 @@
   "tui.thinking": "thinking",
   "tui.placeholder.default": "Ask the agent anything...",
   "tui.placeholder.dangerous": "Approve? y=once s=session r=repo f=full n=deny",
-  "tui.keys.help": "F1 Help F2 Model F3 Search F6 Sidebar PgUp/PgDn Scroll Cmd+C Copy Ctrl+C Stop/Quit",
+  "tui.keys.help": "F1 Help F2 Model F3 Search F6 Sidebar PgUp/PgDn Scroll Drag Select→Copy Ctrl+C Stop/Quit",
   "tui.keys.helpShort": "F2 Model F3 Search F6 Sidebar Ctrl+C Stop/Quit",
   "tui.keys.sidebarHide": "Ctrl+Shift+S — collapsed sidebar",
   "tui.keys.sidebarShow": "Ctrl+Shift+S — expand sidebar",

@@ -1,6 +1,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useRenderer, useTerminalDimensions } from "@opentui/solid";
 import { createEffect } from "solid-js";
+import { useAutoCopySelection } from "../hooks/use-auto-copy-selection";
 import { useTuiKeys } from "../hooks/use-tui-keys";
 import { getTuiTheme } from "../lib/theme";
 import type { NotificationStore } from "../model/notification-store";
@@ -45,6 +46,7 @@ export function TuiApp(props: {
     trustDialogManager,
     openSearch: () => props.store.openSearch(),
   });
+  useAutoCopySelection(renderer, () => props.store.notifyCopied());
   createEffect(() => renderer.setBackgroundColor(theme().background));
 
   const sidebarWidth = () => (dimensions().width >= 100 ? 28 : 20);

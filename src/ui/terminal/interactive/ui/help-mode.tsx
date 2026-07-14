@@ -24,6 +24,7 @@ interface HotkeyEntry {
 const HOTKEYS: HotkeyEntry[] = [
   { key: "Enter", action: "Submit prompt" },
   { key: "Shift+Enter", action: "Insert newline" },
+  { key: "Mouse drag", action: "Select and copy on release" },
   { key: formatKeyBindings("cancelOrQuit"), action: "Stop agent / Quit" },
   { key: formatKeyBindings("copyLastAssistant"), action: "Copy last assistant" },
   { key: `${formatKeyBindings("clearMessages")} / /clear`, action: "Clear messages" },
