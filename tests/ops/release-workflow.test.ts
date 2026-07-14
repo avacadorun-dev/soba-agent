@@ -5,6 +5,7 @@ import { join } from "node:path";
 const projectRoot = process.cwd();
 const releaseWorkflowPath = join(projectRoot, ".github/workflows/release.yml");
 const packageJsonPath = join(projectRoot, "package.json");
+const buildScriptPath = join(projectRoot, "scripts/build.ts");
 
 function readReleaseWorkflow(): string {
   return readFileSync(releaseWorkflowPath, "utf8");
@@ -18,6 +19,20 @@ describe("Release workflow", () => {
 
     expect(packageJson.files).toContain("dist/cli.js");
     expect(packageJson.files).not.toContain("dist/");
+  });
+
+  test("pins the external OpenTUI runtime to the Solid build plugin version", () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const buildScript = readFileSync(buildScriptPath, "utf8");
+    const coreVersion = packageJson.dependencies?.["@opentui/core"];
+    const solidVersion = packageJson.devDependencies?.["@opentui/solid"];
+
+    expect(buildScript).toContain('external: ["@opentui/core"]');
+    expect(coreVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(solidVersion).toBe(coreVersion);
   });
 
   test("builds OpenTUI binaries on native platform runners", () => {
