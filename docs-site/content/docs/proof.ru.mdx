@@ -3,8 +3,9 @@ title: Proof receipts
 description: Proof bundles SOBA, explain-claim, verify, permission receipts и release-ready workflow с доказательствами.
 ---
 
-Линия SOBA 0.6.x — про доказуемый результат. Агент должен не только написать, что сделал, а сохранить proof receipt:
-что изменил, какие команды запускал, какие claims подтвердил, какие риски остались и какие разрешения использовал.
+Proof в SOBA — это встроенный verified handoff локального coding agent. Он отвечает на узкий вопрос: что SOBA реально
+наблюдала и проверила перед завершением задачи? Он не утверждает, что код правильный или пользовательское намерение
+доказано.
 
 Proof receipts лежат в `.soba/evidence/*.soba-proof.json`. Это локальные артефакты проекта: их можно читать без запуска
 агента и без provider credentials.
@@ -17,9 +18,9 @@ Evidence proof receipts — это сохранённые proof-файлы, ко
 `soba prove --last`, чтобы открыть последний receipt, или передайте конкретный
 `.soba/evidence/<id>.soba-proof.json`, если проверяете старую задачу.
 
-Proof claim mapping означает, что важные finish claims привязаны к evidence ids. Claim может ссылаться на command,
-check, changed file, file mutation, risk или review action. `soba verify` проверяет, что поддержанные ссылки указывают
-на известные ids, а не висят обычным текстом.
+Proof claim mapping позволяет finish claim намеренно ссылаться на evidence ids. Claim без явных ссылок остаётся
+unlinked. `soba verify` проверяет, что ссылки указывают на известные ids, но валидная ссылка не означает, что evidence
+семантически достаточно для narrative claim.
 
 Proof claim explanations читаются через `soba explain-claim`. Передавайте текст или id claim, а для не последнего proof
 добавляйте `--proof .soba/evidence/<id>.soba-proof.json`.
@@ -43,12 +44,13 @@ Proof receipt может включать:
 - `runId`, детерминированно выведенный из `sessionId` + `turnId`, и content-addressed `proofId`;
 - SHA-256 digest всего отредактированного receipt.
 
-Смысл простой: финальный ответ можно проверить. Если агент пишет "tests passed", рядом должен быть check,
-который реально запускался. Если подтверждений нет, claim должен оставаться явно unverified.
+`soba prove` отдельно показывает `Observed`, `Declared`, `Unknown` и `Integrity`. В Observed входят changed paths,
+команды, exit codes, freshness относительно последней мутации и privileged actions. Narrative claims всегда требуют
+human review — и linked, и unlinked.
 
-Если completion gate принимает criteria без явных evidence IDs, SOBA связывает их только с уже записанными в этом
-turn успешными mutation, verification и inspection evidence. SOBA не придумывает evidence: если подходящей записи нет,
-claim остаётся unverified.
+Если completion gate принимает criteria без явных evidence IDs, SOBA оставляет их unlinked. Она не прикрепляет все
+успешные записи turn ко всем claims. Command check считается fresh только тогда, когда записан после покрываемых им
+мутаций; более поздняя мутация делает предыдущий check stale в handoff.
 
 Новые Proof Bundle v1 sealed перед записью: SOBA рекурсивно редактирует распознаваемые credentials, канонизирует JSON,
 выводит `proofId` и записывает `integrity.digest`. `soba prove` показывает proof ID, run ID и digest.
@@ -96,7 +98,17 @@ Sealed receipt с changed files обязан содержать соответс
 | `unverified` | `proof_unverified` | 3 |
 | `blocked` | `proof_blocked` | 4 |
 
-Для скриптов используйте `--format json`: ответ содержит `accepted`, `outcome`, `reason`, `exitCode`, счётчики и issues.
+Для скриптов используйте `soba verify --format json`: ответ содержит `accepted`, `outcome`, `reason`, `exitCode`,
+счётчики и issues. `soba prove --format json` сохраняет прежнюю raw-форму Proof Bundle v1; human-facing handoff не
+создаёт второй JSON contract во время adoption pilot.
+
+CI остаётся независимым источником истины для merge. SOBA handoff полезен до CI и во время review, но не заменяет
+повторный запуск проверок репозитория в CI environment.
+
+Готовый workflow лежит в
+[`docs/examples/github-actions/soba-verified-handoff.yml`](https://github.com/avacadorun-dev/soba-agent/blob/main/docs/examples/github-actions/soba-verified-handoff.yml).
+Опциональный шаг `actions/attest` оборачивает receipt в GitHub custom attestation: подпись связывает workflow identity
+с байтами receipt, но не делает producer-authored claims истинными.
 
 ---
 

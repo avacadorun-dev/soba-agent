@@ -99,11 +99,11 @@ secret redaction.
 
 | Command | Purpose |
 |---|---|
-| `soba prove` | Show the latest proof bundle for the current project |
-| `soba prove --last` | Explicitly show the latest proof bundle |
-| `soba prove --format markdown` | Render the latest proof as Markdown |
-| `soba prove --format json` | Print the latest proof as JSON with `proofPath` |
-| `soba prove <path>` | Show a specific `.soba-proof.json` file |
+| `soba prove` | Show the latest Verified Handoff for the current project |
+| `soba prove --last` | Explicitly show the latest Verified Handoff |
+| `soba prove --format markdown` | Render PR-ready Observed, Declared, Unknown, and Integrity sections |
+| `soba prove --format json` | Print raw Proof Bundle v1 fields plus `proofPath` |
+| `soba prove <path>` | Show a Verified Handoff for a specific `.soba-proof.json` file |
 | `soba verify` | Validate the latest proof bundle structure and internal references |
 | `soba verify --format json` | Print verification issues as JSON |
 | `soba verify <path>` | Validate a specific `.soba-proof.json` file |

@@ -3,8 +3,9 @@ title: Proof receipts
 description: SOBA proof bundles, claim explanations, verification commands, permission receipts, and release-ready evidence workflow.
 ---
 
-SOBA's 0.6.x release line is evidence-first. The agent should not only say what it did; it should leave a proof trail
-that a user, reviewer, or CI job can inspect later.
+SOBA's proof feature is an embedded verified handoff for the local coding agent. It answers a narrow question: what did
+SOBA actually observe and check before ending the task? It does not claim that the code is correct or that user intent
+has been proven.
 
 Proof receipts live in `.soba/evidence/*.soba-proof.json`. They are local project artifacts and do not require a
 provider connection to inspect.
@@ -16,9 +17,9 @@ provider connection to inspect.
 Evidence proof receipts are the persisted proof files SOBA writes after an accepted finish. Use `soba prove --last` to
 open the newest receipt, or pass a specific `.soba/evidence/<id>.soba-proof.json` file when reviewing an older task.
 
-Proof claim mapping means each important finish claim should be mapped to evidence ids. A claim can point to a command,
-check, changed file, file mutation, risk, or review action. `soba verify` checks that supported references point to known
-ids instead of dangling text.
+Proof claim mapping means a finish claim may intentionally reference evidence ids. A claim without explicit references
+stays unlinked. `soba verify` checks that references point to known ids, but a valid link is not a machine verdict that
+the evidence is sufficient for the narrative claim.
 
 Proof claim explanations are read with `soba explain-claim`. Use the claim text or id, and add
 `--proof .soba/evidence/<id>.soba-proof.json` when the claim is not in the latest receipt.
@@ -42,16 +43,17 @@ A proof receipt can include:
 - a `runId` deterministically derived from `sessionId` + `turnId`, and a content-addressed `proofId`;
 - a SHA-256 digest for the complete redacted receipt.
 
-This makes the final answer auditable. A claim such as "tests passed" should point to the command that actually ran. A
-claim that has no evidence should stay visibly unverified.
+`soba prove` renders four separate sections: `Observed`, `Declared`, `Unknown`, and `Integrity`. Observed data includes
+changed paths, commands, exit codes, freshness relative to the latest mutation, and privileged actions. Narrative claims
+always require human review, whether linked or unlinked.
 
-When the completion gate accepts criteria without explicit evidence IDs, SOBA links them only to evidence already
-recorded in that turn: successful mutation, verification, and inspection entries. It does not invent evidence. If no
-matching record exists, the claim remains unverified.
+When the completion gate accepts criteria without explicit evidence IDs, SOBA leaves them unlinked. It never attaches
+every successful turn record to every claim. A command check is fresh only when it was recorded after the mutations it
+claims to cover; a later mutation makes the earlier check stale in the handoff.
 
 Newly written Proof Bundle v1 receipts are sealed before persistence. SOBA recursively redacts recognizable credentials,
-canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. `soba prove` shows the proof ID, run ID, and
-digest. Re-sealing the same session/turn identity preserves its run ID, while another turn gets a different run ID.
+canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. `soba prove` shows the receipt digest in the
+Integrity section. Re-sealing the same session/turn identity preserves its run ID, while another turn gets a different run ID.
 Editing any covered field after sealing makes `soba verify` fail with `proof_digest_mismatch`.
 
 Older pre-integrity v1 receipts remain readable, but verification reports `legacy_unsealed_proof`: the structure can be
@@ -95,7 +97,17 @@ remain `unverified`; they cannot make the bundle verified merely because the pro
 | `unverified` | `proof_unverified` | 3 |
 | `blocked` | `proof_blocked` | 4 |
 
-Use `--format json` in scripts. It includes `accepted`, `outcome`, `reason`, `exitCode`, counts, and validation issues.
+Use `soba verify --format json` in scripts. It includes `accepted`, `outcome`, `reason`, `exitCode`, counts, and validation
+issues. `soba prove --format json` retains the existing raw Proof Bundle v1 shape; the human-facing handoff does not
+introduce a second JSON contract during the adoption pilot.
+
+CI remains the source of truth for merge. The SOBA handoff is useful before CI and during review; it does not replace
+running repository checks in the CI environment.
+
+A copyable workflow is available in
+[`docs/examples/github-actions/soba-verified-handoff.yml`](https://github.com/avacadorun-dev/soba-agent/blob/main/docs/examples/github-actions/soba-verified-handoff.yml).
+Its optional `actions/attest` step wraps the receipt in a GitHub custom attestation; the signature binds workflow identity
+to the receipt bytes, not truth to producer-authored claims.
 
 ---
 

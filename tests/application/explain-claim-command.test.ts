@@ -71,6 +71,8 @@ describe("explain-claim command", () => {
     expect(rendered).toContain("Proof id: proof_aaaaaaaaaaaaaaaaaaaaaaaa");
     expect(rendered).toContain("Run id: run_bbbbbbbbbbbbbbbbbbbbbbbb");
     expect(rendered).toContain("Claim: Explain claim command is implemented");
+    expect(rendered).toContain("Evidence link: linked");
+    expect(rendered).toContain("Verification: requires human review");
     expect(rendered).toContain("ev_verification_1: verification success: Verification command passed: bun test");
     expect(rendered).toContain(`cmd_1: command passed: bun test exit=0 digest=${DIGEST}`);
     expect(rendered).toContain("check_1: check passed: Tests. Command passed.");
@@ -95,6 +97,8 @@ describe("explain-claim command", () => {
       turnId: "turn_1",
       id: "claim_1",
       status: "supported",
+      linkStatus: "linked",
+      verification: "requires_human_review",
     });
     expect(rendered.evidence[0]).toMatchObject({ id: "ev_verification_1", kind: "verification" });
   });

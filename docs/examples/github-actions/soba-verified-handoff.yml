@@ -1,0 +1,63 @@
+name: SOBA verified handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      proof_path:
+        description: Path to an existing .soba-proof.json receipt
+        required: true
+        default: .soba/evidence/latest.soba-proof.json
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  verify-handoff:
+    runs-on: ubuntu-latest
+    env:
+      PROOF_PATH: ${{ inputs.proof_path }}
+      # Set the SOBA_VERSION repository variable to a reviewed release for a pinned gate.
+      SOBA_VERSION: ${{ vars.SOBA_VERSION || 'latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SOBA
+        run: npm install --global "soba-agent@${SOBA_VERSION}"
+
+      - name: Verify Proof Bundle v1
+        id: verify
+        shell: bash
+        run: |
+          set +e
+          soba verify "$PROOF_PATH" --format json > "$RUNNER_TEMP/soba-verification.json"
+          verify_exit=$?
+          set -e
+          echo "exit_code=$verify_exit" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/soba-verification.json"
+
+      - name: Add Verified Handoff to job summary
+        shell: bash
+        run: |
+          soba prove "$PROOF_PATH" --format markdown >> "$GITHUB_STEP_SUMMARY"
+
+      # Optional: enable with repository variable SOBA_ATTEST_HANDOFF=true.
+      # This signs the receipt's origin and bytes. It does not make producer-authored
+      # claims true and does not replace repository checks in CI.
+      - name: Wrap the report in a GitHub custom attestation
+        if: ${{ vars.SOBA_ATTEST_HANDOFF == 'true' && steps.verify.outputs.exit_code == '0' }}
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ env.PROOF_PATH }}
+          predicate-type: https://soba-agent.dev/attestations/verified-handoff/v1
+          predicate-path: ${{ runner.temp }}/soba-verification.json
+
+      - name: Enforce receipt verification result
+        if: ${{ steps.verify.outputs.exit_code != '0' }}
+        shell: bash
+        run: |
+          echo "SOBA receipt verification exited with ${{ steps.verify.outputs.exit_code }}" >&2
+          exit "${{ steps.verify.outputs.exit_code }}"

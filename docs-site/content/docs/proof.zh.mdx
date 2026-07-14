@@ -3,8 +3,8 @@ title: Proof receipts
 description: SOBA proof bundles、claim explanations、verification commands、permission receipts 和发布级证据工作流。
 ---
 
-SOBA 的 0.6.x 线转向 evidence-first。代理不应只说“完成了”，还应留下可检查的证据链：改了什么、运行了什么、
-哪些声明有证据、哪些风险仍然存在，以及哪些权限被使用。
+SOBA 的 proof 功能是本地 coding agent 内置的 verified handoff。它回答一个范围有限的问题：SOBA 在结束任务前
+实际观察和检查了什么？它不声称代码一定正确，也不声称已经证明用户意图得到满足。
 
 Proof receipts 保存在 `.soba/evidence/*.soba-proof.json`。它们是本地项目文件；查看时不需要启动代理，也不需要
 provider credentials。
@@ -16,9 +16,8 @@ provider credentials。
 Evidence proof receipts 是 SOBA 在 accepted finish 之后写入磁盘的 proof 文件。使用 `soba prove --last`
 查看最新 receipt；如果要检查较早任务，可以传入具体的 `.soba/evidence/<id>.soba-proof.json`。
 
-Proof claim mapping 表示重要 finish claims 会映射到 evidence ids。一个 claim 可以指向 command、check、
-changed file、file mutation、risk 或 review action。`soba verify` 会检查 supported references 是否指向已知 ids，
-而不是只留下无法验证的文本。
+Proof claim mapping 允许 finish claim 有意引用 evidence ids。没有显式引用的 claim 保持 unlinked。
+`soba verify` 会检查引用是否指向已知 ids，但有效链接不代表机器已经判断这些 evidence 足以支持 narrative claim。
 
 Proof claim explanations 通过 `soba explain-claim` 查看。可以传入 claim 文本或 id；如果不是最新 proof，
 添加 `--proof .soba/evidence/<id>.soba-proof.json`。
@@ -42,10 +41,13 @@ Proof receipt 可以包含：
 - 由 `sessionId` + `turnId` 确定性派生的 `runId`，以及内容寻址的 `proofId`；
 - 整个脱敏 receipt 的 SHA-256 digest。
 
-目标是让最终回答可审计。比如 “tests passed” 应指向真实运行过的命令；没有证据的 claim 应明确保持 unverified。
+`soba prove` 分别显示 `Observed`、`Declared`、`Unknown` 和 `Integrity`。Observed 包括 changed paths、命令、
+exit codes、相对最后一次 mutation 的 freshness，以及 privileged actions。Narrative claims 无论 linked 或 unlinked，
+都必须由人审查。
 
-当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 只会把它们关联到该 turn 中已经记录且
-成功的 mutation、verification 和 inspection evidence。SOBA 不会虚构证据；没有匹配记录时，claim 仍为 unverified。
+当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 会让它们保持 unlinked，不会把 turn 中所有
+成功记录自动附加到每个 claim。Command check 只有在其覆盖的 mutations 之后运行才是 fresh；后续 mutation 会让
+之前的 check 在 handoff 中变为 stale。
 
 新写入的 Proof Bundle v1 会在持久化前 sealing：SOBA 递归脱敏可识别 credentials、规范化 JSON、派生
 `proofId`，并写入 `integrity.digest`。`soba prove` 会显示 proof ID、run ID 和 digest。
@@ -93,7 +95,15 @@ diff 完整性、permission 一致性、secret redaction，以及整个 receipt 
 | `unverified` | `proof_unverified` | 3 |
 | `blocked` | `proof_blocked` | 4 |
 
-脚本中请使用 `--format json`；输出包含 `accepted`、`outcome`、`reason`、`exitCode`、计数和 validation issues。
+脚本中请使用 `soba verify --format json`；输出包含 `accepted`、`outcome`、`reason`、`exitCode`、计数和 validation issues。
+`soba prove --format json` 保留现有的 Proof Bundle v1 原始结构；adoption pilot 期间不会为 handoff 新增第二套 JSON contract。
+
+CI 仍是 merge 的独立事实来源。SOBA handoff 适合在 CI 前和 review 时使用，但不能替代 CI 环境中的仓库检查。
+
+可复制的 workflow 位于
+[`docs/examples/github-actions/soba-verified-handoff.yml`](https://github.com/avacadorun-dev/soba-agent/blob/main/docs/examples/github-actions/soba-verified-handoff.yml)。
+可选的 `actions/attest` 步骤把 receipt 包装为 GitHub custom attestation；签名绑定 workflow identity 与 receipt 字节，
+并不证明 producer-authored claims 为真。
 
 ---
 

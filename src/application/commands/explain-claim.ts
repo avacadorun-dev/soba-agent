@@ -27,6 +27,8 @@ export interface ExplainedClaim {
   id: string;
   claim: string;
   status: string;
+  linkStatus: "linked" | "unlinked" | "invalid_reference";
+  verification: "requires_human_review";
   evidence: ExplainedClaimEvidence[];
 }
 
@@ -223,6 +225,11 @@ function explainClaim(proof: EvidenceProofDocument, claim: Record<string, unknow
   const bundle = proof.bundle;
   const evidenceIds = stringArray(claim.evidenceIds);
   const index = buildEvidenceIndex(bundle);
+  const evidence = evidenceIds.map((id) => index.get(id) ?? {
+    id,
+    kind: "unknown",
+    summary: "No matching evidence record found.",
+  });
   return {
     proofPath: proof.path,
     proofId: stringField(bundle.proofId, "legacy-unsealed"),
@@ -233,11 +240,11 @@ function explainClaim(proof: EvidenceProofDocument, claim: Record<string, unknow
     id: stringField(claim.id, "unknown"),
     claim: stringField(claim.claim, "unnamed claim"),
     status: stringField(claim.status, "unknown"),
-    evidence: evidenceIds.map((id) => index.get(id) ?? {
-      id,
-      kind: "unknown",
-      summary: "No matching evidence record found.",
-    }),
+    linkStatus: evidence.some((item) => item.kind === "unknown")
+      ? "invalid_reference"
+      : evidence.length > 0 ? "linked" : "unlinked",
+    verification: "requires_human_review",
+    evidence,
   };
 }
 
@@ -313,7 +320,9 @@ function renderExplanationText(explanation: ExplainedClaim): string {
     `Proof status: ${explanation.proofStatus}`,
     `Claim: ${explanation.claim}`,
     `Claim id: ${explanation.id}`,
-    `Claim status: ${explanation.status}`,
+    `Recorded claim status: ${explanation.status} (producer-authored)`,
+    `Evidence link: ${explanation.linkStatus}`,
+    "Verification: requires human review; an evidence link does not prove narrative sufficiency.",
     "Evidence:",
     ...evidenceTextLines(explanation.evidence),
   ].join("\n");
@@ -331,7 +340,9 @@ function renderExplanationMarkdown(explanation: ExplainedClaim): string {
     `- Proof status: \`${explanation.proofStatus}\``,
     `- Claim: ${explanation.claim}`,
     `- Claim id: \`${explanation.id}\``,
-    `- Claim status: \`${explanation.status}\``,
+    `- Recorded claim status: \`${explanation.status}\` (producer-authored)`,
+    `- Evidence link: \`${explanation.linkStatus}\``,
+    "- Verification: requires human review; an evidence link does not prove narrative sufficiency.",
     "",
     "## Evidence",
     explanation.evidence.length === 0

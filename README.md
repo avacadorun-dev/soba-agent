@@ -37,8 +37,8 @@ SOBA is a coding agent with a local workflow:
 - **Interactive TUI** for agent sessions, shell commands, slash commands, permissions, context, and model state.
 - **Sealed Proof Bundle v1 receipts** in `.soba/evidence/*.soba-proof.json`, with stable run/proof IDs, recursive
   redaction, and whole-receipt SHA-256 integrity.
-- **Proof claim mapping** through `soba verify` and `soba explain-claim`, making unsupported claims visible instead of
-  hiding them in prose.
+- **Verified handoff reports** through `soba prove`, separating observed changes and checks from declared narrative
+  claims, unknowns, and receipt integrity.
 - **Run metrics in sealed receipts** for model calls and input/output/total tokens, so eval consumers do not have to
   infer usage from terminal output.
 - **Project Memory** in `.soba/memory/` with source receipts, stale checks, doctor output, and explanations.
@@ -48,11 +48,10 @@ SOBA is a coding agent with a local workflow:
 - **Portable capsules** for compacting, resuming, and handing off long sessions.
 
 The current `0.6.x` line is focused on proof integrity, adversarial false-completion tests, and a real-model evaluation
-baseline. A pinned ordinary-agent versus SOBA comparison now covers three task classes and two repetitions with external
-acceptance outside producer workspaces, declared change scope, and six independently verified SOBA receipts. `0.7.0`
-targets a portable proof API, external run manifests,
-and a generic CI gate; safe workspaces come
-before any larger delegation loop.
+baseline. The next validation step keeps proof inside the local coding agent: make the handoff honest about freshness,
+unresolved narrative claims, and privileged actions, then test whether external teams actually use that report in PR
+review. A standalone proof package, generic producer SDK, policy DSL, and new receipt standard are intentionally deferred
+until independent consumers create concrete demand.
 
 ## Install
 
@@ -133,12 +132,17 @@ soba -i
    soba explain-claim "No test regressions detected"
    ```
 
-If a claim is not backed by evidence, SOBA should keep that visible. The receipt is the handoff artifact, not just a
-transcript summary.
+`soba prove` separates Observed, Declared, Unknown, and Integrity. A narrative claim remains a declaration even when it
+links to evidence; that link is not a machine verdict about semantic sufficiency. The receipt is the handoff artifact,
+not just a transcript summary.
 
 New receipts are sealed before persistence. `soba verify` returns exit `0` only for an accepted `verified` proof;
 invalid, partially verified, unverified, and blocked outcomes return stable non-zero exit codes and machine-readable
 reasons. Legacy receipts without integrity metadata remain readable with a warning but are not tamper-evident.
+
+For a PR summary example, see
+[`docs/examples/github-actions/soba-verified-handoff.yml`](docs/examples/github-actions/soba-verified-handoff.yml).
+The adoption decision rules are fixed in [`docs/verified-handoff-pilot.md`](docs/verified-handoff-pilot.md).
 
 ## Project Memory
 

@@ -31,9 +31,9 @@ const copy = {
     zh: "从终端助手到证据优先的工程代理",
   },
   lead: {
-    en: "The current 0.6.x line hardens proof integrity and establishes a real evaluation baseline. Portable CI contracts and safe workspaces come before any larger delegation loop.",
-    ru: "Текущая линия 0.6.x укрепляет integrity proof receipts и создаёт реальный eval baseline. Portable CI contracts и безопасные workspaces идут раньше любого большого delegation loop.",
-    zh: "当前 0.6.x 线加固 proof integrity，并建立真实 eval baseline。Portable CI contracts 和安全 workspaces 必须先于更大的 delegation loop。",
+    en: "The current line hardens completion evidence inside the local agent. A six-week adoption pilot and safe workspaces come before any standalone proof platform or larger delegation loop.",
+    ru: "Текущая линия укрепляет completion evidence внутри local agent. Шестинедельный adoption pilot и безопасные workspaces идут раньше отдельной proof-платформы или большого delegation loop.",
+    zh: "当前路线强化本地代理内的 completion evidence。先进行六周 adoption pilot 并建设安全 workspace，再考虑独立 proof 平台或更大的 delegation loop。",
   },
   primaryCta: { en: "Start with the docs", ru: "Открыть документацию", zh: "从文档开始" },
   backCta: { en: "Back to home", ru: "На главную", zh: "返回首页" },
@@ -64,9 +64,9 @@ const copy = {
     zh: "北极星",
   },
   footerText: {
-    en: "SOBA should become verification and governance infrastructure for coding agents, with its own local-first agent as the reference implementation.",
-    ru: "SOBA должна стать verification и governance infrastructure для coding agents, а собственный local-first агент — её reference implementation.",
-    zh: "SOBA 应成为 coding agents 的 verification 与 governance infrastructure，并以自己的 local-first agent 作为 reference implementation。",
+    en: "SOBA should be a trustworthy local coding agent whose handoff makes observed work, declarations, and unknowns easy to distinguish.",
+    ru: "SOBA должна быть надёжным local coding agent, в handoff которого легко отличить наблюдаемые факты, декларации и неизвестное.",
+    zh: "SOBA 应成为可信的本地 coding agent，让 handoff 中的已观察事实、声明和未知项清晰可分。",
   },
 };
 
@@ -105,20 +105,16 @@ const stages = [
     icon: Workflow,
     release: "v0.7.0",
     state: { en: "Next", ru: "Дальше", zh: "下一步" },
-    title: {
-      en: "Portable trust surface",
-      ru: "Portable trust surface",
-      zh: "可移植 trust surface",
-    },
+    title: { en: "Verified handoff pilot", ru: "Пилот verified handoff", zh: "Verified handoff 试点" },
     intent: {
-      en: "The same versioned proof contract becomes usable from a public API, external run manifests, and generic CI without model credentials.",
-      ru: "Один versioned proof contract становится доступен через public API, external run manifests и generic CI без model credentials.",
-      zh: "同一个 versioned proof contract 可通过 public API、external run manifests 和无需 model credentials 的 generic CI 使用。",
+      en: "SOBA separates observed checks, declared claims, unknowns, freshness, and integrity, then tests whether real teams use the report in review.",
+      ru: "SOBA разделяет observed checks, declared claims, unknown, freshness и integrity, а затем проверяет, используют ли реальные команды отчёт в review.",
+      zh: "SOBA 分离 observed checks、declared claims、unknown、freshness 与 integrity，并验证真实团队是否会在 review 中使用报告。",
     },
     outcomes: {
-      en: ["Public build/validate API", "External Run Manifest v1", "Headless CI proof gate"],
-      ru: ["Public build/validate API", "External Run Manifest v1", "Headless CI proof gate"],
-      zh: ["Public build/validate API", "External Run Manifest v1", "Headless CI proof gate"],
+      en: ["Freshness-aware handoff", "PR-ready Markdown", "Optional GitHub attestation wrapper", "Six-week pilot across 10 repositories"],
+      ru: ["Freshness-aware handoff", "Markdown для PR", "Опциональная GitHub attestation", "Шестинедельный пилот на 10 репозиториях"],
+      zh: ["Freshness-aware handoff", "可用于 PR 的 Markdown", "可选 GitHub attestation 封装", "覆盖 10 个仓库的六周试点"],
     },
   },
   {
@@ -165,20 +161,16 @@ const stages = [
     icon: Compass,
     release: "v0.9 → 1.0",
     state: { en: "Stabilize", ru: "К 1.0", zh: "稳定化" },
-    title: {
-      en: "Stable trust contract",
-      ru: "Stable trust contract",
-      zh: "稳定 trust contract",
-    },
+    title: { en: "Trustworthy local agent", ru: "Надёжный local agent", zh: "可信本地代理" },
     intent: {
-      en: "Adoption hardening, compatibility, selected integrations, and reproducible release evals turn the trust promise into a stable 1.0 contract.",
-      ru: "Adoption hardening, compatibility, выбранные integrations и воспроизводимые release evals превращают trust promise в стабильный contract 1.0.",
-      zh: "通过 adoption hardening、compatibility、精选 integrations 和可重复 release evals，把 trust promise 变成稳定的 1.0 contract。",
+      en: "Adoption evidence, agent quality, compatibility, selected integrations, and reproducible evals shape a focused 1.0 product.",
+      ru: "Данные adoption, качество агента, compatibility, выбранные integrations и воспроизводимые evals формируют сфокусированный продукт 1.0.",
+      zh: "以 adoption 数据、代理质量、compatibility、精选 integrations 和可重复 evals 塑造聚焦的 1.0 产品。",
     },
     outcomes: {
-      en: ["Schema compatibility", "Observed proof consumption", "Selected integrations", "1.0 release hardening"],
-      ru: ["Schema compatibility", "Observed proof consumption", "Выбранные integrations", "1.0 release hardening"],
-      zh: ["Schema compatibility", "Observed proof consumption", "精选 integrations", "1.0 release hardening"],
+      en: ["Agent quality", "Retained handoff usage", "Selected integrations", "1.0 release hardening"],
+      ru: ["Качество агента", "Retained usage handoff", "Выбранные integrations", "1.0 release hardening"],
+      zh: ["代理质量", "Handoff 留存使用", "精选 integrations", "1.0 release hardening"],
     },
   },
 ];

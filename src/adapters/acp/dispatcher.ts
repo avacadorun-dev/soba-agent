@@ -1191,6 +1191,10 @@ function evidenceHandoffMeta(evidence: ParsedEvidenceHandoff): JsonValue {
     checks: evidence.checks,
     risks: evidence.risks,
     reviewActions: evidence.reviewActions,
+    privilegedActions: evidence.privilegedActions,
+    declaredClaims: evidence.declaredClaims,
+    unknown: evidence.unknown,
+    integrity: evidence.integrity,
     rawLines: evidence.rawLines,
   });
 }

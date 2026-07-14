@@ -24,15 +24,20 @@ Evidence, command, check, claim, risk, session, turn, run, and proof identifiers
 records by these identifiers and must not infer relationships from array order, prose summaries, timestamps, or file
 names. IDs are immutable inside a sealed proof.
 
-When accepted completion criteria omit explicit evidence IDs, the runtime may link them only to successful mutation,
-verification, and inspection evidence already recorded in the same turn. If no such evidence exists, the claim remains
-unverified; producers must not synthesize references merely to obtain a verified outcome.
+Accepted completion criteria without explicit evidence IDs remain unlinked and `unverified`. The runtime must not attach
+all successful turn evidence to a claim merely because it was available. Producers must supply an intentional reference;
+consumers must still treat that reference as a link, not as proof that the evidence is semantically sufficient.
+
+Finish claims are narrative declarations. Their persisted v1 status is retained for compatibility, but neither
+`supported` nor the presence of an evidence ID means machine-verified truth. User-facing handoffs render claims as
+`linked`, `unlinked`, or `invalid_reference`, and always mark them as requiring human review.
 
 ## Validation and policy outcomes
 
-`soba verify` first validates schema, references, redaction, content integrity, mutation ordering, command outcomes,
-diff completeness, and permission consistency. A structurally valid proof is accepted only when its terminal status is
-`verified`.
+`soba verify` validates schema, references, redaction, content integrity, mutation ordering, command outcomes, diff
+completeness, and permission consistency. A structurally valid proof is accepted by the v1 receipt policy only when its
+recorded terminal status is `verified`. This is an internal evidence-policy result, not a semantic correctness verdict
+for the code or producer-authored narrative claims.
 
 | Outcome | Stable reason | Exit code |
 | --- | --- | ---: |
@@ -43,6 +48,16 @@ diff completeness, and permission consistency. A structurally valid proof is acc
 | `blocked` | `proof_blocked` | 4 |
 
 Issue codes are machine-readable compatibility surface. Existing codes are not repurposed for a different condition.
+
+`soba prove` is the human-facing Verified Handoff view. It computes four sections without changing the persisted v1
+contract: `Observed` (paths, commands, exit codes, freshness, privileged actions), `Declared` (producer status and
+narrative claims), `Unknown` (missing/stale checks, truncated output, unresolved claims, risks), and `Integrity`.
+`soba prove --format json` intentionally retains the existing raw v1 shape during the adoption pilot; the handoff view
+does not introduce a second public JSON contract.
+
+A passing command is fresh only for mutation evidence it covers and only when it occurs after those mutations. A later
+recorded mutation makes the earlier check stale for the final handoff. `outputTruncated`, when present on a command, is
+an additive boolean that tells consumers the stored output preview is incomplete.
 
 ## Compatibility policy
 

@@ -58,10 +58,11 @@ describe("soba prove CLI", () => {
 
       expect(code).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("# SOBA Proof");
+      expect(stdout).toContain("# SOBA Verified Handoff");
       expect(stdout).toContain("CLI proof rendered.");
-      expect(stdout).toContain("CLI proof rendered supported (ev_verification_cli)");
-      expect(stdout).toContain("Tests passed (bun test)");
+      expect(stdout).toContain("CLI proof rendered: linked; human review required; evidence=ev_verification_cli");
+      expect(stdout).toContain("Tests: passed; command=`bun test`");
+      expect(stdout).toContain("## Unknown / unresolved claims");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

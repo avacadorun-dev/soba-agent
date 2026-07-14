@@ -629,7 +629,7 @@ describe("Evidence Bundle builder", () => {
     });
 
     expect(formatEvidenceBundleForHandoff(bundle)).toBe(
-      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Permissions: bash: bun test auto trust=safe\n- Risks: none",
+      "\n**Verified handoff**\n- Observed changes: modified src/app.ts (+3/-1)\n- Observed diff: 1 file, +3/-1\n- Observed checks: Tests passed (bun test) freshness=unknown\n- Observed privileged actions: none recorded\n- Declared result: Done. (producer status: verified)\n- Declared claims: none recorded\n- Unknown: none recorded\n- Integrity: receipt not persisted",
     );
   });
 
@@ -650,7 +650,7 @@ describe("Evidence Bundle builder", () => {
       now: () => NOW,
     });
 
-    expect(formatEvidenceBundleForHandoff(bundle)).toContain("- Diff: 2 files, +7/-1");
+    expect(formatEvidenceBundleForHandoff(bundle)).toContain("- Observed diff: 2 files, +7/-1");
   });
 });
 

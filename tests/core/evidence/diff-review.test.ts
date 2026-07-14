@@ -145,7 +145,7 @@ describe("Diff review actions", () => {
     });
 
     expect(bundle.reviewActions).toHaveLength(1);
-    expect(formatEvidenceBundleForHandoff(bundle)).toContain("- Review: Rejected file change: src/app.ts");
+    expect(formatEvidenceBundleForHandoff(bundle)).toContain("- Observed review: Rejected file change: src/app.ts");
   });
 });
 

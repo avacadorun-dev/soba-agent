@@ -7,7 +7,7 @@ import type {
   ItemParam as SessionItemParam,
 } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
-import { acknowledgeErrors, type FinishCriterion } from "../completion/completion-gate";
+import { acknowledgeErrors } from "../completion/completion-gate";
 import { buildEvidenceBundle, type EvidenceApproval, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
@@ -137,17 +137,13 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
 
   const finishRequest = finishEvaluation.request;
   acknowledgeErrors(input.errors, finishRequest.acknowledgedErrorIds);
-  const linkedCriteria = linkImplicitCriteriaEvidence(
-    finishRequest.criteria,
-    input.evidenceLedger.getSummary().entries,
-  );
   input.evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
   const evidenceBundle = buildEvidenceBundle({
     sessionId: input.session.getSessionId(),
     turnId: `turn_${input.turn}`,
     completionStatus: finishRequest.status,
     summary: finishRequest.summary,
-    criteria: linkedCriteria,
+    criteria: finishRequest.criteria,
     ledger: input.evidenceLedger.getSummary(),
     approvals: input.approvalReceipts,
     metrics: {
@@ -201,7 +197,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
       status: "accepted",
       completionStatus: finishRequest.status,
       summary: finishRequest.summary,
-      criteria: linkedCriteria,
+      criteria: finishRequest.criteria,
       acknowledgedErrorIds: finishRequest.acknowledgedErrorIds,
     },
   });
@@ -209,7 +205,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     input.finishCall,
     finishRequest.summary,
     finishRequest.status,
-    formatEvidenceBundleForHandoff(evidenceBundle),
+    formatEvidenceBundleForHandoff(evidenceBundle, proofMetadata),
   );
   const text = extractTextFromOutput(finishMessage);
   const sessionItem = outputItemToSessionItem(finishMessage);
@@ -249,21 +245,4 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
   });
   input.emitStopReason("completed", "Model used the explicit finish control tool");
   return "break";
-}
-
-function linkImplicitCriteriaEvidence(
-  criteria: FinishCriterion[],
-  entries: ReturnType<EvidenceLedger["getSummary"]>["entries"],
-): FinishCriterion[] {
-  const recordedIds = entries.flatMap((entry) =>
-    entry.status === "success" && ["mutation", "verification", "inspect"].includes(entry.kind)
-      ? [entry.id]
-      : []
-  );
-  if (recordedIds.length === 0) return criteria;
-  return criteria.map((criterion) =>
-    (criterion.evidenceIds?.length ?? 0) > 0
-      ? criterion
-      : { ...criterion, evidenceIds: recordedIds.slice() }
-  );
 }

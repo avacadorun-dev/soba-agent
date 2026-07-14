@@ -40,6 +40,7 @@ export interface EvidenceEntry {
   cwd?: string;
   outputPreview?: string;
   outputDigest?: string;
+  outputTruncated?: boolean;
   files?: string[];
   mutationIds?: string[];
   resolves?: string[];
@@ -626,7 +627,7 @@ function verificationKindForOutcome(outcome: EvidenceToolOutcome, command: strin
 
 function commandEvidenceFields(outcome: EvidenceToolOutcome): Pick<
   EvidenceEntry,
-  "durationMs" | "exitCode" | "cwd" | "outputPreview" | "outputDigest"
+  "durationMs" | "exitCode" | "cwd" | "outputPreview" | "outputDigest" | "outputTruncated"
 > {
   const exitCode = readExitCode(outcome.details);
   const outputDigest = readStringDetail(outcome.details, "outputDigest");
@@ -636,6 +637,7 @@ function commandEvidenceFields(outcome: EvidenceToolOutcome): Pick<
     cwd: outcome.cwd,
     outputPreview: previewOutput(outcome.output),
     outputDigest,
+    outputTruncated: outcome.output.trim().length > OUTPUT_PREVIEW_MAX_CHARS,
   };
 }
 

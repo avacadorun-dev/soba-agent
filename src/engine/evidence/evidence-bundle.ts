@@ -41,6 +41,7 @@ export interface EvidenceCommandRun {
   cwd?: string;
   outputPreview?: string;
   outputDigest?: string;
+  outputTruncated?: boolean;
 }
 
 export type EvidenceCheckStatus = "passed" | "failed" | "skipped" | "not_run" | "not_required";
@@ -141,6 +142,12 @@ export interface EvidenceProofReceipt {
   digest?: string;
 }
 
+export interface EvidenceHandoffMetadata {
+  proofId?: string;
+  runId?: string;
+  digest?: string;
+}
+
 export interface EvidenceProofSink {
   saveEvidenceBundle(bundle: EvidenceBundle): EvidenceProofReceipt | Promise<EvidenceProofReceipt>;
 }
@@ -201,24 +208,36 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
   };
 }
 
-export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
-  const lines = ["", "**Evidence**", `- Status: ${formatBundleStatus(bundle.status)}`];
+export function formatEvidenceBundleForHandoff(
+  bundle: EvidenceBundle,
+  metadata?: EvidenceHandoffMetadata,
+): string {
+  const privilegedApprovals = bundle.approvals.filter(isPrivilegedApproval);
+  const unresolvedClaims = bundle.claims.filter((claim) => claim.evidenceIds.length === 0 || claim.status === "unsupported");
+  const humanReviewClaims = bundle.claims.filter((claim) => claim.evidenceIds.length > 0 && claim.status !== "unsupported");
+  const unknown = [
+    ...bundle.risks.map((risk) => risk.message),
+    ...(unresolvedClaims.length > 0 ? [`${unresolvedClaims.length} declared claim(s) have no valid evidence link.`] : []),
+    ...(humanReviewClaims.length > 0 ? [`${humanReviewClaims.length} linked narrative claim(s) still require human review.`] : []),
+    ...(bundle.commands.some((command) => command.outputTruncated) ? ["At least one command output is truncated."] : []),
+  ];
+  const lines = ["", "**Verified handoff**"];
 
-  lines.push(`- Changed files: ${formatChangedFiles(bundle.changedFiles)}`);
+  lines.push(`- Observed changes: ${formatChangedFiles(bundle.changedFiles)}`);
   if (bundle.diff) {
-    lines.push(`- Diff: ${formatDiffSummary(bundle.diff)}`);
+    lines.push(`- Observed diff: ${formatDiffSummary(bundle.diff)}`);
   }
-  if (bundle.claims.length > 0) {
-    lines.push(`- Claims: ${formatClaims(bundle.claims)}`);
-  }
-  lines.push(`- Checks: ${formatChecks(bundle.checks, bundle.commands)}`);
-  if (bundle.approvals.length > 0) {
-    lines.push(`- Permissions: ${formatApprovals(bundle.approvals)}`);
-  }
-  lines.push(`- Risks: ${formatRisks(bundle.risks)}`);
+  lines.push(`- Observed checks: ${formatChecks(bundle.checks, bundle.commands, bundle)}`);
+  lines.push(`- Observed privileged actions: ${privilegedApprovals.length > 0 ? formatApprovals(privilegedApprovals) : "none recorded"}`);
   if (bundle.reviewActions.length > 0) {
-    lines.push(`- Review: ${formatReviewActions(bundle.reviewActions)}`);
+    lines.push(`- Observed review: ${formatReviewActions(bundle.reviewActions)}`);
   }
+  lines.push(`- Declared result: ${bundle.summary} (producer status: ${formatBundleStatus(bundle.status)})`);
+  lines.push(`- Declared claims: ${bundle.claims.length > 0 ? formatClaims(bundle.claims) : "none recorded"}`);
+  lines.push(`- Unknown: ${unknown.length > 0 ? unique(unknown).join("; ") : "none recorded"}`);
+  lines.push(
+    `- Integrity: ${metadata?.digest ? `sealed ${metadata.digest}${metadata.proofId ? ` (${metadata.proofId})` : ""}` : "receipt not persisted"}`,
+  );
 
   return lines.join("\n");
 }
@@ -284,6 +303,7 @@ function commandsFromLedger(entries: EvidenceEntry[]): EvidenceCommandRun[] {
         cwd: entry.cwd,
         outputPreview: entry.outputPreview,
         outputDigest: entry.outputDigest,
+        outputTruncated: entry.outputTruncated,
       },
     ];
   });
@@ -662,14 +682,18 @@ function formatChangedFiles(files: EvidenceChangedFile[]): string {
     .join(", ") + (files.length > 8 ? `, ...${files.length - 8} more` : "");
 }
 
-function formatChecks(checks: EvidenceCheck[], commands: EvidenceCommandRun[]): string {
+function formatChecks(checks: EvidenceCheck[], commands: EvidenceCommandRun[], bundle: EvidenceBundle): string {
   if (checks.length === 0) return "none recorded";
   return checks
     .slice(0, 6)
     .map((check) => {
       const command = check.commandId ? commands.find((candidate) => candidate.id === check.commandId) : undefined;
       const commandText = command ? ` (${command.command})` : "";
-      return `${check.label} ${formatCheckStatus(check.status)}${commandText}`;
+      const exitCode = command?.exitCode !== undefined ? ` exit=${command.exitCode ?? "null"}` : "";
+      const freshness = checkFreshness(check, bundle);
+      const freshnessText = freshness === "not applicable" ? "" : ` freshness=${freshness}`;
+      const truncated = command?.outputTruncated ? " output=truncated" : "";
+      return `${check.label} ${formatCheckStatus(check.status)}${commandText}${exitCode}${freshnessText}${truncated}`;
     })
     .join(", ") + (checks.length > 6 ? `, ...${checks.length - 6} more` : "");
 }
@@ -689,14 +713,6 @@ function formatCheckStatus(status: EvidenceCheckStatus): string {
   }
 }
 
-function formatRisks(risks: EvidenceRisk[]): string {
-  if (risks.length === 0) return "none";
-  return risks
-    .slice(0, 6)
-    .map((risk) => risk.message)
-    .join("; ") + (risks.length > 6 ? `; ...${risks.length - 6} more` : "");
-}
-
 function formatApprovals(approvals: EvidenceApproval[]): string {
   return approvals
     .slice(0, 6)
@@ -714,9 +730,48 @@ function formatClaims(claims: EvidenceClaim[]): string {
     .slice(0, 6)
     .map((claim) => {
       const refs = claim.evidenceIds.length > 0 ? ` (${claim.evidenceIds.join(", ")})` : "";
-      return `${claim.claim} ${claim.status}${refs}`;
+      const linkStatus = claim.status === "unsupported" ? "invalid reference" : claim.evidenceIds.length > 0 ? "linked" : "unlinked";
+      return `${claim.claim} ${linkStatus}, human review required${refs}`;
     })
     .join("; ") + (claims.length > 6 ? `; ...${claims.length - 6} more` : "");
+}
+
+function isPrivilegedApproval(approval: EvidenceApproval): boolean {
+  return approval.decision !== "auto" || approval.trustLevel === "dangerous";
+}
+
+function checkFreshness(check: EvidenceCheck, bundle: EvidenceBundle): "fresh" | "partial" | "stale" | "unknown" | "not applicable" {
+  if (check.status !== "passed") return "not applicable";
+  const mutationIds = unique(bundle.changedFiles.flatMap((file) => file.mutationIds));
+  if (mutationIds.length === 0) return "not applicable";
+
+  const command = check.commandId
+    ? bundle.commands.find((candidate) => candidate.id === check.commandId)
+    : undefined;
+  const expectedEvidenceId = check.id.startsWith("check_") ? check.id.slice("check_".length) : "";
+  const verificationIndex = bundle.evidence.findIndex((entry) =>
+    entry.id === expectedEvidenceId ||
+    (command?.toolCallId !== undefined && entry.toolCallId === command.toolCallId) ||
+    (command?.command !== undefined && entry.kind === "verification" && entry.command === command.command)
+  );
+  if (verificationIndex < 0) return "unknown";
+
+  const verification = bundle.evidence[verificationIndex];
+  const covered = new Set(verification.mutationIds ?? []);
+  if (covered.size === 0) return "unknown";
+  const relatedMutationIds = unique(bundle.changedFiles
+    .filter((file) => file.mutationIds.some((id) => covered.has(id)))
+    .flatMap((file) => file.mutationIds));
+  const freshnessScope = relatedMutationIds.length > 0
+    ? relatedMutationIds
+    : mutationIds.filter((id) => covered.has(id));
+  if (freshnessScope.length === 0) return "unknown";
+  const mutationPositions = freshnessScope.map((id) => bundle.evidence.findIndex((entry) => entry.id === id));
+  if (mutationPositions.some((index) => index > verificationIndex)) return "stale";
+  const freshCovered = freshnessScope.filter((id) => covered.has(id));
+  if (freshCovered.length === freshnessScope.length) return "fresh";
+  if (freshCovered.length > 0) return "partial";
+  return "unknown";
 }
 
 function formatDiffSummary(diff: EvidenceDiffSummary): string {

@@ -1533,7 +1533,7 @@ describe("AgentLoop", () => {
       proofSink,
     );
 
-    await loop.runTurn("Use tool");
+    const result = await loop.runTurn("Use tool");
 
     expect(proofSink.saveEvidenceBundle).toHaveBeenCalledTimes(1);
     expect(savedBundles).toHaveLength(1);
@@ -1563,6 +1563,8 @@ describe("AgentLoop", () => {
       runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
       digest: `sha256:${"c".repeat(64)}`,
     });
+    const finalMessage = result.items.at(-1);
+    expect(JSON.stringify(finalMessage)).toContain(`Integrity: sealed sha256:${"c".repeat(64)}`);
   });
 
   test("persists an accepted finish as a sealed proof that the policy validator accepts", async () => {
@@ -1612,7 +1614,7 @@ describe("AgentLoop", () => {
     expect(verification.exitCode).toBe(0);
   });
 
-  test("links evidence-free finish criteria to recorded mutation and verification evidence", async () => {
+  test("keeps evidence-free finish criteria declared and unlinked", async () => {
     const client = makeClient([
       makeToolCallResponse("edit", '{"path":"src/app.ts","oldText":"a","newText":"b"}', "edit_1"),
       makeToolCallResponse("bash", '{"input":"bun test"}', "bash_1"),
@@ -1653,13 +1655,13 @@ describe("AgentLoop", () => {
     await loop.runTurn("Change and test src/app.ts");
 
     expect(savedBundles).toHaveLength(1);
-    expect(savedBundles[0]?.status).toBe("verified");
+    expect(savedBundles[0]?.status).toBe("unverified");
     expect(savedBundles[0]?.claims).toEqual([
       {
         id: "claim_1",
         claim: "The requested change passes tests",
-        status: "supported",
-        evidenceIds: ["ev_mutation_edit_1", "ev_verification_bash_1"],
+        status: "unverified",
+        evidenceIds: [],
       },
     ]);
   });
@@ -2031,8 +2033,8 @@ describe("AgentLoop", () => {
     if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Completed with unverified changes:");
-      expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: unverified");
+      expect(text).toContain("**Verified handoff**");
+      expect(text).toContain("producer status: unverified");
       expect(text).toContain("verification not run");
       expect(text).toContain("Some file mutations are not covered by passing verification evidence.");
     }
@@ -2075,7 +2077,7 @@ describe("AgentLoop", () => {
     ).toHaveLength(3);
   });
 
-  test("legacy finish без criteria связывается с recorded verification evidence", async () => {
+  test("legacy finish без criteria остаётся narrative claim без evidence link", async () => {
     const responses = [
       makeToolCallResponse("bash", '{"input":"test"}', "verify_1"),
       makeLegacyFinishResponseWithoutCriteria(
@@ -2114,9 +2116,9 @@ describe("AgentLoop", () => {
     if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Verification passed");
-      expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: verified");
-      expect(text).toContain("supported (ev_verification_verify_1)");
+      expect(text).toContain("**Verified handoff**");
+      expect(text).toContain("producer status: unverified");
+      expect(text).toContain("unlinked, human review required");
     }
   });
 
@@ -2186,8 +2188,8 @@ describe("AgentLoop", () => {
     if (finalMessage?.type === "message" && finalMessage.role === "assistant") {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Blocked:");
-      expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: blocked");
+      expect(text).toContain("**Verified handoff**");
+      expect(text).toContain("producer status: blocked");
     }
   });
 

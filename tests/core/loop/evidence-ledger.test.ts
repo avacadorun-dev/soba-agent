@@ -466,6 +466,31 @@ describe("EvidenceLedger", () => {
     expect(summary.verificationKinds).toEqual(new Set());
   });
 
+  test("records whether persisted command output was truncated", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_1",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "src/app.ts" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const verification = ledger.recordToolOutcome({
+      toolCallId: "test_1",
+      toolName: "bash",
+      arguments: recordArgs("bun test"),
+      isError: false,
+      output: "x".repeat(2_001),
+      iteration: 2,
+      details: { exitCode: 0, outputDigest: `sha256:${"a".repeat(64)}` },
+    });
+
+    expect(verification.outputTruncated).toBe(true);
+    expect(verification.outputPreview).toContain("[Evidence output preview truncated]");
+  });
+
   test("summary maps ledger evidence to completion state", () => {
     const ledger = new EvidenceLedger();
     ledger.recordToolOutcome({

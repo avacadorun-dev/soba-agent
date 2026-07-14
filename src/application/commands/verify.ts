@@ -675,6 +675,9 @@ function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set
     if (command.outputPreview !== undefined && typeof command.outputPreview !== "string") {
       addError(issues, "invalid_output_preview", `${path}.outputPreview`, "Expected outputPreview to be a string.");
     }
+    if (command.outputTruncated !== undefined && typeof command.outputTruncated !== "boolean") {
+      addError(issues, "invalid_output_truncated", `${path}.outputTruncated`, "Expected outputTruncated to be a boolean.");
+    }
     if (command.outputDigest !== undefined) {
       if (typeof command.outputDigest !== "string" || !SHA256_DIGEST_PATTERN.test(command.outputDigest)) {
         addError(issues, "invalid_output_digest", `${path}.outputDigest`, "Expected sha256:<64 lowercase hex chars>.");
