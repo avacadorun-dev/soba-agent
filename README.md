@@ -140,6 +140,14 @@ New receipts are sealed before persistence. `soba verify` returns exit `0` only 
 invalid, partially verified, unverified, and blocked outcomes return stable non-zero exit codes and machine-readable
 reasons. Legacy receipts without integrity metadata remain readable with a warning but are not tamper-evident.
 
+## Work modes
+
+Use `/plan agent`, `/plan plan`, or `/plan goal` to choose whether SOBA should implement, prepare a decision-complete
+plan, or clarify the objective and success criteria. In Plan and Goal modes, mutation tools and `bash`/`local_shell`
+are removed from the model's tool schemas before inference while the runtime denial remains as a second safety layer.
+Implementation-style prompts in Plan Mode are automatically treated as requests to inspect and plan, without asking
+the user to switch modes. See the [Plan and goal modes guide](https://soba-agent.dev/en/docs/plan-mode).
+
 ## Project Memory
 
 Project Memory stores durable project facts under `.soba/memory/` so future sessions can reuse context without relying

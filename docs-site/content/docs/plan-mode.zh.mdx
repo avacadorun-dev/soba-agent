@@ -39,13 +39,30 @@ SOBA 使用工具声明的 effects，而不是根据工具名称猜测行为。B
 
 这是有意采用的严格安全边界。shell allowlist 很容易通过脚本、重定向、Git 子命令或解释器绕过。请自行通过 `!command` 运行诊断；只有在明确希望 agent 实施并验证变更时，才切换到 `/plan off`。
 
-## 3. 用按钮澄清决策
+## 3. 实施类请求的处理方式
+
+当前 restricted mode 的契约会放在 model prompt 的最前面，早于通用的 agent-loop 指令。Tool schemas 会在
+transport conversion 之前按 registry 中的规范名称过滤，因此 `bash` 不会以匿名 `local_shell` 能力重新出现，
+修改类工具也完全不会展示给模型。
+
+因此，同一条命令式请求会根据模式产生不同结果：
+
+| 当前模式 | 请求：“实现 notes endpoint，添加测试并运行测试” |
+| --- | --- |
+| `agent` | 检查代码、修改文件、运行相关检查，并报告经过验证的完成结果。 |
+| `plan` | 检查相关代码并返回可直接执行的完整实施计划；不尝试修改，也不要求用户切换模式。 |
+| `goal` | 澄清目标、约束、范围和成功标准，不设计或执行补丁。 |
+
+Runtime execution policy 仍然是第二道安全边界。过期、手工构造或其他意外的 mutation call 仍会以
+`plan_mode_blocked` 被拒绝，即使正常 model path 已经看不到该工具。
+
+## 4. 用按钮澄清决策
 
 当当前 client 支持 structured clarification 时，SOBA 可以在计划过程中调用 `ask_user`。它会显示一个简短问题、两到五个选项，并在需要时提供 **Other** 文本字段。选择结果会回到同一 agent turn，因此最终计划会直接反映该决定。
 
 第一版适用于声明不稳定 `elicitation.form` capability 的 ACP client。没有该 capability 的 client 不会把此工具提供给模型；SOBA 会在最终计划中列出未解决的问题。终端 TUI 目前保留文本 fallback。
 
-## 4. 推荐工作流
+## 5. 推荐工作流
 
 ```text
 /plan on

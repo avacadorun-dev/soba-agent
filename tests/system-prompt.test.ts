@@ -52,7 +52,7 @@ describe("System Prompt", () => {
     expect(prompt).toContain("include source receipts when known");
     expect(prompt).toContain("staleIfFilesChange");
     expect(prompt).toContain("First check for AGENTS.md");
-    expect(prompt).toContain("Work autonomously until the user's task is actually complete");
+    expect(prompt).toContain("Work autonomously until the active work mode's requested outcome is complete");
     expect(prompt).toContain("Simple Q&A with no tools may end with normal text");
     expect(prompt).toContain("After tools, intermediate plain text should lead to more tool use or finish");
     expect(prompt).toContain("Prefer finish with status completed");
@@ -99,10 +99,47 @@ describe("System Prompt", () => {
     expect(prompt).not.toContain("- checkpoint:");
     expect(prompt).not.toContain("- read_project_memory:");
     expect(prompt).not.toContain("- write_project_memory:");
+    expect(prompt).not.toContain("Use search_files for project text or symbol search");
+    expect(prompt).not.toContain("use inspect_file for exact line-numbered");
+    expect(prompt).not.toContain("use ls only for directory shape");
     expect(prompt).not.toContain("write, bash, edit, ls, search_files, inspect_file");
     if (prompt.includes("Available registry tools in this prompt:")) {
       expect(prompt).toContain("Available registry tools in this prompt: read");
     }
+  });
+
+  test("plan mode is prominent and reframes implementation without mutation guidance", () => {
+    const prompt = buildSystemPrompt({
+      cwd: "/project",
+      workMode: "plan",
+      selectedTools: ["read", "ls", "search_files", "inspect_file", "checkpoint"],
+    });
+
+    expect(prompt).toStartWith("<work_mode>\n- PLAN MODE IS ACTIVE");
+    expect(prompt.indexOf("PLAN MODE IS ACTIVE")).toBeLessThan(prompt.indexOf("Agent Loop Contract"));
+    expect(prompt).toContain(
+      "Interpret requests to implement, fix, or change something as requests to inspect the relevant context and produce a decision-complete implementation plan",
+    );
+    expect(prompt).toContain("Do not attempt implementation");
+    expect(prompt).not.toContain("/plan off");
+    expect(prompt).not.toContain("- Use bash for verification commands");
+    expect(prompt).not.toContain("- Use edit for precise changes");
+    expect(prompt).not.toContain("- Use write only for new files");
+    expect(prompt).not.toContain("executing commands, editing code, and writing new files");
+  });
+
+  test("agent mode retains execution guidance for exposed mutation tools", () => {
+    const prompt = buildSystemPrompt({
+      cwd: "/project",
+      workMode: "agent",
+      selectedTools: ["read", "write", "edit", "bash"],
+    });
+
+    expect(prompt).not.toContain("PLAN MODE IS ACTIVE");
+    expect(prompt).not.toContain("GOAL MODE IS ACTIVE");
+    expect(prompt).toContain("- Use bash for verification commands");
+    expect(prompt).toContain("- Use edit for precise changes");
+    expect(prompt).toContain("- Use write only for new files");
   });
 
   test("customPrompt заменяет весь системный промпт", () => {
@@ -224,7 +261,7 @@ describe("System Prompt", () => {
   test("runtime prompt contains Working Narration and verification evidence rules", () => {
     const prompt = buildSystemPrompt({ cwd: "/project" });
 
-    expect(prompt).toContain("provide concise visible updates at key boundaries");
+    expect(prompt).toContain("provide concise visible updates at applicable key boundaries");
     expect(prompt).toContain("context scan, meaningful observation, plan, edit intent, verification");
     expect(prompt).toContain("Working narration, confidence, readbacks, or explanations are not verification evidence");
   });

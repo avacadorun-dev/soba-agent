@@ -43,7 +43,24 @@ This strict boundary is intentional. Shell allowlists are easy to bypass through
 interpreters. Run diagnostics yourself with `!command`, or switch to `/plan off` when you explicitly want the agent to
 implement and verify changes.
 
-## 3. Ask for a decision with buttons
+## 3. How implementation requests behave
+
+The active restricted-mode contract is placed at the beginning of the model prompt, before generic agent-loop guidance.
+Tool schemas are filtered by their canonical registry names before transport conversion, so `bash` cannot reappear as an
+anonymous `local_shell` capability and mutation tools are not advertised to the model at all.
+
+That makes the same imperative request mode-dependent:
+
+| Active mode | Request: “Implement the notes endpoint, add tests, and run them” |
+| --- | --- |
+| `agent` | Inspect, change files, run the relevant checks, and report verified completion. |
+| `plan` | Inspect the relevant code and return a decision-complete implementation plan. Do not attempt changes or ask the user to switch modes. |
+| `goal` | Clarify the objective, constraints, scope, and success criteria without designing or executing a patch. |
+
+The runtime execution policy remains a second safety boundary. A stale, manually constructed, or otherwise unexpected
+mutation call is still rejected with `plan_mode_blocked`, even though the normal model path can no longer see that tool.
+
+## 4. Ask for a decision with buttons
 
 When the active client supports structured clarification, SOBA can call `ask_user` while planning. It presents one
 concise question with two to five choices and, when useful, an **Other** text field. The selected answer returns to the
@@ -53,7 +70,7 @@ The first implementation is available through ACP clients that advertise unstabl
 without that capability do not receive the tool; SOBA writes unresolved questions in its final plan instead. The terminal
 TUI deliberately keeps the text fallback for now.
 
-## 4. Recommended workflow
+## 5. Recommended workflow
 
 ```text
 /plan on

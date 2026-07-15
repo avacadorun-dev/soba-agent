@@ -8,6 +8,8 @@
  * See SYSTEM.md for the canonical prompt text.
  */
 
+import { systemGuidelinesForWorkMode, type WorkMode } from "../../kernel/work-mode/public";
+
 export interface SystemPromptOptions {
   /** Working directory */
   cwd: string;
@@ -15,6 +17,8 @@ export interface SystemPromptOptions {
   customPrompt?: string;
   /** Tool names to include in the prompt (default: core registry tools) */
   selectedTools?: string[];
+  /** Active work mode that constrains the current turn */
+  workMode?: WorkMode;
   /** Additional guidelines appended to the default list */
   extraGuidelines?: string[];
   /** Text appended to the end of the system prompt */
@@ -62,37 +66,27 @@ const CONTROL_TOOLS = [
  * These are minimal and structural — project-specific rules belong in AGENTS.md.
  */
 const PROJECT_ONBOARDING_GUIDELINE =
-  "First check for AGENTS.md in the current working directory. If present, read and follow it before doing project work. If AGENTS.md is absent, read README.md. If neither exists, inspect the project structure with ls and targeted reads before making changes";
+  "First check for AGENTS.md in the current working directory. If present, read and follow it before doing project work. If AGENTS.md is absent, read README.md. If neither exists, inspect the project structure with available inspection tools before taking the next mode-appropriate action";
 
 const COMPLETION_GUIDELINE =
   "Simple Q&A with no tools may end with normal text. After tools, intermediate plain text should lead to more tool use or finish. Prefer finish with status completed, summary, and criteria; if unavailable, emit one concise final answer only after work and verification. After file changes, do not report completed until relevant verification has run. Docs/text-only changes need readback or diff inspection, not code gates, unless code changed or the user requested a full gate. Help/version/which probes and checks piped through head/tail/tee or `; echo exit` wrappers are diagnostics only. Use completed_with_unverified_changes only when the user explicitly permits unverified completion or verification is impossible, and make that limitation visible in summary. Use blocked only for a real external blocker: missing user decision, credentials, required service, security denial, or another condition you cannot resolve safely. Do not use blocked for uncertainty, difficulty, or because the next step requires more analysis. Resolve active tool errors before finishing, or finish as blocked with a concrete blocker when they are unfixable. The loop tracks verification evidence automatically; use criteria[].evidenceIds only when you have matching public evidence IDs";
 
 const ANTI_LOOP_GUIDELINE =
-  "Do not repeat the same command, file read, edit attempt, search, or optional tooling decision when it has already produced no useful new evidence. For optional tooling or non-critical implementation choices, make at most one targeted check, choose the simplest defensible option, and continue unless new evidence appears. After repeated failures or no-progress tool results, change strategy: inspect different evidence, narrow the hypothesis, or stop with a real blocker. Do not keep searching broadly when the results no longer affect the task. Either take the next concrete implementation step, verify, or finish";
+  "Do not repeat the same command, file read, edit attempt, search, or optional tooling decision when it has already produced no useful new evidence. For optional tooling or non-critical implementation choices, make at most one targeted check, choose the simplest defensible option, and continue unless new evidence appears. After repeated failures or no-progress tool results, change strategy: inspect different evidence, narrow the hypothesis, or stop with a real blocker. Do not keep searching broadly when the results no longer affect the task. Either take the next concrete mode-appropriate step, verify when applicable, or finish";
 
 const AGENT_LOOP_CONTRACT_GUIDELINES = [
-  "Agent Loop Contract: for non-trivial project work, follow understand, inspect, plan, act, verify, reflect, finish. Understand the requested outcome and task kind; inspect project instructions and relevant files; make a concise plan; act in small scoped steps; verify mutations with project-appropriate evidence; reflect only as concise observable lessons when useful; finish only with completed, completed_with_unverified_changes, or blocked status",
+  "Agent Loop Contract phases are understand, inspect, plan, act, verify, reflect, finish. Follow only the phases permitted by the active work mode: restricted modes finish with their requested plan or goal brief without entering act or mutation-verification phases",
   "Project instructions override generic skill examples and generic guidelines whenever they are more specific and do not conflict with safety or core completion rules",
   "Code mutation cannot finish as completed without verification evidence. Working narration, confidence, readbacks, or explanations are not verification evidence for code changes",
-  "For non-trivial work, provide concise visible updates at key boundaries: context scan, meaningful observation, plan, edit intent, verification, recovery or blocked status, and completion. These updates must be user-facing summaries, not hidden chain-of-thought, secrets, private prompt text, or fabricated tool results",
+  "For non-trivial work, provide concise visible updates at applicable key boundaries: context scan, meaningful observation, plan, edit intent, verification, recovery or blocked status, and completion. These updates must be user-facing summaries, not hidden chain-of-thought, secrets, private prompt text, or fabricated tool results",
 ];
 
-const CORE_GUIDELINES = [
+const COMMON_GUIDELINES = [
   PROJECT_ONBOARDING_GUIDELINE,
-  "Work autonomously until the user's task is actually complete. Do not stop after announcing a next action — perform it with tools in the same turn. Only finish when the task is done or you are blocked by something requiring user input",
+  "Work autonomously until the active work mode's requested outcome is complete. Do not stop after announcing a next mode-appropriate action — perform it with available tools in the same turn. Only finish when that outcome is done or you are blocked by something requiring user input",
   ...AGENT_LOOP_CONTRACT_GUIDELINES,
   COMPLETION_GUIDELINE,
   ANTI_LOOP_GUIDELINE,
-  "After changing files, detect and use the project's existing verification workflow: formatter, linter, type checker, tests, and build commands as relevant. Prefer commands documented in project instructions and configuration. Do not assume a language, runtime, package manager, framework, or command. If no workflow exists, choose checks appropriate to the detected stack and the changes",
-  "Run final verification commands directly and let the tool truncate long output. Verification commands piped through head/tail/tee or `; echo exit` wrappers do not count as passing evidence. Do not present --help, --version, which, command -v, type, or man probes as passed checks",
-  "For smoke tests that need clean state, use mktemp -d or another unique temp directory, env-configured storage paths, or test fixtures. Do not remove project data with rm -rf just to reset a smoke test",
-  "You may start a dev server or other long-running process when the task requires it. Keep it controllable, stop it when it is no longer needed, and do not leave background processes running without telling the user",
-  "Use search_files for project text or symbol search; use inspect_file for exact line-numbered ranges before edit/write; use ls only for directory shape or filename discovery; use read for images or whole-file reads",
-  "Use bash for verification commands, project scripts, git, package-manager commands, and shell-only operations. Prefer ls, search_files, inspect_file, or read for pwd, ls/find/grep/rg/sed/cat inspection when those tools can provide bounded evidence",
-  "Use edit for precise changes with exact text replacement, including multiple non-overlapping edits in one call",
-  "Use write only for new files or complete rewrites",
-  "Use checkpoint only for meaningful milestones or plan pivots in long tasks; it does not finish the turn",
-  "Use allowed project memory tools. For durable facts, include source receipts when known: file, lines, lastVerified, confidence, staleIfFilesChange. Never modify .soba/memory/** directly",
   "Be concise in your responses",
   "Show file paths clearly when working with files",
   "TRUST DIALOG DENIALS ARE FINAL: If the security system denies a bash command or tool call, this is the user's decision — not a transient error. Stop the ENTIRE sub-goal that required the denied operation. Do NOT try alternative commands, script wrappers (bun -e, node -e, python -c), file moves (mv to /tmp), or any workaround. Simply state what was blocked and ask how to proceed.",
@@ -109,9 +103,69 @@ function buildControlToolsList(): string {
   return CONTROL_TOOLS.join("\n");
 }
 
-function buildGuidelines(extra: string[]): string {
-  const all = [...CORE_GUIDELINES, ...extra.map((g) => g.trim()).filter((g) => g.length > 0)];
+function joinToolNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} or ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`;
+}
+
+function buildGuidelines(tools: string[], extra: string[]): string {
+  const available = new Set(tools);
+  const inspectionClauses = [
+    ...(available.has("search_files") ? ["Use search_files for project text or symbol search"] : []),
+    ...(available.has("inspect_file")
+      ? [
+          available.has("edit") || available.has("write")
+            ? "use inspect_file for exact line-numbered ranges before edit/write"
+            : "use inspect_file for exact line-numbered context",
+        ]
+      : []),
+    ...(available.has("ls") ? ["use ls only for directory shape or filename discovery"] : []),
+    ...(available.has("read") ? ["use read for images or whole-file reads"] : []),
+  ];
+  const inspectionText = inspectionClauses.join("; ");
+  const inspectionGuideline = inspectionText.length > 0
+    ? `${inspectionText[0]?.toUpperCase() ?? ""}${inspectionText.slice(1)}`
+    : "";
+  const boundedInspectionTools = ["ls", "search_files", "inspect_file", "read"]
+    .filter((name) => available.has(name));
+  const bashInspectionPreference = boundedInspectionTools.length > 0
+    ? ` Prefer ${joinToolNames(boundedInspectionTools)} for pwd, ls/find/grep/rg/sed/cat inspection when those tools can provide bounded evidence`
+    : "";
+  const toolGuidelines = [
+    ...(inspectionGuideline ? [inspectionGuideline] : []),
+    ...(available.has("bash")
+      ? [
+          "After changing files, detect and use the project's existing verification workflow: formatter, linter, type checker, tests, and build commands as relevant. Prefer commands documented in project instructions and configuration. Do not assume a language, runtime, package manager, framework, or command. If no workflow exists, choose checks appropriate to the detected stack and the changes",
+          "Run final verification commands directly and let the tool truncate long output. Verification commands piped through head/tail/tee or `; echo exit` wrappers do not count as passing evidence. Do not present --help, --version, which, command -v, type, or man probes as passed checks",
+          "For smoke tests that need clean state, use mktemp -d or another unique temp directory, env-configured storage paths, or test fixtures. Do not remove project data with rm -rf just to reset a smoke test",
+          "You may start a dev server or other long-running process when the task requires it. Keep it controllable, stop it when it is no longer needed, and do not leave background processes running without telling the user",
+          `Use bash for verification commands, project scripts, git, package-manager commands, and shell-only operations.${bashInspectionPreference}`,
+        ]
+      : []),
+    ...(available.has("edit")
+      ? ["Use edit for precise changes with exact text replacement, including multiple non-overlapping edits in one call"]
+      : []),
+    ...(available.has("write") ? ["Use write only for new files or complete rewrites"] : []),
+    ...(available.has("checkpoint")
+      ? ["Use checkpoint only for meaningful milestones or plan pivots in long tasks; it does not finish the turn"]
+      : []),
+    ...(available.has("read_project_memory") || available.has("write_project_memory")
+      ? ["Use allowed project memory tools. For durable facts, include source receipts when known: file, lines, lastVerified, confidence, staleIfFilesChange. Never modify .soba/memory/** directly"]
+      : []),
+  ];
+  const all = [
+    ...COMMON_GUIDELINES,
+    ...toolGuidelines,
+    ...extra.map((g) => g.trim()).filter((g) => g.length > 0),
+  ];
   return all.map((g) => `- ${g}`).join("\n");
+}
+
+function buildWorkModeSection(workMode: WorkMode): string {
+  if (workMode === "agent") return "";
+  const guidelines = systemGuidelinesForWorkMode(workMode);
+  return `<work_mode>\n${guidelines.map((guideline) => `- ${guideline}`).join("\n")}\n</work_mode>`;
 }
 
 function buildProjectContext(files: Array<{ path: string; content: string }>): string {
@@ -188,6 +242,7 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
     cwd,
     customPrompt,
     selectedTools,
+    workMode = "agent",
     extraGuidelines = [],
     appendText = "",
     contextFiles = [],
@@ -197,9 +252,11 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
 
   const now = new Date();
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const workModeSection = buildWorkModeSection(workMode);
+  const workModePrefix = workModeSection ? `${workModeSection}\n\n` : "";
 
   if (customPrompt) {
-    let prompt = customPrompt;
+    let prompt = `${workModePrefix}${customPrompt}`;
     prompt += `\n\nRuntime Agent Loop contract:\n${AGENT_LOOP_CONTRACT_GUIDELINES.map((guideline) => `- ${guideline}`).join("\n")}`;
     prompt += `\n- ${COMPLETION_GUIDELINE}`;
     prompt += `\n- ${ANTI_LOOP_GUIDELINE}`;
@@ -223,10 +280,10 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
   const tools = selectedTools ?? DEFAULT_CORE_TOOLS;
   const toolsList = buildToolsList(tools);
   const controlToolsList = buildControlToolsList();
-  const guidelines = buildGuidelines(extraGuidelines);
+  const guidelines = buildGuidelines(tools, extraGuidelines);
   const sobaDocs = buildSobaDocsSection(tools);
 
-  let prompt = `You are an expert coding assistant operating inside soba, a terminal-based coding agent. You help users by reading files, executing commands, editing code, and writing new files.
+  let prompt = `${workModePrefix}You are an expert coding assistant operating inside soba, a terminal-based coding agent. You help users by inspecting and planning work and, when the active work mode permits, executing commands and changing files.
 
 Available tools:
 ${toolsList}

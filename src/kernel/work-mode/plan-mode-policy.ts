@@ -76,8 +76,9 @@ export function isCommandAllowedInPlanMode(command: string): PlanModeCommandDeci
 export function planModeSystemGuidelines(): string[] {
   return [
     "PLAN MODE IS ACTIVE: inspect and design only. Do not mutate repository files, project memory, configs, or git state",
-    "Do not call write, edit, write_project_memory, bash, or any mutating MCP tools. If implementation is requested, tell the user to run /plan off",
-    "Use read, ls, search_files, inspect_file, read_project_memory, checkpoint, and ask_user when an ACP clarification form is available",
+    "Interpret requests to implement, fix, or change something as requests to inspect the relevant context and produce a decision-complete implementation plan",
+    "Do not attempt implementation, ask the user to switch modes, or call write, edit, write_project_memory, bash, or any mutating MCP tools",
+    "Use only the inspection, search, clarification, checkpoint, and finish tools exposed in the current tool list",
     "Deliver a concrete implementation plan: goal, scope, files to touch, risks, verification commands, and open questions. Prefer finish with that plan when ready",
   ];
 }
@@ -85,8 +86,9 @@ export function planModeSystemGuidelines(): string[] {
 export function goalModeSystemGuidelines(): string[] {
   return [
     "GOAL MODE IS ACTIVE: clarify objective and success criteria only. Do not mutate repository files, project memory, configs, or git state",
-    "Do not call write, edit, write_project_memory, bash, or any mutating MCP tools. If implementation is requested, tell the user to run /plan off or switch to agent mode",
-    "Use read, ls, search_files, inspect_file, read_project_memory, checkpoint, and ask_user when an ACP clarification form is available",
+    "Interpret implementation requests as requests to clarify the objective, constraints, and success criteria without attempting implementation",
+    "Do not call write, edit, write_project_memory, bash, or any mutating MCP tools",
+    "Use only the inspection, search, clarification, checkpoint, and finish tools exposed in the current tool list",
     "Deliver a crisp goal brief: objective, in/out of scope, success criteria, constraints, key risks, and open questions. Prefer finish with that brief when ready",
   ];
 }

@@ -1,7 +1,6 @@
 import type { OpenResponsesClientConfig } from "../../kernel/model/model-gateway";
 import {
   filterToolsForWorkMode,
-  systemGuidelinesForWorkMode,
   type WorkMode,
 } from "../../kernel/work-mode/public";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
@@ -55,7 +54,7 @@ export async function prepareTurnPrompt(input: {
   const systemPrompt = buildSystemPrompt({
     cwd: input.cwd,
     selectedTools,
-    extraGuidelines: systemGuidelinesForWorkMode(workMode),
+    workMode,
     contextFiles,
     skills,
     projectMemorySection,

@@ -60,6 +60,13 @@ function makeDummyTool(
   };
 }
 
+function makeDummyShellTool(): ToolDefinition {
+  return {
+    ...makeDummyTool("bash"),
+    toolType: "local_shell",
+  };
+}
+
 function makeTextResponse(
   text: string,
   phase: "commentary" | "final_answer" = "final_answer",
@@ -2277,7 +2284,7 @@ describe("AgentLoop", () => {
     }
   });
 
-  test("plan mode: inspection tools + plan brief не требует finish auto-continue", async () => {
+  test("plan mode: imperative implementation request stays read-only across inspection iterations", async () => {
     const planText = [
       "## Implementation plan",
       "1. Inspect package.json and test layout",
@@ -2311,17 +2318,26 @@ describe("AgentLoop", () => {
     const session = SessionManager.inMemory("/test");
     const tools = new ToolRegistry();
     tools.register(makeDummyTool("inspect_file"));
+    tools.register(makeDummyTool("write"));
+    tools.register(makeDummyTool("edit"));
+    tools.register(makeDummyShellTool());
     const loop = new AgentLoop(client, session, tools, "/test", {
       emitEvents: true,
     });
     loop.setWorkMode("plan");
 
     const result = await loop.runTurn(
-      "Составь план реализации invoice notes API. Не меняй файлы.",
+      "Реализуй invoice notes API.",
     );
 
     expect(requests).toHaveLength(2);
     expect(result.errors).toHaveLength(0);
+    for (const request of requests) {
+      expect(request.instructions).toStartWith("<work_mode>\n- PLAN MODE IS ACTIVE");
+      expect(
+        (request.tools ?? []).map((tool) => tool.type === "function" ? tool.name : tool.type),
+      ).toEqual(["inspect_file", "finish"]);
+    }
     const syntheticNudges = session
       .buildInput()
       .items.filter(

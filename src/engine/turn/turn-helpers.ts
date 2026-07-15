@@ -442,12 +442,10 @@ export function buildRequest(
     instructions: systemPrompt,
     tools: [
       ...tools
-        .getOpenResponsesTools()
+        .getOpenResponsesTools(allowedToolNames)
         .filter(
           (tool) =>
-            tool.type !== "function" ||
-            (tool.name !== FINISH_TOOL_NAME &&
-              (allowedToolNames === undefined || allowedToolNames.has(tool.name))),
+            tool.type !== "function" || tool.name !== FINISH_TOOL_NAME,
         ),
       FINISH_TOOL,
     ],

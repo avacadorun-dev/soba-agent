@@ -118,11 +118,16 @@ export class ToolRegistry {
   /**
    * Get OpenResponses-compatible tool definitions.
    * Returns function tools as-is and local_shell as a separate type.
+   * Filters by canonical registry name before transport conversion so
+   * anonymous wire types such as local_shell cannot bypass tool policy.
    */
-  getOpenResponsesTools(): ToolParam[] {
+  getOpenResponsesTools(allowedToolNames?: ReadonlySet<string>): ToolParam[] {
     const tools: ToolParam[] = [];
 
     for (const tool of this.tools.values()) {
+      if (allowedToolNames !== undefined && !allowedToolNames.has(tool.name)) {
+        continue;
+      }
       if (tool.toolType === "local_shell") {
         tools.push({ type: "local_shell" });
       } else {
