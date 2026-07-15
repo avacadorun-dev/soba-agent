@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { KeyEvent } from "@opentui/core";
-import { formatKeyBindings, keyMatchesAction } from "../../../../src/ui/terminal/interactive/lib/keymap";
+import {
+  formatKeyBindings,
+  keyMatchesAction,
+  TUI_KEYMAP,
+} from "../../../../src/ui/terminal/interactive/lib/keymap";
 
 function key(partial: Partial<KeyEvent>): KeyEvent {
   return partial as KeyEvent;
@@ -27,6 +31,14 @@ describe("TUI keymap", () => {
     expect(keyMatchesAction(key({ name: "c", ctrl: true, shift: true }), "copyTranscript")).toBe(true);
     expect(keyMatchesAction(key({ name: "c", ctrl: true }), "cancelOrQuit")).toBe(true);
     expect(keyMatchesAction(key({ name: "c", ctrl: true }), "copyTranscript")).toBe(false);
+  });
+
+  test("leaves Ctrl+E available to the focused input editor", () => {
+    const ctrlEIsGlobal = Object.values(TUI_KEYMAP)
+      .flat()
+      .some((binding) => binding.name === "e" && binding.ctrl);
+
+    expect(ctrlEIsGlobal).toBe(false);
   });
 
   test("formats labels for help output", () => {

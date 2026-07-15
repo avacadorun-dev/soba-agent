@@ -40,10 +40,12 @@ export function useTuiKeys(options: TuiKeysOptions): void {
 
     if (keyMatchesAction(key, "copyTranscript")) {
       key.preventDefault();
-      const text = options.renderer.getSelection()?.getSelectedText();
+      const editorText = options.renderer.currentFocusedEditor?.getSelectedText();
+      const terminalSelection = options.renderer.getSelection();
+      const text = editorText?.trim() ? editorText : terminalSelection?.getSelectedText();
       if (text?.trim() && options.renderer.copyToClipboardOSC52(text)) {
         options.store.notifyCopied();
-        options.renderer.clearSelection();
+        if (!editorText?.trim()) options.renderer.clearSelection();
       } else {
         options.store.copyTranscript();
       }
@@ -135,14 +137,6 @@ export function useTuiKeys(options: TuiKeysOptions): void {
     }
   }
 
-  if (keyMatchesAction(key, "toggleToolResult") && !options.store.isProcessing()) {
-    key.preventDefault();
-    const tf = options.getToolFocus();
-    if (tf) {
-      tf.toggleFocused();
-    }
-    return;
-  }
   if (keyMatchesAction(key, "focusNextToolResult") && !options.store.isProcessing()) {
     key.preventDefault();
     const tf = options.getToolFocus();

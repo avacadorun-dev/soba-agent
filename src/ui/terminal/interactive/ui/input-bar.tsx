@@ -1,6 +1,7 @@
 import type { KeyEvent, PasteEvent, TextareaRenderable } from "@opentui/core";
-import { usePaste } from "@opentui/solid";
+import { usePaste, useRenderer } from "@opentui/solid";
 import { For, Show, createEffect, createSignal } from "solid-js";
+import { handleInputEditingShortcut } from "../lib/input-editing";
 import {
   applyInputSuggestion,
   formatInputSuggestion,
@@ -28,6 +29,7 @@ const INPUT_BAR_KEY_BINDINGS = [
 ];
 
 export function InputBar(props: { store: TuiStore }) {
+  const renderer = useRenderer();
   const theme = () => getTuiTheme(props.store.themeName());
   const queued = () => props.store.queuedMessages();
   const composerBlocks = () => props.store.composerBlocks();
@@ -103,6 +105,11 @@ export function InputBar(props: { store: TuiStore }) {
   const handleKeyDown = (key: KeyEvent) => {
     if (!textareaRef) return;
     props.store.setActiveUiPane("input");
+
+    if (handleInputEditingShortcut(key, textareaRef, () => renderer.clearSelection())) {
+      setSuggestions([]);
+      return;
+    }
 
     if (suggestions().length > 0) {
       if (key.name === "up" || key.name === "down") {

@@ -11,7 +11,6 @@ export type TuiKeyAction =
   | "nextSidebarMode"
   | "previousSidebarMode"
   | "openHelp"
-  | "toggleToolResult"
   | "focusNextToolResult"
   | "focusPreviousToolResult";
 
@@ -57,7 +56,6 @@ export const TUI_KEYMAP: Record<TuiKeyAction, KeyBinding[]> = {
     { name: "f1", label: "F1" },
     { name: "h", label: "Ctrl+H", ctrl: true },
   ],
-  toggleToolResult: [{ name: "e", label: "Ctrl+E", ctrl: true }],
   focusNextToolResult: [{ name: "down", label: "Ctrl+Down", ctrl: true }],
   focusPreviousToolResult: [{ name: "up", label: "Ctrl+Up", ctrl: true }],
 };
@@ -73,7 +71,6 @@ export const TUI_KEYMAP_HELP_ORDER: TuiKeyAction[] = [
   "copyTranscript",
   "copyLastAssistant",
   "cancelOrQuit",
-  "toggleToolResult",
   "focusNextToolResult",
   "focusPreviousToolResult",
 ];
@@ -89,7 +86,6 @@ export const TUI_KEYMAP_ACTION_LABELS: Record<TuiKeyAction, string> = {
   nextSidebarMode: "Next sidebar panel",
   previousSidebarMode: "Previous sidebar panel",
   openHelp: "Open help panel",
-  toggleToolResult: "Toggle focused block",
   focusNextToolResult: "Focus next block",
   focusPreviousToolResult: "Focus previous block",
 };
