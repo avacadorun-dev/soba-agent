@@ -37,6 +37,70 @@ describe("bash tool", () => {
     expect(result.content[0].text).toContain("stderr");
   });
 
+  test("стримит построчный вывод до завершения команды", async () => {
+    const cwd = makeCwd();
+    const chunks: string[] = [];
+    let firstChunkSeen = () => {};
+    const firstChunk = new Promise<void>((resolve) => {
+      firstChunkSeen = resolve;
+    });
+    let settled = false;
+    const execution = bashTool.execute(
+      { command: "printf 'first\\n'; sleep 0.2; printf 'second\\n'" },
+      {
+        cwd,
+        onOutput: (chunk) => {
+          chunks.push(chunk);
+          firstChunkSeen();
+        },
+      },
+    );
+    void execution.then(() => {
+      settled = true;
+    });
+
+    const firstEvent = await Promise.race([
+      firstChunk.then(() => "chunk" as const),
+      execution.then(() => "completed" as const),
+    ]);
+
+    expect(firstEvent).toBe("chunk");
+    expect(settled).toBe(false);
+    expect(chunks.join("")).toContain("first\n");
+
+    await execution;
+    expect(chunks.join("")).toContain("second\n");
+  });
+
+  test("редактирует секреты до отправки live output", async () => {
+    const cwd = makeCwd();
+    const chunks: string[] = [];
+
+    await bashTool.execute(
+      { command: "printf 'api_key=secret-value\\n'" },
+      { cwd, onOutput: (chunk) => chunks.push(chunk) },
+    );
+
+    expect(chunks.join("")).toContain("api_key=[REDACTED]");
+    expect(chunks.join("")).not.toContain("secret-value");
+  });
+
+  test("не стримит содержимое private key до безопасной редакции блока", async () => {
+    const cwd = makeCwd();
+    const chunks: string[] = [];
+
+    await bashTool.execute(
+      {
+        command:
+          "printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'private-material' '-----END PRIVATE KEY-----'",
+      },
+      { cwd, onOutput: (chunk) => chunks.push(chunk) },
+    );
+
+    expect(chunks.join("")).toContain("[REDACTED PRIVATE KEY]");
+    expect(chunks.join("")).not.toContain("private-material");
+  });
+
   test("команда с ошибкой возвращает exit code", async () => {
     const cwd = makeCwd();
     const result = await bashTool.execute({ command: "exit 1" }, { cwd });

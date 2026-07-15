@@ -68,6 +68,7 @@ export type TuiMessage =
       toolCallId?: string;
       details?: string[];
       durationMs?: number;
+      streaming?: boolean;
     }
   | { id: number; type: "tool-end"; toolName: string; durationMs: number }
   | { id: number; type: "info" | "error" | "warning" | "success"; content: string };

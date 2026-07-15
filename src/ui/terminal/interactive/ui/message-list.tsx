@@ -23,6 +23,10 @@ export interface ToolResultFocusRef {
   defocus: () => void;
 }
 
+export function shouldAutoExpandMessage(message: TuiMessage): boolean {
+  return message.type === "evidence" || (message.type === "tool-result" && Boolean(message.isError || message.streaming));
+}
+
 function UserMessage(props: { content: string; store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   return (
@@ -240,7 +244,7 @@ export function MessageList(props: {
     let changed = false;
     const newExpanded = new Set(currentExpanded);
     for (const msg of msgs) {
-      if ((msg.type === "tool-result" && msg.isError) || msg.type === "evidence") {
+      if (shouldAutoExpandMessage(msg)) {
         if (newExpanded.has(msg.id)) continue;
         newExpanded.add(msg.id);
         changed = true;

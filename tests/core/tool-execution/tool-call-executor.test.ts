@@ -268,6 +268,48 @@ describe("ToolCallExecutor", () => {
     release();
   });
 
+  test("emits ephemeral output for a visible direct shell command", async () => {
+    const registry = new ToolRegistry();
+    registry.register(makeTool("bash", async (_args, context) => {
+      context.onOutput?.("step one\n");
+      context.onOutput?.("step two\n");
+      return { content: [{ type: "text", text: "step one\nstep two\n" }], isError: false };
+    }));
+    const events: AgentEvent[] = [];
+    const executor = makeExecutor({ registry, events });
+
+    await executor.runDirectShellCommand("long task");
+
+    expect(events.map((event) => event.type)).toEqual([
+      "tool_call_start",
+      "tool_call_output",
+      "tool_call_output",
+      "tool_call_result",
+      "tool_call_end",
+    ]);
+    expect(events[0]).toMatchObject({
+      type: "tool_call_start",
+      userInitiated: true,
+      silent: false,
+    });
+    expect(events[1]).toMatchObject({ type: "tool_call_output", chunk: "step one\n" });
+  });
+
+  test("does not emit live output for a silent direct shell command", async () => {
+    const registry = new ToolRegistry();
+    registry.register(makeTool("bash", async (_args, context) => {
+      context.onOutput?.("hidden\n");
+      return { content: [{ type: "text", text: "hidden\n" }], isError: false };
+    }));
+    const events: AgentEvent[] = [];
+    const executor = makeExecutor({ registry, events });
+
+    await executor.runDirectShellCommand("hidden task", true);
+
+    expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_end"]);
+    expect(events[0]).toMatchObject({ type: "tool_call_start", userInitiated: true, silent: true });
+  });
+
   test("aborts all concurrently active registered tools", async () => {
     const registry = new ToolRegistry();
     let startedCount = 0;

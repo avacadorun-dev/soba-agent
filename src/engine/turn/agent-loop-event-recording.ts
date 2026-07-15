@@ -11,6 +11,11 @@ export interface TurnStopReasonInput {
 }
 
 export function runtimeFlightRecords(event: AgentEvent): Array<Omit<FlightRecordData, "version">> {
+  // Live process output is an ephemeral UI transport. The final redacted tool
+  // result is recorded separately, so persisting every chunk would duplicate
+  // output and inflate session flight logs.
+  if (event.type === "tool_call_output") return [];
+
   const turn = "turnIndex" in event
     ? event.turnIndex
     : "turn" in event && typeof event.turn === "number"

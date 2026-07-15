@@ -93,6 +93,8 @@ export interface ToolContext {
   bashMaxTimeoutSeconds?: number;
   /** Optional interactive clarification bridge supplied by the active host. */
   requestClarification?: (request: AskUserArgs) => Promise<ClarificationOutcome>;
+  /** Optional ephemeral output sink for tools that can report progress while running. */
+  onOutput?: (chunk: string) => void;
 }
 
 /**

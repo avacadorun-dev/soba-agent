@@ -152,7 +152,13 @@ export function ToolResultBlock(props: {
       borderStyle={BLOCK.borderStyle}
       border={["left"]}
       borderColor={
-        props.focused ? theme().primary : props.message.isError ? theme().error : theme()[meta().color]
+        props.focused
+          ? theme().primary
+          : props.message.isError
+            ? theme().error
+            : props.message.streaming
+              ? theme().warning
+              : theme()[meta().color]
       }
       style={{
         flexDirection: "column",
@@ -185,9 +191,18 @@ export function ToolResultBlock(props: {
           </text>
         </box>
         <box>
-          <text fg={props.focused ? theme().primary : theme().dim} wrapMode="none">
-            {props.expanded ? "▾ collapsed" : "▸ expand"}
-          </text>
+          <Show
+            when={!props.message.streaming}
+            fallback={
+              <text fg={theme().warning} wrapMode="none">
+                ● running
+              </text>
+            }
+          >
+            <text fg={props.focused ? theme().primary : theme().dim} wrapMode="none">
+              {props.expanded ? "▾ collapsed" : "▸ expand"}
+            </text>
+          </Show>
         </box>
       </box>
 

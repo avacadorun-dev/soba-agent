@@ -357,6 +357,72 @@ describe("OpenTUI Solid store", () => {
     store.dispose();
   });
 
+  test("показывает live output прямой shell-команды без дублирования финального результата", () => {
+    const store = createStore();
+    store.onAgentEvent(
+      event({
+        type: "tool_call_start",
+        toolCallId: "user_shell_1",
+        toolName: "bash",
+        args: { command: "long task" },
+        userInitiated: true,
+        silent: false,
+      }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["tool-start", "tool-result"]);
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      toolCallId: "user_shell_1",
+      content: "",
+      streaming: true,
+    });
+
+    store.onAgentEvent(
+      event({
+        type: "tool_call_output",
+        toolCallId: "user_shell_1",
+        toolName: "bash",
+        chunk: "step one\n",
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "tool_call_output",
+        toolCallId: "user_shell_1",
+        toolName: "bash",
+        chunk: "step two\r",
+      }),
+    );
+
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      content: "step one\nstep two\n",
+      streaming: true,
+    });
+
+    store.onAgentEvent(
+      event({
+        type: "tool_call_result",
+        toolCallId: "user_shell_1",
+        toolName: "bash",
+        result: { content: [{ type: "text", text: "step one\nstep two\n" }], isError: false },
+      }),
+    );
+    store.onAgentEvent(
+      event({ type: "tool_call_end", toolCallId: "user_shell_1", toolName: "bash", durationMs: 1250 }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["tool-start", "tool-result", "tool-end"]);
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      content: "step one\nstep two\n",
+      streaming: false,
+      durationMs: 1250,
+    });
+    store.dispose();
+  });
+
   test("рендерит ошибку тул-колла", () => {
     const store = createStore();
     store.onAgentEvent(

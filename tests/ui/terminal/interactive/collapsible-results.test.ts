@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, test, vi } from "bun:test";
 import type { AgentEvent } from "../../../../src/engine/turn/types";
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
+import { shouldAutoExpandMessage } from "../../../../src/ui/terminal/interactive/ui/message-list";
 import { createToolResultMouseToggle } from "../../../../src/ui/terminal/interactive/ui/tool-result-block";
 
 function event(value: Record<string, unknown>): AgentEvent {
@@ -54,6 +55,21 @@ describe("B2 — Collapsible Tool Results", () => {
 
   beforeEach(() => {
     store = createStore();
+  });
+
+  test("live shell result auto-expands while output is streaming", () => {
+    expect(
+      shouldAutoExpandMessage({
+        id: 1,
+        type: "tool-result",
+        content: "step one\n",
+        isError: false,
+        isDiff: false,
+        toolName: "bash",
+        summary: "Bash long task",
+        streaming: true,
+      }),
+    ).toBe(true);
   });
 
   describe("Mouse interaction", () => {

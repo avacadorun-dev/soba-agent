@@ -48,6 +48,8 @@ const DEFAULT_MAX_TIMEOUT = 300; // seconds
 const MAX_LINES = 2000;
 const MAX_BYTES = 50 * 1024; // 50KB
 const REDACTION_CARRY_CHARS = 4096;
+const PRIVATE_KEY_BEGIN_RE = /-----BEGIN [A-Z ]*PRIVATE KEY-----/g;
+const PRIVATE_KEY_END_RE = /-----END [A-Z ]*PRIVATE KEY-----/g;
 const MAX_MUTATION_SNAPSHOT_FILES = 10_000;
 const MAX_REPORTED_CHANGED_FILES = 100;
 const SNAPSHOT_SKIP_DIRS = new Set([
@@ -75,6 +77,7 @@ async function execCommand(
   cwd: string,
   timeoutSec: number,
   signal?: AbortSignal,
+  onOutput?: (chunk: string) => void,
 ): Promise<{
   output: string;
   exitCode: number | null;
@@ -95,7 +98,7 @@ async function execCommand(
       detached: process.platform !== "win32",
     });
 
-    const capture = new StreamingOutputCapture(cwd, MAX_LINES, MAX_BYTES);
+    const capture = new StreamingOutputCapture(cwd, MAX_LINES, MAX_BYTES, onOutput);
     let timedOut = false;
     let aborted = false;
     let settled = false;
@@ -182,15 +185,18 @@ class StreamingOutputCapture {
   private totalBytes = 0;
   private totalLineBreaks = 0;
   private _truncated = false;
+  private readonly onOutput?: (chunk: string) => void;
 
   constructor(
     cwd: string,
     maxLines: number,
     maxBytes: number,
+    onOutput?: (chunk: string) => void,
   ) {
     this.cwd = cwd;
     this.maxLines = maxLines;
     this.maxBytes = maxBytes;
+    this.onOutput = onOutput;
   }
 
   get truncated(): boolean {
@@ -206,7 +212,9 @@ class StreamingOutputCapture {
     if (!raw) return;
 
     const combined = this.redactionCarry + raw;
-    const flushTarget = Math.max(0, combined.length - REDACTION_CARRY_CHARS);
+    const streamingBoundary = safeStreamingBoundary(combined);
+    const carryBoundary = hasOpenPrivateKeyBlock(combined) ? 0 : combined.length - REDACTION_CARRY_CHARS;
+    const flushTarget = Math.max(streamingBoundary, carryBoundary, 0);
     const flushLength = safeRedactionFlushLength(combined, flushTarget);
     if (flushLength > 0) {
       this.appendRedacted(redactSecrets(combined.slice(0, flushLength)));
@@ -233,6 +241,12 @@ class StreamingOutputCapture {
 
   private appendRedacted(chunk: string): void {
     if (!chunk) return;
+
+    try {
+      this.onOutput?.(chunk);
+    } catch {
+      // UI progress callbacks are best-effort and must not break the command.
+    }
 
     this.totalBytes += Buffer.byteLength(chunk, "utf-8");
     this.totalLineBreaks += countLineBreaks(chunk);
@@ -302,6 +316,32 @@ function safeRedactionFlushLength(value: string, target: number): number {
     if (/\s/.test(value[index])) return index + 1;
   }
   return target;
+}
+
+function safeStreamingBoundary(value: string): number {
+  const lastLineBoundary = Math.max(value.lastIndexOf("\n"), value.lastIndexOf("\r")) + 1;
+  if (lastLineBoundary <= 0) return 0;
+
+  const lastPrivateKeyStart = lastPatternIndex(value, PRIVATE_KEY_BEGIN_RE);
+  const lastPrivateKeyEnd = lastPatternIndex(value, PRIVATE_KEY_END_RE);
+  if (lastPrivateKeyStart > lastPrivateKeyEnd) {
+    const prefix = value.slice(0, lastPrivateKeyStart);
+    return Math.max(prefix.lastIndexOf("\n"), prefix.lastIndexOf("\r")) + 1;
+  }
+
+  return lastLineBoundary;
+}
+
+function hasOpenPrivateKeyBlock(value: string): boolean {
+  return lastPatternIndex(value, PRIVATE_KEY_BEGIN_RE) > lastPatternIndex(value, PRIVATE_KEY_END_RE);
+}
+
+function lastPatternIndex(value: string, pattern: RegExp): number {
+  let lastIndex = -1;
+  for (const match of value.matchAll(pattern)) {
+    lastIndex = match.index;
+  }
+  return lastIndex;
 }
 
 function normalizeMaxTimeout(maxTimeout: number | undefined): number {
@@ -449,7 +489,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
 
     try {
       const beforeSnapshot = shouldTrackShellFileChanges(args.command) ? snapshotProjectFiles(context.cwd) : null;
-      const result = await execCommand(args.command, context.cwd, timeout.seconds, signal);
+      const result = await execCommand(args.command, context.cwd, timeout.seconds, signal, context.onOutput);
       const changedFiles = beforeSnapshot ? changedFilesBetween(beforeSnapshot, snapshotProjectFiles(context.cwd)) : [];
 
       let output = timeout.note ? `${timeout.note}\n` : "";

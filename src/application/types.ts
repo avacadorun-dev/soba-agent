@@ -21,6 +21,7 @@ export type RuntimeEventType =
   | "function_call_delta"
   | "function_call_done"
   | "tool_call_start"
+  | "tool_call_output"
   | "tool_call_result"
   | "tool_call_end"
   | "turn_end"
@@ -72,6 +73,15 @@ export interface RuntimeToolCallStartEvent extends BaseRuntimeEvent {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
+  userInitiated?: boolean;
+  silent?: boolean;
+}
+
+export interface RuntimeToolCallOutputEvent extends BaseRuntimeEvent {
+  type: "tool_call_output";
+  toolCallId: string;
+  toolName: string;
+  chunk: string;
 }
 
 export interface RuntimeToolCallResultEvent extends BaseRuntimeEvent {
@@ -261,6 +271,7 @@ export type RuntimeEvent =
   | RuntimeFunctionCallDeltaEvent
   | RuntimeFunctionCallDoneEvent
   | RuntimeToolCallStartEvent
+  | RuntimeToolCallOutputEvent
   | RuntimeToolCallResultEvent
   | RuntimeToolCallEndEvent
   | RuntimeTurnEndEvent

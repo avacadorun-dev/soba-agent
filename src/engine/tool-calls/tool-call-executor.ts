@@ -270,11 +270,32 @@ export class ToolCallExecutor {
       toolCallId: toolCall.call_id,
       toolName: toolCall.name,
       args: { command },
+      userInitiated: true,
+      silent,
     });
 
     let result: ToolResult;
     try {
-      result = await tool.execute({ command }, this.toolContext(), controller.signal);
+      const context = this.toolContext();
+      result = await tool.execute(
+        { command },
+        silent
+          ? context
+          : {
+              ...context,
+              onOutput: (chunk) => {
+                if (!chunk) return;
+                this.emit({
+                  type: "tool_call_output",
+                  timestamp: Date.now(),
+                  toolCallId: toolCall.call_id,
+                  toolName: toolCall.name,
+                  chunk,
+                });
+              },
+            },
+        controller.signal,
+      );
     } catch (error) {
       result = {
         content: [{ type: "text", text: `Error executing "bash": ${error instanceof Error ? error.message : String(error)}` }],

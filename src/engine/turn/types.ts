@@ -41,6 +41,7 @@ export type AgentEventType =
   | "function_call_delta"
   | "function_call_done"
   | "tool_call_start"
+  | "tool_call_output"
   | "tool_call_result"
   | "tool_call_end"
   | "turn_end"
@@ -92,6 +93,16 @@ export interface ToolCallStartEvent extends BaseAgentEvent {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
+  userInitiated?: boolean;
+  silent?: boolean;
+}
+
+export interface ToolCallOutputEvent extends BaseAgentEvent {
+  type: "tool_call_output";
+  toolCallId: string;
+  toolName: string;
+  /** Redacted, ephemeral process output. It is not persisted to the session log. */
+  chunk: string;
 }
 
 export interface ToolCallResultEvent extends BaseAgentEvent {
@@ -272,6 +283,7 @@ export type AgentEvent =
   | FunctionCallDeltaEvent
   | FunctionCallDoneEvent
   | ToolCallStartEvent
+  | ToolCallOutputEvent
   | ToolCallResultEvent
   | ToolCallEndEvent
   | TurnEndEvent

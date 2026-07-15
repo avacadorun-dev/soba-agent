@@ -41,6 +41,15 @@ import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type Queu
 
 const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "checkpoint", "activate_skill"]);
 const PROJECT_INFO_REFRESH_DELAY_MS = 0;
+const MAX_LIVE_TOOL_OUTPUT_BYTES = 50 * 1024;
+
+function appendLiveToolOutput(content: string, chunk: string): string {
+  const normalizedChunk = chunk.replace(/\r(?!\n)/g, "\n");
+  const combined = content + normalizedChunk;
+  const bytes = Buffer.from(combined, "utf-8");
+  if (bytes.length <= MAX_LIVE_TOOL_OUTPUT_BYTES) return combined;
+  return `[Earlier live output omitted]\n${new TextDecoder().decode(bytes.subarray(-MAX_LIVE_TOOL_OUTPUT_BYTES))}`;
+}
 
 interface TuiTrustController {
   getPermissionMode(): PermissionMode;
@@ -100,6 +109,7 @@ export class TuiStore {
   private readonly setConfirmation: Setter<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
   private readonly _toolSummaries = new Map<string, string>();
   private readonly _toolDetails = new Map<string, string[]>();
+  private readonly _liveToolResultIds = new Map<string, number>();
   private readonly setInputValue: Setter<string>;
   private readonly setComposerBlocks: Setter<ComposerBlock[]>;
   private readonly setLastAssistantText: Setter<string>;
@@ -784,23 +794,60 @@ export class TuiStore {
         this._toolSummaries.set(event.toolCallId, formatToolSummary(event.toolName, event.args));
         this._toolDetails.set(event.toolCallId, formatToolArgs(event.toolName, event.args));
         this.add({ type: "tool-start", toolName: event.toolName, summary: this._toolSummaries.get(event.toolCallId)! });
+        if (event.userInitiated && event.toolName === "bash" && !event.silent) {
+          const liveResult = this.add({
+            type: "tool-result",
+            content: "",
+            isError: false,
+            isDiff: false,
+            toolName: event.toolName,
+            summary: this._toolSummaries.get(event.toolCallId) ?? "Bash",
+            toolCallId: event.toolCallId,
+            details: this._toolDetails.get(event.toolCallId) ?? [],
+            streaming: true,
+          });
+          this._liveToolResultIds.set(event.toolCallId, liveResult.id);
+        }
         this.setStatus(this.l("tui.status.running", { tool: event.toolName }));
         break;
+      case "tool_call_output": {
+        const liveResultId = this._liveToolResultIds.get(event.toolCallId);
+        if (liveResultId !== undefined) {
+          this.updateToolResult(liveResultId, (message) => ({
+            ...message,
+            content: appendLiveToolOutput(message.content, event.chunk),
+          }));
+        }
+        break;
+      }
       case "tool_call_result": {
         const resultContent = formatToolResult(event.result, this.i18n);
         const isDiff = event.toolName === "edit";
         const summary = this._toolSummaries.get(event.toolCallId) ?? "";
         const details = this._toolDetails.get(event.toolCallId) ?? [];
-        this.add({
-          type: "tool-result",
-          content: resultContent,
-          isError: event.result.isError,
-          isDiff,
-          toolName: event.toolName,
-          summary,
-          toolCallId: event.toolCallId,
-          details,
-        });
+        const liveResultId = this._liveToolResultIds.get(event.toolCallId);
+        if (liveResultId !== undefined) {
+          this.updateToolResult(liveResultId, (message) => ({
+            ...message,
+            content: resultContent,
+            isError: event.result.isError,
+            isDiff,
+            summary,
+            details,
+            streaming: false,
+          }));
+        } else {
+          this.add({
+            type: "tool-result",
+            content: resultContent,
+            isError: event.result.isError,
+            isDiff,
+            toolName: event.toolName,
+            summary,
+            toolCallId: event.toolCallId,
+            details,
+          });
+        }
         break;
       }
       case "tool_call_end":
@@ -821,6 +868,7 @@ export class TuiStore {
           }
           return prev;
         });
+        this._liveToolResultIds.delete(event.toolCallId);
         // Coalesce project info refreshes for bursts of read-only or parallel tool calls.
         if (shouldRefreshProjectInfoAfterTool(event.toolName)) {
           this.refreshFileTreeDeferred();
@@ -1148,6 +1196,21 @@ export class TuiStore {
           : { ...message, content: update(message.content), streaming };
       const next = messages.slice();
       next[idx] = updated;
+      return next;
+    });
+  }
+
+  private updateToolResult(
+    id: number,
+    update: (message: Extract<TuiMessage, { type: "tool-result" }>) => Extract<TuiMessage, { type: "tool-result" }>,
+  ): void {
+    this.setMessages((messages) => {
+      const index = messages.findIndex((message) => message.id === id);
+      if (index < 0) return messages;
+      const message = messages[index];
+      if (message.type !== "tool-result") return messages;
+      const next = messages.slice();
+      next[index] = update(message);
       return next;
     });
   }
