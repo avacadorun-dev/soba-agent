@@ -27,6 +27,7 @@ import type { SlashCommandContext } from "../commands/types";
 import { CommandHistory } from "../lib/command-history";
 import { formatTuiEvidenceSummary, splitAssistantEvidence } from "../lib/evidence-summary";
 import { formatToolArgs, formatToolResult, formatToolSummary } from "../lib/format-tool";
+import { parseTuiInput } from "../lib/input-mode";
 import { buildFileTree, readChangeStats } from "../lib/project-info";
 import {
   type ComposerBlock,
@@ -497,16 +498,21 @@ export class TuiStore {
   }
 
   async submit(rawInput: string): Promise<void> {
-    const input = rawInput.trim();
     const blocks = this.composerBlocks();
-    if (!input && blocks.length === 0) return;
+    const trimmedInput = rawInput.trim();
+    const parsedInput =
+      blocks.length === 0
+        ? parseTuiInput(trimmedInput)
+        : { mode: trimmedInput ? ("message" as const) : ("empty" as const), content: trimmedInput };
+    const input = parsedInput.content;
+    if (parsedInput.mode === "empty" && blocks.length === 0) return;
     if (this.confirmation()) {
-      this.resolveConfirmation(input);
+      this.resolveConfirmation(trimmedInput);
       return;
     }
     this.setInputValue("");
     this.clearComposerBlocks();
-    this.history.add(this.formatTurnDisplay(input, blocks));
+    this.history.add(this.formatTurnDisplay(trimmedInput, blocks));
     if (blocks.length === 0 && /^\/queue(?:\s|$)/.test(input)) {
       this.handleQueueCommand(input);
       return;
@@ -519,7 +525,7 @@ export class TuiStore {
       this.handlePlanCommand(input);
       return;
     }
-    if (blocks.length === 0 && input.startsWith("/")) {
+    if (blocks.length === 0 && parsedInput.mode === "slash-command") {
       // Phase 2.5 A4: Try TUI slash command registry first.
       // This dispatches TUI commands like /clear, /notifications,
       // and future /model, /search, /sessions without modifying
@@ -545,9 +551,12 @@ export class TuiStore {
       }
       return;
     }
-    const shellKind = blocks.length === 0 ? (input.startsWith("!!") ? "shell-silent" : input.startsWith("!") ? "shell" : null) : null;
+    const shellKind =
+      blocks.length === 0 && (parsedInput.mode === "shell" || parsedInput.mode === "shell-silent")
+        ? parsedInput.mode
+        : null;
     if (shellKind) {
-      const command = input.slice(shellKind === "shell-silent" ? 2 : 1).trim();
+      const command = parsedInput.content;
       if (!command) return;
       if (this.turnActive || this.isProcessing()) {
         this.enqueue(command, shellKind);

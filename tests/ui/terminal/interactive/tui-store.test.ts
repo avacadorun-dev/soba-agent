@@ -611,7 +611,75 @@ describe("OpenTUI Solid store", () => {
       { command: "pwd", silent: false },
       { command: "bun test", silent: true },
     ]);
+    expect(store.history.older()).toBe("!!bun test");
     expect(turns).toEqual([]);
+  });
+
+  test("многострочный ! ввод выполняется одним нормализованным shell-скриптом", async () => {
+    const shellCalls: Array<{ command: string; silent: boolean }> = [];
+    const agentLoop = {
+      getModel: () => "test-model",
+      runTurn: async () => {},
+      runShellCommand: async (command: string, silent: boolean) => {
+        shellCalls.push({ command, silent });
+        return { content: [{ type: "text" as const, text: "ok" }], isError: false };
+      },
+    } as unknown as RuntimeAgentHandle;
+    const store = new TuiStore({
+      cwd: process.cwd(),
+      tokenBudget: 0,
+      contextWindow: 128_000,
+      theme: "graphite",
+      agentLoop,
+      toolNames: ["bash"],
+      executeCommand: async () => ({ handled: true }),
+      debug: false,
+      maxOutputTokens: 0,
+      maxCompletionTokens: 0,
+      maxAgentIterations: 0,
+      maxStalledIterations: 4,
+      maxRunMinutes: 0,
+      autoCompact: true,
+    });
+
+    await store.submit("!pwd\n!git status\n// local note\n!!bun test");
+
+    expect(shellCalls).toEqual([{ command: "pwd\ngit status\n// local note\nbun test", silent: false }]);
+  });
+
+  test("// комментарий отправляется агенту и в историю, но не считается slash-командой", async () => {
+    let commandCalls = 0;
+    const turns: string[] = [];
+    const store = createStore();
+    store.options.executeCommand = async () => {
+      commandCalls += 1;
+      return { handled: true };
+    };
+    store.options.agentLoop.runTurn = async (input: string) => {
+      turns.push(input);
+    };
+
+    await store.submit("// do not submit");
+
+    expect(commandCalls).toBe(0);
+    expect(turns).toEqual(["// do not submit"]);
+    expect(store.history.older()).toBe("// do not submit");
+  });
+
+  test("composer block отключает shell shortcut и сохраняет ведущий ! в промпте", async () => {
+    let turnInput: unknown;
+    const store = createStore();
+    store.options.agentLoop.runTurn = async (input: unknown) => {
+      turnInput = input;
+    };
+    store.addComposerBlock(createTextComposerBlock("context"));
+
+    await store.submit("!explain this");
+
+    expect(turnInput).toEqual([
+      { type: "input_text", text: "context" },
+      { type: "input_text", text: "!explain this" },
+    ]);
   });
 
   test("shell shortcut сохраняет режим вывода в очереди", async () => {

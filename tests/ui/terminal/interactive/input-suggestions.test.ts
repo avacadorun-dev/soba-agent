@@ -55,6 +55,10 @@ describe("TUI input suggestions", () => {
     expect(getInputSuggestions("объясни /compact", 16, process.cwd())).toEqual([]);
   });
 
+  test("не считает // комментарий slash-командой", () => {
+    expect(getInputSuggestions("// local note", 13, process.cwd())).toEqual([]);
+  });
+
   test("не падает при некорректном значении события OpenTUI", () => {
     expect(getInputSuggestions({} as unknown as string, 0, process.cwd())).toEqual([]);
   });

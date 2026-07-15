@@ -2,6 +2,7 @@ import type { KeyEvent, PasteEvent, TextareaRenderable } from "@opentui/core";
 import { usePaste, useRenderer } from "@opentui/solid";
 import { For, Show, createEffect, createSignal } from "solid-js";
 import { handleInputEditingShortcut } from "../lib/input-editing";
+import { isShellInput, parseTuiInput } from "../lib/input-mode";
 import {
   applyInputSuggestion,
   formatInputSuggestion,
@@ -33,6 +34,8 @@ export function InputBar(props: { store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   const queued = () => props.store.queuedMessages();
   const composerBlocks = () => props.store.composerBlocks();
+  const inputMode = () => (composerBlocks().length === 0 ? parseTuiInput(props.store.inputValue()).mode : "message");
+  const shellMode = () => inputMode() === "shell" || inputMode() === "shell-silent";
   const [suggestions, setSuggestions] = createSignal<InputSuggestion[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = createSignal(0);
   const visibleSuggestions = () => getVisibleInputSuggestions(suggestions(), selectedSuggestion());
@@ -77,7 +80,7 @@ export function InputBar(props: { store: TuiStore }) {
     if (!textareaRef || props.store.activePane() !== "input") return;
     const block = blockFromPasteBytes(event.bytes, event.metadata);
     if (!block) return;
-    if (block.type === "text" && classifyPastedText(block.text) === "inline") {
+    if (block.type === "text" && (classifyPastedText(block.text) === "inline" || isShellInput(block.text))) {
       return;
     }
     event.preventDefault();
@@ -181,7 +184,10 @@ export function InputBar(props: { store: TuiStore }) {
       }
       backgroundColor={theme().background}
       border={["bottom"]}
-      borderColor={theme().border}
+      borderColor={shellMode() ? theme().warning : theme().border}
+      borderStyle={shellMode() ? "heavy" : "single"}
+      bottomTitle={shellMode() ? (inputMode() === "shell-silent" ? " !! shell · silent " : " ! shell ") : undefined}
+      bottomTitleAlignment="right"
       style={{ flexDirection: "column" }}
     >
       <Show when={queued().length > 0}>
@@ -228,8 +234,11 @@ export function InputBar(props: { store: TuiStore }) {
         </For>
       </box>
       <box height={TEXTAREA_HEIGHT} backgroundColor={theme().background} style={{ flexDirection: "row", paddingLeft: 1 }}>
-        <text fg={props.store.confirmation() ? theme().warning : theme().secondary} style={{ paddingTop: 1 }}>
-          <b>›</b>{" "}
+        <text
+          fg={props.store.confirmation() || shellMode() ? theme().warning : theme().secondary}
+          style={{ paddingTop: 1 }}
+        >
+          <b>{shellMode() ? "$" : "›"}</b>{" "}
         </text>
         <textarea
           ref={(ref: TextareaRenderable) => {
@@ -239,7 +248,7 @@ export function InputBar(props: { store: TuiStore }) {
           placeholder={props.store.getInputPlaceholder()}
           textColor={theme().text}
           focusedTextColor={theme().text}
-          cursorColor={theme().secondary}
+          cursorColor={shellMode() ? theme().warning : theme().secondary}
           focused
           keyBindings={INPUT_BAR_KEY_BINDINGS}
           style={{ flexGrow: 1, minHeight: 1, maxHeight: TEXTAREA_HEIGHT - 1 }}
