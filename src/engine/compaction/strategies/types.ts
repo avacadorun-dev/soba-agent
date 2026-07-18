@@ -13,7 +13,9 @@ import type {
   ArtifactLedger,
   ContextCapsuleEntry,
   NativeContinuation,
-  PortableContextState,ProviderCapabilities, ProviderIdentity 
+  PortableContextState,
+  ProviderCapabilities,
+  ProviderIdentity,
 } from "../../../kernel/transcript/types-v2";
 import type { ContextSnapshot } from "../context-meter";
 
@@ -31,6 +33,8 @@ export interface CapsuleGenerationInput {
   provider: ProviderIdentity;
   capabilities: ProviderCapabilities;
   activatedSkills: ActivatedSkillRef[];
+  /** Portable state from the preceding context capsule, if one exists. */
+  previousPortableState?: PortableContextState;
 }
 
 // ─── Draft ───

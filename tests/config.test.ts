@@ -332,6 +332,16 @@ describe("Config validation", () => {
     expect(resolveCompactionConfig(config, true).auto).toBe(false);
   });
 
+  test("legacy backgroundTimeoutMs aliases timeoutMs", () => {
+    const config = { ...DEFAULT_CONFIG, compaction: { backgroundTimeoutMs: 4321 } };
+    expect(resolveCompactionConfig(config).timeoutMs).toBe(4321);
+  });
+
+  test("canonical timeoutMs wins over the deprecated alias", () => {
+    const config = { ...DEFAULT_CONFIG, compaction: { timeoutMs: 9876, backgroundTimeoutMs: 4321 } };
+    expect(resolveCompactionConfig(config).timeoutMs).toBe(9876);
+  });
+
   test("невалидный compaction config отклоняется до запуска runtime", () => {
     const config = {
       ...DEFAULT_CONFIG,

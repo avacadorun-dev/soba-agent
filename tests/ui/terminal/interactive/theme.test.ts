@@ -28,6 +28,19 @@ describe("OpenTUI themes", () => {
     expect([...TUI_THEME_NAMES]).not.toContain("ember");
   });
 
+  test("канонические темы редакторов доступны как отдельные пресеты", () => {
+    expect(getTuiTheme("vscode")).toMatchObject({
+      background: "#1F1F1F",
+      panel: "#181818",
+      primary: "#4DAAFC",
+    });
+    expect(getTuiTheme("github")).toMatchObject({
+      background: "#0D1117",
+      panel: "#151B23",
+      primary: "#4493F8",
+    });
+  });
+
   test("каждый пресет содержит цвета и markdown-стиль", () => {
     for (const name of TUI_THEME_NAMES) {
       const theme = getTuiTheme(name);

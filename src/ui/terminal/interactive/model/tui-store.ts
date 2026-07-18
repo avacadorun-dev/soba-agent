@@ -78,6 +78,7 @@ export class TuiStore {
   readonly composerBlocks: Accessor<ComposerBlock[]>;
   readonly lastAssistantText: Accessor<string>;
   readonly isProcessing: Accessor<boolean>;
+  readonly activeCompaction: Accessor<boolean>;
   readonly themeName: Accessor<TuiThemeName>;
   readonly model: Accessor<string>;
   readonly providerName: Accessor<string>;
@@ -114,6 +115,7 @@ export class TuiStore {
   private readonly setComposerBlocks: Setter<ComposerBlock[]>;
   private readonly setLastAssistantText: Setter<string>;
   private readonly setIsProcessing: Setter<boolean>;
+  private readonly setActiveCompaction: Setter<boolean>;
   private readonly setThemeName: Setter<TuiThemeName>;
   private readonly setModel: Setter<string>;
   private readonly setProviderName: Setter<string>;
@@ -137,6 +139,7 @@ export class TuiStore {
   private readonly assistantTuiIds = new Map<string, number>();
   private readonly assistantRelatedTuiIds = new Map<string, number[]>();
   private finalizedIds = new Set<string>();
+  private readonly displayedCompactionCheckpoints = new Set<string>();
   private noodleTimer: ReturnType<typeof setInterval> | null = null;
   private fileTreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private changesRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,6 +173,7 @@ export class TuiStore {
     [this.composerBlocks, this.setComposerBlocks] = createSignal<ComposerBlock[]>([]);
     [this.lastAssistantText, this.setLastAssistantText] = createSignal("");
     [this.isProcessing, this.setIsProcessing] = createSignal(false);
+    [this.activeCompaction, this.setActiveCompaction] = createSignal(false);
     [this.themeName, this.setThemeName] = createSignal(options.theme);
     [this.model, this.setModel] = createSignal(options.agentLoop.getModel());
     [this.providerName, this.setProviderName] = createSignal(options.providerStore?.registry.getActiveProvider().name ?? "");
@@ -207,6 +211,7 @@ export class TuiStore {
 
     // Phase 2.5 A4: Register TUI commands in the slash command registry
     this.registerCommands();
+    this.restoreLastCompaction();
   }
 
   /**
@@ -346,6 +351,14 @@ export class TuiStore {
     contextWindow: number;
     hardLimit: number;
     effectiveTokens: number;
+    softLimit: number;
+    lastCompact: null | {
+      status: string;
+      trigger: string;
+      checkpointId: string | null;
+      durationMs: number;
+      reclaimedTokens: number;
+    };
   } | null {
     const cm = this.options.agentLoop.getContextManager();
     if (!cm) return null;
@@ -535,6 +548,14 @@ export class TuiStore {
       this.handlePlanCommand(input);
       return;
     }
+    if (
+      blocks.length === 0
+      && /^\/compact(?:\s|$)/.test(input)
+      && (this.turnActive || this.isProcessing() || this.activeCompaction())
+    ) {
+      this.enqueue(input, "command");
+      return;
+    }
     if (blocks.length === 0 && parsedInput.mode === "slash-command") {
       // Phase 2.5 A4: Try TUI slash command registry first.
       // This dispatches TUI commands like /clear, /notifications,
@@ -553,7 +574,7 @@ export class TuiStore {
       const result = await this.options.executeCommand(input, (event) => this.onCommandOutput(event));
       if ("exit" in result && result.exit) this.onExit();
       if (!result.handled && result.prompt) {
-        if (this.turnActive || this.isProcessing()) {
+        if (this.turnActive || this.isProcessing() || this.activeCompaction()) {
           this.enqueue(result.prompt);
         } else {
           await this.runTurn(result.prompt);
@@ -568,14 +589,14 @@ export class TuiStore {
     if (shellKind) {
       const command = parsedInput.content;
       if (!command) return;
-      if (this.turnActive || this.isProcessing()) {
+      if (this.turnActive || this.isProcessing() || this.activeCompaction()) {
         this.enqueue(command, shellKind);
         return;
       }
       await this.runShellCommand(command, shellKind === "shell-silent");
       return;
     }
-    if (this.turnActive || this.isProcessing()) {
+    if (this.turnActive || this.isProcessing() || this.activeCompaction()) {
       this.enqueue(input, "message", blocks);
       return;
     }
@@ -959,6 +980,8 @@ export class TuiStore {
         );
         break;
       case "compaction_done":
+        this.setActiveCompaction(false);
+        this.addCompactionSummary(event);
         this._notificationStore?.notify(
           "info",
           this.l("tui.notifications.compactionCompleteTitle"),
@@ -967,6 +990,25 @@ export class TuiStore {
             strategy: event.strategy,
           }),
         );
+        void this.runNextQueued();
+        break;
+      case "compaction_start": {
+        const percent = event.hardLimit > 0
+          ? Math.round((event.tokensBefore / event.hardLimit) * 100)
+          : 0;
+        this.setActiveCompaction(true);
+        this.setStatus(this.l("tui.status.compactingPercent", { percent }));
+        break;
+      }
+      case "compaction_skipped":
+      case "compaction_cancelled":
+      case "compaction_failed":
+        this.setActiveCompaction(false);
+        this.setStatus(this.isProcessing() ? this.l("tui.status.working") : this.l("tui.status.idle"));
+        if (event.type === "compaction_failed") {
+          this.add({ type: "warning", content: event.reason });
+        }
+        void this.runNextQueued();
         break;
       case "plan_update":
         this.finalizeStreamingReasoning();
@@ -975,7 +1017,6 @@ export class TuiStore {
       case "function_call_done":
       case "skill_deactivated":
       case "context_error":
-      case "compaction_start":
         break;
     }
   }
@@ -1003,12 +1044,15 @@ export class TuiStore {
   }
 
   private async runNextQueued(): Promise<void> {
-    if (this.turnActive || this.isProcessing()) return;
+    if (this.turnActive || this.isProcessing() || this.activeCompaction()) return;
     const next = this.queuedMessages()[0];
     if (!next) return;
     this.setQueuedMessages((messages) => messages.slice(1));
     if (next.kind === "message") {
       await this.runTurn(next.content, next.blocks ?? []);
+    } else if (next.kind === "command") {
+      const result = await this.options.executeCommand(next.content, (event) => this.onCommandOutput(event));
+      if ("prompt" in result && result.prompt) await this.runTurn(result.prompt);
     } else {
       await this.runShellCommand(next.content, next.kind === "shell-silent");
     }
@@ -1319,8 +1363,18 @@ export class TuiStore {
       this.add({ type: "info", content: String(event.message) });
       this.setStatus(this.l("tui.status.idle"));
     }
-    if (event.type === "compaction_start") this.setStatus(this.l("tui.status.compacting"));
-    if (event.type === "compaction_skipped") this.setStatus(this.l("tui.status.idle"));
+    if (event.type === "compaction_start") {
+      const tokensBefore = Number(event.tokensBefore) || 0;
+      const hardLimit = Number(event.hardLimit) || this.options.contextWindow;
+      const percent = hardLimit > 0 ? Math.round((tokensBefore / hardLimit) * 100) : 0;
+      this.setActiveCompaction(true);
+      this.setStatus(this.l("tui.status.compactingPercent", { percent }));
+    }
+    if (event.type === "compaction_skipped" || event.type === "compaction_cancelled" || event.type === "compaction_failed") {
+      this.setActiveCompaction(false);
+      this.setStatus(this.l("tui.status.idle"));
+      void this.runNextQueued();
+    }
     if (event.type === "theme_changed" && isTuiThemeName(event.theme)) {
       this.setThemeName(event.theme);
       this.setStatus(this.l("tui.status.theme", { name: String(event.theme) }));
@@ -1332,16 +1386,93 @@ export class TuiStore {
       this.refreshProjectTrust();
     }
     if (event.type === "compaction_done") {
-      this.add({
-        type: "success",
-        content: this.l("tui.compact.complete", {
-          before: String(event.tokensBefore),
-          after: String(event.tokensAfter),
-        }),
+      this.addCompactionSummary(event as {
+        trigger?: unknown;
+        tokensBefore?: unknown;
+        tokensAfter?: unknown;
+        checkpointId?: unknown;
       });
+      this.setActiveCompaction(false);
       this.setStatus(this.l("tui.status.idle"));
+      void this.runNextQueued();
     }
     if (event.type === "capsule_create_done") this.setStatus(this.l("tui.status.idle"));
+  }
+
+  private addCompactionSummary(event: {
+    trigger?: unknown;
+    tokensBefore?: unknown;
+    tokensAfter?: unknown;
+    checkpointId?: unknown;
+    portableState?: unknown;
+  }): void {
+    const checkpointId = typeof event.checkpointId === "string" ? event.checkpointId : null;
+    if (checkpointId && this.displayedCompactionCheckpoints.has(checkpointId)) return;
+    if (checkpointId) this.displayedCompactionCheckpoints.add(checkpointId);
+    const before = Number(event.tokensBefore) || 0;
+    const after = Number(event.tokensAfter) || 0;
+    const percent = before > 0 ? Math.max(0, Math.round(((before - after) / before) * 100)) : 0;
+    const stateSummary = checkpointId ? this.compactionStateSummary(checkpointId, event.portableState) : "";
+    this.add({
+      type: "success",
+      content: this.l("tui.compact.completeDetailed", {
+        trigger: typeof event.trigger === "string" ? event.trigger : "manual",
+        before,
+        after,
+        percent,
+        capsule: checkpointId ?? "—",
+        summary: stateSummary ? ` · ${stateSummary}` : "",
+      }),
+    });
+  }
+
+  private compactionStateSummary(checkpointId: string, suppliedState?: unknown): string {
+    const loop = this.options.agentLoop as typeof this.options.agentLoop & {
+      getSessionManager?: () => { getEntries?: () => Array<Record<string, unknown>> };
+    };
+    const entries = (loop.getSessionManager?.().getEntries?.() ?? []) as unknown as Array<Record<string, unknown>>;
+    const capsule = entries
+      .find((entry) => entry.type === "context_capsule" && entry.checkpointId === checkpointId);
+    const state = (suppliedState ?? capsule?.portableState) as {
+      goal?: unknown;
+      completed?: unknown;
+      inProgress?: unknown;
+      pending?: unknown;
+    } | undefined;
+    if (!state) return "";
+    const completed = Array.isArray(state.completed)
+      ? state.completed.filter((item): item is string => typeof item === "string")
+      : [];
+    const inProgress = Array.isArray(state.inProgress)
+      ? state.inProgress.filter((item): item is string => typeof item === "string")
+      : [];
+    const pending = Array.isArray(state.pending)
+      ? state.pending.filter((item): item is string => typeof item === "string")
+      : [];
+    const text = completed[0] ?? inProgress[0] ?? pending[0]
+      ?? (typeof state.goal === "string" ? state.goal : "");
+    if (!text) return "";
+    const suffix = completed.length > 1 ? ` (+${completed.length - 1})` : "";
+    const normalized = `${text}${suffix}`.replaceAll(/\s+/g, " ").trim();
+    return normalized.length <= 160 ? normalized : `${normalized.slice(0, 157).trimEnd()}...`;
+  }
+
+  private restoreLastCompaction(): void {
+    const loop = this.options.agentLoop as typeof this.options.agentLoop & {
+      getSessionManager?: () => { getEntries?: () => Array<{ type: string }> };
+    };
+    const entries = loop.getSessionManager?.().getEntries?.() ?? [];
+    const capsuleEntry = [...entries].reverse().find((entry) => entry.type === "context_capsule");
+    if (!capsuleEntry) return;
+    const capsule = capsuleEntry as unknown as Record<string, unknown>;
+    const metrics = capsule.metrics as { effectiveTokensBefore?: number; estimatedTokensAfter?: number } | undefined;
+    this.addCompactionSummary({
+      trigger: capsule.trigger,
+      tokensBefore: metrics?.effectiveTokensBefore,
+      tokensAfter: metrics?.estimatedTokensAfter,
+      checkpointId: capsule.checkpointId,
+      portableState: capsule.portableState,
+    });
   }
 
   private startNoodle(): void {

@@ -67,6 +67,24 @@ export class TriggerPolicy {
     };
   }
 
+  /** Soft threshold used by every proactive trigger. */
+  getSoftLimit(snapshot: ContextSnapshot): number {
+    return Math.min(
+      snapshot.hardLimit - 1,
+      Math.max(
+        this.config.minTokensForAutoCompact,
+        Math.floor(snapshot.hardLimit * this.config.autoCompactThresholdRatio),
+      ),
+    );
+  }
+
+  evaluateAutoThreshold(snapshot: ContextSnapshot): TriggerDecision {
+    if (!this.config.auto) {
+      return this._skip("Auto-compact disabled");
+    }
+    return this._evaluateROI(snapshot, "auto_threshold");
+  }
+
   /**
    * Evaluate whether background compaction should run after turn completion.
    *
@@ -169,11 +187,12 @@ export class TriggerPolicy {
   // ─── Private ───
 
   private _evaluateROI(snapshot: ContextSnapshot, trigger: CapsuleTrigger): TriggerDecision {
-    if (snapshot.effectiveTokens < this.config.minTokensForAutoCompact) {
+    const softLimit = this.getSoftLimit(snapshot);
+    if (snapshot.effectiveTokens < softLimit) {
       return {
         shouldCompact: false,
         trigger: null,
-        reason: `Effective tokens (${snapshot.effectiveTokens}) below minTokensForAutoCompact (${this.config.minTokensForAutoCompact})`,
+        reason: `Effective tokens (${snapshot.effectiveTokens}) below soft limit (${softLimit})`,
         estimatedReclaimableTokens: 0,
         estimatedSavingsRatio: 0,
       };
@@ -208,6 +227,16 @@ export class TriggerPolicy {
       reason: `ROI check passed: ${Math.round(savingsRatio * 100)}% savings estimated`,
       estimatedReclaimableTokens: reclaimable,
       estimatedSavingsRatio: savingsRatio,
+    };
+  }
+
+  private _skip(reason: string): TriggerDecision {
+    return {
+      shouldCompact: false,
+      trigger: null,
+      reason,
+      estimatedReclaimableTokens: 0,
+      estimatedSavingsRatio: 0,
     };
   }
 }

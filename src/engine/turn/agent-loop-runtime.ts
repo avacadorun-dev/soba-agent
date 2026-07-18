@@ -90,7 +90,6 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
 
   const contextController = new ContextController({
     contextManager: input.contextManager,
-    backgroundScheduler: input.backgroundScheduler,
     autoCompactEnabled: () => autoCompactState.override?.enabled ?? true,
     emit,
   });

@@ -47,7 +47,7 @@ export interface QueuedMessage {
   id: number;
   content: string;
   blocks?: ComposerBlock[];
-  kind: "message" | "shell" | "shell-silent";
+  kind: "message" | "command" | "shell" | "shell-silent";
 }
 
 export type TuiMessage =

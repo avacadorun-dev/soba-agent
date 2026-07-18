@@ -36,7 +36,8 @@ The configuration file is `~/.soba/config.json`. SOBA creates it on first run, o
     "minSavingsRatio": 0.25,
     "keepRecentTokens": 20000,
     "safetyReserveTokens": 8192,
-    "backgroundTimeoutMs": 15000
+    "autoCompactThresholdRatio": 0.8,
+    "timeoutMs": 15000
   },
   "registry": {
     "activeProvider": "deepseek",
@@ -96,7 +97,7 @@ Minimal configuration:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `lang` | `"en" \| "ru" \| "zh"` | `"en"` | Default interface language |
-| `theme` | `TuiThemeName` | `"graphite"` | TUI theme: `graphite`, `aurora`, `synthwave`, `paper`, `forest`, `highContrast`, `clay`, `operator`, or `ink` |
+| `theme` | `TuiThemeName` | `"graphite"` | TUI theme: `graphite`, `vscode`, `github`, `aurora`, `synthwave`, `paper`, `forest`, `highContrast`, `clay`, `operator`, or `ink` |
 
 ---
 
@@ -223,15 +224,17 @@ Compaction is configured through the `compaction` section.
 
 | Option | Default | Description |
 |---|---|---|
-| `auto` | `true` | Enable proactive background compaction |
-| `compactOnTurnComplete` | `true` | Run background compaction after a turn completes |
-| `compactOnMilestone` | `true` | Run background compaction at milestone checkpoints |
+| `auto` | `true` | Enable soft deferred preflight compaction |
+| `compactOnTurnComplete` | `true` | Mark compaction pending after a turn completes |
+| `compactOnMilestone` | `true` | Mark compaction pending at milestone checkpoints |
 | `minTokensForAutoCompact` | `32000` | Minimum effective tokens before considering auto-compaction |
 | `minReclaimableTokens` | `12000` | Minimum reclaimable tokens for useful ROI |
 | `minSavingsRatio` | `0.25` | Minimum savings ratio, 25% by default |
 | `keepRecentTokens` | `20000` | Recent tokens to keep after compaction |
 | `safetyReserveTokens` | `8192` | Safety reserve subtracted from the context window |
-| `backgroundTimeoutMs` | `15000` | Timeout for background compaction operations |
+| `autoCompactThresholdRatio` | `0.8` | Soft threshold as a fraction of the request hard limit |
+| `timeoutMs` | `15000` | Timeout for a preflight compaction operation |
+| `backgroundTimeoutMs` | — | Deprecated alias for `timeoutMs` |
 
 Hard limit:
 
@@ -261,6 +264,8 @@ Special rules:
 
 - **`maxOutputTokens` and `contextWindow`** are taken from the active model definition when possible. CLI flags override them for advanced cases such as local proxies with incorrect model metadata.
 - **`compaction.auto`** can be overridden by `SOBA_AUTO_COMPACT=false` or `--no-auto-compact`.
+- Disabling auto-compaction turns off only soft triggers. Hard-limit and provider-overflow recovery remain mandatory.
+- Turn and milestone triggers are deferred: SOBA shows progress and awaits compaction immediately before the next model call.
 - **Numeric `0`** means unlimited for `maxAgentIterations` and `maxRunMinutes`; for `maxCompletionTokens`, it means no explicit limit.
 
 ---

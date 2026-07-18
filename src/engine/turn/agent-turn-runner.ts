@@ -87,7 +87,6 @@ export async function runAgentTurn(
     emit,
     debug,
   });
-  runtime.contextController.cancelBackgroundCompaction("new turn started");
   try {
     const preparedPrompt = await prepareAgentTurnPromptContext({
       cwd,

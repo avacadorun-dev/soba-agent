@@ -33,6 +33,9 @@ export type RuntimeEventType =
   | "turn_stop_reason"
   | "compaction_start"
   | "compaction_done"
+  | "compaction_skipped"
+  | "compaction_cancelled"
+  | "compaction_failed"
   | "context_error"
   | "working_narration"
   | "plan_update"
@@ -197,18 +200,55 @@ export interface RuntimeFunctionCallDoneEvent extends BaseRuntimeEvent {
 
 export interface RuntimeCompactionStartEvent extends BaseRuntimeEvent {
   type: "compaction_start";
-  reason: "pre_inference" | "overflow_recovery" | "manual";
+  operationId: string;
+  trigger: import("../kernel/compaction/config").CapsuleTrigger;
+  reason?: "pre_inference" | "overflow_recovery" | "manual";
+  tokensBefore: number;
   effectiveTokens: number;
+  softLimit: number;
   hardLimit: number;
+  required: boolean;
+  source: "provider_usage" | "estimated";
+  checkpointId: null;
+  quality: null;
+  strategy: null;
+  durationMs: 0;
+  reclaimedTokens: 0;
 }
 
 export interface RuntimeCompactionDoneEvent extends BaseRuntimeEvent {
   type: "compaction_done";
-  reason: "pre_inference" | "overflow_recovery" | "manual";
+  operationId: string;
+  trigger: import("../kernel/compaction/config").CapsuleTrigger;
+  reason?: "pre_inference" | "overflow_recovery" | "manual";
   tokensBefore: number;
   tokensAfter: number;
   tokensSaved: number;
+  reclaimedTokens: number;
   strategy: string;
+  quality: string | null;
+  checkpointId: string | null;
+  durationMs: number;
+  softLimit: number;
+  hardLimit: number;
+  required: boolean;
+}
+
+export interface RuntimeCompactionTerminalEvent extends BaseRuntimeEvent {
+  type: "compaction_skipped" | "compaction_cancelled" | "compaction_failed";
+  operationId: string;
+  trigger: import("../kernel/compaction/config").CapsuleTrigger;
+  reason: string;
+  tokensBefore: number;
+  tokensAfter: number;
+  reclaimedTokens: number;
+  durationMs: number;
+  softLimit: number;
+  hardLimit: number;
+  required: boolean;
+  checkpointId: null;
+  quality: null;
+  strategy: string | null;
 }
 
 export interface RuntimeContextErrorEvent extends BaseRuntimeEvent {
@@ -283,6 +323,7 @@ export type RuntimeEvent =
   | RuntimeTurnStopReasonEvent
   | RuntimeCompactionStartEvent
   | RuntimeCompactionDoneEvent
+  | RuntimeCompactionTerminalEvent
   | RuntimeContextErrorEvent
   | RuntimeWorkingNarrationEvent
   | RuntimePlanUpdateEvent

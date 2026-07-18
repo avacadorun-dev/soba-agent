@@ -3,6 +3,37 @@ import type { UserTurnInput } from "../../src/application/types";
 import { AgentLoopRuntimeAdapter } from "../../src/composition/runtime/agent-loop-runtime-adapter";
 
 describe("AgentLoopRuntimeAdapter rich content", () => {
+  test("serializes turns and manual commands behind one session gate", async () => {
+    const calls: unknown[] = [];
+    let release!: () => void;
+    const firstTurn = new Promise<void>((resolve) => { release = resolve; });
+    const loop = {
+      runTurn: async (input: unknown) => {
+        calls.push(input);
+        if (calls.length === 1) await firstTurn;
+        return {};
+      },
+      setSessionManager: () => {}, abort: () => {}, onEvent: () => () => {},
+    };
+    const adapter = new AgentLoopRuntimeAdapter(
+      loop as never,
+      { getSessionId: () => "session_1", getCwd: () => "/repo" } as never,
+      {} as never,
+      { getActiveProvider: () => ({ id: "openai" }) } as never,
+    );
+    const turn = (text: string): UserTurnInput => ({
+      sessionId: "session_1", source: "tui", content: [{ type: "text", text }],
+    });
+
+    const first = adapter.runTurn(turn("first"));
+    const second = adapter.runTurn(turn("second"));
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+    release();
+    await Promise.all([first, second]);
+    expect(calls).toHaveLength(2);
+  });
+
   test("preserves image runtime blocks when calling AgentLoop", async () => {
     let receivedInput: unknown;
     const loop = {

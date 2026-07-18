@@ -179,6 +179,33 @@ describe("ContextManager", () => {
       expect(result.canProceed).toBe(true);
     });
 
+    it("invalidates a pre-compaction provider watermark before the post-check", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 600);
+      const manager = new ContextManager(session, makeConfig({
+        contextWindow: 500,
+        maxOutputTokens: 50,
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 50,
+          safetyReserveTokens: 10,
+        },
+      }));
+      manager.recordProviderUsage(500, session.getLeafId(), FINGERPRINT);
+      expect(manager.getSnapshot(10, 5, FINGERPRINT)).toMatchObject({
+        source: "provider_usage",
+        effectiveTokens: 500,
+        hardLimit: 440,
+      });
+
+      const result = await manager.preInferenceCheck(10, 5, FINGERPRINT);
+
+      expect(result).toMatchObject({ canProceed: true, compactionPerformed: true });
+      const postSnapshot = manager.getSnapshot(10, 5, FINGERPRINT);
+      expect(postSnapshot.source).toBe("estimated");
+      expect(postSnapshot.effectiveTokens).toBeLessThanOrEqual(postSnapshot.hardLimit);
+    });
+
     it("не выполняет compaction для пустой сессии", async () => {
       const session = SessionManager.inMemoryV2();
 
@@ -272,7 +299,7 @@ describe("ContextManager", () => {
       const manager = new ContextManager(session, config);
       const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
 
-      expect(outcome.compacted).toBe(true);
+      expect(outcome.status).toBe("completed");
       expect(outcome.trigger).toBe("user_request");
       expect(outcome.checkpointId).toBeDefined();
       expect(outcome.strategy).toBeDefined();
@@ -293,7 +320,7 @@ describe("ContextManager", () => {
       const manager = new ContextManager(session, config);
       const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
 
-      expect(outcome.compacted).toBe(false);
+      expect(outcome.status).toBe("skipped");
       expect(outcome.reason).toContain("No reclaimable");
     });
 
@@ -334,7 +361,7 @@ describe("ContextManager", () => {
         FINGERPRINT,
       );
 
-      expect(outcome.compacted).toBe(true);
+      expect(outcome.status).toBe("completed");
       expect(capturedPrompt).toContain("Focus on API refactoring");
     });
 
@@ -379,7 +406,7 @@ describe("ContextManager", () => {
       const manager = new ContextManager(session, config);
       const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
 
-      expect(outcome.compacted).toBe(true);
+      expect(outcome.status).toBe("completed");
       expect(memoryWrites).toHaveLength(1);
       expect(memoryWrites[0]).toMatchObject({
         id: `mem_${outcome.checkpointId}`,
@@ -389,7 +416,24 @@ describe("ContextManager", () => {
         },
         tags: expect.arrayContaining(["context-capsule", "checkpoint", "user_request"]),
       });
-      expect(memoryWrites[0]?.detail).toContain(`Checkpoint: ${outcome.checkpointId}`);
+      expect(memoryWrites[0]?.detail).toContain(`Context capsule: ${outcome.checkpointId}`);
+    });
+
+    it("does not mirror degraded fallback capsules into durable project memory", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 500);
+      const memoryWrites: MemoryCapsuleInput[] = [];
+      const manager = new ContextManager(session, makeConfig({
+        compaction: { ...DEFAULT_COMPACTION_CONFIG, keepRecentTokens: 100 },
+        generatorConfig: { modelInvoker: { invoke: async () => "not-json" } },
+        memory: { addCapsule: (input) => memoryWrites.push(input) },
+      }));
+
+      const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
+
+      expect(outcome.status).toBe("completed");
+      expect(outcome.quality).toBe("degraded");
+      expect(memoryWrites).toHaveLength(0);
     });
   });
 
@@ -476,6 +520,60 @@ describe("ContextManager", () => {
     });
   });
 
+  describe("transactional append safety", () => {
+    it("does not append a capsule when the leaf changes during generation", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 1_000);
+      const deferred = deferredSummary();
+      const manager = new ContextManager(session, makeConfig({
+        generatorConfig: { modelInvoker: { invoke: deferred.invoke } },
+      }));
+
+      const pending = manager.manualCompact(undefined, 10, 5, FINGERPRINT);
+      await deferred.started;
+      session.appendItem(userMessage("new leaf"));
+      deferred.resolve();
+
+      expect((await pending).status).toBe("stale");
+      expect(session.getCapsuleEntries()).toHaveLength(0);
+    });
+
+    it("abort returns cancelled and a late generator cannot append", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 1_000);
+      const deferred = deferredSummary();
+      const manager = new ContextManager(session, makeConfig({
+        generatorConfig: { modelInvoker: { invoke: deferred.invoke } },
+      }));
+      const abort = new AbortController();
+
+      const pending = manager.manualCompact(undefined, 10, 5, FINGERPRINT, abort.signal);
+      await deferred.started;
+      abort.abort("test cancellation");
+      expect((await pending).status).toBe("cancelled");
+      deferred.resolve();
+      await Promise.resolve();
+      expect(session.getCapsuleEntries()).toHaveLength(0);
+    });
+
+    it("timeout cancels the barrier and a late generator cannot append", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 1_000);
+      const deferred = deferredSummary();
+      const manager = new ContextManager(session, makeConfig({
+        compaction: { ...DEFAULT_COMPACTION_CONFIG, keepRecentTokens: 100, timeoutMs: 5 },
+        generatorConfig: { modelInvoker: { invoke: deferred.invoke } },
+      }));
+
+      const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
+      expect(outcome.status).toBe("cancelled");
+      expect(outcome.reason).toContain("timed out");
+      deferred.resolve();
+      await Promise.resolve();
+      expect(session.getCapsuleEntries()).toHaveLength(0);
+    });
+  });
+
   describe("unrelated errors", () => {
     it("не связанные с context overflow ошибки не триггерят compaction", async () => {
       // This test verifies that ContextManager.handleContextOverflow is ONLY
@@ -510,3 +608,21 @@ describe("ContextManager", () => {
     });
   });
 });
+
+function deferredSummary() {
+  let resolveStarted!: () => void;
+  let resolveSummary!: (value: string) => void;
+  const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+  const summary = new Promise<string>((resolve) => { resolveSummary = resolve; });
+  return {
+    started,
+    invoke: async () => {
+      resolveStarted();
+      return summary;
+    },
+    resolve: () => resolveSummary(JSON.stringify({
+      goal: "Continue the task",
+      constraints: [], completed: [], inProgress: [], pending: [], decisions: [], blockers: [], nextSteps: [],
+    })),
+  };
+}

@@ -11,7 +11,7 @@ import {
 import type { CommandContext } from "./index";
 
 export async function handleCompact(args: string[], ctx: CommandContext): Promise<CommandResult> {
-  const view = await executeCompactCommand({
+  await executeCompactCommand({
     args,
     session: ctx.session,
     client: ctx.client,
@@ -19,11 +19,8 @@ export async function handleCompact(args: string[], ctx: CommandContext): Promis
     i18n: ctx.i18n,
     contextManager: ctx.contextManager,
     fallbackCompactor: ctx.fallbackCompactor,
+    emit: (event) => ctx.renderer.emit(event),
   });
-
-  for (const event of view.events) {
-    ctx.renderer.emit(event);
-  }
 
   return { handled: true };
 }

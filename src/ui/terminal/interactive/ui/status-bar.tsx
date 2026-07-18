@@ -8,7 +8,7 @@ export function StatusBar(props: { store: TuiStore; width: number }) {
     const frame = props.store.noodleFrame();
     const mode = props.store.workMode();
     const modeBadge = mode === "plan" ? " [plan]" : mode === "goal" ? " [goal]" : "";
-    return frame === null
+    return frame === null || props.store.activeCompaction()
       ? `● ${props.store.status()}${modeBadge}`
       : `${SYNTHWAVE_NOODLE_FRAMES[frame]} ${props.store.getThinkingLabel()}${modeBadge}`;
   };
@@ -22,7 +22,7 @@ export function StatusBar(props: { store: TuiStore; width: number }) {
         fg={
           props.store.workMode() === "plan" || props.store.workMode() === "goal"
             ? theme().warning
-            : props.store.noodleFrame() === null
+            : props.store.noodleFrame() === null || props.store.activeCompaction()
               ? props.store.isIdle()
                 ? theme().success
                 : theme().warning

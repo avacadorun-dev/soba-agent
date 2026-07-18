@@ -104,6 +104,7 @@ export interface RuntimeAgentTrustController {
 export interface RuntimeAgentSessionView {
   isPersisted(): boolean;
   getSessionId(): string;
+  getEntries?(): Array<{ type: string }>;
 }
 
 export interface RuntimeAgentContextDebugInfo {
@@ -113,6 +114,14 @@ export interface RuntimeAgentContextDebugInfo {
   contextWindow: number;
   hardLimit: number;
   effectiveTokens: number;
+  softLimit: number;
+  lastCompact: null | {
+    status: string;
+    trigger: string;
+    checkpointId: string | null;
+    durationMs: number;
+    reclaimedTokens: number;
+  };
 }
 
 export interface RuntimeAgentContextView {

@@ -1055,6 +1055,62 @@ describe("OpenTUI Solid store", () => {
     });
   });
 
+  test("preflight compact keeps input responsive and leaves one summary row", async () => {
+    const store = createStore();
+    store.onAgentEvent(event({
+      type: "compaction_start", operationId: "op_1", trigger: "turn_complete",
+      tokensBefore: 820, effectiveTokens: 820, softLimit: 800, hardLimit: 1000,
+      required: false, source: "estimated",
+    }));
+
+    expect(store.activeCompaction()).toBe(true);
+    expect(store.status()).toContain("82%");
+    await store.submit("queued while compacting");
+    expect(store.queuedMessages()).toHaveLength(1);
+
+    const done = event({
+      type: "compaction_done", operationId: "op_1", trigger: "turn_complete",
+      tokensBefore: 820, tokensAfter: 300, tokensSaved: 520, reclaimedTokens: 520,
+      strategy: "deterministic", quality: "degraded", checkpointId: "ctx_1",
+      durationMs: 20, softLimit: 800, hardLimit: 1000,
+    });
+    store.onAgentEvent(done);
+    store.onAgentEvent(done);
+    expect(store.messages().filter((message) => message.type === "success")).toHaveLength(1);
+  });
+
+  test("resume restores the latest capsule checkpoint once", () => {
+    const agentLoop = {
+      getModel: () => "test-model",
+      runTurn: async () => {},
+      getSessionManager: () => ({
+        getEntries: () => [{
+          type: "context_capsule", checkpointId: "ctx_resume", trigger: "milestone",
+          metrics: { effectiveTokensBefore: 900, estimatedTokensAfter: 250 },
+          portableState: {
+            goal: "Map adapters",
+            completed: ["Mapped ACP dispatcher", "Mapped CLI adapter"],
+            inProgress: [],
+            pending: [],
+          },
+        }],
+      }),
+    } as unknown as RuntimeAgentHandle;
+    const store = new TuiStore({
+      cwd: process.cwd(), tokenBudget: 0, contextWindow: 1_000, theme: "graphite",
+      agentLoop, toolNames: [], executeCommand: async () => ({ handled: true }),
+      debug: false, maxOutputTokens: 0, maxCompletionTokens: 0,
+      maxAgentIterations: 0, maxStalledIterations: 4, maxRunMinutes: 0, autoCompact: true,
+    });
+
+    expect(store.messages().filter((message) => message.type === "success")).toHaveLength(1);
+    const restored = store.messages()[0];
+    expect(restored?.type).toBe("success");
+    const content = restored && "content" in restored ? restored.content : "";
+    expect(content).toContain("ctx_resume");
+    expect(content).toContain("Mapped ACP dispatcher (+1)");
+  });
+
   test("/lang обновляет chrome, но не переводит старые сообщения", async () => {
     const i18n = new I18n("en");
     const agentLoop = { getModel: () => "test-model", runTurn: async () => {} } as unknown as RuntimeAgentHandle;

@@ -20,7 +20,8 @@ describe("contextCapsuleToMemoryInput", () => {
     });
     expect(input.summary).toContain("ck_123456789abc");
     expect(input.summary.length).toBeLessThanOrEqual(160);
-    expect(input.detail).toContain("Checkpoint: ck_123456789abc");
+    expect(input.summary).toContain("Completed: Added proof persistence");
+    expect(input.detail).toContain("Context capsule: ck_123456789abc");
     expect(input.detail).toContain("Completed: Added proof persistence");
     expect(input.detail).toContain("Metrics: 10000 -> 2500 tokens, reclaimed 7500.");
   });

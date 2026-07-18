@@ -16,6 +16,7 @@
 
 import type { ItemParam } from "../../../kernel/transcript/types";
 import type { ArtifactLedger, PortableContextState, ProviderCapabilities } from "../../../kernel/transcript/types-v2";
+import { toolFailureOutput } from "../tool-output-failure";
 import type { CapsuleGenerationInput, CapsuleStrategy, ContextCapsuleDraft } from "./types";
 
 interface CheckpointFacts {
@@ -37,7 +38,11 @@ export class DeterministicStrategy implements CapsuleStrategy {
   async generate(input: CapsuleGenerationInput, _signal: AbortSignal): Promise<ContextCapsuleDraft> {
     const startTime = Date.now();
 
-    const portableState = this._extractPortableState(input.sourceItems, input.customInstructions);
+    const portableState = this._extractPortableState(
+      input.sourceItems,
+      input.customInstructions,
+      input.previousPortableState,
+    );
     const artifacts = this._extractArtifactLedger(input.sourceItems);
 
     const duration = Date.now() - startTime;
@@ -63,20 +68,24 @@ export class DeterministicStrategy implements CapsuleStrategy {
     };
   }
 
-  private _extractPortableState(items: ItemParam[], customInstructions?: string): PortableContextState {
+  private _extractPortableState(
+    items: ItemParam[],
+    customInstructions?: string,
+    previous?: PortableContextState,
+  ): PortableContextState {
     const checkpoints = this._extractCheckpoints(items);
-    const goal = this._extractGoal(items);
-    const completed = this._extractCompleted(items, checkpoints);
-    const pending = this._extractPending(checkpoints);
-    const nextSteps = this._extractNextSteps(items, checkpoints);
-    const blockers = this._extractBlockers(items);
-    const decisions = this._extractDecisions(items, checkpoints);
+    const completed = unique([...(previous?.completed ?? []), ...this._extractCompleted(items, checkpoints)]);
+    const pending = unique([...(previous?.pending ?? []), ...this._extractPending(checkpoints)])
+      .filter((item) => !completed.includes(item));
+    const nextSteps = unique([...this._extractNextSteps(items, checkpoints), ...(previous?.nextSteps ?? [])]);
+    const blockers = unique([...(previous?.blockers ?? []), ...this._extractBlockers(items)]);
+    const decisions = uniqueDecisions([...(previous?.decisions ?? []), ...this._extractDecisions(items, checkpoints)]);
 
     return {
-      goal: customInstructions ?? goal,
-      constraints: [],
+      goal: customInstructions ?? this._extractGoal(items) ?? previous?.goal ?? "Continue working on the current task",
+      constraints: unique(previous?.constraints ?? []),
       completed,
-      inProgress: [],
+      inProgress: unique(previous?.inProgress ?? []).filter((item) => !completed.includes(item)),
       pending,
       decisions,
       blockers,
@@ -84,7 +93,7 @@ export class DeterministicStrategy implements CapsuleStrategy {
     };
   }
 
-  private _extractGoal(items: ItemParam[]): string {
+  private _extractGoal(items: ItemParam[]): string | null {
     // Find the last user message
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
@@ -98,7 +107,7 @@ export class DeterministicStrategy implements CapsuleStrategy {
         }
       }
     }
-    return "Continue working on the current task";
+    return null;
   }
 
   private _extractCompleted(items: ItemParam[], checkpoints: CheckpointFacts[]): string[] {
@@ -118,8 +127,12 @@ export class DeterministicStrategy implements CapsuleStrategy {
         if (Array.isArray(item.content)) {
           for (const block of item.content) {
             if ("text" in block && block.text) {
-              // Look for completion markers
-              if (
+              // A final answer is the strongest deterministic record of what
+              // the previous turn actually delivered.
+              if (item.phase === "final_answer") {
+                const summary = summarizeText(block.text, 400);
+                if (summary && !completed.includes(summary)) completed.push(summary);
+              } else if (
                 block.text.toLowerCase().includes("completed") ||
                 block.text.toLowerCase().includes("done") ||
                 block.text.toLowerCase().includes("finished")
@@ -197,15 +210,8 @@ export class DeterministicStrategy implements CapsuleStrategy {
     for (let i = items.length - 1; i >= 0 && blockers.length < 5; i--) {
       const item = items[i];
       if (item.type === "function_call_output" || item.type === "local_shell_call_output") {
-        const output = item.type === "function_call_output"
-          ? (typeof item.output === "string" ? item.output : JSON.stringify(item.output))
-          : item.output;
-
-        if (
-          output.toLowerCase().includes("error") ||
-          output.toLowerCase().includes("failed") ||
-          output.toLowerCase().includes("exception")
-        ) {
+        const output = toolFailureOutput(item);
+        if (output) {
           const summary = output.slice(0, 200);
           if (!blockers.includes(summary)) {
             blockers.push(summary);
@@ -374,4 +380,26 @@ export class DeterministicStrategy implements CapsuleStrategy {
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))].slice(0, 10);
+}
+
+function uniqueDecisions(
+  values: Array<{ decision: string; rationale?: string }>,
+): Array<{ decision: string; rationale?: string }> {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (!value.decision.trim() || seen.has(value.decision)) return false;
+    seen.add(value.decision);
+    return true;
+  }).slice(0, 10);
+}
+
+function summarizeText(value: string, maxLength: number): string {
+  const normalized = value.replaceAll(/\s+/g, " ").trim();
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }

@@ -99,6 +99,8 @@ function parseCompactionConfig(
     "minSavingsRatio",
     "keepRecentTokens",
     "safetyReserveTokens",
+    "autoCompactThresholdRatio",
+    "timeoutMs",
     "backgroundTimeoutMs",
   ] as const;
 
@@ -633,9 +635,14 @@ export function resolveCompactionConfig(
   config: SobaConfig,
   disableAuto = false,
 ): CompactionConfig {
+  const configured = config.compaction;
+  const legacyTimeout = configured?.backgroundTimeoutMs;
   const compaction = {
     ...DEFAULT_COMPACTION_CONFIG,
-    ...config.compaction,
+    ...configured,
+    ...(configured?.timeoutMs === undefined && legacyTimeout !== undefined
+      ? { timeoutMs: legacyTimeout }
+      : {}),
     ...(disableAuto ? { auto: false } : {}),
   };
 

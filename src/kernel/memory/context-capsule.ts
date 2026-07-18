@@ -20,7 +20,7 @@ export function contextCapsuleToMemoryInput(capsule: ContextCapsuleEntry, sessio
   return {
     id: `mem_${capsule.checkpointId}`,
     type: "discovery",
-    summary: truncateText(`Context capsule ${capsule.checkpointId}: ${goal}`, MAX_SUMMARY_LENGTH),
+    summary: truncateText(memorySummary(capsule, goal), MAX_SUMMARY_LENGTH),
     detail: buildContextCapsuleMemoryDetail(capsule),
     context: {
       task: goal,
@@ -36,7 +36,7 @@ export function contextCapsuleToMemoryInput(capsule: ContextCapsuleEntry, sessio
 function buildContextCapsuleMemoryDetail(capsule: ContextCapsuleEntry): string {
   const state = capsule.portableState;
   const lines = [
-    `Checkpoint: ${capsule.checkpointId}`,
+    `Context capsule: ${capsule.checkpointId}`,
     `Trigger: ${capsule.trigger}`,
     `Strategy: ${capsule.strategy}`,
     `Quality: ${capsule.quality}`,
@@ -51,6 +51,18 @@ function buildContextCapsuleMemoryDetail(capsule: ContextCapsuleEntry): string {
   ];
 
   return lines.map(normalizeText).filter(Boolean).join("\n");
+}
+
+function memorySummary(capsule: ContextCapsuleEntry, goal: string): string {
+  const state = capsule.portableState;
+  const progress = state.completed[0]
+    ? `Completed: ${state.completed[0]}${state.completed.length > 1 ? ` (+${state.completed.length - 1})` : ""}`
+    : state.inProgress[0]
+      ? `In progress: ${state.inProgress[0]}`
+      : state.pending[0]
+        ? `Pending: ${state.pending[0]}`
+        : `Goal: ${goal}`;
+  return `Context capsule ${capsule.checkpointId}: ${progress}`;
 }
 
 function priorityForCapsule(capsule: ContextCapsuleEntry): MemoryCapsuleInput["priority"] {

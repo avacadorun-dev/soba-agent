@@ -2,16 +2,17 @@ export type CapsuleTrigger =
   | "hard_limit"
   | "context_overflow"
   | "user_request"
+  | "auto_threshold"
   | "turn_complete"
   | "milestone"
   | "plan_pivot";
 
 export interface CompactionConfig {
-  /** Enable proactive (background) compaction triggers */
+  /** Enable proactive deferred preflight compaction triggers */
   auto: boolean;
-  /** Run background compaction after turn completion */
+  /** Mark compaction as pending after turn completion */
   compactOnTurnComplete: boolean;
-  /** Run background compaction on milestone checkpoint */
+  /** Mark compaction as pending on milestone checkpoint */
   compactOnMilestone: boolean;
   /** Minimum effective tokens before auto-compact is considered */
   minTokensForAutoCompact: number;
@@ -23,8 +24,12 @@ export interface CompactionConfig {
   keepRecentTokens: number;
   /** Safety reserve tokens (subtracted from context window to get hard limit) */
   safetyReserveTokens: number;
-  /** Timeout for background compaction operations in ms */
-  backgroundTimeoutMs: number;
+  /** Fraction of the hard limit at which proactive compaction becomes eligible */
+  autoCompactThresholdRatio: number;
+  /** Timeout for a preflight compaction operation in ms */
+  timeoutMs: number;
+  /** @deprecated Use timeoutMs. Accepted for one compatibility release. */
+  backgroundTimeoutMs?: number;
 }
 
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
@@ -36,7 +41,8 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   minSavingsRatio: 0.25,
   keepRecentTokens: 20_000,
   safetyReserveTokens: 8_192,
-  backgroundTimeoutMs: 15_000,
+  autoCompactThresholdRatio: 0.8,
+  timeoutMs: 15_000,
 };
 
 export interface ConfigValidationResult {
@@ -68,6 +74,12 @@ export function validateCompactionConfig(
   }
   if (config.safetyReserveTokens < 0) {
     errors.push("safetyReserveTokens must be >= 0");
+  }
+  if (!(config.autoCompactThresholdRatio > 0 && config.autoCompactThresholdRatio < 1)) {
+    errors.push("autoCompactThresholdRatio must be > 0 and < 1");
+  }
+  if (!(config.timeoutMs > 0)) {
+    errors.push("timeoutMs must be > 0");
   }
   if (contextWindow > 0 && maxOutputTokens > 0 && maxOutputTokens + config.safetyReserveTokens >= contextWindow) {
     errors.push("maxOutputTokens + safetyReserveTokens must be < contextWindow");

@@ -68,6 +68,7 @@ export type CapsuleTrigger =
   | "hard_limit"
   | "context_overflow"
   | "user_request"
+  | "auto_threshold"
   | "turn_complete"
   | "milestone"
   | "plan_pivot";

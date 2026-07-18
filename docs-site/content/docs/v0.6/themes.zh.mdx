@@ -39,11 +39,13 @@ SOBA 当前提供三种颜色模式：
 | **Paper** | `light` | 适合明亮环境的浅色主题。蓝色强调色 (`#2e6edf`)，对比清晰 |
 | **Forest** | `forest` | 自然感的深色主题。苔绿色强调色 (`#6AAC7D`)，暖色文字 (`#C2CBB8`) |
 
-配置里还有一些预留主题名，之后会作为新的内置主题使用。现在它们会映射到基础模式：
+每个名称都会选择独立的 TUI 调色板；对于非交互式输出，它们映射到基础模式：
 
 | 主题名 | 映射到 |
 |---|---|
 | `graphite` | `dark` |
+| `vscode` | `dark` |
+| `github` | `dark` |
 | `aurora` | `dark` |
 | `synthwave` | `dark` |
 | `paper` | `light` |
@@ -136,7 +138,7 @@ soba --theme forest
 
 # 输出:
 # Current theme: Graphite (dark)
-# Available themes: graphite, aurora, synthwave, paper,
+# Available themes: graphite, vscode, github, aurora, synthwave, paper,
 #                   forest, highContrast, clay, operator, ink
 # Use /theme <name> to switch
 ```

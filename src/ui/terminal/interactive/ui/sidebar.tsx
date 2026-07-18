@@ -263,7 +263,8 @@ function SessionMode(props: { store: TuiStore }) {
     // Fall back to budget tokens if context meter hasn't reported yet
     return props.store.usedTokens();
   };
-  const ctxWindow = () => props.store.options.contextWindow;
+  const debugInfo = () => props.store.getContextDebugInfo();
+  const ctxWindow = () => debugInfo()?.hardLimit ?? props.store.options.contextWindow;
   const pct = () =>
     ctxWindow() > 0 ? Math.min(100, (ctxTokens() / ctxWindow()) * 100) : 0;
 
@@ -300,6 +301,15 @@ function SessionMode(props: { store: TuiStore }) {
         {formatTokens(ctxTokens())} / {formatTokens(ctxWindow())}
       </text>
       <ProgressBar percent={pct()} store={props.store} />
+      <KV key="soft at" value={debugInfo() ? formatTokens(debugInfo()!.softLimit) : "—"} store={props.store} />
+      <KV key="source" value={debugInfo()?.source ?? "estimated"} store={props.store} />
+      <KV
+        key="last"
+        value={debugInfo()?.lastCompact
+          ? `${debugInfo()!.lastCompact!.trigger} · ${formatTokens(debugInfo()!.lastCompact!.reclaimedTokens)} saved`
+          : "—"}
+        store={props.store}
+      />
       <text> </text>
 
       <Section label="perms" store={props.store} />
@@ -444,6 +454,7 @@ function DebugMode(props: { store: TuiStore }) {
         value={debugInfo() ? formatTokens(debugInfo()!.hardLimit) : "—"}
         store={props.store}
       />
+      <KV key="soft limit" value={debugInfo() ? formatTokens(debugInfo()!.softLimit) : "—"} store={props.store} />
       <KV key="source" value={debugInfo()?.source ?? "—"} store={props.store} />
       <text> </text>
 

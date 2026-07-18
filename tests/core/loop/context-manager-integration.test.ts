@@ -197,6 +197,53 @@ function createTestContextManager(
 // ─── Tests ───
 
 describe("ContextManager integration with AgentLoop", () => {
+  test("model inference waits until the preflight generator completes", async () => {
+    const session = SessionManager.inMemory("/test");
+    for (let index = 0; index < 30; index++) {
+      session.appendItem({
+        type: "message", role: index % 2 === 0 ? "user" : "assistant",
+        content: [{ type: index % 2 === 0 ? "input_text" : "output_text", text: "x".repeat(600) }],
+      } as any);
+    }
+    let release!: (summary: string) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const generated = new Promise<string>((resolve) => { release = resolve; });
+    const client = createMockClient();
+    const manager = new ContextManager(session, {
+      compaction: {
+        ...DEFAULT_COMPACTION_CONFIG,
+        minTokensForAutoCompact: 100,
+        minReclaimableTokens: 100,
+        minSavingsRatio: 0.01,
+        keepRecentTokens: 500,
+        safetyReserveTokens: 500,
+        autoCompactThresholdRatio: 0.5,
+      },
+      contextWindow: 5_000,
+      maxOutputTokens: 1_000,
+      provider: client.getProviderIdentity(),
+      capabilities: client.getProviderCapabilities(),
+      generatorConfig: { modelInvoker: { invoke: async () => { markStarted(); return generated; } } },
+    });
+    const loop = new AgentLoop(client, session, new ToolRegistry(), "/test", { emitEvents: true }, undefined, undefined, manager);
+    const events: any[] = [];
+    loop.onEvent((event) => events.push(event));
+
+    const turn = loop.runTurn("continue");
+    await started;
+    expect(events.some((event) => event.type === "compaction_start")).toBe(true);
+    expect(client.create).not.toHaveBeenCalled();
+    release(JSON.stringify({
+      goal: "continue", constraints: [], completed: [], inProgress: [], pending: [],
+      decisions: [], blockers: [], nextSteps: [],
+    }));
+    await turn;
+    expect(client.create).toHaveBeenCalledTimes(1);
+    const sentRequest = (client.create as ReturnType<typeof mock>).mock.calls[0]?.[0];
+    expect(JSON.stringify(sentRequest)).toContain("SOBA Context Capsule");
+  });
+
   test("AgentLoop accepts contextManager in constructor", () => {
     const session = SessionManager.inMemory("/test");
     const client = createMockClient();
@@ -253,6 +300,16 @@ describe("ContextManager integration with AgentLoop", () => {
 
   test("context overflow error triggers recovery and retry", async () => {
     const session = SessionManager.inMemory("/test");
+    for (let index = 0; index < 20; index++) {
+      session.appendItem({
+        type: "message",
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: [{
+          type: index % 2 === 0 ? "input_text" : "output_text",
+          text: `history ${index} ${"x".repeat(500)}`,
+        }],
+      } as any);
+    }
     const client = createMockClient({ shouldOverflow: true, overflowOnce: true });
     const tools = new ToolRegistry();
     tools.register(readTool);

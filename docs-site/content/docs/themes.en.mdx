@@ -39,11 +39,13 @@ SOBA currently ships with three color modes:
 | **Paper** | `light` | Light theme for bright rooms. Blue accent (`#2e6edf`), clear contrast |
 | **Forest** | `forest` | Dark, natural palette. Moss-green accent (`#6AAC7D`), warm text (`#C2CBB8`) |
 
-Additional names from configuration are reserved for future built-in themes. For now they map to base modes:
+Each name selects its own TUI palette. For non-interactive output, themes map to one of the base modes:
 
 | Theme name | Maps to mode |
 |---|---|
 | `graphite` | `dark` |
+| `vscode` | `dark` |
+| `github` | `dark` |
 | `aurora` | `dark` |
 | `synthwave` | `dark` |
 | `paper` | `light` |
@@ -136,7 +138,7 @@ soba --theme forest
 
 # Output:
 # Current theme: Graphite (dark)
-# Available themes: graphite, aurora, synthwave, paper,
+# Available themes: graphite, vscode, github, aurora, synthwave, paper,
 #                   forest, highContrast, clay, operator, ink
 # Use /theme <name> to switch
 ```

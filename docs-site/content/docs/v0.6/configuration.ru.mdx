@@ -38,7 +38,8 @@ SOBA конфигурируется через три источника с чё
     "minSavingsRatio": 0.25,
     "keepRecentTokens": 20000,
     "safetyReserveTokens": 8192,
-    "backgroundTimeoutMs": 15000
+    "autoCompactThresholdRatio": 0.8,
+    "timeoutMs": 15000
   },
   "registry": {
     "activeProvider": "deepseek",
@@ -97,7 +98,7 @@ SOBA конфигурируется через три источника с чё
 | Параметр | Тип | По умолчанию | Описание |
 |---|---|---|---|
 | `lang` | `"en" \| "ru" \| "zh"` | `"en"` | Язык интерфейса по умолчанию |
-| `theme` | `TuiThemeName` | `"graphite"` | Цветовая тема TUI. Доступные: `"graphite"`, `"aurora"`, `"synthwave"`, `"paper"`, `"forest"`, `"highContrast"`, `"clay"`, `"operator"`, `"ink"` |
+| `theme` | `TuiThemeName` | `"graphite"` | Цветовая тема TUI. Доступные: `"graphite"`, `"vscode"`, `"github"`, `"aurora"`, `"synthwave"`, `"paper"`, `"forest"`, `"highContrast"`, `"clay"`, `"operator"`, `"ink"` |
 
 ### 2.6. Compaction (сжатие контекста)
 
@@ -256,15 +257,17 @@ Compaction управляется через секцию `compaction` в `~/.so
 
 | Параметр | По умолчанию | Описание |
 |---|---|---|
-| `auto` | `true` | Включить proactive (фоновый) compaction |
-| `compactOnTurnComplete` | `true` | Фоновый compaction после завершения хода |
-| `compactOnMilestone` | `true` | Фоновый compaction при milestone checkpoint |
+| `auto` | `true` | Включить мягкий deferred preflight compaction |
+| `compactOnTurnComplete` | `true` | Пометить compaction как pending после завершения хода |
+| `compactOnMilestone` | `true` | Пометить compaction как pending при milestone checkpoint |
 | `minTokensForAutoCompact` | `32000` | Минимум эффективных токенов для рассмотрения авто-компакта |
 | `minReclaimableTokens` | `12000` | Минимум токенов, доступных для освобождения (ROI) |
 | `minSavingsRatio` | `0.25` | Минимальный коэффициент экономии для ROI (25%) |
 | `keepRecentTokens` | `20000` | Количество токенов, сохраняемых после компакта |
 | `safetyReserveTokens` | `8192` | Резерв безопасности (вычитается из context window для hard limit) |
-| `backgroundTimeoutMs` | `15000` | Таймаут для фоновых операций компакта в мс |
+| `autoCompactThresholdRatio` | `0.8` | Мягкий порог как доля hard limit запроса |
+| `timeoutMs` | `15000` | Таймаут preflight compaction в мс |
+| `backgroundTimeoutMs` | — | Устаревший alias для `timeoutMs` |
 
 **Формула hard limit:**
 ```
@@ -299,6 +302,8 @@ config.json
   извлечённые значения для продвинутых сценариев (например, локальные прокси, которые некорректно сообщают размеры модели).
 
 - **`auto` в compaction**: `SOBA_AUTO_COMPACT=false` или `--no-auto-compact` переопределяет `compaction.auto`.
+- Отключение auto-compaction выключает только мягкие trigger. Hard limit и восстановление после provider overflow остаются обязательными.
+- Trigger после turn и milestone откладывается: SOBA показывает прогресс и ожидает compact непосредственно перед следующим model call.
 
 - **Строковые и числовые значения**: `0` для `maxAgentIterations` и `maxRunMinutes` означает «без лимита» (unlimited).
   Для `maxCompletionTokens` — «без явного лимита» (используется дефолт провайдера).

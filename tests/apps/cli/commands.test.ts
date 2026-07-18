@@ -186,7 +186,7 @@ describe("slash commands", () => {
       ...makeCommandContext(session, output),
       contextManager: {
         manualCompact: async () => ({
-          compacted: false,
+          status: "skipped",
           reason: "No reclaimable context (estimatedTokensAfter >= effectiveTokensBefore)",
           metrics: {
             effectiveTokensBefore: 42,
@@ -204,6 +204,25 @@ describe("slash commands", () => {
       type: "compaction_skipped",
       reason: "No reclaimable context (estimatedTokensAfter >= effectiveTokensBefore)",
     });
+  });
+
+  test("/compact emits start live before the generator promise resolves", async () => {
+    const session = SessionManager.inMemory(process.cwd());
+    session.appendItem({ type: "message", role: "user", content: [{ type: "input_text", text: "context" }] });
+    const output: Array<{ type: string }> = [];
+    let resolve!: (value: any) => void;
+    const deferred = new Promise<any>((done) => { resolve = done; });
+    const context = {
+      ...makeCommandContext(session, output),
+      contextManager: { manualCompact: () => deferred },
+    } as unknown as CommandContext;
+
+    const execution = executeCommand("/compact", context);
+    await Promise.resolve();
+    expect(output.map((event) => event.type)).toContain("compaction_start");
+    resolve({ status: "skipped", reason: "nothing to compact", checkpointId: null, strategy: null, quality: null, metrics: null });
+    await execution;
+    expect(output.at(-1)?.type).toBe("compaction_skipped");
   });
 
   test("/skill:<name> возвращает обычный user prompt после активации", async () => {

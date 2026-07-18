@@ -1,16 +1,17 @@
+import type { CapsuleTrigger } from "../../kernel/compaction/config";
 import type { ResponseResource } from "../../kernel/model/openresponses-types";
 import type {
+  CompactionOutcome,
+  CompactionPlan,
   ContextManager,
   OverflowRecoveryResult,
   PreInferenceCheckResult,
 } from "../compaction/context-manager";
-import type { BackgroundScheduler } from "../compaction/scheduler";
-import type { CapsuleTrigger } from "../compaction/trigger-policy";
+import type { TriggerDecision } from "../compaction/trigger-policy";
 import type { AgentEvent } from "../turn/types";
 
 export interface ContextControllerOptions {
   contextManager?: ContextManager;
-  backgroundScheduler?: BackgroundScheduler;
   autoCompactEnabled?: () => boolean;
   emit?: (event: AgentEvent) => void;
 }
@@ -19,6 +20,7 @@ export interface ContextRequestMetrics {
   systemPromptTokens: number;
   toolSchemaTokens: number;
   requestFingerprint: string;
+  turnIndex?: number;
 }
 
 export interface CheckpointLikeEvent {
@@ -33,90 +35,154 @@ export interface ScheduleDecision {
   reason?: string;
 }
 
+interface PendingTrigger {
+  trigger: "turn_complete" | "milestone" | "plan_pivot";
+  reason?: string;
+}
+
+/**
+ * Owns deferred compaction intent. No capsule generation happens here until the
+ * next pre-inference barrier explicitly awaits it.
+ */
 export class ContextController {
   private readonly contextManager?: ContextManager;
-  private readonly backgroundScheduler?: BackgroundScheduler;
   private readonly autoCompactEnabled: () => boolean;
   private readonly emit: (event: AgentEvent) => void;
+  private pendingTrigger: PendingTrigger | null = null;
+  private lastSoftAttemptTurn: number | string | null = null;
+  private overflowAttemptTurns = new Set<number | string>();
 
   constructor(options: ContextControllerOptions = {}) {
     this.contextManager = options.contextManager;
-    this.backgroundScheduler = options.backgroundScheduler;
     this.autoCompactEnabled = options.autoCompactEnabled ?? (() => true);
     this.emit = options.emit ?? (() => {});
   }
 
-  cancelBackgroundCompaction(reason: string): void {
-    if (this.backgroundScheduler?.isRunning()) {
-      this.backgroundScheduler.cancel(reason);
-    }
-  }
+  /** @deprecated Background compaction no longer exists; retained for host compatibility. */
+  cancelBackgroundCompaction(_reason: string): void {}
 
-  async performPreInferenceCheck(metrics: ContextRequestMetrics): Promise<PreInferenceCheckResult> {
-    if (!this.contextManager) {
+  async performPreInferenceCheck(
+    metrics: ContextRequestMetrics,
+    signal?: AbortSignal,
+  ): Promise<PreInferenceCheckResult> {
+    if (!this.contextManager) return { canProceed: true, compactionPerformed: false };
+
+    const snapshot = this.contextManager.getSnapshot(
+      metrics.systemPromptTokens,
+      metrics.toolSchemaTokens,
+      metrics.requestFingerprint,
+    );
+    const policy = this.contextManager.getPolicy();
+    const hardDecision = policy.evaluateHardLimit(snapshot);
+    let decision: TriggerDecision | null = hardDecision.shouldCompact ? hardDecision : null;
+    let trigger: CapsuleTrigger | null = decision?.trigger ?? null;
+    let required = hardDecision.shouldCompact;
+    const turnKey = metrics.turnIndex ?? metrics.requestFingerprint;
+    if (typeof turnKey === "number") {
+      for (const attemptedTurn of this.overflowAttemptTurns) {
+        if (typeof attemptedTurn === "number" && attemptedTurn !== turnKey) this.overflowAttemptTurns.delete(attemptedTurn);
+      }
+    }
+
+    if (!required && !this.autoCompactEnabled()) this.pendingTrigger = null;
+
+    if (!required && this.autoCompactEnabled() && this.lastSoftAttemptTurn !== turnKey) {
+      const pending = this.consumePendingTrigger();
+      if (pending) {
+        decision = pending.trigger === "turn_complete"
+          ? policy.evaluateTurnComplete(snapshot)
+          : policy.evaluateMilestone(snapshot);
+        if (decision.shouldCompact) trigger = pending.trigger;
+      }
+      if (!decision?.shouldCompact) {
+        decision = policy.evaluateAutoThreshold(snapshot);
+        trigger = decision.trigger;
+      }
+    }
+
+    if (!decision?.shouldCompact || !trigger) {
       return { canProceed: true, compactionPerformed: false };
     }
 
-    const checkResult = await this.contextManager.preInferenceCheck(
+    if (!required) this.lastSoftAttemptTurn = turnKey;
+    const plan = this.contextManager.createPlan({
+      trigger,
+      snapshot,
+      required,
+      estimatedReclaimableTokens: decision.estimatedReclaimableTokens,
+      estimatedSavingsRatio: decision.estimatedSavingsRatio,
+    });
+    this.emitStart(plan);
+    const outcome = await this.contextManager.executePlan(plan, signal);
+    const postSnapshot = this.contextManager.getSnapshot(
       metrics.systemPromptTokens,
       metrics.toolSchemaTokens,
       metrics.requestFingerprint,
     );
+    this.emitOutcome(plan, outcome, postSnapshot.effectiveTokens);
 
-    if (checkResult.compactionPerformed && checkResult.outcome) {
-      this.emitCompactionStart("pre_inference", checkResult.outcome.metrics?.effectiveTokensBefore ?? 0);
-      this.emitCompactionDone("pre_inference", checkResult.outcome);
+    if (outcome.status === "completed" && postSnapshot.effectiveTokens <= postSnapshot.hardLimit) {
+      return { canProceed: true, compactionPerformed: true, outcome };
     }
 
-    if (!checkResult.canProceed) {
-      this.emit({
-        type: "context_error",
-        timestamp: Date.now(),
-        error: checkResult.error ?? "Pre-inference check failed",
-        effectiveTokens: 0,
-        hardLimit: 0,
-        recoveryAttempted: checkResult.compactionPerformed,
-      });
+    // A soft barrier is advisory: warn through its terminal event and continue
+    // whenever the actual request remains below the mandatory hard limit.
+    if (!required && postSnapshot.effectiveTokens <= postSnapshot.hardLimit) {
+      return { canProceed: true, compactionPerformed: false, outcome };
     }
 
-    return checkResult;
+    const error = outcome.status === "completed"
+      ? `Post-compaction effective tokens (${postSnapshot.effectiveTokens}) still exceed hard limit (${postSnapshot.hardLimit}).`
+      : outcome.reason;
+    this.emitContextError(error, postSnapshot.effectiveTokens, postSnapshot.hardLimit, true);
+    return { canProceed: false, compactionPerformed: outcome.status === "completed", error, outcome };
   }
 
-  async recoverContextOverflow(metrics: ContextRequestMetrics): Promise<OverflowRecoveryResult> {
+  async recoverContextOverflow(
+    metrics: ContextRequestMetrics,
+    signal?: AbortSignal,
+  ): Promise<OverflowRecoveryResult> {
     if (!this.contextManager) {
       return { recovered: false, shouldRetry: false, error: "Context manager is not configured." };
     }
+    const turnKey = metrics.turnIndex ?? metrics.requestFingerprint;
+    if (this.overflowAttemptTurns.has(turnKey)) {
+      const error = "Context overflow recovery already attempted for this turn.";
+      this.emitContextError(error, 0, 0, true);
+      return { recovered: false, shouldRetry: false, error };
+    }
+    this.overflowAttemptTurns.add(turnKey);
 
-    this.emit({
-      type: "compaction_start",
-      timestamp: Date.now(),
-      reason: "overflow_recovery",
-      effectiveTokens: 0,
-      hardLimit: 0,
-    });
-
-    const recoveryResult = await this.contextManager.handleContextOverflow(
+    const snapshot = this.contextManager.getSnapshot(
       metrics.systemPromptTokens,
       metrics.toolSchemaTokens,
       metrics.requestFingerprint,
     );
+    const decision = this.contextManager.getPolicy().evaluateContextOverflow(snapshot);
+    const plan = this.contextManager.createPlan({
+      trigger: "context_overflow",
+      snapshot,
+      required: true,
+      estimatedReclaimableTokens: decision.estimatedReclaimableTokens,
+      estimatedSavingsRatio: decision.estimatedSavingsRatio,
+    });
+    this.emitStart(plan);
+    const outcome = await this.contextManager.executePlan(plan, signal);
+    const postSnapshot = this.contextManager.getSnapshot(
+      metrics.systemPromptTokens,
+      metrics.toolSchemaTokens,
+      metrics.requestFingerprint,
+    );
+    this.emitOutcome(plan, outcome, postSnapshot.effectiveTokens);
 
-    if (recoveryResult.outcome) {
-      this.emitCompactionDone("overflow_recovery", recoveryResult.outcome);
+    if (outcome.status === "completed" && postSnapshot.effectiveTokens <= postSnapshot.hardLimit) {
+      return { recovered: true, shouldRetry: true, outcome };
     }
-
-    if (!recoveryResult.recovered || !recoveryResult.shouldRetry) {
-      this.emit({
-        type: "context_error",
-        timestamp: Date.now(),
-        error: recoveryResult.error ?? "Context overflow recovery failed",
-        effectiveTokens: 0,
-        hardLimit: 0,
-        recoveryAttempted: true,
-      });
-    }
-
-    return recoveryResult;
+    const error = outcome.status === "completed"
+      ? `Emergency compaction freed insufficient context. Post-compaction: ${postSnapshot.effectiveTokens}, hard limit: ${postSnapshot.hardLimit}`
+      : outcome.reason;
+    this.emitContextError(error, postSnapshot.effectiveTokens, postSnapshot.hardLimit, true);
+    return { recovered: false, shouldRetry: false, outcome, error };
   }
 
   recordProviderUsage(
@@ -129,9 +195,8 @@ export class ContextController {
   }
 
   getEffectiveContextTokens(metrics: ContextRequestMetrics): number | undefined {
-    if (!this.contextManager) return undefined;
     try {
-      return this.contextManager.getSnapshot(
+      return this.contextManager?.getSnapshot(
         metrics.systemPromptTokens,
         metrics.toolSchemaTokens,
         metrics.requestFingerprint,
@@ -145,33 +210,13 @@ export class ContextController {
     checkpointEvents: CheckpointLikeEvent[];
     metrics: ContextRequestMetrics;
   }): ScheduleDecision {
-    const milestone = [...input.checkpointEvents].reverse().find((event) => event.kind === "milestone");
-    if (!milestone || !this.contextManager || !this.backgroundScheduler || !this.autoCompactEnabled()) {
+    const checkpoint = [...input.checkpointEvents].reverse()
+      .find((event) => event.kind === "milestone" || event.kind === "plan_pivot");
+    if (!checkpoint || !this.contextManager || !this.autoCompactEnabled()) {
       return { evaluated: false, shouldCompact: false };
     }
-
-    const { shouldCompact, snapshot } = this.contextManager.evaluateMilestone(
-      input.metrics.systemPromptTokens,
-      input.metrics.toolSchemaTokens,
-      input.metrics.requestFingerprint,
-    );
-
-    if (shouldCompact) {
-      this.backgroundScheduler.schedule(
-        "milestone",
-        snapshot,
-        input.metrics.systemPromptTokens,
-        input.metrics.toolSchemaTokens,
-        input.metrics.requestFingerprint,
-      );
-    }
-
-    return {
-      evaluated: true,
-      shouldCompact,
-      trigger: "milestone",
-      reason: milestone.reason,
-    };
+    this.markPending({ trigger: checkpoint.kind, reason: checkpoint.reason });
+    return { evaluated: true, shouldCompact: true, trigger: checkpoint.kind, reason: checkpoint.reason };
   }
 
   scheduleTurnComplete(input: {
@@ -179,64 +224,109 @@ export class ContextController {
     errorCount: number;
     metrics: ContextRequestMetrics;
   }): ScheduleDecision {
-    if (
-      !this.contextManager ||
-      !this.backgroundScheduler ||
-      input.responseStatus !== "completed" ||
-      input.errorCount !== 0 ||
-      !this.autoCompactEnabled()
-    ) {
+    if (!this.contextManager || input.responseStatus !== "completed" || input.errorCount !== 0 || !this.autoCompactEnabled()) {
       return { evaluated: false, shouldCompact: false };
     }
-
-    const { shouldCompact, snapshot } = this.contextManager.evaluateTurnComplete(
-      input.metrics.systemPromptTokens,
-      input.metrics.toolSchemaTokens,
-      input.metrics.requestFingerprint,
-    );
-
-    if (shouldCompact) {
-      this.backgroundScheduler.schedule(
-        "turn_complete",
-        snapshot,
-        input.metrics.systemPromptTokens,
-        input.metrics.toolSchemaTokens,
-        input.metrics.requestFingerprint,
-      );
-    }
-
-    return {
-      evaluated: true,
-      shouldCompact,
-      trigger: "turn_complete",
-    };
+    this.markPending({ trigger: "turn_complete" });
+    return { evaluated: true, shouldCompact: true, trigger: "turn_complete" };
   }
 
-  private emitCompactionStart(
-    reason: "pre_inference" | "overflow_recovery",
-    effectiveTokens: number,
-  ): void {
+  getPendingTrigger(): CapsuleTrigger | null {
+    return this.pendingTrigger?.trigger ?? null;
+  }
+
+  private markPending(next: PendingTrigger): void {
+    const priority = (trigger: PendingTrigger["trigger"]) => trigger === "turn_complete" ? 1 : 2;
+    if (!this.pendingTrigger || priority(next.trigger) >= priority(this.pendingTrigger.trigger)) {
+      this.pendingTrigger = next;
+    }
+  }
+
+  private consumePendingTrigger(): PendingTrigger | null {
+    const pending = this.pendingTrigger;
+    this.pendingTrigger = null;
+    return pending;
+  }
+
+  private emitStart(plan: CompactionPlan): void {
+    const softLimit = this.contextManager?.getPolicy().getSoftLimit(plan.snapshot) ?? 0;
     this.emit({
       type: "compaction_start",
       timestamp: Date.now(),
-      reason,
-      effectiveTokens,
-      hardLimit: 0,
+      operationId: plan.operationId,
+      trigger: plan.trigger,
+      reason: legacyReason(plan.trigger),
+      tokensBefore: plan.snapshot.effectiveTokens,
+      effectiveTokens: plan.snapshot.effectiveTokens,
+      softLimit,
+      hardLimit: plan.snapshot.hardLimit,
+      required: plan.required,
+      source: plan.snapshot.source,
+      checkpointId: null,
+      quality: null,
+      strategy: null,
+      durationMs: 0,
+      reclaimedTokens: 0,
     });
   }
 
-  private emitCompactionDone(
-    reason: "pre_inference" | "overflow_recovery",
-    outcome: NonNullable<PreInferenceCheckResult["outcome"]>,
-  ): void {
+  private emitOutcome(plan: CompactionPlan, outcome: CompactionOutcome, measuredTokensAfter: number): void {
+    const tokensAfter = outcome.metrics?.estimatedTokensAfter ?? measuredTokensAfter;
+    const reclaimedTokens = outcome.metrics?.reclaimedTokens
+      ?? Math.max(0, plan.snapshot.effectiveTokens - tokensAfter);
+    const softLimit = this.contextManager?.getPolicy().getSoftLimit(plan.snapshot) ?? 0;
+    if (outcome.status === "completed") {
+      this.emit({
+        type: "compaction_done",
+        timestamp: Date.now(),
+        operationId: plan.operationId,
+        trigger: plan.trigger,
+        reason: legacyReason(plan.trigger),
+        tokensBefore: plan.snapshot.effectiveTokens,
+        tokensAfter,
+        tokensSaved: reclaimedTokens,
+        reclaimedTokens,
+        strategy: outcome.strategy ?? "unknown",
+        quality: outcome.quality,
+        checkpointId: outcome.checkpointId,
+        durationMs: outcome.durationMs,
+        softLimit,
+        hardLimit: plan.snapshot.hardLimit,
+        required: plan.required,
+      });
+      return;
+    }
+    const type = outcome.status === "cancelled"
+      ? "compaction_cancelled"
+      : outcome.status === "failed"
+        ? "compaction_failed"
+        : "compaction_skipped";
     this.emit({
-      type: "compaction_done",
+      type,
       timestamp: Date.now(),
-      reason,
-      tokensBefore: outcome.metrics?.effectiveTokensBefore ?? 0,
-      tokensAfter: outcome.metrics?.estimatedTokensAfter ?? 0,
-      tokensSaved: outcome.metrics?.reclaimedTokens ?? 0,
-      strategy: outcome.strategy ?? "unknown",
+      operationId: plan.operationId,
+      trigger: plan.trigger,
+      reason: outcome.reason,
+      tokensBefore: plan.snapshot.effectiveTokens,
+      tokensAfter,
+      reclaimedTokens,
+      durationMs: outcome.durationMs,
+      softLimit,
+      hardLimit: plan.snapshot.hardLimit,
+      required: plan.required,
+      checkpointId: null,
+      quality: null,
+      strategy: outcome.strategy,
     });
   }
+
+  private emitContextError(error: string, effectiveTokens: number, hardLimit: number, recoveryAttempted: boolean): void {
+    this.emit({ type: "context_error", timestamp: Date.now(), error, effectiveTokens, hardLimit, recoveryAttempted });
+  }
+}
+
+function legacyReason(trigger: CapsuleTrigger): "pre_inference" | "overflow_recovery" | "manual" {
+  if (trigger === "context_overflow") return "overflow_recovery";
+  if (trigger === "user_request") return "manual";
+  return "pre_inference";
 }

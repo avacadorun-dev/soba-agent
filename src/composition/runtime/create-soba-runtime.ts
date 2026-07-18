@@ -14,7 +14,7 @@ import type {
   SobaRuntime,
 } from "../../application/types";
 import { ContextManager } from "../../engine/compaction/context-manager";
-import { BackgroundScheduler } from "../../engine/compaction/scheduler";
+import type { BackgroundScheduler } from "../../engine/compaction/scheduler";
 import { AgentLoop } from "../../engine/turn/agent-loop";
 import type { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/client-proxy";
 import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
@@ -84,7 +84,8 @@ export interface SobaRuntimeComposition {
   projectMemory: ProjectMemory;
   trustManager: TrustManager;
   contextManager: ContextManager;
-  backgroundScheduler: BackgroundScheduler;
+  /** @deprecated Deferred preflight compaction no longer uses a scheduler. */
+  backgroundScheduler?: BackgroundScheduler;
   skillManager: SkillManager;
   skillCommands: SkillCommands;
   skillCatalog: SkillCatalog;
@@ -166,10 +167,6 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
       },
     },
   });
-  const backgroundScheduler = new BackgroundScheduler(session, contextManager, {
-    backgroundTimeoutMs: compactionConfig.backgroundTimeoutMs,
-  });
-
   const { skillManager, skillCommands, skillCatalog, trustStore } = await createSkillStack({
     projectPath: cwd,
     homeDir,
@@ -196,7 +193,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     trustManager,
     undefined,
     contextManager,
-    backgroundScheduler,
+    undefined,
     skillManager,
     { enabled: compactionConfig.auto },
     projectMemory,
@@ -239,7 +236,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     projectMemory,
     trustManager,
     contextManager,
-    backgroundScheduler,
+    backgroundScheduler: undefined,
     skillManager,
     skillCommands,
     skillCatalog,

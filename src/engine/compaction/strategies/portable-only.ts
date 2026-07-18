@@ -92,6 +92,10 @@ Focus on preserving:
 Conversation:
 ${serialized}
 
+${input.previousPortableState
+  ? `Previous context capsule state (carry this forward unless the conversation explicitly updates it):\n${JSON.stringify(input.previousPortableState)}`
+  : ""}
+
 ${input.customInstructions ? `Additional instructions: ${input.customInstructions}` : ""}
 
 Return only the JSON object, no markdown formatting.`;
@@ -99,7 +103,7 @@ Return only the JSON object, no markdown formatting.`;
     const response = await this._modelInvoker.invoke(prompt, signal);
 
     try {
-      const parsed = JSON.parse(response);
+      const parsed = parseJsonObject(response);
       return this._validatePortableState(parsed);
     } catch {
       throw new Error("Failed to parse portable state JSON");
@@ -173,4 +177,34 @@ Return only the JSON object, no markdown formatting.`;
 
 export interface ModelInvoker {
   invoke(prompt: string, signal: AbortSignal): Promise<string>;
+}
+
+function parseJsonObject(response: string): unknown {
+  const trimmed = response.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Some compatible providers wrap JSON in markdown or prepend reasoning.
+  }
+
+  const start = trimmed.indexOf("{");
+  if (start < 0) throw new Error("Portable state response contains no JSON object");
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) {
+      return JSON.parse(trimmed.slice(start, i + 1));
+    }
+  }
+  throw new Error("Portable state response contains incomplete JSON");
 }

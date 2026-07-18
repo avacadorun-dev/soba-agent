@@ -59,7 +59,7 @@ export async function executeModelTurn(input: {
 }): Promise<ModelTurnExecutionResult> {
   input.emit({ type: "thinking", timestamp: Date.now(), active: true });
 
-  const request = buildRequest(
+  let request = buildRequest(
     input.session,
     input.systemPrompt,
     input.tools,
@@ -79,7 +79,8 @@ export async function executeModelTurn(input: {
     systemPromptTokens,
     toolSchemaTokens,
     requestFingerprint: `turn_${input.turn}`,
-  });
+    turnIndex: input.turn,
+  }, input.signal);
   emitContextUsageUpdate({
     contextController: input.contextController,
     totalUsage: input.totalUsage,
@@ -107,6 +108,23 @@ export async function executeModelTurn(input: {
     });
     input.emitStopReason("api-error", errorMsg);
     return { action: "break", systemPromptTokens, toolSchemaTokens };
+  }
+
+  // Compaction appends a capsule and changes the effective branch. Rebuild the
+  // immutable request only after the preflight barrier has committed.
+  if (checkResult.compactionPerformed) {
+    request = buildRequest(
+      input.session,
+      input.systemPrompt,
+      input.tools,
+      input.model,
+      input.maxOutputTokens,
+      input.maxCompletionTokens,
+      input.temperature,
+      input.ephemeralMessages,
+      input.allowParallelToolCalls,
+      input.allowedToolNames,
+    );
   }
 
   for (let attempt = 0; attempt <= MAX_MODEL_TRANSPORT_RETRIES; attempt++) {
@@ -140,7 +158,8 @@ export async function executeModelTurn(input: {
           systemPromptTokens,
           toolSchemaTokens,
           requestFingerprint: `turn_${input.turn}_overflow`,
-        });
+          turnIndex: input.turn,
+        }, input.signal);
         if (recoveryResult.recovered && recoveryResult.shouldRetry) {
           input.emit({ type: "thinking", timestamp: Date.now(), active: true });
           return { action: "retry", systemPromptTokens, toolSchemaTokens };

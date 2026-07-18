@@ -167,6 +167,26 @@ describe("CapsuleStore", () => {
     expect(relevant[0]?.score).toBeGreaterThan(relevant[1]?.score ?? 0);
   });
 
+  test("automatic relevance excludes degraded context-capsule mirrors", () => {
+    addCapsule(store, {
+      id: "degraded-context",
+      priority: "low",
+      tags: ["mcp", "context-capsule", "degraded"],
+      summary: "MCP source read containing fake errors",
+    });
+    addCapsule(store, {
+      id: "portable-context",
+      priority: "medium",
+      tags: ["mcp", "context-capsule", "portable"],
+      summary: "MCP adapter map",
+    });
+
+    const relevant = store.getRelevant({ tags: ["mcp"], now: "2026-06-19T10:00:00.000Z" });
+
+    expect(relevant.map((result) => result.capsule.id)).toEqual(["portable-context"]);
+    expect(store.list().map((capsule) => capsule.id)).toContain("degraded-context");
+  });
+
   test("prune removes low-priority capsules older than 30 days first and keeps critical", () => {
     addCapsule(store, {
       id: "critical-old",

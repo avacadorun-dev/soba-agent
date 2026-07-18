@@ -53,6 +53,9 @@ export type AgentEventType =
   | "turn_stop_reason"
   | "compaction_start"
   | "compaction_done"
+  | "compaction_skipped"
+  | "compaction_cancelled"
+  | "compaction_failed"
   | "context_error"
   | "working_narration"
   | "skill_activated"
@@ -229,18 +232,57 @@ export interface FunctionCallDoneEvent extends BaseAgentEvent {
 
 export interface CompactionStartEvent extends BaseAgentEvent {
   type: "compaction_start";
-  reason: "pre_inference" | "overflow_recovery" | "manual";
+  operationId: string;
+  trigger: import("../../kernel/compaction/config").CapsuleTrigger;
+  /** @deprecated Use trigger. */
+  reason?: "pre_inference" | "overflow_recovery" | "manual";
+  tokensBefore: number;
+  /** @deprecated Use tokensBefore. */
   effectiveTokens: number;
+  softLimit: number;
   hardLimit: number;
+  required: boolean;
+  source: "provider_usage" | "estimated";
+  checkpointId: null;
+  quality: null;
+  strategy: null;
+  durationMs: 0;
+  reclaimedTokens: 0;
 }
 
 export interface CompactionDoneEvent extends BaseAgentEvent {
   type: "compaction_done";
-  reason: "pre_inference" | "overflow_recovery" | "manual";
+  operationId: string;
+  trigger: import("../../kernel/compaction/config").CapsuleTrigger;
+  reason?: "pre_inference" | "overflow_recovery" | "manual";
   tokensBefore: number;
   tokensAfter: number;
   tokensSaved: number;
+  reclaimedTokens: number;
   strategy: string;
+  quality: string | null;
+  checkpointId: string | null;
+  durationMs: number;
+  softLimit: number;
+  hardLimit: number;
+  required: boolean;
+}
+
+export interface CompactionTerminalEvent extends BaseAgentEvent {
+  type: "compaction_skipped" | "compaction_cancelled" | "compaction_failed";
+  operationId: string;
+  trigger: import("../../kernel/compaction/config").CapsuleTrigger;
+  reason: string;
+  tokensBefore: number;
+  tokensAfter: number;
+  reclaimedTokens: number;
+  durationMs: number;
+  softLimit: number;
+  hardLimit: number;
+  required: boolean;
+  checkpointId: null;
+  quality: null;
+  strategy: string | null;
 }
 
 export interface ContextErrorEvent extends BaseAgentEvent {
@@ -295,6 +337,7 @@ export type AgentEvent =
   | TurnStopReasonEvent
   | CompactionStartEvent
   | CompactionDoneEvent
+  | CompactionTerminalEvent
   | ContextErrorEvent
   | WorkingNarrationEvent
   | SkillActivatedEvent

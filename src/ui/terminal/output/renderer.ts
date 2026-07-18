@@ -199,7 +199,9 @@ export class TuiRenderer {
 
       case "compaction_start":
         this.flushStream();
-        console.log(tFg("dim", this.config.i18n.t("compact.starting", { tokens: event.tokensBefore as number })));
+        console.log(tFg("dim", this.config.i18n.t("compact.starting", {
+          tokens: Number(event.tokensBefore ?? event.effectiveTokens) || 0,
+        })));
         break;
 
       case "compaction_done": {
@@ -211,13 +213,20 @@ export class TuiRenderer {
             this.config.i18n.t("tui.compact.completePercent", {
               before: tokensBefore,
               after: tokensAfter,
-              percent: Math.round(((tokensBefore - tokensAfter) / tokensBefore) * 100),
+              percent: tokensBefore > 0 ? Math.round(((tokensBefore - tokensAfter) / tokensBefore) * 100) : 0,
             }),
           ),
         );
         console.log("");
         break;
       }
+
+      case "compaction_skipped":
+      case "compaction_cancelled":
+      case "compaction_failed":
+        this.flushStream();
+        console.log(tFg(event.type === "compaction_failed" ? "warning" : "dim", String(event.reason ?? event.type)));
+        break;
 
       case "error":
         this.flushStream();

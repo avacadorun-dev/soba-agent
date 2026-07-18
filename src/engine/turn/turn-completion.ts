@@ -61,6 +61,7 @@ export function completeAgentTurn(input: {
       systemPromptTokens: turnCompleteSystemPromptTokens,
       toolSchemaTokens: turnCompleteToolSchemaTokens,
       requestFingerprint: `turn_${input.turnIndex}_complete`,
+      turnIndex: input.turnIndex,
     },
   });
 

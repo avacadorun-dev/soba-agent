@@ -112,6 +112,7 @@ export type TranslationKey =
   | "tui.status.copied"
   | "tui.status.confirmation"
   | "tui.status.compacting"
+  | "tui.status.compactingPercent"
   | "tui.status.running"
   | "tui.status.theme"
   | "tui.queue.added"
@@ -359,6 +360,7 @@ export type TranslationKey =
   | "tui.session.end"
   | "tui.compact.complete"
   | "tui.compact.completePercent"
+  | "tui.compact.completeDetailed"
   | "tui.reasoning"
   | "repl.interruptHint"
   // === Notifications ===

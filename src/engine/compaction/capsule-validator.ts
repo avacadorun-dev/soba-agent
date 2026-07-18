@@ -11,6 +11,7 @@ import type { ItemParam } from "../../kernel/transcript/types";
 import type { ActivatedSkillRef } from "../../kernel/transcript/types-v2";
 import type { ContextSnapshot } from "./context-meter";
 import type { ContextCapsuleDraft } from "./strategies/types";
+import { toolFailureOutput } from "./tool-output-failure";
 
 // ─── Types ───
 
@@ -264,21 +265,8 @@ export class CapsuleValidator {
 
     for (let i = items.length - 1; i >= 0 && blockers.length < 3; i--) {
       const item = items[i];
-      if (item.type === "function_call_output" || item.type === "local_shell_call_output") {
-        const output =
-          item.type === "function_call_output"
-            ? typeof item.output === "string"
-              ? item.output
-              : JSON.stringify(item.output)
-            : item.output;
-
-        if (
-          output.toLowerCase().includes("error") ||
-          output.toLowerCase().includes("failed")
-        ) {
-          blockers.push(output.slice(0, 100));
-        }
-      }
+      const output = toolFailureOutput(item);
+      if (output) blockers.push(output.slice(0, 100));
     }
 
     return blockers;

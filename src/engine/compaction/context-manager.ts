@@ -5,7 +5,7 @@
  * 1. Pre-inference hard limit check (blocking compaction)
  * 2. Context overflow recovery (emergency compact + retry)
  * 3. Manual /compact command (/compact [instructions])
- * 4. Background compaction trigger (turn_complete, milestone)
+ * 4. Deferred preflight compaction trigger (turn_complete, milestone)
  *
  * The manager coordinates:
  * - ContextMeter (snapshot)
@@ -46,11 +46,12 @@ export interface ContextManagerConfig {
   memory?: ContextCapsuleMemorySink;
 }
 
+export type CompactionOutcomeStatus = "completed" | "skipped" | "cancelled" | "stale" | "failed";
+
 export interface CompactionOutcome {
-  /** Whether compaction was performed */
-  compacted: boolean;
+  status: CompactionOutcomeStatus;
   /** The trigger that caused compaction */
-  trigger: CapsuleTrigger | null;
+  trigger: CapsuleTrigger;
   /** The strategy used */
   strategy: ContextCapsuleEntry["strategy"] | null;
   /** The quality of the resulting capsule */
@@ -63,6 +64,25 @@ export interface CompactionOutcome {
   validation: CapsuleValidationResult | null;
   /** Reason for no-op or error */
   reason: string;
+  /** Stable identifier shared by lifecycle events. */
+  operationId: string;
+  /** Wall-clock duration of this attempt. */
+  durationMs: number;
+  /** Whether failure must prevent the model call. */
+  required: boolean;
+  /** Error text without any generated summary contents. */
+  error?: string;
+}
+
+export interface CompactionPlan {
+  readonly operationId: string;
+  readonly trigger: CapsuleTrigger;
+  readonly snapshot: Readonly<ContextSnapshot>;
+  readonly expectedLeafId: string | null;
+  readonly required: boolean;
+  readonly estimatedReclaimableTokens: number;
+  readonly estimatedSavingsRatio: number;
+  readonly customInstructions?: string;
 }
 
 export interface PreInferenceCheckResult {
@@ -100,6 +120,9 @@ export class ContextManager {
   private _memory?: ContextCapsuleMemorySink;
   /** Cached last snapshot for reactive sidebar access (set via getSnapshot). */
   private _lastSnapshot: ContextSnapshot | null = null;
+  private _lastOutcome: CompactionOutcome | null = null;
+  private _operationSequence = 0;
+  private _operationTail: Promise<void> = Promise.resolve();
 
   constructor(session: SessionPort, config: ContextManagerConfig) {
     this._session = session;
@@ -114,6 +137,47 @@ export class ContextManager {
     this._provider = config.provider;
     this._capabilities = config.capabilities;
     this._memory = config.memory;
+  }
+
+  createPlan(input: {
+    trigger: CapsuleTrigger;
+    snapshot: ContextSnapshot;
+    required: boolean;
+    estimatedReclaimableTokens?: number;
+    estimatedSavingsRatio?: number;
+    customInstructions?: string;
+  }): CompactionPlan {
+    const snapshot = Object.freeze({
+      ...input.snapshot,
+      ...(input.snapshot.watermark
+        ? { watermark: Object.freeze({ ...input.snapshot.watermark }) }
+        : {}),
+    });
+    return Object.freeze({
+      operationId: `${this._session.getSessionId()}:compact:${Date.now()}:${++this._operationSequence}`,
+      trigger: input.trigger,
+      snapshot,
+      expectedLeafId: this._session.getLeafId(),
+      required: input.required,
+      estimatedReclaimableTokens: input.estimatedReclaimableTokens ?? 0,
+      estimatedSavingsRatio: input.estimatedSavingsRatio ?? 0,
+      customInstructions: input.customInstructions,
+    });
+  }
+
+  /** Execute a frozen plan behind the per-session compaction gate. */
+  async executePlan(plan: CompactionPlan, signal?: AbortSignal): Promise<CompactionOutcome> {
+    const previous = this._operationTail;
+    let release!: () => void;
+    this._operationTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      const outcome = await this._performCompaction(plan, signal);
+      this._lastOutcome = outcome;
+      return outcome;
+    } finally {
+      release();
+    }
   }
 
   // ─── Pre-inference check ───
@@ -149,13 +213,16 @@ export class ContextManager {
     }
 
     // Perform blocking compaction
-    const outcome = await this._performCompaction(
+    const decision = this._policy.evaluateHardLimit(snapshot);
+    const outcome = await this.executePlan(this.createPlan({
       snapshot,
-      "hard_limit",
-      true, // isBlocking
-    );
+      trigger: "hard_limit",
+      required: true,
+      estimatedReclaimableTokens: decision.estimatedReclaimableTokens,
+      estimatedSavingsRatio: decision.estimatedSavingsRatio,
+    }));
 
-    if (!outcome.compacted) {
+    if (outcome.status !== "completed") {
       // Compaction failed or insufficient — cannot proceed
       return {
         canProceed: false,
@@ -215,13 +282,16 @@ export class ContextManager {
       toolSchemaTokens,
     );
 
-    const outcome = await this._performCompaction(
+    const decision = this._policy.evaluateContextOverflow(snapshot);
+    const outcome = await this.executePlan(this.createPlan({
       snapshot,
-      "context_overflow",
-      true, // isBlocking — emergency
-    );
+      trigger: "context_overflow",
+      required: true,
+      estimatedReclaimableTokens: decision.estimatedReclaimableTokens,
+      estimatedSavingsRatio: decision.estimatedSavingsRatio,
+    }));
 
-    if (!outcome.compacted) {
+    if (outcome.status !== "completed") {
       return {
         recovered: false,
         shouldRetry: false,
@@ -269,6 +339,7 @@ export class ContextManager {
     systemPromptTokens: number,
     toolSchemaTokens: number,
     requestFingerprint: string,
+    signal?: AbortSignal,
   ): Promise<CompactionOutcome> {
     const branch = this._session.getBranch();
     const snapshot = this._meter.snapshot(
@@ -283,23 +354,28 @@ export class ContextManager {
 
     if (!decision.shouldCompact) {
       return {
-        compacted: false,
-        trigger: null,
+        status: "skipped",
+        trigger: "user_request",
         strategy: null,
         quality: null,
         checkpointId: null,
         metrics: null,
         validation: null,
         reason: decision.reason,
+        operationId: `${this._session.getSessionId()}:compact:${Date.now()}:${++this._operationSequence}`,
+        durationMs: 0,
+        required: false,
       };
     }
 
-    return this._performCompaction(
+    return this.executePlan(this.createPlan({
       snapshot,
-      "user_request",
-      false, // not blocking
+      trigger: "user_request",
+      required: false,
+      estimatedReclaimableTokens: decision.estimatedReclaimableTokens,
+      estimatedSavingsRatio: decision.estimatedSavingsRatio,
       customInstructions,
-    );
+    }), signal);
   }
 
   // ─── Turn complete trigger ───
@@ -355,11 +431,7 @@ export class ContextManager {
     trigger: CapsuleTrigger,
     snapshot: ContextSnapshot,
   ): Promise<CompactionOutcome> {
-    return this._performCompaction(
-      snapshot,
-      trigger,
-      false,
-    );
+    return this.executePlan(this.createPlan({ snapshot, trigger, required: false }));
   }
 
   // ─── Record provider usage ───
@@ -417,7 +489,34 @@ export class ContextManager {
     contextWindow: number;
     hardLimit: number;
     effectiveTokens: number;
+    softLimit: number;
+    lastCompact: null | {
+      status: CompactionOutcomeStatus;
+      trigger: CapsuleTrigger;
+      checkpointId: string | null;
+      durationMs: number;
+      reclaimedTokens: number;
+    };
   } {
+    const snapshot = this._lastSnapshot ?? {
+      hardLimit: this._meter.hardLimit,
+    } as ContextSnapshot;
+    const persistedCapsule = [...this._session.getEntries()]
+      .reverse()
+      .find((entry): entry is ContextCapsuleEntry => isContextCapsuleEntry(entry));
+    const lastCompact = this._lastOutcome ? {
+      status: this._lastOutcome.status,
+      trigger: this._lastOutcome.trigger,
+      checkpointId: this._lastOutcome.checkpointId,
+      durationMs: this._lastOutcome.durationMs,
+      reclaimedTokens: this._lastOutcome.metrics?.reclaimedTokens ?? 0,
+    } : persistedCapsule ? {
+      status: "completed" as const,
+      trigger: persistedCapsule.trigger,
+      checkpointId: persistedCapsule.checkpointId,
+      durationMs: persistedCapsule.metrics.generationDurationMs,
+      reclaimedTokens: persistedCapsule.metrics.reclaimedTokens,
+    } : null;
     return {
       source: this._meter.watermark ? "provider_usage" : "estimated",
       safetyReserveTokens: this._meter.safetyReserveTokens,
@@ -425,6 +524,8 @@ export class ContextManager {
       contextWindow: this._meter.contextWindow,
       hardLimit: this._meter.hardLimit,
       effectiveTokens: this._lastSnapshot?.effectiveTokens ?? 0,
+      softLimit: this._policy.getSoftLimit(snapshot),
+      lastCompact,
     };
   }
 
@@ -434,25 +535,35 @@ export class ContextManager {
    * Perform compaction using the configured strategy chain.
    */
   private async _performCompaction(
-    snapshot: ContextSnapshot,
-    trigger: CapsuleTrigger,
-    isBlocking: boolean,
-    customInstructions?: string,
+    plan: CompactionPlan,
+    externalSignal?: AbortSignal,
   ): Promise<CompactionOutcome> {
+    const startedAt = Date.now();
+    const { snapshot, trigger } = plan;
+    const controller = new AbortController();
+    const forwardAbort = () => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) forwardAbort();
+    else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
+    const timeout = setTimeout(
+      () => controller.abort(new Error(`Compaction timed out after ${this._config.compaction.timeoutMs}ms`)),
+      this._config.compaction.timeoutMs,
+    );
+    const cleanup = () => {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", forwardAbort);
+    };
+
+    if (controller.signal.aborted) {
+      cleanup();
+      return this._makeOutcome(plan, "cancelled", startedAt, { reason: "Compaction cancelled before generation" });
+    }
+
     const branch = this._session.getBranch();
     const branchEntryIds = branch.map((e) => e.id);
 
     if (branch.length === 0) {
-      return {
-        compacted: false,
-        trigger,
-        strategy: null,
-        quality: null,
-        checkpointId: null,
-        metrics: null,
-        validation: null,
-        reason: "Empty session — nothing to compact",
-      };
+      cleanup();
+      return this._makeOutcome(plan, "skipped", startedAt, { reason: "Empty session — nothing to compact" });
     }
 
     // Build effective items respecting existing capsule boundaries.
@@ -494,16 +605,8 @@ export class ContextManager {
     }
 
     if (effectiveItems.length === 0) {
-      return {
-        compacted: false,
-        trigger,
-        strategy: null,
-        quality: null,
-        checkpointId: null,
-        metrics: null,
-        validation: null,
-        reason: "No items to compact",
-      };
+      cleanup();
+      return this._makeOutcome(plan, "skipped", startedAt, { reason: "No items to compact" });
     }
 
     // Find cut point within effective branch
@@ -528,16 +631,10 @@ export class ContextManager {
     }
 
     if (compactedItems.length === 0) {
-      return {
-        compacted: false,
-        trigger,
-        strategy: null,
-        quality: null,
-        checkpointId: null,
-        metrics: null,
-        validation: null,
+      cleanup();
+      return this._makeOutcome(plan, "skipped", startedAt, {
         reason: "No items to compact (all items are in the keep window)",
-      };
+      });
     }
 
     // Determine first compacted and first kept entry IDs
@@ -552,66 +649,117 @@ export class ContextManager {
       firstCompactedEntryId,
       firstKeptEntryId,
       trigger,
-      customInstructions,
+      customInstructions: plan.customInstructions,
       snapshotBefore: snapshot,
       provider: this._provider,
       capabilities: this._capabilities,
       activatedSkills: this._session.getActiveSkillRefs(),
+      previousPortableState: lastCapsule?.portableState,
     };
 
-    // Generate capsule
-    const signal = new AbortController().signal;
-    const result = await this._generator.generate(
-      generationInput,
-      compactedItems,
-      keptItems,
-      isBlocking,
-      signal,
-    );
+    try {
+      if (this._session.getLeafId() !== plan.expectedLeafId) {
+        return this._makeOutcome(plan, "stale", startedAt, {
+          reason: "Session leaf changed before capsule generation",
+        });
+      }
 
-    // If validation failed for blocking compaction, return error
-    if (isBlocking && !result.validation.valid) {
-      return {
-        compacted: false,
+      const generation = this._generator.generate(
+        generationInput,
+        compactedItems,
+        keptItems,
+        plan.required,
+        controller.signal,
+      );
+      const result = await raceWithAbort(generation, controller.signal);
+
+      // The generator may ignore cancellation. Never append after the barrier was cancelled.
+      if (controller.signal.aborted) {
+        return this._makeOutcome(plan, "cancelled", startedAt, {
+          reason: abortReason(controller.signal),
+        });
+      }
+
+      // Compare-and-append: a capsule is valid only for the exact leaf captured by the plan.
+      if (this._session.getLeafId() !== plan.expectedLeafId) {
+        return this._makeOutcome(plan, "stale", startedAt, {
+          strategy: result.strategyUsed,
+          metrics: result.draft.metrics,
+          validation: result.validation,
+          reason: "Session leaf changed while capsule was being generated",
+        });
+      }
+
+      if (plan.required && !result.validation.valid) {
+        return this._makeOutcome(plan, "failed", startedAt, {
+          strategy: result.strategyUsed,
+          metrics: result.draft.metrics,
+          validation: result.validation,
+          reason: `Validation failed: ${result.validation.errors.map((e) => e.message).join("; ")}`,
+        });
+      }
+
+      const checkpointId = this._session.generateCheckpointId();
+      const capsuleEntry = {
+        checkpointId,
         trigger,
         strategy: result.strategyUsed,
-        quality: null,
-        checkpointId: null,
+        quality: result.draft.quality,
+        portableState: result.draft.portableState,
+        artifacts: result.draft.artifacts,
+        activatedSkills: result.draft.activatedSkills,
+        nativeContinuation: result.draft.nativeContinuation,
+        provenance: result.draft.provenance,
+        metrics: result.draft.metrics,
+      };
+
+      const entryId = this._session.appendContextCapsule(capsuleEntry);
+      // Provider usage measured the request before this capsule changed its
+      // effective history. Reusing that baseline makes the post-check see the
+      // pre-compaction token count and can falsely fail a hard-limit barrier.
+      this._meter.invalidateWatermark();
+      this._writeMemoryMirror(entryId);
+
+      return this._makeOutcome(plan, "completed", startedAt, {
+        strategy: result.strategyUsed,
+        quality: result.draft.quality,
+        checkpointId,
         metrics: result.draft.metrics,
         validation: result.validation,
-        reason: `Validation failed: ${result.validation.errors.map((e) => e.message).join("; ")}`,
-      };
+        reason: result.validation.valid
+          ? `Compaction completed using ${result.strategyUsed} strategy`
+          : `Compaction completed with warnings: ${result.validation.warnings.map((w) => w.message).join("; ")}`,
+      });
+    } catch (error) {
+      const cancelled = controller.signal.aborted;
+      return this._makeOutcome(plan, cancelled ? "cancelled" : "failed", startedAt, {
+        reason: cancelled ? abortReason(controller.signal) : "Capsule generation failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      cleanup();
     }
+  }
 
-    // Append capsule to session
-    const checkpointId = this._session.generateCheckpointId();
-    const capsuleEntry = {
-      checkpointId,
-      trigger,
-      strategy: result.strategyUsed,
-      quality: result.draft.quality,
-      portableState: result.draft.portableState,
-      artifacts: result.draft.artifacts,
-      activatedSkills: result.draft.activatedSkills,
-      nativeContinuation: result.draft.nativeContinuation,
-      provenance: result.draft.provenance,
-      metrics: result.draft.metrics,
-    };
-
-    const entryId = this._session.appendContextCapsule(capsuleEntry);
-    this._writeMemoryMirror(entryId);
-
+  private _makeOutcome(
+    plan: CompactionPlan,
+    status: CompactionOutcomeStatus,
+    startedAt: number,
+    values: Partial<Pick<CompactionOutcome, "strategy" | "quality" | "checkpointId" | "metrics" | "validation" | "reason" | "error">>,
+  ): CompactionOutcome {
     return {
-      compacted: true,
-      trigger,
-      strategy: result.strategyUsed,
-      quality: result.draft.quality,
-      checkpointId,
-      metrics: result.draft.metrics,
-      validation: result.validation,
-      reason: result.validation.valid
-        ? `Compaction completed using ${result.strategyUsed} strategy`
-        : `Compaction completed with warnings: ${result.validation.warnings.map((w) => w.message).join("; ")}`,
+      status,
+      trigger: plan.trigger,
+      strategy: values.strategy ?? null,
+      quality: values.quality ?? null,
+      checkpointId: values.checkpointId ?? null,
+      metrics: values.metrics ?? null,
+      validation: values.validation ?? null,
+      reason: values.reason ?? status,
+      operationId: plan.operationId,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      required: plan.required,
+      ...(values.error ? { error: values.error } : {}),
     };
   }
 
@@ -621,10 +769,35 @@ export class ContextManager {
       .getEntries()
       .find((candidate): candidate is ContextCapsuleEntry => candidate.id === entryId && isContextCapsuleEntry(candidate));
     if (!entry) return;
+    // A degraded deterministic capsule is safe for in-session continuity, but
+    // too noisy to become durable cross-session project memory automatically.
+    if (entry.quality === "degraded") return;
     try {
       this._memory.addCapsule(contextCapsuleToMemoryInput(entry, this._session.getSessionId()));
     } catch {
       // Memory mirrors are advisory; a storage failure must not invalidate the session capsule.
     }
   }
+}
+
+async function raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw signal.reason ?? new Error("Compaction cancelled");
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error("Compaction cancelled"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function abortReason(signal: AbortSignal): string {
+  return signal.reason instanceof Error ? signal.reason.message : "Compaction cancelled";
 }

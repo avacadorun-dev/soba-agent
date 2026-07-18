@@ -26,7 +26,7 @@ export interface CompactContextManagerPort {
 }
 
 export interface CompactContextManagerOutcome {
-  compacted: boolean;
+  status: "completed" | "skipped" | "cancelled" | "stale" | "failed";
   reason?: string;
   checkpointId: string | null;
   strategy: string | null;
@@ -37,6 +37,7 @@ export interface CompactContextManagerOutcome {
     reclaimedTokens: number;
     savingsRatio: number;
   } | null;
+  durationMs?: number;
 }
 
 export interface CompactFallbackInput {
@@ -63,44 +64,73 @@ export async function executeCompactCommand(input: {
   i18n: CompactCommandI18n;
   contextManager?: CompactContextManagerPort;
   fallbackCompactor?: CompactFallbackCompactorPort;
+  /** Receives lifecycle events synchronously as they occur. */
+  emit?: (event: CompactCommandEvent) => void;
 }): Promise<CompactCommandView> {
-  const { args, session, client, contextWindow, i18n, contextManager, fallbackCompactor } = input;
+  const { args, session, client, contextWindow, i18n, contextManager, fallbackCompactor, emit } = input;
   const instructions = args.join(" ") || undefined;
   const tokens = estimateTokens(session.buildInput().items);
   const events: CompactCommandEvent[] = [];
+  const publish = (event: CompactCommandEvent) => {
+    events.push(event);
+    emit?.(event);
+  };
+  const operationId = `manual-compact:${Date.now()}`;
 
   if (tokens <= contextWindow * 0.7) {
-    events.push({
+    publish({
       type: "info",
       timestamp: Date.now(),
       message: i18n.t("command.compact.manualBelowThreshold", { tokens, contextWindow }),
     });
   }
 
-  events.push({
+  publish({
     type: "compaction_start",
     timestamp: Date.now(),
+    operationId,
+    trigger: "user_request",
     tokensBefore: tokens,
+    effectiveTokens: tokens,
+    softLimit: Math.floor(contextWindow * 0.8),
+    hardLimit: contextWindow,
+    required: false,
+    source: "estimated",
+    checkpointId: null,
+    quality: null,
+    strategy: null,
+    durationMs: 0,
+    reclaimedTokens: 0,
   });
 
   try {
     if (contextManager) {
-      await runManagedCompaction({ contextManager, instructions, tokens, session, i18n, events });
+      await runManagedCompaction({ contextManager, instructions, tokens, session, i18n, publish, operationId, contextWindow });
     } else {
-      await runFallbackCompaction({ fallbackCompactor, session, client, instructions, tokens, events });
+      await runFallbackCompaction({ fallbackCompactor, session, client, instructions, tokens, publish, operationId, contextWindow });
     }
   } catch (error) {
-    events.push({
+    publish({
       type: "error",
       timestamp: Date.now(),
       message: i18n.t("compact.failed", { error: error instanceof Error ? error.message : String(error) }),
     });
-    events.push({
-      type: "compaction_skipped",
+    publish({
+      type: "compaction_failed",
       timestamp: Date.now(),
+      operationId,
+      trigger: "user_request",
       reason: "failed",
       tokensBefore: tokens,
       tokensAfter: estimateTokens(session.buildInput().items),
+      reclaimedTokens: 0,
+      durationMs: 0,
+      softLimit: Math.floor(contextWindow * 0.8),
+      hardLimit: contextWindow,
+      required: false,
+      checkpointId: null,
+      quality: null,
+      strategy: null,
     });
   }
 
@@ -113,9 +143,11 @@ async function runManagedCompaction(input: {
   tokens: number;
   session: RuntimeSessionHandle;
   i18n: CompactCommandI18n;
-  events: CompactCommandEvent[];
+  publish: (event: CompactCommandEvent) => void;
+  operationId: string;
+  contextWindow: number;
 }): Promise<void> {
-  const { contextManager, instructions, tokens, session, i18n, events } = input;
+  const { contextManager, instructions, tokens, session, i18n, publish, operationId, contextWindow } = input;
   const systemPromptTokens = 1000;
   const toolSchemaTokens = 500;
   const requestFingerprint = `manual_compact_${Date.now()}`;
@@ -127,18 +159,28 @@ async function runManagedCompaction(input: {
     requestFingerprint,
   );
 
-  if (outcome.compacted) {
-    events.push({
+  if (outcome.status === "completed") {
+    const tokensAfter = outcome.metrics?.estimatedTokensAfter ?? estimateTokens(session.buildInput().items);
+    const reclaimedTokens = outcome.metrics?.reclaimedTokens ?? Math.max(0, tokens - tokensAfter);
+    publish({
       type: "compaction_done",
       timestamp: Date.now(),
-      reason: "manual",
+      operationId,
+      trigger: "user_request",
       tokensBefore: outcome.metrics?.effectiveTokensBefore ?? tokens,
-      tokensAfter: outcome.metrics?.estimatedTokensAfter ?? estimateTokens(session.buildInput().items),
-      tokensSaved: outcome.metrics?.reclaimedTokens ?? 0,
+      tokensAfter,
+      tokensSaved: reclaimedTokens,
+      reclaimedTokens,
       strategy: outcome.strategy ?? "unknown",
+      quality: outcome.quality,
+      checkpointId: outcome.checkpointId,
+      durationMs: outcome.durationMs ?? 0,
+      softLimit: Math.floor(contextWindow * 0.8),
+      hardLimit: contextWindow,
+      required: false,
     });
 
-    events.push({
+    publish({
       type: "info",
       timestamp: Date.now(),
       message: i18n.t("command.compact.capsuleInfo", {
@@ -151,17 +193,27 @@ async function runManagedCompaction(input: {
     return;
   }
 
-  events.push({
+  publish({
     type: "info",
     timestamp: Date.now(),
     message: i18n.t("command.compact.noOp", { reason: outcome.reason ?? "no reclaimable context" }),
   });
-  events.push({
-    type: "compaction_skipped",
+  publish({
+    type: outcome.status === "cancelled" ? "compaction_cancelled" : outcome.status === "failed" ? "compaction_failed" : "compaction_skipped",
     timestamp: Date.now(),
+    operationId,
+    trigger: "user_request",
     reason: outcome.reason ?? "no reclaimable context",
     tokensBefore: outcome.metrics?.effectiveTokensBefore ?? tokens,
     tokensAfter: outcome.metrics?.estimatedTokensAfter ?? estimateTokens(session.buildInput().items),
+    reclaimedTokens: outcome.metrics?.reclaimedTokens ?? 0,
+    durationMs: 0,
+    softLimit: Math.floor(contextWindow * 0.8),
+    hardLimit: contextWindow,
+    required: false,
+    checkpointId: null,
+    quality: null,
+    strategy: outcome.strategy,
   });
 }
 
@@ -171,19 +223,33 @@ async function runFallbackCompaction(input: {
   client: OpenResponsesClient;
   instructions: string | undefined;
   tokens: number;
-  events: CompactCommandEvent[];
+  publish: (event: CompactCommandEvent) => void;
+  operationId: string;
+  contextWindow: number;
 }): Promise<void> {
-  const { fallbackCompactor, session, client, instructions, tokens, events } = input;
+  const { fallbackCompactor, session, client, instructions, tokens, publish, operationId, contextWindow } = input;
   if (!fallbackCompactor) {
     throw new Error("Compact fallback is not configured");
   }
   const keepRecentTokens = Math.min(8000, Math.floor(tokens * 0.5));
   const result = await fallbackCompactor.compact({ session, client, instructions, keepRecentTokens });
-  events.push({
+  const tokensAfter = estimateTokens(session.buildInput().items);
+  const reclaimedTokens = Math.max(0, result.tokensBefore - result.tokensKept);
+  publish({
     type: "compaction_done",
     timestamp: Date.now(),
+    operationId,
+    trigger: "user_request",
     tokensBefore: result.tokensBefore,
-    tokensAfter: estimateTokens(session.buildInput().items),
-    savedTokens: result.tokensBefore - result.tokensKept,
+    tokensAfter,
+    tokensSaved: reclaimedTokens,
+    reclaimedTokens,
+    strategy: "legacy",
+    quality: null,
+    checkpointId: null,
+    durationMs: 0,
+    softLimit: Math.floor(contextWindow * 0.8),
+    hardLimit: contextWindow,
+    required: false,
   });
 }

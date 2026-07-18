@@ -266,6 +266,63 @@ describe("DeterministicStrategy", () => {
     expect(draft.portableState.blockers[0]).toContain("Error");
   });
 
+  it("does not treat source code containing error words as an active blocker", async () => {
+    const strategy = new DeterministicStrategy();
+    const items: ItemParam[] = [
+      userMessage("Inspect the engine"),
+      functionCall("read", { path: "src/engine/turn/types.ts" }, "call_read"),
+      functionCallOutput(
+        "call_read",
+        'import type { AgentTurnError } from "./types";\nconst failedChecks: string[] = [];',
+      ),
+    ];
+
+    const draft = await strategy.generate(makeGenerationInput({ sourceItems: items }), ABORT_SIGNAL);
+
+    expect(draft.portableState.blockers).toEqual([]);
+  });
+
+  it("carries the previous capsule state into a deterministic fallback", async () => {
+    const strategy = new DeterministicStrategy();
+    const draft = await strategy.generate(makeGenerationInput({
+      sourceItems: [assistantMessage("Continuing inspection")],
+      previousPortableState: {
+        goal: "Map the engine",
+        constraints: ["Read-only"],
+        completed: ["Mapped turn orchestration"],
+        inProgress: [],
+        pending: ["Map adapters"],
+        decisions: [{ decision: "Inspect source", rationale: "Evidence first" }],
+        blockers: [],
+        nextSteps: ["Read ACP dispatcher"],
+      },
+    }), ABORT_SIGNAL);
+
+    expect(draft.portableState).toMatchObject({
+      goal: "Map the engine",
+      constraints: ["Read-only"],
+      completed: ["Mapped turn orchestration"],
+      pending: ["Map adapters"],
+    });
+  });
+
+  it("uses a final-answer message as deterministic completed-work evidence", async () => {
+    const strategy = new DeterministicStrategy();
+    const finalAnswer: Extract<ItemParam, { type: "message"; role: "assistant" }> = {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Adapter architecture mapped across ACP and CLI." }],
+      phase: "final_answer",
+    };
+
+    const draft = await strategy.generate(
+      makeGenerationInput({ sourceItems: [userMessage("Map adapters"), finalAnswer] }),
+      ABORT_SIGNAL,
+    );
+
+    expect(draft.portableState.completed).toContain("Adapter architecture mapped across ACP and CLI.");
+  });
+
   it("использует custom instructions как goal", async () => {
     const strategy = new DeterministicStrategy();
     const items: ItemParam[] = [userMessage("Original request")];
@@ -355,6 +412,40 @@ describe("PortableOnlyStrategy", () => {
     expect(draft.strategy).toBe("deterministic");
     expect(draft.quality).toBe("degraded");
     expect(draft.portableState.goal).toBe("Fix the bug");
+  });
+
+  it("accepts a JSON object wrapped in provider reasoning and a markdown fence", async () => {
+    const strategy = new PortableOnlyStrategy({
+      invoke: async () => 'I summarized the state.\n```json\n{"goal":"Map adapters","constraints":[],"completed":["Read ACP"],"inProgress":[],"pending":[],"decisions":[],"blockers":[],"nextSteps":[]}\n```',
+    });
+
+    const draft = await strategy.generate(
+      makeGenerationInput({ sourceItems: [userMessage("Map adapters")] }),
+      ABORT_SIGNAL,
+    );
+
+    expect(draft.strategy).toBe("portable_only");
+    expect(draft.portableState.completed).toEqual(["Read ACP"]);
+  });
+
+  it("includes the previous capsule state in the portable summarization prompt", async () => {
+    let prompt = "";
+    const strategy = new PortableOnlyStrategy({
+      invoke: async (value) => {
+        prompt = value;
+        return JSON.stringify({ goal: "Map engine", constraints: [], completed: [], inProgress: [], pending: [], decisions: [], blockers: [], nextSteps: [] });
+      },
+    });
+
+    await strategy.generate(makeGenerationInput({
+      previousPortableState: {
+        goal: "Map engine",
+        constraints: [], completed: ["Mapped turn loop"], inProgress: [], pending: [], decisions: [], blockers: [], nextSteps: [],
+      },
+    }), ABORT_SIGNAL);
+
+    expect(prompt).toContain("Previous context capsule state");
+    expect(prompt).toContain("Mapped turn loop");
   });
 
   it("falls back на deterministic при network error", async () => {
@@ -835,6 +926,28 @@ describe("CapsuleValidator", () => {
     );
 
     expect(result.errors.some((e) => e.code === "lost_blocker")).toBe(true);
+  });
+
+  it("does not reject a summary when inspected source code mentions errors", () => {
+    const sourceItems: ItemParam[] = [
+      functionCall("read", { path: "types.ts" }, "call_1"),
+      functionCallOutput(
+        "call_1",
+        'import type { AgentTurnError } from "./types";\nconst failedChecks: string[] = [];',
+      ),
+    ];
+
+    const result = validator.validate(
+      makeValidDraft(),
+      ["e1", "e2", "e3", "e4"],
+      sourceItems,
+      [],
+      makeSnapshot(),
+      false,
+      "test-session",
+    );
+
+    expect(result.errors.some((error) => error.code === "lost_blocker")).toBe(false);
   });
 });
 

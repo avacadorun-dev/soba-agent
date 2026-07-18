@@ -17,6 +17,7 @@ interface MockRuntimeState {
   emitClarification?: boolean;
   emitPlan?: boolean;
   emitReasoning?: boolean;
+  emitCompaction?: boolean;
   waitForCancel?: boolean;
   permissionDecision?: string;
   clarificationOutcome?: unknown;
@@ -262,6 +263,19 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           timestamp: Date.now(),
           messageId: "thought_1",
           delta: "checking constraints",
+        } as RuntimeEvent));
+      }
+      if (state.emitCompaction) {
+        listeners.forEach((listener) => listener({
+          type: "compaction_start", timestamp: Date.now(), operationId: "op_1", trigger: "turn_complete",
+          tokensBefore: 820, effectiveTokens: 820, softLimit: 800, hardLimit: 1000,
+          required: false, source: "estimated",
+        } as RuntimeEvent));
+        listeners.forEach((listener) => listener({
+          type: "compaction_done", timestamp: Date.now(), operationId: "op_1", trigger: "turn_complete",
+          tokensBefore: 820, tokensAfter: 300, tokensSaved: 520, reclaimedTokens: 520,
+          strategy: "deterministic", quality: "degraded", checkpointId: "ctx_1",
+          durationMs: 20, softLimit: 800, hardLimit: 1000,
         } as RuntimeEvent));
       }
       if (state.emitPlan) {
@@ -1027,6 +1041,28 @@ describe("ACP stdio server foundation", () => {
           ],
         },
       },
+    });
+  });
+
+  test("maps compaction start to progress and completion to one visible line with metadata", async () => {
+    const result = await runLines(
+      [`${JSON.stringify({
+        jsonrpc: "2.0", id: "prompt", method: "session/prompt",
+        params: { sessionId: "session_1", prompt: [{ type: "text", text: "continue" }] },
+      })}\n`],
+      { state: { emitCompaction: true, assistantMessage: "" } },
+    );
+    const updates = result.messages.filter((message) => message.method === "session/update");
+
+    expect(updates[0]).toMatchObject({
+      params: { update: { sessionUpdate: "agent_thought_chunk", messageId: "op_1" } },
+    });
+    expect(updates[1]).toMatchObject({
+      params: { update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { text: expect.stringContaining("ctx_1") },
+        _meta: { soba: { compaction: { operationId: "op_1", checkpointId: "ctx_1" } } },
+      } },
     });
   });
 

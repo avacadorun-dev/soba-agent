@@ -42,7 +42,7 @@ describe("AgentLoop checkpoint integration", () => {
     expect(checkpointEvidence?.summary).toContain("Parser API is too broad");
   });
 
-  test("milestone checkpoint schedules a capsule candidate after the tool batch", async () => {
+  test("milestone checkpoint is compacted at the next preflight without background scheduler", async () => {
     const client = createMockClient([
       makeToolCallResponse("checkpoint", {
         kind: "milestone",
@@ -71,9 +71,9 @@ describe("AgentLoop checkpoint integration", () => {
     const result = await loop.runTurn("Continue the phase task");
 
     expect(result.errors).toEqual([]);
-    const scheduleMock = scheduler.schedule as unknown as { mock: { calls: unknown[][] } };
-    expect(scheduleMock.mock.calls.length).toBe(1);
-    expect(scheduleMock.mock.calls[0]?.[0]).toBe("milestone");
+    expect(scheduler.schedule).not.toHaveBeenCalled();
+    expect(contextManager.executePlan).toHaveBeenCalledTimes(1);
+    expect((contextManager.createPlan as ReturnType<typeof mock>).mock.calls[0]?.[0]).toMatchObject({ trigger: "milestone" });
   });
 });
 
@@ -195,12 +195,25 @@ function createMockClient(responses: ResponseResource[]): OpenResponsesClient {
 }
 
 function makeFakeContextManager(shouldCompactMilestone: boolean): ContextManager {
+  const policy = {
+    evaluateHardLimit: mock(() => ({ shouldCompact: false, trigger: null, reason: "ok", estimatedReclaimableTokens: 0, estimatedSavingsRatio: 0 })),
+    evaluateAutoThreshold: mock(() => ({ shouldCompact: false, trigger: null, reason: "below", estimatedReclaimableTokens: 0, estimatedSavingsRatio: 0 })),
+    evaluateMilestone: mock(() => ({ shouldCompact: shouldCompactMilestone, trigger: shouldCompactMilestone ? "milestone" : null, reason: "checkpoint", estimatedReclaimableTokens: 20_000, estimatedSavingsRatio: 0.5 })),
+    evaluateTurnComplete: mock(() => ({ shouldCompact: false, trigger: null, reason: "below", estimatedReclaimableTokens: 0, estimatedSavingsRatio: 0 })),
+    evaluateContextOverflow: mock(() => ({ shouldCompact: true, trigger: "context_overflow", reason: "overflow", estimatedReclaimableTokens: 20_000, estimatedSavingsRatio: 0.5 })),
+    getSoftLimit: mock(() => 80_000),
+  };
   return {
-    preInferenceCheck: mock(async () => ({ canProceed: true, compactionPerformed: false })),
     recordProviderUsage: mock(() => {}),
     getSnapshot: mock(() => makeSnapshot()),
-    evaluateMilestone: mock(() => ({ shouldCompact: shouldCompactMilestone, snapshot: makeSnapshot() })),
-    evaluateTurnComplete: mock(() => ({ shouldCompact: false, snapshot: makeSnapshot() })),
+    getPolicy: mock(() => policy),
+    createPlan: mock((input) => ({ ...input, operationId: "op_checkpoint", expectedLeafId: "leaf" })),
+    executePlan: mock(async () => ({
+      status: "completed", trigger: "milestone", strategy: "deterministic", quality: "degraded",
+      checkpointId: "ctx_1", metrics: { effectiveTokensBefore: 40_000, estimatedTokensAfter: 20_000,
+        reclaimedTokens: 20_000, savingsRatio: 0.5, generationDurationMs: 1 }, validation: null,
+      reason: "completed", operationId: "op_checkpoint", durationMs: 1, required: false,
+    })),
   } as unknown as ContextManager;
 }
 

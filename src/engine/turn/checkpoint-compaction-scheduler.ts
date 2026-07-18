@@ -21,6 +21,7 @@ export function scheduleCheckpointCompactionForTurn(input: {
       systemPromptTokens,
       toolSchemaTokens,
       requestFingerprint: checkpointFingerprint,
+      turnIndex: input.turnIndex,
     },
   });
   if (!decision.evaluated) return;

@@ -146,6 +146,7 @@ export class CapsuleStore {
     const normalizedQuery = normalizeRelevanceQuery(query, this.now().toISOString());
 
     return this.list()
+      .filter(isEligibleForAutomaticRetrieval)
       .map((capsule) => ({
         capsule,
         score: scoreCapsule(capsule, normalizedQuery),
@@ -453,6 +454,10 @@ function matchesFilters(capsule: MemoryCapsule, filters: CapsuleListFilters): bo
   }
 
   return true;
+}
+
+function isEligibleForAutomaticRetrieval(capsule: MemoryCapsule): boolean {
+  return !(capsule.tags.includes("context-capsule") && capsule.tags.includes("degraded"));
 }
 
 function normalizeRelevanceQuery(query: string | CapsuleRelevanceQuery, defaultNow: string): Required<CapsuleRelevanceQuery> {

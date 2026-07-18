@@ -42,6 +42,7 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   private readonly skillManager?: SkillManager;
   private commandExecutor?: RuntimeCommandExecutor;
   private readonly runtimeListeners = new Set<RuntimeEventListener>();
+  private sessionGate: Promise<void> = Promise.resolve();
 
   constructor(
     loop: AgentLoop,
@@ -159,6 +160,18 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   }
 
   async runTurn(input: UserTurnInput): Promise<TurnResult> {
+    const previous = this.sessionGate;
+    let release!: () => void;
+    this.sessionGate = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await this.runTurnExclusive(input);
+    } finally {
+      release();
+    }
+  }
+
+  private async runTurnExclusive(input: UserTurnInput): Promise<TurnResult> {
     this.assertActiveSession(input.sessionId);
     this.setClarificationAvailable(input.clarificationAvailable === true);
     const command = commandTextFromTurn(input);

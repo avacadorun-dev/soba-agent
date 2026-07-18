@@ -241,6 +241,11 @@ Useful TUI commands:
 /rewind
 ```
 
+Auto-compaction is a deferred preflight barrier: turn and milestone triggers mark
+work as pending, then SOBA shows live progress and waits immediately before the
+next model call. The TUI remains responsive and queues new input. Disabling
+`/auto-compact` affects soft triggers only; hard-limit and overflow recovery stay enabled.
+
 ## From source
 
 ```bash

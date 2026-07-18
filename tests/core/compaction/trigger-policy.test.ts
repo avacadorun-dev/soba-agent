@@ -48,7 +48,8 @@ describe("DEFAULT_COMPACTION_CONFIG", () => {
     expect(DEFAULT_COMPACTION_CONFIG.minSavingsRatio).toBe(0.25);
     expect(DEFAULT_COMPACTION_CONFIG.keepRecentTokens).toBe(20_000);
     expect(DEFAULT_COMPACTION_CONFIG.safetyReserveTokens).toBe(8_192);
-    expect(DEFAULT_COMPACTION_CONFIG.backgroundTimeoutMs).toBe(15_000);
+    expect(DEFAULT_COMPACTION_CONFIG.autoCompactThresholdRatio).toBe(0.8);
+    expect(DEFAULT_COMPACTION_CONFIG.timeoutMs).toBe(15_000);
   });
 });
 
@@ -104,6 +105,7 @@ describe("TriggerPolicy.evaluateTurnComplete", () => {
       minReclaimableTokens: 12_000,
       minSavingsRatio: 0.25,
       keepRecentTokens: 20_000,
+      autoCompactThresholdRatio: 0.3,
     });
     // effectiveTokens=50k, reclaimable=30k, ratio=0.6
     const snap = makeSnapshot({ effectiveTokens: 50_000 });
@@ -132,7 +134,7 @@ describe("TriggerPolicy.evaluateTurnComplete", () => {
     const snap = makeSnapshot({ effectiveTokens: 20_000 });
     const decision = policy.evaluateTurnComplete(snap);
     expect(decision.shouldCompact).toBe(false);
-    expect(decision.reason).toContain("minTokensForAutoCompact");
+    expect(decision.reason).toContain("soft limit");
   });
 
   test("returns shouldCompact=false when reclaimable < minReclaimableTokens", () => {
@@ -140,6 +142,7 @@ describe("TriggerPolicy.evaluateTurnComplete", () => {
       minTokensForAutoCompact: 32_000,
       minReclaimableTokens: 40_000, // very high threshold
       keepRecentTokens: 20_000,
+      autoCompactThresholdRatio: 0.3,
     });
     const snap = makeSnapshot({ effectiveTokens: 50_000 }); // reclaimable=30k < 40k
     const decision = policy.evaluateTurnComplete(snap);
@@ -153,6 +156,7 @@ describe("TriggerPolicy.evaluateTurnComplete", () => {
       minReclaimableTokens: 1_000,
       minSavingsRatio: 0.9, // very high threshold
       keepRecentTokens: 20_000,
+      autoCompactThresholdRatio: 0.3,
     });
     const snap = makeSnapshot({ effectiveTokens: 50_000 }); // ratio=0.6 < 0.9
     const decision = policy.evaluateTurnComplete(snap);
@@ -170,6 +174,7 @@ describe("TriggerPolicy.evaluateMilestone", () => {
       minReclaimableTokens: 12_000,
       minSavingsRatio: 0.25,
       keepRecentTokens: 20_000,
+      autoCompactThresholdRatio: 0.3,
     });
     const snap = makeSnapshot({ effectiveTokens: 50_000 });
     const decision = policy.evaluateMilestone(snap);
@@ -243,7 +248,7 @@ describe("TriggerPolicy.evaluateContextOverflow", () => {
 
 describe("TriggerPolicy.setAuto", () => {
   test("setAuto(false) disables turn_complete", () => {
-    const policy = new TriggerPolicy({ auto: true });
+    const policy = new TriggerPolicy({ auto: true, autoCompactThresholdRatio: 0.3 });
     const snap = makeSnapshot({ effectiveTokens: 50_000 });
     expect(policy.evaluateTurnComplete(snap).shouldCompact).toBe(true);
 
@@ -259,7 +264,7 @@ describe("TriggerPolicy.setAuto", () => {
   });
 
   test("setAuto(true) re-enables turn_complete", () => {
-    const policy = new TriggerPolicy({ auto: false });
+    const policy = new TriggerPolicy({ auto: false, autoCompactThresholdRatio: 0.3 });
     const snap = makeSnapshot({ effectiveTokens: 50_000 });
     expect(policy.evaluateTurnComplete(snap).shouldCompact).toBe(false);
 

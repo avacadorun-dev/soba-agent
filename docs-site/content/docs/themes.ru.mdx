@@ -49,11 +49,13 @@ SOBA поставляется с тремя цветовыми режимами:
 | **Paper** | `light` | Светлая тема для хорошо освещённых помещений. Синий акцент (`#2e6edf`), чёткий контраст |
 | **Forest** | `forest` | «Тёмная в лесу» — глубокие природные цвета. Мохово-зелёный акцент (`#6AAC7D`), тёплый текст (`#C2CBB8`). Низкая нагрузка на глаза в темноте |
 
-Дополнительные имена тем из конфигурации (`aurora`, `synthwave`, `highContrast`, `clay`, `operator`, `ink`) зарезервированы для будущих встроенных тем. Сейчас они отображаются как алиасы базовых режимов:
+Каждое имя выбирает отдельную палитру TUI. Для неинтерактивного вывода темы маппятся на базовые режимы:
 
 | Имя темы | Маппится на режим |
 |---|---|
 | `graphite` | `dark` |
+| `vscode` | `dark` |
+| `github` | `dark` |
 | `aurora` | `dark` |
 | `synthwave` | `dark` |
 | `paper` | `light` |
@@ -146,7 +148,7 @@ soba --theme forest
 
 # Вывод:
 # Current theme: Graphite (dark)
-# Available themes: graphite, aurora, synthwave, paper,
+# Available themes: graphite, vscode, github, aurora, synthwave, paper,
 #                   forest, highContrast, clay, operator, ink
 # Use /theme <name> to switch
 ```

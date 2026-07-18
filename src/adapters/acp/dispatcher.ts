@@ -634,6 +634,38 @@ export class AcpDispatcher {
             percentage: event.percentage,
           },
         };
+      case "compaction_start": {
+        const percent = event.hardLimit > 0 ? Math.round((event.tokensBefore / event.hardLimit) * 100) : 0;
+        return {
+          sessionUpdate: "agent_thought_chunk",
+          messageId: event.operationId,
+          content: { type: "text", text: `Compacting context before response · ${percent}%` },
+          _meta: { soba: { compaction: compactionMeta(event) } },
+        };
+      }
+      case "compaction_done": {
+        const percent = event.tokensBefore > 0
+          ? Math.round(((event.tokensBefore - event.tokensAfter) / event.tokensBefore) * 100)
+          : 0;
+        return {
+          sessionUpdate: "agent_message_chunk",
+          messageId: event.operationId,
+          content: {
+            type: "text",
+            text: `Context compacted [${event.trigger}]: ${event.tokensBefore} → ${event.tokensAfter} tokens (${percent}% saved) · checkpoint ${event.checkpointId ?? "—"}`,
+          },
+          _meta: { soba: { compaction: compactionMeta(event) } },
+        };
+      }
+      case "compaction_skipped":
+      case "compaction_cancelled":
+      case "compaction_failed":
+        return {
+          sessionUpdate: event.type === "compaction_failed" ? "agent_message_chunk" : "agent_thought_chunk",
+          messageId: event.operationId,
+          content: { type: "text", text: `Context compaction ${event.type.replace("compaction_", "")}: ${event.reason}` },
+          _meta: { soba: { compaction: compactionMeta(event) } },
+        };
       case "working_narration":
         if (event.eventType === "plan") {
           return {
@@ -766,6 +798,25 @@ export class AcpDispatcher {
       for (const cancel of pending) cancel();
     }
   }
+}
+
+function compactionMeta(event: Extract<RuntimeEvent, {
+  type: "compaction_start" | "compaction_done" | "compaction_skipped" | "compaction_cancelled" | "compaction_failed";
+}>): JsonValue {
+  return {
+    operationId: event.operationId,
+    status: event.type.replace("compaction_", ""),
+    trigger: event.trigger,
+    tokensBefore: event.tokensBefore,
+    hardLimit: event.hardLimit,
+    softLimit: event.softLimit,
+    ...(event.type === "compaction_start" ? {} : { tokensAfter: event.tokensAfter }),
+    reclaimedTokens: event.reclaimedTokens,
+    checkpointId: event.checkpointId,
+    quality: event.quality,
+    strategy: event.strategy,
+    durationMs: event.durationMs,
+  };
 }
 
 function extractSessionId(params: JsonValue | undefined): string | undefined {

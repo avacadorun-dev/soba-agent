@@ -97,22 +97,23 @@ hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
 **Пример:** contextWindow=65536, maxOutputTokens=8192, safetyReserveTokens=8192 →
 hardLimit = 65536 - 8192 - 8192 = 49152 токенов
 
-### 3.2. Turn Complete (фоновый)
+### 3.2. Turn Complete (deferred preflight)
 
 **Срабатывает:** После каждого завершённого хода агента, если:
 - `auto: true` и `compactOnTurnComplete: true`
-- Эффективных токенов ≥ `minTokensForAutoCompact` (32K)
+- Эффективных токенов ≥ soft limit
 - ROI проходит проверку (см. §4)
 
-**Действие:** Фоновый compaction. Асинхронный, не блокирует пользователя.
+**Действие:** Помечает compaction как pending. Перед следующим model call SOBA
+показывает live-статус и ожидает завершения; TUI продолжает принимать ввод в очередь.
 
-### 3.3. Milestone (фоновый)
+### 3.3. Milestone (deferred preflight)
 
 **Срабатывает:** При milestone checkpoint (установленном агентом), если:
 - `auto: true` и `compactOnMilestone: true`
 - ROI проходит проверку
 
-**Действие:** Фоновый compaction на milestone.
+**Действие:** Помечает milestone intent; compaction выполняется в следующем preflight barrier.
 
 ### 3.4. User Request (явный)
 
@@ -145,7 +146,8 @@ hardLimit = 65536 - 8192 - 8192 = 49152 токенов
     "minSavingsRatio": 0.25,
     "keepRecentTokens": 20000,
     "safetyReserveTokens": 8192,
-    "backgroundTimeoutMs": 15000
+    "autoCompactThresholdRatio": 0.8,
+    "timeoutMs": 15000
   }
 }
 ```
@@ -155,14 +157,16 @@ hardLimit = 65536 - 8192 - 8192 = 49152 токенов
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `auto` | `true` | Включить proactive compaction |
-| `compactOnTurnComplete` | `true` | Фоновый compaction после хода |
-| `compactOnMilestone` | `true` | Фоновый compaction на milestone |
+| `compactOnTurnComplete` | `true` | Pending intent после хода |
+| `compactOnMilestone` | `true` | Pending intent на milestone |
 | `minTokensForAutoCompact` | `32000` | Минимум токенов для рассмотрения авто-компакта |
 | `minReclaimableTokens` | `12000` | Минимум токенов, доступных для освобождения |
 | `minSavingsRatio` | `0.25` | Минимальный коэффициент экономии (25%) |
 | `keepRecentTokens` | `20000` | Токены, сохраняемые после компакта |
 | `safetyReserveTokens` | `8192` | Резерв безопасности |
-| `backgroundTimeoutMs` | `15000` | Таймаут фонового компакта в мс |
+| `autoCompactThresholdRatio` | `0.8` | Soft threshold как доля hard limit |
+| `timeoutMs` | `15000` | Таймаут preflight compact в мс |
+| `backgroundTimeoutMs` | — | Deprecated alias для `timeoutMs` |
 
 ### 4.3. ROI-проверка
 
@@ -171,6 +175,12 @@ hardLimit = 65536 - 8192 - 8192 = 49152 токенов
 ```
 reclaimable = effectiveTokens - keepRecentTokens
 savingsRatio = reclaimable / effectiveTokens
+```
+
+Soft limit вычисляется как:
+
+```
+softLimit = min(hardLimit - 1, max(minTokensForAutoCompact, floor(hardLimit * autoCompactThresholdRatio)))
 ```
 
 Compaction выполняется, только если:
