@@ -43,7 +43,7 @@ export class PortableOnlyStrategy implements CapsuleStrategy {
         provenance: {
           firstCompactedEntryId: input.firstCompactedEntryId,
           firstKeptEntryId: input.firstKeptEntryId,
-          sourceEntryIds: input.branchEntryIds,
+          sourceEntryIds: input.sourceEntryIds,
         },
         metrics: {
           effectiveTokensBefore: input.snapshotBefore.effectiveTokens,

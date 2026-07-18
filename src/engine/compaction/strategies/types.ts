@@ -23,7 +23,10 @@ import type { ContextSnapshot } from "../context-meter";
 
 export interface CapsuleGenerationInput {
   sessionId: string;
+  /** Every entry on the active branch, used for boundary validation. */
   branchEntryIds: string[];
+  /** Entries whose item content is actually summarized into this capsule. */
+  sourceEntryIds: string[];
   sourceItems: ItemParam[];
   firstCompactedEntryId: string;
   firstKeptEntryId: string;

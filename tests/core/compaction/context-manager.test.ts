@@ -95,6 +95,19 @@ function assistantMessage(text: string): ItemParam {
   };
 }
 
+function functionCall(callId: string, name = "read"): ItemParam {
+  return {
+    type: "function_call",
+    call_id: callId,
+    name,
+    arguments: JSON.stringify({ path: `${callId}.ts` }),
+  };
+}
+
+function functionCallOutput(callId: string, output: string): ItemParam {
+  return { type: "function_call_output", call_id: callId, output };
+}
+
 /**
  * Fill session with enough items to exceed a given token count.
  * Each message is about 100 chars ≈ 29 tokens.
@@ -204,6 +217,83 @@ describe("ContextManager", () => {
       const postSnapshot = manager.getSnapshot(10, 5, FINGERPRINT);
       expect(postSnapshot.source).toBe("estimated");
       expect(postSnapshot.effectiveTokens).toBeLessThanOrEqual(postSnapshot.hardLimit);
+    });
+
+    it("rolls a previous capsule forward through complete tool batches in one turn", async () => {
+      const session = SessionManager.inMemoryV2();
+      const userId = session.appendItem(userMessage("Inspect the engine"));
+      const firstKeptId = session.appendItem(assistantMessage("Continuing engine inspection"));
+      session.appendItem(functionCall("old_batch"));
+      session.appendItem(functionCallOutput("old_batch", "x".repeat(4_000)));
+      session.appendContextCapsule({
+        checkpointId: "ck_existing",
+        trigger: "auto_threshold",
+        strategy: "deterministic",
+        quality: "degraded",
+        portableState: {
+          goal: "Inspect the engine",
+          constraints: [],
+          completed: ["Mapped the entry point"],
+          inProgress: [],
+          pending: ["Map turn execution"],
+          decisions: [],
+          blockers: [],
+          nextSteps: ["Read turn modules"],
+        },
+        artifacts: {
+          readFiles: ["src/engine/README.md"],
+          modifiedFiles: [],
+          verificationCommands: [],
+          verificationStatus: "unknown",
+        },
+        activatedSkills: [],
+        provenance: {
+          firstCompactedEntryId: userId,
+          firstKeptEntryId: firstKeptId,
+          sourceEntryIds: [userId],
+        },
+        metrics: {
+          effectiveTokensBefore: 1_600,
+          estimatedTokensAfter: 600,
+          reclaimedTokens: 1_000,
+          savingsRatio: 0.625,
+          generationDurationMs: 1,
+        },
+      });
+      for (const callId of ["batch_1", "batch_2", "batch_3"]) {
+        session.appendItem(functionCall(callId));
+        session.appendItem(functionCallOutput(callId, "x".repeat(1_200)));
+      }
+      const manager = new ContextManager(session, makeConfig({
+        contextWindow: 2_000,
+        maxOutputTokens: 400,
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 600,
+          safetyReserveTokens: 200,
+        },
+        generatorConfig: { modelInvoker: makeModelInvoker("not-json") },
+      }));
+
+      const result = await manager.preInferenceCheck(10, 5, FINGERPRINT);
+
+      expect(result).toMatchObject({ canProceed: true, compactionPerformed: true });
+      const capsules = session.getCapsuleEntries();
+      expect(capsules).toHaveLength(2);
+      const latest = capsules[1];
+      expect(latest?.portableState.goal).toBe("Inspect the engine");
+      expect(latest?.provenance.firstKeptEntryId).not.toBe(firstKeptId);
+      expect(latest?.provenance.sourceEntryIds).not.toContain(latest?.provenance.firstKeptEntryId);
+
+      const effectiveItems = session.buildInput().items;
+      const keptCallIds = new Set(
+        effectiveItems
+          .filter((item) => item.type === "function_call")
+          .map((item) => item.call_id),
+      );
+      for (const output of effectiveItems.filter((item) => item.type === "function_call_output")) {
+        expect(keptCallIds.has(output.call_id)).toBe(true);
+      }
     });
 
     it("не выполняет compaction для пустой сессии", async () => {

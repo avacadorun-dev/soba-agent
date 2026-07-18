@@ -112,7 +112,14 @@ export function findCutPoint(entries: SessionEntry[], keepRecentTokens = DEFAULT
       // keepRecentTokens is an upper target: an oversized tool result before
       // that boundary should be compacted instead of retained in full.
       if (accumulatedTokens >= keepRecentTokens && lastAllowedCutIdx >= 0) {
-        return lastAllowedCutIdx;
+        if (lastAllowedCutIdx > 0 && !boundarySplitsToolPair(entries, lastAllowedCutIdx)) {
+          return lastAllowedCutIdx;
+        }
+
+        // A long agent turn may contain no new message after the first kept
+        // assistant message. Fall back to the newest complete tool batch rather
+        // than returning index 0 and falsely reporting that nothing is reclaimable.
+        return findCompleteToolBatchCutPoint(entries, keepRecentTokens) ?? lastAllowedCutIdx;
       }
     }
   }
@@ -123,8 +130,72 @@ export function findCutPoint(entries: SessionEntry[], keepRecentTokens = DEFAULT
     return lastAllowedCutIdx;
   }
 
+  const toolBatchCutPoint = accumulatedTokens >= keepRecentTokens
+    ? findCompleteToolBatchCutPoint(entries, keepRecentTokens)
+    : null;
+  if (toolBatchCutPoint !== null) return toolBatchCutPoint;
+
   // No suitable cut point found — compact everything (keep nothing)
   return entries.length;
+}
+
+/**
+ * Find a boundary that keeps whole tool call/output groups together.
+ *
+ * Candidate boundaries are the beginning of a tool batch, the first entry
+ * after an existing capsule, or the end of the effective branch. Of the safe
+ * candidates below the keep target, retain as much recent context as possible.
+ */
+function findCompleteToolBatchCutPoint(
+  entries: SessionEntry[],
+  keepRecentTokens: number,
+): number | null {
+  const candidates: Array<{ index: number; keptTokens: number }> = [];
+
+  for (let index = 1; index <= entries.length; index++) {
+    const entry = entries[index];
+    const previous = entries[index - 1];
+    const item = entry?.type === "item" ? entry.item : null;
+    const isToolBatchStart = item?.type === "function_call" || item?.type === "local_shell_call";
+    const isCapsuleRollover = previous?.type === "context_capsule";
+    const isEnd = index === entries.length;
+
+    if (!isToolBatchStart && !isCapsuleRollover && !isEnd) continue;
+    if (!entries.slice(0, index).some((candidate) => candidate.type === "item")) continue;
+    if (boundarySplitsToolPair(entries, index)) continue;
+
+    const keptTokens = entries.slice(index).reduce((total, candidate) =>
+      candidate.type === "item" ? total + estimateItemTokens(candidate.item) : total, 0);
+    if (keptTokens <= keepRecentTokens) candidates.push({ index, keptTokens });
+  }
+
+  return candidates.reduce<{ index: number; keptTokens: number } | null>((best, candidate) => {
+    if (!best || candidate.keptTokens > best.keptTokens) return candidate;
+    if (candidate.keptTokens === best.keptTokens && candidate.index > best.index) return candidate;
+    return best;
+  }, null)?.index ?? null;
+}
+
+function boundarySplitsToolPair(entries: SessionEntry[], cutIndex: number): boolean {
+  const compactedCalls = new Set<string>();
+  const compactedOutputs = new Set<string>();
+  const keptCalls = new Set<string>();
+  const keptOutputs = new Set<string>();
+
+  entries.forEach((entry, index) => {
+    if (entry.type !== "item") return;
+    const calls = index < cutIndex ? compactedCalls : keptCalls;
+    const outputs = index < cutIndex ? compactedOutputs : keptOutputs;
+    if (entry.item.type === "function_call" || entry.item.type === "local_shell_call") {
+      calls.add(entry.item.call_id);
+    }
+    if (entry.item.type === "function_call_output" || entry.item.type === "local_shell_call_output") {
+      outputs.add(entry.item.call_id);
+    }
+  });
+
+  return [...compactedCalls].some((callId) => keptOutputs.has(callId)) ||
+    [...keptCalls].some((callId) => compactedOutputs.has(callId));
 }
 
 /**

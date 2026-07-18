@@ -169,6 +169,42 @@ describe("findCutPoint", () => {
     expect(cutPoint).toBe(2);
   });
 
+  test("uses a complete tool batch boundary when a long turn has no new messages", () => {
+    const items: ItemParam[] = [
+      makeAssistantMsg("Continuing the same agent turn"),
+      makeFunctionCall("old", "read", '{"path":"old.ts"}'),
+      makeFunctionCallOutput("old", "x".repeat(8_000)),
+      makeFunctionCall("batch_1a", "read", '{"path":"one.ts"}'),
+      makeFunctionCall("batch_1b", "read", '{"path":"two.ts"}'),
+      makeFunctionCallOutput("batch_1a", "x".repeat(8_000)),
+      makeFunctionCallOutput("batch_1b", "x".repeat(8_000)),
+      makeFunctionCall("batch_2", "read", '{"path":"three.ts"}'),
+      makeFunctionCallOutput("batch_2", "recent output"),
+    ];
+    const entries = entriesFromItems(items);
+
+    const cutPoint = findCutPoint(entries, 1_000);
+    const compactedItems = entries.slice(0, cutPoint).map((entry) => entry.item);
+    const keptItems = entries.slice(cutPoint).map((entry) => entry.item);
+    const compactedCallIds = new Set(
+      compactedItems
+        .filter((item) => item.type === "function_call")
+        .map((item) => item.call_id),
+    );
+    const keptOutputIds = new Set(
+      keptItems
+        .filter((item) => item.type === "function_call_output")
+        .map((item) => item.call_id),
+    );
+
+    expect(cutPoint).toBe(7);
+    expect((entries[cutPoint] as SessionItemEntry).item).toMatchObject({
+      type: "function_call",
+      call_id: "batch_2",
+    });
+    expect([...compactedCallIds].some((callId) => keptOutputIds.has(callId))).toBe(false);
+  });
+
   test("single user message at start — cuts at assistant message, not returning 0", () => {
     // Reproduces the real session bug: one user message at index 0, many tool calls.
     // Before fix: findCutPoint returned 0 → compacted = slice(0,0) = [] → no-op error.

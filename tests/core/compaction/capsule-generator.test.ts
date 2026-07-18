@@ -19,6 +19,7 @@ import { DeterministicStrategy } from "../../../src/engine/compaction/strategies
 import { type NativeCompactor, NativePortableStrategy } from "../../../src/engine/compaction/strategies/native-portable";
 import { type ModelInvoker, PortableOnlyStrategy } from "../../../src/engine/compaction/strategies/portable-only";
 import type { CapsuleGenerationInput, ContextCapsuleDraft } from "../../../src/engine/compaction/strategies/types";
+import { toolResultToOutputItem } from "../../../src/kernel/tools/types";
 import type { ItemParam } from "../../../src/kernel/transcript/types";
 import type {
   ActivatedSkillRef,
@@ -68,6 +69,7 @@ function makeGenerationInput(overrides: Partial<CapsuleGenerationInput> = {}): C
   return {
     sessionId: "test-session",
     branchEntryIds: ["e1", "e2", "e3", "e4", "e5"],
+    sourceEntryIds: ["e1", "e2", "e3"],
     sourceItems: [],
     firstCompactedEntryId: "e1",
     firstKeptEntryId: "e4",
@@ -273,13 +275,56 @@ describe("DeterministicStrategy", () => {
       functionCall("read", { path: "src/engine/turn/types.ts" }, "call_read"),
       functionCallOutput(
         "call_read",
-        'import type { AgentTurnError } from "./types";\nconst failedChecks: string[] = [];',
+        [
+          'import type { AgentTurnError } from "./types";',
+          "interface Result {",
+          "  error: string;",
+          "}",
+          "const failedChecks: string[] = [];",
+        ].join("\n"),
       ),
     ];
 
     const draft = await strategy.generate(makeGenerationInput({ sourceItems: items }), ABORT_SIGNAL);
 
     expect(draft.portableState.blockers).toEqual([]);
+  });
+
+  it("prefers persisted tool status over error-looking output text", async () => {
+    const strategy = new DeterministicStrategy();
+    const successfulRead = toolResultToOutputItem({
+      content: [{ type: "text", text: "Error: string;" }],
+      isError: false,
+    }, "call_read", "read");
+    const failedRead = toolResultToOutputItem({
+      content: [{ type: "text", text: "permission denied" }],
+      isError: true,
+    }, "call_failed", "read");
+
+    const successfulDraft = await strategy.generate(makeGenerationInput({
+      sourceItems: [successfulRead],
+    }), ABORT_SIGNAL);
+    const failedDraft = await strategy.generate(makeGenerationInput({
+      sourceItems: [failedRead],
+    }), ABORT_SIGNAL);
+
+    expect(successfulRead.status).toBe("completed");
+    expect(successfulDraft.portableState.blockers).toEqual([]);
+    expect(failedRead.status).toBe("failed");
+    expect(failedDraft.portableState.blockers).toEqual(["permission denied"]);
+  });
+
+  it("records only entries that were actually summarized in capsule provenance", async () => {
+    const strategy = new DeterministicStrategy();
+    const draft = await strategy.generate(makeGenerationInput({
+      branchEntryIds: ["e1", "e2", "e3", "e4", "e5"],
+      sourceEntryIds: ["e1", "e2"],
+      sourceItems: [userMessage("Inspect the engine"), assistantMessage("Reading core files")],
+      firstCompactedEntryId: "e1",
+      firstKeptEntryId: "e3",
+    }), ABORT_SIGNAL);
+
+    expect(draft.provenance.sourceEntryIds).toEqual(["e1", "e2"]);
   });
 
   it("carries the previous capsule state into a deterministic fallback", async () => {
@@ -1174,6 +1219,7 @@ describe("CapsuleGenerator", () => {
     const input = makeGenerationInput({
       sourceItems: items,
       branchEntryIds: ["e1", "e2", "e3", "e4", "e5"],
+      sourceEntryIds: ["e1", "e2", "e3"],
       firstCompactedEntryId: "e1",
       firstKeptEntryId: "e4",
       capabilities: makeCapabilities({ nativeCompaction: false }),
@@ -1183,6 +1229,6 @@ describe("CapsuleGenerator", () => {
 
     expect(result.draft.provenance.firstCompactedEntryId).toBe("e1");
     expect(result.draft.provenance.firstKeptEntryId).toBe("e4");
-    expect(result.draft.provenance.sourceEntryIds).toEqual(["e1", "e2", "e3", "e4", "e5"]);
+    expect(result.draft.provenance.sourceEntryIds).toEqual(["e1", "e2", "e3"]);
   });
 });

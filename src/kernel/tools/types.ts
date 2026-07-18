@@ -142,6 +142,7 @@ export function toolResultToOutputItem(
       type: "local_shell_call_output",
       call_id: callId,
       output,
+      status: toolResult.isError ? "failed" : "completed",
     };
   }
 
@@ -149,6 +150,7 @@ export function toolResultToOutputItem(
     type: "function_call_output",
     call_id: callId,
     output,
+    status: toolResult.isError ? "failed" : "completed",
   };
 }
 

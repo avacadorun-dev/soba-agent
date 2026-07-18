@@ -19,15 +19,20 @@ export function toolFailureOutput(item: ItemParam): string | null {
           .join("\n"))
     : item.output;
 
-  if (item.status === "failed") return output;
+  if (item.status !== undefined && item.status !== null) {
+    return item.status === "failed" ? output : null;
+  }
   if (item.type === "local_shell_call_output" && item.exit_code !== undefined) {
     return item.exit_code === 0 ? null : output;
   }
 
   // Compatibility for older transcript entries that did not persist status.
-  const hasExplicitFailureLine = output
+  // Only trust the first meaningful line: inspected source code can legitimately
+  // contain declarations such as `error: string` deeper in the output.
+  const firstMeaningfulLine = output
     .replaceAll(/\x1b\[[0-9;]*m/g, "")
     .split("\n")
-    .some((line) => FAILURE_LINE.test(line.trim()));
-  return hasExplicitFailureLine ? output : null;
+    .map((line) => line.trim())
+    .find(Boolean);
+  return firstMeaningfulLine && FAILURE_LINE.test(firstMeaningfulLine) ? output : null;
 }

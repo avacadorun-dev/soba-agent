@@ -19,7 +19,7 @@
 
 import { type ContextCapsuleMemorySink, contextCapsuleToMemoryInput } from "../../kernel/memory/context-capsule";
 import type { SessionPort } from "../../kernel/session/session-port";
-import type { ItemParam } from "../../kernel/transcript/types";
+import type { ItemParam, SessionItemEntry } from "../../kernel/transcript/types";
 import type {
   ContextCapsuleEntry,
   ProviderCapabilities,
@@ -566,9 +566,8 @@ export class ContextManager {
       return this._makeOutcome(plan, "skipped", startedAt, { reason: "Empty session — nothing to compact" });
     }
 
-    // Build effective items respecting existing capsule boundaries.
-    // Only items AFTER the last capsule should be considered for compaction.
-    // Items before the last capsule were already compacted.
+    // Build effective items respecting the most recent capsule. Its retained
+    // prefix remains effective and may be rolled into the next capsule later.
     let lastCapsule: ContextCapsuleEntry | null = null;
     let lastCapsuleIdx = -1;
     for (let i = branch.length - 1; i >= 0; i--) {
@@ -616,35 +615,29 @@ export class ContextManager {
     const compactedEntries = effectiveBranch.slice(0, cutIdx);
     const keptEntries = effectiveBranch.slice(cutIdx);
 
-    const compactedItems: ItemParam[] = [];
-    for (const entry of compactedEntries) {
-      if (entry.type === "item") {
-        compactedItems.push((entry as unknown as { item: ItemParam }).item);
-      }
-    }
-
-    const keptItems: ItemParam[] = [];
-    for (const entry of keptEntries) {
-      if (entry.type === "item") {
-        keptItems.push((entry as unknown as { item: ItemParam }).item);
-      }
-    }
+    const compactedItemEntries = compactedEntries
+      .filter((entry): entry is SessionItemEntry => entry.type === "item");
+    const keptItemEntries = keptEntries
+      .filter((entry): entry is SessionItemEntry => entry.type === "item");
+    const compactedItems = compactedItemEntries.map((entry) => entry.item);
+    const keptItems = keptItemEntries.map((entry) => entry.item);
 
     if (compactedItems.length === 0) {
       cleanup();
       return this._makeOutcome(plan, "skipped", startedAt, {
-        reason: "No items to compact (all items are in the keep window)",
+        reason: "No reclaimable session history before a safe compaction boundary",
       });
     }
 
     // Determine first compacted and first kept entry IDs
-    const firstCompactedEntryId = compactedEntries.length > 0 ? compactedEntries[0].id : "root";
-    const firstKeptEntryId = keptEntries.length > 0 ? keptEntries[0].id : "root";
+    const firstCompactedEntryId = compactedItemEntries[0]?.id ?? "root";
+    const firstKeptEntryId = keptItemEntries[0]?.id ?? "root";
 
     // Build generation input
     const generationInput: CapsuleGenerationInput = {
       sessionId: this._session.getSessionId(),
       branchEntryIds,
+      sourceEntryIds: compactedItemEntries.map((entry) => entry.id),
       sourceItems: compactedItems,
       firstCompactedEntryId,
       firstKeptEntryId,
