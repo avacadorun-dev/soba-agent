@@ -1,0 +1,215 @@
+---
+title: Compaction and Context Capsules
+description: "Context compression for long-running sessions: preflight barriers, Context Capsules, triggers, metrics, and manual controls."
+---
+
+Compaction lets SOBA continue long sessions without silently dropping their working history. It replaces old model input
+with a structured **Context Capsule** plus a recent retained tail. The canonical JSONL transcript remains append-only for
+audit, resume, and rewind.
+
+## 1. Why compaction exists
+
+Every model has a finite context window. System instructions, tool schemas, messages, tool results, and the reserved
+response budget all consume it. Simply truncating old messages can lose decisions, modified files, verification state,
+and unresolved blockers.
+
+A Context Capsule preserves the state needed to continue:
+
+- the current goal and constraints;
+- completed, active, and pending work;
+- decisions and rationale;
+- unresolved blockers and next steps;
+- read and modified files, verification commands, and active skills.
+
+The capsule is working session state, not a claim that every summarized fact belongs in long-term Project Memory.
+
+## 2. How Context Capsules work
+
+### 2.1 Model input and canonical history
+
+After a successful compact, the next model request contains:
+
+1. the latest compatible native continuation or portable Context Capsule;
+2. complete recent entries beginning at `firstKeptEntryId`;
+3. new entries appended after the capsule.
+
+Older messages remain in the canonical session JSONL. They stop consuming model context but remain available for audit
+and rewind. Tool calls are never split from their results at the compaction boundary.
+
+### 2.2 Multiple capsules
+
+Only the latest capsule and its retained tail enter model input. When SOBA compacts again, the previous portable state is
+rolled into the new capsule. Older capsules remain in JSONL but do not accumulate in the request.
+
+Automatic, milestone, plan-pivot, and hard-limit capsules remain session-local. They are not mirrored into durable
+Project Memory. An explicit `/compact` may mirror a validated non-degraded capsule; use `/capsule create` for an
+intentional portable handoff.
+
+## 3. Deferred preflight barrier
+
+SOBA does not generate summaries concurrently with model work. Soft triggers record a pending intent. Immediately before
+the next inference, SOBA creates an immutable plan, emits `compaction_start`, and waits for the compact to reach a terminal
+outcome.
+
+The model flow waits, while the TUI stays responsive and queues new input. During the barrier it shows live progress such
+as `Compacting context before response · 82%`; completion leaves one persistent line with the trigger, before/after token
+counts, reclaimed percentage, and checkpoint ID.
+
+The outcome is one of `completed`, `skipped`, `cancelled`, `stale`, or `failed`. An abort or a changed session leaf never
+appends a late capsule.
+
+## 4. Triggers and priority
+
+SOBA supports seven triggers. Their effective preflight priority is:
+
+1. `hard_limit`;
+2. pending `milestone` or `plan_pivot`;
+3. pending `turn_complete`;
+4. ordinary `auto_threshold`.
+
+Provider `context_overflow` is a separate recovery barrier.
+
+### Hard limit
+
+Before every inference SOBA calculates:
+
+```text
+hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
+```
+
+If effective input exceeds this limit, compaction is mandatory and fail-closed. `auto: false` cannot disable it, and SOBA
+does not send a request already known to be oversized.
+
+For `contextWindow=65000`, `maxOutputTokens=8000`, and `safetyReserveTokens=8192`, the hard limit is `48808`.
+
+### Auto threshold
+
+An ordinary soft compact becomes eligible when effective context reaches the soft limit and the pre-generation ROI check
+passes. At most one soft attempt runs per agent turn.
+
+### Turn complete
+
+When `auto` and `compactOnTurnComplete` are enabled, a completed turn may record a pending intent. It does not mutate the
+session in the background; the compact runs at the next preflight barrier.
+
+### Milestone and plan pivot
+
+A checkpoint can record a milestone or a change of direction. These intents outrank `turn_complete` and are consumed once
+at the next preflight.
+
+### User request
+
+`/compact` performs an explicit compact. It bypasses the soft ROI threshold, but remains a no-op when there is no safe
+history before the retained window.
+
+### Context overflow
+
+When the provider reports a real context-overflow error, SOBA performs one mandatory recovery compact and allows at most
+one retry for that turn. Failure does not send the same oversized request again.
+
+## 5. Configuration and thresholds
+
+```json
+{
+  "compaction": {
+    "auto": true,
+    "compactOnTurnComplete": true,
+    "compactOnMilestone": true,
+    "minTokensForAutoCompact": 32000,
+    "minReclaimableTokens": 12000,
+    "minSavingsRatio": 0.25,
+    "keepRecentTokens": 20000,
+    "safetyReserveTokens": 8192,
+    "autoCompactThresholdRatio": 0.8,
+    "timeoutMs": 15000
+  }
+}
+```
+
+| Option | Default | Meaning |
+|---|---:|---|
+| `auto` | `true` | Enable soft deferred preflight triggers |
+| `compactOnTurnComplete` | `true` | Record an intent after a completed turn |
+| `compactOnMilestone` | `true` | Record an intent at milestone checkpoints |
+| `minTokensForAutoCompact` | `32000` | Minimum effective input considered for soft compact |
+| `minReclaimableTokens` | `12000` | Minimum tokens that must actually be reclaimed |
+| `minSavingsRatio` | `0.25` | Minimum actual savings ratio |
+| `keepRecentTokens` | `20000` | Approximate recent context retained after compact |
+| `safetyReserveTokens` | `8192` | Reserve subtracted from the request budget |
+| `autoCompactThresholdRatio` | `0.8` | Soft threshold as a fraction of the hard limit |
+| `timeoutMs` | `15000` | Model-summary deadline before deterministic fallback |
+| `backgroundTimeoutMs` | — | Deprecated compatibility alias for `timeoutMs` |
+
+The soft limit is:
+
+```text
+softLimit = min(
+  hardLimit - 1,
+  max(minTokensForAutoCompact, floor(hardLimit * autoCompactThresholdRatio))
+)
+```
+
+With a `48808` hard limit and the defaults, the soft limit is `39046`.
+
+## 6. Two-stage ROI validation
+
+Before generating a summary, SOBA estimates:
+
+```text
+reclaimable = effectiveTokens - keepRecentTokens
+savingsRatio = reclaimable / effectiveTokens
+```
+
+Generation starts only when `reclaimable >= minReclaimableTokens` and
+`savingsRatio >= minSavingsRatio`.
+
+After generation, SOBA measures the complete continuation exactly: system and tool tokens, the serialized capsule with
+artifacts and active skills, and the retained tail. A soft capsule that misses either configured minimum is skipped and is
+not appended. Hard-limit, overflow, and explicit user compacts are exempt from this post-generation soft ROI gate.
+
+## 7. Timeout and fallback behavior
+
+If model summarization does not complete within `timeoutMs`, SOBA aborts that model request and immediately builds a local
+deterministic capsule. The result is marked `quality: degraded`, and the UI explains that fallback was used.
+
+An external turn cancellation is different: it appends no capsule. A provider that finishes after cancellation cannot
+write to the session because SOBA checks the abort signal and expected leaf immediately before append.
+
+## 8. Observability
+
+The sidebar reports effective tokens relative to the hard limit, the soft threshold, measurement source
+(`provider_usage` or `estimated`), and the most recent compact. Runtime and flight records include operation ID, trigger,
+token limits, outcome, duration, checkpoint, and reclaimed tokens without publishing summary contents.
+
+Useful commands:
+
+```text
+/budget
+/compact
+/auto-compact off
+/auto-compact on
+/capsule
+```
+
+`/auto-compact off` disables only soft triggers. Hard-limit protection and overflow recovery remain mandatory.
+
+## 9. Context Capsules vs Portable Capsules
+
+Context Capsules are internal JSONL session entries used for model continuation and rewind. Portable Capsules are explicit
+`.capsule.md` handoffs that can move state to another session, project, or agent:
+
+```text
+/capsule create "handoff auth work"
+/capsule export ck_abc ./handoff.capsule.md
+/capsule load ./handoff.capsule.md
+```
+
+See [Portable Capsules](/en/docs/v0.6/portable-capsules) and [Configuration](/en/docs/v0.6/configuration).
+
+## 10. Practical guidance
+
+- Keep `contextWindow` and `maxOutputTokens` aligned with the active model definition.
+- Increase `safetyReserveTokens` for providers whose tool or reasoning overhead is difficult to estimate.
+- Do not reduce `keepRecentTokens` so far that the agent loses the current tool batch or immediate task details.
+- Use explicit Portable Capsules for durable handoff; do not treat automatic working summaries as project knowledge.
+- When debugging, inspect the measurement source and hard/soft limits before changing thresholds.

@@ -233,7 +233,7 @@ Compaction 通过 `compaction` 配置段控制。
 | `keepRecentTokens` | `20000` | compaction 后保留的最近 token 数 |
 | `safetyReserveTokens` | `8192` | 从 context window 中扣除的安全保留量 |
 | `autoCompactThresholdRatio` | `0.8` | 相对于请求 hard limit 的软阈值 |
-| `timeoutMs` | `15000` | preflight compaction timeout |
+| `timeoutMs` | `15000` | 模型摘要超时后切换到 deterministic fallback |
 | `backgroundTimeoutMs` | — | `timeoutMs` 的 deprecated alias |
 
 Hard limit:
@@ -242,7 +242,7 @@ Hard limit:
 hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
 ```
 
-当 effective tokens 超过 `hardLimit` 时，SOBA 会执行 blocking compaction。这个行为不能通过 `auto: false` 关闭。完整 compaction guide 当前在俄语文档中：[Compaction and Context Capsules](/ru/docs/v0.6/compaction)。
+当 effective tokens 超过 `hardLimit` 时，SOBA 会执行 blocking compaction。这个行为不能通过 `auto: false` 关闭。完整生命周期与阈值说明请参阅 [Compaction 与 Context Capsules](/zh/docs/v0.6/compaction)。
 
 ---
 

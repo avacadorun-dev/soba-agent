@@ -45,9 +45,11 @@ A proof receipt can include:
 This makes the final answer auditable. A claim such as "tests passed" should point to the command that actually ran. A
 claim that has no evidence should stay visibly unverified.
 
-When the completion gate accepts criteria without explicit evidence IDs, SOBA links them only to evidence already
-recorded in that turn: successful mutation, verification, and inspection entries. It does not invent evidence. If no
-matching record exists, the claim remains unverified.
+When the completion gate accepts criteria without explicit evidence IDs, SOBA links each criterion only to relevant
+evidence already recorded in that turn. It uses lexical and semantic cues, then follows explicit mutation/check
+relationships; it no longer attaches every successful inspection to every claim. If no matching record exists, the claim
+remains unverified. The compact TUI handoff shows activity counts without exposing internal evidence IDs; the persisted
+proof keeps the complete references for `soba prove` and `soba explain-claim`.
 
 Newly written Proof Bundle v1 receipts are sealed before persistence. SOBA recursively redacts recognizable credentials,
 canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. `soba prove` shows the proof ID, run ID, and
