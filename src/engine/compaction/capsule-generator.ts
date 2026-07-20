@@ -17,6 +17,7 @@
  * Spec: internal-design-notes § Compaction Strategies
  */
 
+import { serializeCapsuleContext } from "../../kernel/session/context-capsule-input";
 import { estimateTokens } from "../../kernel/session/estimation";
 import type { ItemParam } from "../../kernel/transcript/types";
 import type { ContextCapsuleEntry, ProviderCapabilities } from "../../kernel/transcript/types-v2";
@@ -90,7 +91,12 @@ export class CapsuleGenerator {
         const draft = await strategy.generate(input, signal);
 
         // Calculate metrics
-        this._calculateMetrics(draft, keptItems, input.snapshotBefore);
+        this._calculateMetrics(
+          draft,
+          keptItems,
+          input.snapshotBefore,
+          input.capabilities.continuationCompatibilityKey,
+        );
 
         // Validate
         const validation = this._validator.validate(
@@ -149,6 +155,49 @@ export class CapsuleGenerator {
   }
 
   /**
+   * Generate the local fallback directly after a model-strategy deadline.
+   *
+   * This is deliberately separate from `generate`: the caller owns the
+   * deadline and must be able to stop waiting for a provider that ignores
+   * cancellation without re-entering the model strategy chain.
+   */
+  async generateDeterministic(
+    input: CapsuleGenerationInput,
+    sourceItems: ItemParam[],
+    keptItems: ItemParam[],
+    isBlocking: boolean,
+    signal: AbortSignal,
+  ): Promise<CapsuleGenerationResult> {
+    if (signal.aborted) throw new Error("Capsule generation aborted");
+
+    const strategy = new DeterministicStrategy();
+    const draft = await strategy.generate(input, signal);
+    this._calculateMetrics(
+      draft,
+      keptItems,
+      input.snapshotBefore,
+      input.capabilities.continuationCompatibilityKey,
+    );
+    const validation = this._validator.validate(
+      draft,
+      input.branchEntryIds,
+      sourceItems,
+      keptItems,
+      input.snapshotBefore,
+      isBlocking,
+      input.sessionId,
+      input.activatedSkills,
+    );
+
+    return {
+      draft,
+      validation,
+      strategyUsed: strategy.name,
+      fallbackChain: [strategy.name],
+    };
+  }
+
+  /**
    * Build the strategy chain based on provider capabilities.
    */
   private _buildStrategyChain(capabilities: ProviderCapabilities): CapsuleStrategy[] {
@@ -177,14 +226,37 @@ export class CapsuleGenerator {
     draft: ContextCapsuleDraft,
     keptItems: ItemParam[],
     snapshotBefore: ContextSnapshot,
+    providerCompatibilityKey?: string,
   ): void {
-    // Estimate tokens after compaction
-    // This includes the capsule itself (portable state) plus kept items
-    const portableStateText = this._serializePortableState(draft.portableState);
-    const portableStateTokens = Math.ceil(portableStateText.length / 3.5);
+    // Estimate the exact continuation prefix that buildInput will send, plus
+    // retained items and stable non-session request parts.
+    const native = draft.nativeContinuation;
+    const useNative = native !== undefined &&
+      providerCompatibilityKey !== undefined &&
+      providerCompatibilityKey !== "" &&
+      native.compatibilityKey === providerCompatibilityKey;
+    const capsuleItems: ItemParam[] = useNative && native
+      ? native.items as ItemParam[]
+      : [{
+          type: "message",
+          role: "system",
+          content: [{
+            type: "input_text",
+            text: `SOBA Context Capsule\n\n${serializeCapsuleContext(
+              draft.portableState,
+              draft.artifacts,
+              draft.activatedSkills,
+            )}`,
+          }],
+        }];
+    const capsuleTokens = estimateTokens(capsuleItems);
     const keptItemsTokens = estimateTokens(keptItems);
 
-    const estimatedTokensAfter = portableStateTokens + keptItemsTokens;
+    const estimatedTokensAfter =
+      snapshotBefore.systemPromptTokens +
+      snapshotBefore.toolSchemaTokens +
+      capsuleTokens +
+      keptItemsTokens;
     const reclaimedTokens = Math.max(0, snapshotBefore.effectiveTokens - estimatedTokensAfter);
     const savingsRatio =
       snapshotBefore.effectiveTokens > 0
@@ -196,45 +268,4 @@ export class CapsuleGenerator {
     draft.metrics.savingsRatio = savingsRatio;
   }
 
-  /**
-   * Serialize portable state to text for token estimation.
-   */
-  private _serializePortableState(state: import("../../kernel/transcript/types-v2").PortableContextState): string {
-    const lines: string[] = [];
-
-    lines.push(`Goal: ${state.goal}`);
-
-    if (state.constraints.length > 0) {
-      lines.push(`Constraints: ${state.constraints.join(", ")}`);
-    }
-
-    if (state.completed.length > 0) {
-      lines.push(`Completed: ${state.completed.join(", ")}`);
-    }
-
-    if (state.inProgress.length > 0) {
-      lines.push(`In Progress: ${state.inProgress.join(", ")}`);
-    }
-
-    if (state.pending.length > 0) {
-      lines.push(`Pending: ${state.pending.join(", ")}`);
-    }
-
-    if (state.decisions.length > 0) {
-      const decisionText = state.decisions
-        .map((d) => (d.rationale ? `${d.decision} (${d.rationale})` : d.decision))
-        .join("; ");
-      lines.push(`Decisions: ${decisionText}`);
-    }
-
-    if (state.blockers.length > 0) {
-      lines.push(`Blockers: ${state.blockers.join(", ")}`);
-    }
-
-    if (state.nextSteps.length > 0) {
-      lines.push(`Next Steps: ${state.nextSteps.join(", ")}`);
-    }
-
-    return lines.join("\n");
-  }
 }

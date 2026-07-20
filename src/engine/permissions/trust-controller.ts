@@ -4,6 +4,7 @@ export type { PermissionMode, TrustCheckResult, TrustController, TrustLevel, Tru
 
 const DEFAULT_TOOL_RULES: TrustRule[] = [
   { pattern: "read", level: "safe" },
+  { pattern: "ask_user", level: "safe" },
   { pattern: "write", level: "normal" },
   { pattern: "edit", level: "normal" },
   { pattern: "bash", level: "normal" },

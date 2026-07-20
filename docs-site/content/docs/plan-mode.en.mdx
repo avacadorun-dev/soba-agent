@@ -66,9 +66,10 @@ When the active client supports structured clarification, SOBA can call `ask_use
 concise question with two to five choices and, when useful, an **Other** text field. The selected answer returns to the
 same agent turn, so the completed plan reflects the decision instead of leaving it as an open question.
 
-The first implementation is available through ACP clients that advertise unstable `elicitation.form` support. Clients
-without that capability do not receive the tool; SOBA writes unresolved questions in its final plan instead. The terminal
-TUI deliberately keeps the text fallback for now.
+ACP clients use `elicitation.form`. The terminal TUI uses an inline blocking dialog: the model turn pauses, while the
+input remains responsive. Choose with `1`–`5`, arrows/Tab and Enter, click an option, type a free-form answer when
+**Other** is enabled, press Esc to decline, or Ctrl+C to cancel. Clients without a structured clarification capability do
+not receive the tool; SOBA keeps the question visible in the final response instead.
 
 ## 5. Recommended workflow
 

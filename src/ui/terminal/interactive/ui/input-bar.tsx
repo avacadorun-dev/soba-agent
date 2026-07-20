@@ -42,6 +42,10 @@ export function InputBar(props: { store: TuiStore }) {
   let textareaRef: TextareaRenderable | null = null;
 
   const refreshSuggestions = (value: string): void => {
+    if (props.store.clarification()) {
+      setSuggestions([]);
+      return;
+    }
     const next = getInputSuggestions(
       value,
       textareaRef?.cursorOffset ?? value.length,

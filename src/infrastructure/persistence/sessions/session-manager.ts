@@ -19,6 +19,11 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  buildContextCapsuleInput,
+  serializeCapsuleContext,
+  serializePortableState,
+} from "../../../kernel/session/context-capsule-input";
 import { CURRENT_SESSION_VERSION } from "../../../kernel/session/version";
 import type {
   CompactionEntry,
@@ -805,36 +810,7 @@ export class SessionManager {
       const lastCapsule = capsuleEntries[capsuleEntries.length - 1];
       const items: ItemParam[] = [];
 
-      // Determine whether to use native or portable continuation
-      const native = lastCapsule.nativeContinuation;
-      const useNative =
-        native !== undefined &&
-        providerCompatibilityKey !== undefined &&
-        providerCompatibilityKey !== "" &&
-        native.compatibilityKey === providerCompatibilityKey;
-
-      if (useNative && native) {
-        // Native continuation: use opaque provider items
-        items.push(...(native.items as ItemParam[]));
-      } else {
-        // Portable continuation: serialize portable state as a developer message
-        const portableText = serializeCapsuleContext(
-          lastCapsule.portableState,
-          lastCapsule.artifacts,
-          lastCapsule.activatedSkills,
-        );
-        const developerMsg: ItemParam = {
-          type: "message",
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: `SOBA Context Capsule\n\n${portableText}`,
-            },
-          ],
-        };
-        items.push(developerMsg);
-      }
+      items.push(...buildContextCapsuleInput(lastCapsule, providerCompatibilityKey));
 
       // Add session items starting from firstKeptEntryId
       const firstKeptIdx = branch.findIndex(
@@ -1017,94 +993,7 @@ export function listSessions(sessionDir: string): SessionInfo[] {
   return sessions;
 }
 
-// ─── Portable State Serialization ───
-
-/**
- * Serialize a PortableContextState to a human-readable text block.
- * Used when constructing the developer message for portable continuation.
- */
-export function serializePortableState(
-  state: import("../../../kernel/transcript/types-v2").PortableContextState,
-): string {
-  const lines: string[] = [];
-
-  lines.push(`## Goal\n${state.goal}`);
-
-  if (state.constraints.length > 0) {
-    lines.push(
-      `## Constraints\n${state.constraints.map((c) => `- ${c}`).join("\n")}`,
-    );
-  }
-
-  if (state.completed.length > 0) {
-    lines.push(
-      `## Completed\n${state.completed.map((c) => `- ${c}`).join("\n")}`,
-    );
-  }
-
-  if (state.inProgress.length > 0) {
-    lines.push(
-      `## In Progress\n${state.inProgress.map((c) => `- ${c}`).join("\n")}`,
-    );
-  }
-
-  if (state.pending.length > 0) {
-    lines.push(`## Pending\n${state.pending.map((c) => `- ${c}`).join("\n")}`);
-  }
-
-  if (state.decisions.length > 0) {
-    const decisionLines = state.decisions.map((d) =>
-      d.rationale
-        ? `- ${d.decision} (rationale: ${d.rationale})`
-        : `- ${d.decision}`,
-    );
-    lines.push(`## Decisions\n${decisionLines.join("\n")}`);
-  }
-
-  if (state.blockers.length > 0) {
-    lines.push(
-      `## Blockers\n${state.blockers.map((b) => `- ${b}`).join("\n")}`,
-    );
-  }
-
-  if (state.nextSteps.length > 0) {
-    lines.push(
-      `## Next Steps\n${state.nextSteps.map((s) => `- ${s}`).join("\n")}`,
-    );
-  }
-
-  return lines.join("\n\n");
-}
-
-/**
- * Serialize all portable checkpoint data required to continue work safely.
- * Provider-native continuations intentionally bypass this representation.
- */
-export function serializeCapsuleContext(
-  state: import("../../../kernel/transcript/types-v2").PortableContextState,
-  artifacts: import("../../../kernel/transcript/types-v2").ArtifactLedger,
-  activatedSkills: import("../../../kernel/transcript/types-v2").ActivatedSkillRef[],
-): string {
-  const sections = [serializePortableState(state)];
-
-  const artifactLines = [
-    `- Verification status: ${artifacts.verificationStatus}`,
-    ...artifacts.modifiedFiles.map((path) => `- Modified: ${path}`),
-    ...artifacts.readFiles.map((path) => `- Read: ${path}`),
-    ...artifacts.verificationCommands.map((command) => `- Verification command: ${command}`),
-    ...(artifacts.checkpointSummaries ?? []).map((summary) => `- Checkpoint: ${summary}`),
-  ];
-  sections.push(`## Artifacts\n${artifactLines.join("\n")}`);
-
-  if (activatedSkills.length > 0) {
-    const skillLines = activatedSkills.map(
-      (skill) => `- ${skill.name} (${skill.scope}, revision ${skill.revision}, hash ${skill.contentHash})`,
-    );
-    sections.push(`## Active Skills\n${skillLines.join("\n")}`);
-  }
-
-  return sections.join("\n\n");
-}
+export { serializeCapsuleContext, serializePortableState };
 
 // ─── Serialization ───
 

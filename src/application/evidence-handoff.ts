@@ -1,5 +1,6 @@
 export interface ParsedEvidenceHandoff {
   status?: string;
+  activity?: string;
   changedFiles: string[];
   checks: string[];
   risks: string[];
@@ -28,6 +29,7 @@ export function splitEvidenceHandoff(content: string): SplitEvidenceHandoffResul
 export function formatParsedEvidenceHandoff(summary: ParsedEvidenceHandoff): string {
   const lines = ["Evidence"];
   if (summary.status) lines.push(`Status: ${summary.status}`);
+  if (summary.activity) lines.push(`Activity: ${summary.activity}`);
   if (summary.diff) lines.push(`Diff: ${summary.diff}`);
   if (summary.changedFiles.length > 0) lines.push(`Changed files: ${summary.changedFiles.join(", ")}`);
   if (summary.checks.length > 0) lines.push(`Checks: ${summary.checks.join(", ")}`);
@@ -52,6 +54,9 @@ function parseEvidenceLines(lines: string[]): ParsedEvidenceHandoff {
     switch (parsed.key) {
       case "status":
         summary.status = parsed.value;
+        break;
+      case "activity":
+        summary.activity = parsed.value;
         break;
       case "changed files":
         summary.changedFiles = splitCommaList(parsed.value);

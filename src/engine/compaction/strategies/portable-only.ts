@@ -10,6 +10,7 @@
 import type { ItemParam } from "../../../kernel/transcript/types";
 import type { ProviderCapabilities } from "../../../kernel/transcript/types-v2";
 import { serializeItemsForCompaction } from "../serializer";
+import { reconcileStructuredState } from "../structured-state-reducer";
 import { DeterministicStrategy } from "./deterministic";
 import type { CapsuleGenerationInput, CapsuleStrategy, ContextCapsuleDraft } from "./types";
 
@@ -30,7 +31,10 @@ export class PortableOnlyStrategy implements CapsuleStrategy {
     const startTime = Date.now();
 
     try {
-      const portableState = await this._generatePortableState(input, signal);
+      const portableState = reconcileStructuredState(
+        await this._generatePortableState(input, signal),
+        input.sourceItems,
+      );
       const artifacts = this._extractArtifacts(input.sourceItems);
       const duration = Date.now() - startTime;
 

@@ -525,6 +525,59 @@ describe("ContextManager", () => {
       expect(outcome.quality).toBe("degraded");
       expect(memoryWrites).toHaveLength(0);
     });
+
+    it("does not mirror automatic context capsules into durable project memory", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 1_000);
+      const memoryWrites: MemoryCapsuleInput[] = [];
+      const manager = new ContextManager(session, makeConfig({
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 100,
+          minReclaimableTokens: 100,
+          minSavingsRatio: 0.1,
+        },
+        memory: { addCapsule: (input) => memoryWrites.push(input) },
+      }));
+      const snapshot = manager.getSnapshot(10, 5, FINGERPRINT);
+
+      const outcome = await manager.compactScheduled("auto_threshold", snapshot);
+
+      expect(outcome.status).toBe("completed");
+      expect(session.getCapsuleEntries()).toHaveLength(1);
+      expect(memoryWrites).toHaveLength(0);
+    });
+  });
+
+  describe("actual soft ROI", () => {
+    it("skips append when the generated capsule misses the configured savings", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 1_000);
+      const memoryWrites: MemoryCapsuleInput[] = [];
+      const manager = new ContextManager(session, makeConfig({
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 100,
+          minReclaimableTokens: 500,
+          minSavingsRatio: 0.25,
+        },
+        generatorConfig: {
+          modelInvoker: makeModelInvoker(JSON.stringify({
+            goal: "g".repeat(20_000),
+            constraints: [], completed: [], inProgress: [], pending: [], decisions: [], blockers: [], nextSteps: [],
+          })),
+        },
+        memory: { addCapsule: (input) => memoryWrites.push(input) },
+      }));
+      const snapshot = manager.getSnapshot(10, 5, FINGERPRINT);
+
+      const outcome = await manager.compactScheduled("auto_threshold", snapshot);
+
+      expect(outcome.status).toBe("skipped");
+      expect(outcome.reason).toMatch(/Actual (reclaimed tokens|savings ratio)/);
+      expect(session.getCapsuleEntries()).toHaveLength(0);
+      expect(memoryWrites).toHaveLength(0);
+    });
   });
 
   describe("evaluateTurnComplete", () => {
@@ -646,7 +699,7 @@ describe("ContextManager", () => {
       expect(session.getCapsuleEntries()).toHaveLength(0);
     });
 
-    it("timeout cancels the barrier and a late generator cannot append", async () => {
+    it("timeout aborts the model and completes with one deterministic fallback capsule", async () => {
       const session = SessionManager.inMemoryV2();
       fillSession(session, 1_000);
       const deferred = deferredSummary();
@@ -656,11 +709,44 @@ describe("ContextManager", () => {
       }));
 
       const outcome = await manager.manualCompact(undefined, 10, 5, FINGERPRINT);
-      expect(outcome.status).toBe("cancelled");
+      expect(outcome.status).toBe("completed");
+      expect(outcome.strategy).toBe("deterministic");
+      expect(outcome.quality).toBe("degraded");
       expect(outcome.reason).toContain("timed out");
+      expect(deferred.signal?.aborted).toBe(true);
+      expect(session.getCapsuleEntries()).toHaveLength(1);
       deferred.resolve();
       await Promise.resolve();
-      expect(session.getCapsuleEntries()).toHaveLength(0);
+      expect(session.getCapsuleEntries()).toHaveLength(1);
+    });
+
+    it("required preflight uses deterministic fallback instead of stopping the turn on timeout", async () => {
+      const session = SessionManager.inMemoryV2();
+      fillSession(session, 600);
+      const deferred = deferredSummary();
+      const manager = new ContextManager(session, makeConfig({
+        contextWindow: 500,
+        maxOutputTokens: 50,
+        compaction: {
+          ...DEFAULT_COMPACTION_CONFIG,
+          keepRecentTokens: 50,
+          safetyReserveTokens: 10,
+          timeoutMs: 5,
+        },
+        generatorConfig: { modelInvoker: { invoke: deferred.invoke } },
+      }));
+
+      const result = await manager.preInferenceCheck(10, 5, FINGERPRINT);
+
+      expect(result.canProceed).toBe(true);
+      expect(result.compactionPerformed).toBe(true);
+      expect(result.outcome?.status).toBe("completed");
+      expect(result.outcome?.strategy).toBe("deterministic");
+      expect(deferred.signal?.aborted).toBe(true);
+      expect(session.getCapsuleEntries()).toHaveLength(1);
+      deferred.resolve();
+      await Promise.resolve();
+      expect(session.getCapsuleEntries()).toHaveLength(1);
     });
   });
 
@@ -702,11 +788,14 @@ describe("ContextManager", () => {
 function deferredSummary() {
   let resolveStarted!: () => void;
   let resolveSummary!: (value: string) => void;
+  let invokedSignal: AbortSignal | undefined;
   const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
   const summary = new Promise<string>((resolve) => { resolveSummary = resolve; });
   return {
     started,
-    invoke: async () => {
+    get signal() { return invokedSignal; },
+    invoke: async (_prompt: string, signal: AbortSignal) => {
+      invokedSignal = signal;
       resolveStarted();
       return summary;
     },

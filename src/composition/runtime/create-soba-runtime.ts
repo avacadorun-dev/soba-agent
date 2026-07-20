@@ -153,12 +153,12 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     memory: projectMemory,
     generatorConfig: {
       modelInvoker: {
-        invoke: async (prompt: string, _signal: AbortSignal): Promise<string> => {
+        invoke: async (prompt: string, signal: AbortSignal): Promise<string> => {
           const response = await client.create({
             model: config.model,
             input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
             max_output_tokens: config.maxOutputTokens,
-          });
+          }, { signal });
           const textOutput = response.output.find((output) => output.type === "message" && output.role === "assistant");
           return textOutput && "content" in textOutput
             ? (textOutput as { content: Array<{ text: string }> }).content.map((content) => content.text).join("")

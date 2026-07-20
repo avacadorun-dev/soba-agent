@@ -266,7 +266,7 @@ Compaction управляется через секцию `compaction` в `~/.so
 | `keepRecentTokens` | `20000` | Количество токенов, сохраняемых после компакта |
 | `safetyReserveTokens` | `8192` | Резерв безопасности (вычитается из context window для hard limit) |
 | `autoCompactThresholdRatio` | `0.8` | Мягкий порог как доля hard limit запроса |
-| `timeoutMs` | `15000` | Таймаут preflight compaction в мс |
+| `timeoutMs` | `15000` | Бюджет модельного summary до deterministic fallback, в мс |
 | `backgroundTimeoutMs` | — | Устаревший alias для `timeoutMs` |
 
 **Формула hard limit:**

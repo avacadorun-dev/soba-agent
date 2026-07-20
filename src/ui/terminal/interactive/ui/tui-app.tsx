@@ -3,6 +3,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid";
 import { Show, createEffect } from "solid-js";
 import { useCopyOnSelection } from "../hooks/use-copy-on-selection";
 import { useTuiKeys } from "../hooks/use-tui-keys";
+import { ClarificationDialogManager } from "../lib/clarification-dialog-manager";
 import { getTuiTheme } from "../lib/theme";
 import type { NotificationStore } from "../model/notification-store";
 import type { ProviderStore } from "../model/provider-store";
@@ -15,6 +16,7 @@ import { SearchOverlay } from "./search-overlay";
 import { Sidebar } from "./sidebar";
 import { StatusBar } from "./status-bar";
 import { TrustDialog, TrustDialogManager } from "./trust-dialog";
+import { ClarificationDialog } from "./clarification-dialog";
 
 export function TuiApp(props: {
   store: TuiStore;
@@ -28,6 +30,7 @@ export function TuiApp(props: {
   let toolFocusRef: ToolResultFocusRef | null = null;
   const theme = () => getTuiTheme(props.store.themeName());
   const trustDialogManager = new TrustDialogManager();
+  const clarificationDialogManager = new ClarificationDialogManager();
 
   // Wire scrollbox ref to store for search-result jump scrolling
   const setScrollboxRef = (ref: ScrollBoxRenderable) => {
@@ -43,6 +46,7 @@ export function TuiApp(props: {
     shutdown: props.shutdown,
     renderer,
     trustDialogManager,
+    clarificationDialogManager,
     openSearch: () => props.store.openSearch(),
   });
   useCopyOnSelection(renderer, () => props.store.notifyCopied());
@@ -67,6 +71,11 @@ export function TuiApp(props: {
           />
           {/* Trust dialog appears between message list and input bar in normal flow. */}
           <TrustDialog store={props.store} themeName={props.store.themeName} manager={trustDialogManager} />
+          <ClarificationDialog
+            store={props.store}
+            themeName={props.store.themeName}
+            manager={clarificationDialogManager}
+          />
           <InputBar store={props.store} />
         </box>
         <StatusBar store={props.store} width={mainWidth()} />

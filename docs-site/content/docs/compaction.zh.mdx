@@ -1,0 +1,209 @@
+---
+title: Compaction 与 Context Capsules
+description: 长会话上下文压缩：preflight barrier、Context Capsules、触发器、指标与手动控制。
+---
+
+Compaction 让 SOBA 在长会话中继续工作，而不会静默丢弃工作历史。它用结构化的 **Context Capsule** 和最近保留的
+上下文尾部替换旧的 model input。规范的 JSONL transcript 仍保持 append-only，可用于审计、resume 和 rewind。
+
+## 1. 为什么需要 compaction
+
+每个模型都有有限的 context window。系统指令、tool schemas、消息、工具结果以及为响应预留的 token 都会占用它。
+直接截断旧消息可能丢失关键决策、修改过的文件、验证状态和未解决的 blocker。
+
+Context Capsule 会保留继续工作所需的状态：
+
+- 当前目标与约束；
+- 已完成、进行中和待处理的工作；
+- 决策及其理由；
+- 未解决的 blocker 与下一步；
+- 已读/已修改文件、验证命令和 active skills。
+
+Capsule 是当前 session 的工作状态，并不表示其中每条摘要都应该进入长期 Project Memory。
+
+## 2. Context Capsules 如何工作
+
+### 2.1 Model input 与规范历史
+
+成功 compact 后，下一次模型请求包含：
+
+1. 最新且兼容的 native continuation，或 portable Context Capsule；
+2. 从 `firstKeptEntryId` 开始的完整近期条目；
+3. capsule 之后新增的条目。
+
+更早的消息仍保留在规范 session JSONL 中。它们不再占用模型上下文，但仍可用于审计和 rewind。Compaction 边界
+不会把 tool call 与对应 result 分开。
+
+### 2.2 多个 capsules
+
+只有最新 capsule 和它保留的尾部会进入 model input。再次 compact 时，上一 capsule 的 portable state 会被滚入新
+capsule。旧 capsules 保留在 JSONL 中，但不会在请求里不断累积。
+
+自动、milestone、plan-pivot 和 hard-limit capsules 只属于当前 session，不会镜像到长期 Project Memory。显式
+`/compact` 可以镜像通过验证且非 degraded 的 capsule；需要有意的 portable handoff 时请使用 `/capsule create`。
+
+## 3. Deferred preflight barrier
+
+SOBA 不会在模型工作期间并发生成摘要。Soft trigger 只记录 pending intent。下一次 inference 之前，SOBA 会建立不可
+变的 plan，发送 `compaction_start`，并等待 compact 到达 terminal outcome。
+
+Model flow 会等待，但 TUI 仍可响应并将新输入排队。Barrier 期间会显示类似
+`Compacting context before response · 82%` 的实时状态；完成后只保留一行结果，包含 trigger、压缩前后 token、回收
+比例和 checkpoint ID。
+
+Outcome 为 `completed`、`skipped`、`cancelled`、`stale` 或 `failed`。Abort 或 session leaf 变化后，迟到的生成结果
+永远不能 append capsule。
+
+## 4. 触发器与优先级
+
+SOBA 支持七种触发器。Preflight 的实际优先级为：
+
+1. `hard_limit`；
+2. pending `milestone` 或 `plan_pivot`；
+3. pending `turn_complete`；
+4. 普通 `auto_threshold`。
+
+Provider `context_overflow` 使用独立的恢复 barrier。
+
+### Hard limit
+
+每次 inference 前，SOBA 计算：
+
+```text
+hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
+```
+
+当 effective input 超过该限制时，compaction 是强制且 fail-closed 的。`auto: false` 无法关闭它，SOBA 也不会发送
+已知超出大小的请求。
+
+例如 `contextWindow=65000`、`maxOutputTokens=8000`、`safetyReserveTokens=8192` 时，hard limit 为 `48808`。
+
+### Auto threshold
+
+当 effective context 达到 soft limit，并且生成前 ROI 检查通过时，普通 soft compact 才会执行。每个 agent turn
+最多尝试一次 soft compact。
+
+### Turn complete
+
+启用 `auto` 和 `compactOnTurnComplete` 后，完成的 turn 可以记录 pending intent。它不会在后台修改 session；compact
+会在下一次 preflight barrier 执行。
+
+### Milestone 与 plan pivot
+
+Checkpoint 可以记录 milestone 或计划方向变化。这些 intent 的优先级高于 `turn_complete`，并在下一次 preflight
+中消费一次。
+
+### User request
+
+`/compact` 执行显式 compact。它跳过 soft ROI threshold，但如果保留窗口之前没有可安全压缩的历史，则仍为 no-op。
+
+### Context overflow
+
+当 provider 返回真实 context-overflow 错误时，SOBA 会执行一次强制恢复 compact，并且该 turn 最多 retry 一次。
+失败后不会再次发送相同的超大请求。
+
+## 5. 配置与阈值
+
+```json
+{
+  "compaction": {
+    "auto": true,
+    "compactOnTurnComplete": true,
+    "compactOnMilestone": true,
+    "minTokensForAutoCompact": 32000,
+    "minReclaimableTokens": 12000,
+    "minSavingsRatio": 0.25,
+    "keepRecentTokens": 20000,
+    "safetyReserveTokens": 8192,
+    "autoCompactThresholdRatio": 0.8,
+    "timeoutMs": 15000
+  }
+}
+```
+
+| 参数 | 默认值 | 含义 |
+|---|---:|---|
+| `auto` | `true` | 开启 soft deferred preflight triggers |
+| `compactOnTurnComplete` | `true` | turn 完成后记录 intent |
+| `compactOnMilestone` | `true` | milestone checkpoint 时记录 intent |
+| `minTokensForAutoCompact` | `32000` | 考虑 soft compact 的最低 effective input |
+| `minReclaimableTokens` | `12000` | 实际必须回收的最低 token 数 |
+| `minSavingsRatio` | `0.25` | 最低实际节省比例 |
+| `keepRecentTokens` | `20000` | compact 后大致保留的近期上下文 |
+| `safetyReserveTokens` | `8192` | 从请求预算中扣除的安全保留量 |
+| `autoCompactThresholdRatio` | `0.8` | Soft threshold 相对于 hard limit 的比例 |
+| `timeoutMs` | `15000` | 模型摘要 deadline，之后切换到 deterministic fallback |
+| `backgroundTimeoutMs` | — | `timeoutMs` 的 deprecated compatibility alias |
+
+Soft limit 的计算方式：
+
+```text
+softLimit = min(
+  hardLimit - 1,
+  max(minTokensForAutoCompact, floor(hardLimit * autoCompactThresholdRatio))
+)
+```
+
+Hard limit 为 `48808` 且使用默认配置时，soft limit 为 `39046`。
+
+## 6. 两阶段 ROI 验证
+
+生成摘要之前，SOBA 估算：
+
+```text
+reclaimable = effectiveTokens - keepRecentTokens
+savingsRatio = reclaimable / effectiveTokens
+```
+
+只有 `reclaimable >= minReclaimableTokens` 且 `savingsRatio >= minSavingsRatio` 时才开始生成。
+
+生成完成后，SOBA 会精确测量完整 continuation：system/tool tokens、包含 artifacts 和 active skills 的序列化 capsule，
+以及保留尾部。没有达到任一配置下限的 soft capsule 会被跳过且不会 append。Hard-limit、overflow 和显式 user compact
+不受这个生成后 soft ROI gate 限制。
+
+## 7. Timeout 与 fallback
+
+如果模型摘要没有在 `timeoutMs` 内完成，SOBA 会 abort 该模型请求，并立即生成本地 deterministic capsule。结果会标记
+为 `quality: degraded`，UI 会说明使用了 fallback。
+
+外部 turn cancellation 不同：它不会 append capsule。即使 provider 在取消后才结束，SOBA 也会在 append 前再次检查
+abort signal 和 expected leaf，因此无法写入 session。
+
+## 8. 可观察性
+
+Sidebar 会显示相对于 hard limit 的 effective tokens、soft threshold、测量来源（`provider_usage` 或 `estimated`）以及
+最近一次 compact。Runtime 与 flight records 会记录 operation ID、trigger、token limits、outcome、duration、checkpoint
+和 reclaimed tokens，但不会发布 summary 内容。
+
+常用命令：
+
+```text
+/budget
+/compact
+/auto-compact off
+/auto-compact on
+/capsule
+```
+
+`/auto-compact off` 只关闭 soft triggers。Hard-limit 保护和 overflow recovery 始终强制启用。
+
+## 9. Context Capsules 与 Portable Capsules
+
+Context Capsules 是内部 JSONL session entries，用于 model continuation 和 rewind。Portable Capsules 是显式的
+`.capsule.md` handoff，可以将状态传给另一个 session、project 或 agent：
+
+```text
+/capsule create "handoff auth work"
+/capsule export ck_abc ./handoff.capsule.md
+/capsule load ./handoff.capsule.md
+```
+
+另请参阅 [Portable Capsules](/zh/docs/portable-capsules) 和 [配置](/zh/docs/configuration)。
+
+## 10. 实践建议
+
+- 让 `contextWindow` 与 `maxOutputTokens` 和 active model definition 保持一致。
+- 对 tool 或 reasoning overhead 难以估计的 provider，提高 `safetyReserveTokens`。
+- 不要把 `keepRecentTokens` 降得过低，以免丢失当前 tool batch 或即时任务细节。
+- 长期 handoff 使用显式 Portable Capsule；不要把自动工作摘要当作 project knowledge。
+- 调试阈值前，先检查 measurement source、hard limit 与 soft limit。

@@ -204,6 +204,8 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
 export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
   const lines = ["", "**Evidence**", `- Status: ${formatBundleStatus(bundle.status)}`];
 
+  const activity = formatEvidenceActivity(bundle.evidence);
+  if (activity) lines.push(`- Activity: ${activity}`);
   lines.push(`- Changed files: ${formatChangedFiles(bundle.changedFiles)}`);
   if (bundle.diff) {
     lines.push(`- Diff: ${formatDiffSummary(bundle.diff)}`);
@@ -212,8 +214,11 @@ export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
     lines.push(`- Claims: ${formatClaims(bundle.claims)}`);
   }
   lines.push(`- Checks: ${formatChecks(bundle.checks, bundle.commands)}`);
-  if (bundle.approvals.length > 0) {
-    lines.push(`- Permissions: ${formatApprovals(bundle.approvals)}`);
+  const visibleApprovals = bundle.approvals.filter((approval) =>
+    approval.decision !== "auto" || approval.trustLevel === "dangerous"
+  );
+  if (visibleApprovals.length > 0) {
+    lines.push(`- Permissions: ${formatApprovals(visibleApprovals)}`);
   }
   lines.push(`- Risks: ${formatRisks(bundle.risks)}`);
   if (bundle.reviewActions.length > 0) {
@@ -221,6 +226,24 @@ export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
   }
 
   return lines.join("\n");
+}
+
+function formatEvidenceActivity(evidence: EvidenceReference[]): string | null {
+  const successful = evidence.filter((entry) =>
+    entry.status === "success" && ["inspect", "search", "mutation", "verification"].includes(entry.kind)
+  );
+  if (successful.length === 0) return null;
+  const labels: string[] = [];
+  const count = (kind: EvidenceKind) => successful.filter((entry) => entry.kind === kind).length;
+  const add = (kind: EvidenceKind, singular: string, plural: string) => {
+    const value = count(kind);
+    if (value > 0) labels.push(`${value} ${value === 1 ? singular : plural}`);
+  };
+  add("mutation", "change", "changes");
+  add("verification", "check", "checks");
+  add("inspect", "inspection", "inspections");
+  add("search", "search", "searches");
+  return `${successful.length} successful · ${labels.join(", ")}`;
 }
 
 function evidenceReferencesFromLedger(entries: EvidenceEntry[]): EvidenceReference[] {
@@ -712,10 +735,7 @@ function formatApprovals(approvals: EvidenceApproval[]): string {
 function formatClaims(claims: EvidenceClaim[]): string {
   return claims
     .slice(0, 6)
-    .map((claim) => {
-      const refs = claim.evidenceIds.length > 0 ? ` (${claim.evidenceIds.join(", ")})` : "";
-      return `${claim.claim} ${claim.status}${refs}`;
-    })
+    .map((claim) => `${claim.claim} ${claim.status}`)
     .join("; ") + (claims.length > 6 ? `; ...${claims.length - 6} more` : "");
 }
 

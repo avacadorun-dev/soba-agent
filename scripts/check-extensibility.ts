@@ -12,6 +12,7 @@ const root = resolve(import.meta.dir, "..");
 const files = [...new Bun.Glob("src/**/*.ts").scanSync({ cwd: root, absolute: true })].sort();
 const findings: Finding[] = [];
 const languageCatalogues = new Set([
+  "src/engine/compaction/structured-state-lexicon.ts",
   "src/engine/turn/assistant-text-lexicon.ts",
   "src/engine/verification/task-intent-lexicon.ts",
 ]);

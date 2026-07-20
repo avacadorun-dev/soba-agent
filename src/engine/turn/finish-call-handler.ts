@@ -31,6 +31,7 @@ export interface FinishCallHandlerInput {
   allowUnverifiedCompletion: boolean;
   runAutoVerification: () => Promise<boolean>;
   appendAssistantMessagesToSession: () => void;
+  supersedeVisibleAssistantMessages: () => void;
   session: SessionPort;
   allItems: ItemParam[];
   turn: number;
@@ -76,6 +77,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
 
   if (finishEvaluation.kind === "rejected" || finishEvaluation.kind === "invalid") {
     input.appendAssistantMessagesToSession();
+    input.supersedeVisibleAssistantMessages();
     input.evidenceLedger.recordFinishAttempt(
       "rejected",
       finishEvaluation.kind === "invalid"
@@ -137,7 +139,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
 
   const finishRequest = finishEvaluation.request;
   acknowledgeErrors(input.errors, finishRequest.acknowledgedErrorIds);
-  const linkedCriteria = linkImplicitCriteriaEvidence(
+  const linkedCriteria = linkRelevantCriteriaEvidence(
     finishRequest.criteria,
     input.evidenceLedger.getSummary().entries,
   );
@@ -251,19 +253,82 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
   return "break";
 }
 
-function linkImplicitCriteriaEvidence(
+function linkRelevantCriteriaEvidence(
   criteria: FinishCriterion[],
   entries: ReturnType<EvidenceLedger["getSummary"]>["entries"],
 ): FinishCriterion[] {
-  const recordedIds = entries.flatMap((entry) =>
-    entry.status === "success" && ["mutation", "verification", "inspect"].includes(entry.kind)
-      ? [entry.id]
-      : []
+  const candidates = entries.filter((entry) =>
+    entry.status === "success" && ["mutation", "verification", "inspect", "search"].includes(entry.kind)
   );
-  if (recordedIds.length === 0) return criteria;
-  return criteria.map((criterion) =>
-    (criterion.evidenceIds?.length ?? 0) > 0
-      ? criterion
-      : { ...criterion, evidenceIds: recordedIds.slice() }
+  if (candidates.length === 0) return criteria;
+
+  return criteria.map((criterion) => {
+    if ((criterion.evidenceIds?.length ?? 0) > 0) return criterion;
+
+    const criterionTokens = evidenceTokens(criterion.criterion);
+    let selected = candidates.filter((entry) => {
+      const entryTokens = evidenceTokens([
+        entry.kind,
+        entry.verificationKind ?? "",
+        entry.toolName ?? "",
+        entry.command ?? "",
+        entry.summary,
+        ...(entry.files ?? []),
+      ].join(" "));
+      const lexicalMatch = [...entryTokens].some((token) => criterionTokens.has(token));
+      const semanticMatch = (entry.kind === "mutation" || entry.kind === "verification") &&
+        semanticEvidenceMatch(criterionTokens, entry.kind, entry.verificationKind);
+      return lexicalMatch || semanticMatch;
+    });
+    if (selected.length === 0 && candidates.length === 1) selected = candidates;
+    if (selected.length === 0) return criterion;
+
+    const selectedIds = new Set(selected.map((entry) => entry.id));
+    for (const entry of candidates) {
+      if (entry.mutationIds?.some((id) => selectedIds.has(id))) selectedIds.add(entry.id);
+      if (selectedIds.has(entry.id)) {
+        for (const mutationId of entry.mutationIds ?? []) selectedIds.add(mutationId);
+      }
+    }
+    return { ...criterion, evidenceIds: [...selectedIds].slice(0, 8) };
+  });
+}
+
+const EVIDENCE_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "be", "been", "by", "for", "from", "in", "is", "it", "of", "on", "or",
+  "requested", "the", "this", "to", "was", "were", "with", "work", "done",
+]);
+
+function evidenceTokens(value: string): Set<string> {
+  return new Set(
+    value.toLocaleLowerCase()
+      .split(/[^\p{L}\p{N}_-]+/u)
+      .map(normalizeEvidenceToken)
+      .filter((token) => token.length >= 3 && !EVIDENCE_STOP_WORDS.has(token)),
   );
+}
+
+function normalizeEvidenceToken(token: string): string {
+  if (token.endsWith("ing") && token.length > 6) return token.slice(0, -3);
+  if (token.endsWith("ed") && token.length > 5) return token.slice(0, -2);
+  if (token.endsWith("es") && token.length > 5) return token.slice(0, -2);
+  if (token.endsWith("s") && token.length > 4) return token.slice(0, -1);
+  return token;
+}
+
+function semanticEvidenceMatch(
+  criterionTokens: Set<string>,
+  kind: string,
+  verificationKind: string | undefined,
+): boolean {
+  const verificationCues = new Set(["test", "check", "verif", "lint", "typecheck", "build", "pass"]);
+  const mutationCues = new Set(["chang", "creat", "edit", "fix", "implement", "updat"]);
+  const hasCue = (cues: Set<string>) => [...criterionTokens].some((token) => [...cues].some((cue) => token.startsWith(cue)));
+
+  if (kind === "verification") {
+    return hasCue(verificationCues) || (verificationKind ? criterionTokens.has(normalizeEvidenceToken(verificationKind)) : false);
+  }
+  if (kind === "mutation") return hasCue(mutationCues);
+  if (kind === "inspect" || kind === "search") return false;
+  return false;
 }

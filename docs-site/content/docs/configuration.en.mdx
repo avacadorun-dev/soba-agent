@@ -233,7 +233,7 @@ Compaction is configured through the `compaction` section.
 | `keepRecentTokens` | `20000` | Recent tokens to keep after compaction |
 | `safetyReserveTokens` | `8192` | Safety reserve subtracted from the context window |
 | `autoCompactThresholdRatio` | `0.8` | Soft threshold as a fraction of the request hard limit |
-| `timeoutMs` | `15000` | Timeout for a preflight compaction operation |
+| `timeoutMs` | `15000` | Model-summary deadline before deterministic fallback |
 | `backgroundTimeoutMs` | — | Deprecated alias for `timeoutMs` |
 
 Hard limit:
@@ -242,7 +242,7 @@ Hard limit:
 hardLimit = contextWindow - maxOutputTokens - safetyReserveTokens
 ```
 
-When effective tokens exceed `hardLimit`, SOBA runs blocking compaction. This cannot be disabled with `auto: false`. The full compaction guide is currently available in Russian: [Compaction and Context Capsules](/ru/docs/compaction).
+When effective tokens exceed `hardLimit`, SOBA runs blocking compaction. This cannot be disabled with `auto: false`. See [Compaction and Context Capsules](/en/docs/compaction) for the complete lifecycle and threshold guide.
 
 ---
 

@@ -32,9 +32,9 @@ export function filterToolsForWorkMode(
     semanticsFor?: (toolName: string) => ToolSemantics;
   } = {},
 ): string[] {
-  if (!isRestrictedWorkMode(mode)) return [...toolNames];
   return toolNames.filter((name) => {
     if (name === "ask_user" && !options.clarificationAvailable) return false;
+    if (!isRestrictedWorkMode(mode)) return true;
     return isToolAllowedInPlanMode(name, options.semanticsFor?.(name)).allowed;
   });
 }

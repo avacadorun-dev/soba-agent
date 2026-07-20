@@ -16,6 +16,7 @@ describe("TUI evidence summary", () => {
         "",
         "**Evidence**",
         "- Status: partially verified",
+        "- Activity: 3 successful · 1 change, 2 checks",
         "- Changed files: modified src/app.ts (+3/-1), created src/new.ts (+4/-0)",
         "- Diff: 2 files, +7/-1",
         "- Checks: Tests passed (bun test), Lint failed (bun run lint)",
@@ -27,6 +28,7 @@ describe("TUI evidence summary", () => {
     expect(split.body).toBe("Done.");
     expect(split.evidence).toMatchObject({
       status: "partially verified",
+      activity: "3 successful · 1 change, 2 checks",
       changedFiles: ["modified src/app.ts (+3/-1)", "created src/new.ts (+4/-0)"],
       diff: "2 files, +7/-1",
       checks: ["Tests passed (bun test)", "Lint failed (bun run lint)"],

@@ -44,8 +44,10 @@ Proof receipt 可以包含：
 
 目标是让最终回答可审计。比如 “tests passed” 应指向真实运行过的命令；没有证据的 claim 应明确保持 unverified。
 
-当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 只会把它们关联到该 turn 中已经记录且
-成功的 mutation、verification 和 inspection evidence。SOBA 不会虚构证据；没有匹配记录时，claim 仍为 unverified。
+当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 只把每个 criterion 关联到当前 turn 中
+相关的 evidence。它先使用词汇和语义线索，再沿用明确的 mutation/check 关系；不会再把所有成功 inspection
+自动附加到每个 claim。没有匹配记录时，claim 仍为 unverified。紧凑的 TUI handoff 只显示 activity 计数，
+不暴露内部 evidence IDs；持久化 proof 仍保留完整引用，供 `soba prove` 和 `soba explain-claim` 使用。
 
 新写入的 Proof Bundle v1 会在持久化前 sealing：SOBA 递归脱敏可识别 credentials、规范化 JSON、派生
 `proofId`，并写入 `integrity.digest`。`soba prove` 会显示 proof ID、run ID 和 digest。

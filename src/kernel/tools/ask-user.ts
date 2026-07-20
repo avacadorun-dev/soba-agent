@@ -1,4 +1,3 @@
-import { createToolErrorResult } from "./errors";
 import type { ToolDefinition, ToolResult } from "./types";
 
 export interface AskUserOption {
@@ -29,6 +28,8 @@ export const askUserTool: ToolDefinition<AskUserArgs> = {
       options: {
         type: "array",
         description: "Two to five stable choices.",
+        minItems: 2,
+        maxItems: 5,
         items: {
           type: "object",
           properties: {
@@ -65,25 +66,21 @@ export const askUserTool: ToolDefinition<AskUserArgs> = {
     if (new Set(options.map((option) => option.id)).size !== options.length) throw new Error("option ids must be unique");
     return { question, options, ...(raw.allowOther === true ? { allowOther: true } : {}) };
   },
-  async execute(args, context): Promise<ToolResult> {
+  async execute(args, context, signal): Promise<ToolResult> {
     if (!context.requestClarification) {
-      return createToolErrorResult({
-        code: "clarification_unavailable",
-        category: "validation",
-        message: "Structured clarification is unavailable in this client. Present the open question in the final response instead.",
-        nextAction: "Finish with the unresolved question; do not retry ask_user.",
-        fingerprint: "validation:clarification_unavailable",
-      });
+      return controlOutcome(
+        "unavailable",
+        "Structured clarification is unavailable in this client. Continue only with a safe reversible assumption, or present the open question in the final response. Do not retry ask_user.",
+      );
     }
-    const outcome = await context.requestClarification(args);
+    const outcome = await context.requestClarification(args, signal);
     if (outcome.status !== "answered") {
-      return createToolErrorResult({
-        code: `clarification_${outcome.status}`,
-        category: "aborted",
-        message: `The user ${outcome.status} the clarification. Present it as an unresolved question in the final response.`,
-        nextAction: "Finish with the unresolved question; do not retry ask_user.",
-        fingerprint: `aborted:clarification_${outcome.status}`,
-      });
+      const message = outcome.status === "declined"
+        ? "The user declined the clarification. Do not ask it again. Continue only when a safe reversible assumption is available; otherwise finish with the open question."
+        : outcome.status === "cancelled"
+          ? "The clarification was cancelled. Do not retry it automatically."
+          : "The clarification UI became unavailable. Continue only with a safe reversible assumption, or finish with the open question.";
+      return controlOutcome(outcome.status, message);
     }
     const selected = args.options.find((option) => option.id === outcome.choice);
     const answer = selected ? `${selected.label} (${selected.id})` : outcome.choice;
@@ -94,3 +91,14 @@ export const askUserTool: ToolDefinition<AskUserArgs> = {
     };
   },
 };
+
+function controlOutcome(
+  status: Exclude<ClarificationOutcome["status"], "answered">,
+  message: string,
+): ToolResult {
+  return {
+    content: [{ type: "text", text: `Clarification ${status}: ${message}` }],
+    isError: false,
+    details: { status, controlOutcome: "clarification" },
+  };
+}

@@ -139,7 +139,7 @@ export class EvidenceLedger {
       const command = readCommand(outcome.arguments);
       const verificationKind = verificationKindForOutcome(outcome, command);
       if (verificationKind && verificationKind !== "diff_inspection" && verificationKind !== "manual_inspection") {
-        return this.recordVerification(outcome, command, verificationKind);
+        return this.recordVerification(outcome, command, verificationKind, resolvedDiagnosticIds);
       }
       if (verificationKind === "diff_inspection") {
         const mutationIds = this.resolveDocsMutationsWithDiffInspection(outcome.toolCallId);
@@ -429,11 +429,15 @@ export class EvidenceLedger {
     outcome: EvidenceToolOutcome,
     command: string,
     verificationKind: VerificationKind,
+    alreadyResolvedDiagnosticIds: string[] = [],
   ): EvidenceEntry {
     const unverifiedMutations = this.entries.filter((entry) => entry.kind === "mutation" && entry.status === "unverified");
     const activeDiagnostics = this.entries.filter((entry) => entry.kind === "diagnostic" && entry.status === "active");
     const mutationIds = unverifiedMutations.map((entry) => entry.id);
-    const diagnosticIds = activeDiagnostics.map((entry) => entry.id);
+    const diagnosticIds = [...new Set([
+      ...alreadyResolvedDiagnosticIds,
+      ...activeDiagnostics.map((entry) => entry.id),
+    ])];
 
     for (const entry of unverifiedMutations) {
       entry.status = "success";
@@ -501,10 +505,6 @@ export class EvidenceLedger {
   }
 
   private resolveActiveDiagnosticsForSuccessfulTool(outcome: EvidenceToolOutcome): string[] {
-    const semantics = resolveToolSemantics(outcome.toolName, outcome.semantics);
-    if (!hasToolEffect(semantics, "state_read") && !hasToolEffect(semantics, "state_mutation")) {
-      return [];
-    }
     const resolvedIds: string[] = [];
     for (const entry of this.entries) {
       if (entry.kind !== "diagnostic" || entry.status !== "active" || entry.toolName !== outcome.toolName) {

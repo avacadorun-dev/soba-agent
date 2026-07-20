@@ -110,6 +110,63 @@ afterEach(() => {
 });
 
 describe("createSobaRuntime", () => {
+  test("forwards compaction cancellation to the provider request", async () => {
+    const session = SessionManager.inMemory(projectRoot);
+    for (let index = 0; index < 20; index++) {
+      session.appendItem({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: `Context ${index}: ${"x".repeat(500)}` }],
+      });
+      session.appendItem({
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: `Result ${index}: ${"y".repeat(500)}` }],
+      });
+    }
+    const compactionConfig = {
+      ...DEFAULT_COMPACTION_CONFIG,
+      keepRecentTokens: 100,
+      minReclaimableTokens: 1,
+      minSavingsRatio: 0,
+      timeoutMs: 1_000,
+    };
+    const composition = await createSobaRuntime({
+      cwd: projectRoot,
+      session,
+      config: { ...makeConfig(), compaction: compactionConfig },
+      compactionConfig,
+      interactive: false,
+      modelExplicitlyPassed: true,
+      noStream: true,
+      stream: false,
+      tokenBudget: 0,
+      debug: false,
+      providerRegistryConfigPath: registryConfigPath(),
+    });
+    let started!: () => void;
+    const requestStarted = new Promise<void>((resolve) => { started = resolve; });
+    let providerSignal: AbortSignal | undefined;
+    composition.client.create = async (_params, options) => {
+      providerSignal = options?.signal;
+      started();
+      return new Promise<ResponseResource>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new Error("provider request aborted")), { once: true });
+      });
+    };
+    const abort = new AbortController();
+
+    const pending = composition.contextManager.manualCompact(undefined, 10, 5, "runtime-compaction", abort.signal);
+    await requestStarted;
+    abort.abort("test cancellation");
+    const outcome = await pending;
+
+    expect(providerSignal).toBeDefined();
+    expect(providerSignal?.aborted).toBe(true);
+    expect(outcome.status).toBe("cancelled");
+    expect(session.getCapsuleEntries()).toHaveLength(0);
+  });
+
   test("builds one shared runtime composition over the legacy AgentLoop", async () => {
     const session = SessionManager.inMemory(projectRoot);
     const composition = await createSobaRuntime({

@@ -11,6 +11,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { ContextMeter } from "../../../src/engine/compaction/context-meter";
+import { SessionManager } from "../../../src/infrastructure/persistence/sessions/session-manager";
+import { estimateTokens } from "../../../src/kernel/session/estimation";
 import type { SessionEntry, SessionItemEntry } from "../../../src/kernel/transcript/types";
 
 // ─── Helpers ───
@@ -76,6 +78,132 @@ describe("ContextMeter — estimated source (no watermark)", () => {
     const snapWithout = meter.snapshot(branch, "fp1", 0, 0, 0);
     const snapWith = meter.snapshot(branch, "fp1", 0, 0, 5000);
     expect(snapWith.effectiveTokens).toBe(snapWithout.effectiveTokens + 5000);
+  });
+
+  test("estimated snapshot measures the same portable capsule prefix as buildInput", () => {
+    const session = SessionManager.inMemoryV2();
+    const compactedId = session.appendItem({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Old request that is now compacted" }],
+    });
+    const keptId = session.appendItem({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Recent retained context" }],
+    });
+    session.appendContextCapsule({
+      checkpointId: "ck_123456789abc",
+      trigger: "auto_threshold",
+      strategy: "portable_only",
+      quality: "portable",
+      portableState: {
+        goal: "Continue the compacted task",
+        constraints: ["Keep the capsule in the measured request"],
+        completed: ["Read the old request"],
+        inProgress: [],
+        pending: ["Finish the task"],
+        decisions: [],
+        blockers: [],
+        nextSteps: ["Use recent context"],
+      },
+      artifacts: {
+        readFiles: ["src/example.ts"],
+        modifiedFiles: [],
+        verificationCommands: [],
+        verificationStatus: "unknown",
+      },
+      activatedSkills: [],
+      provenance: {
+        firstCompactedEntryId: compactedId,
+        firstKeptEntryId: keptId,
+        sourceEntryIds: [compactedId],
+      },
+      metrics: {
+        effectiveTokensBefore: 1_000,
+        estimatedTokensAfter: 400,
+        reclaimedTokens: 600,
+        savingsRatio: 0.6,
+        generationDurationMs: 10,
+      },
+    });
+    session.appendItem({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Fresh tail after the capsule" }],
+    });
+
+    const meter = new ContextMeter(128_000, 16_384, 8_192);
+    const snapshot = meter.snapshot(session.getBranch(), "fp1", 1_000, 500);
+    const expected = 1_500 + estimateTokens(session.buildInput().items);
+
+    expect(snapshot.effectiveTokens).toBe(expected);
+    expect(snapshot.effectiveTokens).toBeGreaterThan(1_500 + estimateTokens(session.buildInput().items.slice(1)));
+  });
+
+  test("estimated snapshot measures a compatible native capsule exactly", () => {
+    const session = SessionManager.inMemoryV2();
+    const compactedId = session.appendItem({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Old native request" }],
+    });
+    const keptId = session.appendItem({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Native retained tail" }],
+    });
+    session.appendContextCapsule({
+      checkpointId: "ck_abcdef123456",
+      trigger: "hard_limit",
+      strategy: "native_portable",
+      quality: "native",
+      portableState: {
+        goal: "Continue natively",
+        constraints: [],
+        completed: [],
+        inProgress: [],
+        pending: [],
+        decisions: [],
+        blockers: [],
+        nextSteps: [],
+      },
+      artifacts: {
+        readFiles: [],
+        modifiedFiles: [],
+        verificationCommands: [],
+        verificationStatus: "unknown",
+      },
+      activatedSkills: [],
+      nativeContinuation: {
+        provider: { adapterId: "test", endpointOrigin: "https://example.test", model: "native" },
+        compatibilityKey: "native-key",
+        items: [{
+          type: "message",
+          role: "system",
+          content: [{ type: "input_text", text: "Opaque compatible native continuation" }],
+        }],
+      },
+      provenance: {
+        firstCompactedEntryId: compactedId,
+        firstKeptEntryId: keptId,
+        sourceEntryIds: [compactedId],
+      },
+      metrics: {
+        effectiveTokensBefore: 1_000,
+        estimatedTokensAfter: 400,
+        reclaimedTokens: 600,
+        savingsRatio: 0.6,
+        generationDurationMs: 10,
+      },
+    });
+
+    const meter = new ContextMeter(128_000, 16_384, 8_192, "native-key");
+    const snapshot = meter.snapshot(session.getBranch(), "fp1", 1_000, 500);
+
+    expect(snapshot.effectiveTokens).toBe(
+      1_500 + estimateTokens(session.buildInput("native-key").items),
+    );
   });
 });
 

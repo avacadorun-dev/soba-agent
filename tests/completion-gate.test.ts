@@ -187,6 +187,29 @@ describe("diagnoseFinishArguments", () => {
 
     expect(issues.some((issue) => issue.includes("criteria[0].evidenceIds"))).toBe(true);
   });
+
+  test("принимает компактный criteria:string[] от совместимых моделей", () => {
+    const issues = diagnoseFinishArguments(
+      makeToolCall(JSON.stringify({
+        summary: "ok",
+        status: "completed",
+        criteria: ["Tests pass", "CLI starts"],
+      })),
+    );
+    const request = parseFinishRequest(
+      makeToolCall(JSON.stringify({
+        summary: "ok",
+        status: "completed",
+        criteria: ["Tests pass", "CLI starts"],
+      })),
+    );
+
+    expect(issues).toEqual([]);
+    expect(request?.criteria).toEqual([
+      { criterion: "Tests pass" },
+      { criterion: "CLI starts" },
+    ]);
+  });
 });
 
 describe("parseFinishRequest", () => {

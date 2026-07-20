@@ -168,7 +168,7 @@ export class AgentLoop {
       sessionId: this.session.getSessionId(),
       session: this.session,
       bashMaxTimeoutSeconds: this.runtime.options.bashMaxTimeoutSeconds,
-      requestClarification: (request) => this.runtime.eventBus.requestClarification(request),
+      requestClarification: (request, signal) => this.runtime.eventBus.requestClarification(request, signal),
     };
   }
 

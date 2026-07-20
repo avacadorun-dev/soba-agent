@@ -88,8 +88,9 @@ function diagnoseCriteria(value: unknown): string | null {
   }
   for (let i = 0; i < value.length; i++) {
     const item = value[i];
+    if (typeof item === "string" && item.trim().length > 0) continue;
     if (typeof item !== "object" || item === null) {
-      return `criteria[${i}] must be an object with a 'criterion' string field.`;
+      return `criteria[${i}] must be a non-empty string or an object with a 'criterion' string field.`;
     }
     const record = item as Record<string, unknown>;
     if (typeof record.criterion !== "string" || record.criterion.trim().length === 0) {
@@ -332,19 +333,31 @@ export function recordToolOutcome(
     }
   }
 
-  // 2. Forward progress: any successful tool call after a tool_error indicates
-  //    the error was not blocking. Auto-resolve all previous active tool_errors
-  //    that occurred before this iteration.
+}
+
+/** Keep completion errors aligned with explicit diagnostic resolutions in the evidence ledger. */
+export function synchronizeErrorsWithDiagnosticEvidence(
+  errors: AgentTurnError[],
+  entries: ReadonlyArray<{
+    kind: string;
+    status: string;
+    toolCallId?: string;
+    resolves?: string[];
+  }>,
+): void {
+  const resolutions = new Map(
+    entries.flatMap((entry) =>
+      entry.kind === "diagnostic" && entry.status === "resolved" && entry.toolCallId
+        ? [[entry.toolCallId, entry.resolves?.at(-1)] as const]
+        : []
+    ),
+  );
   for (const error of errors) {
-    if (
-      error.status === "active" &&
-      error.type === "tool_error" &&
-      error.iteration !== undefined &&
-      error.iteration < iteration
-    ) {
-      error.status = "resolved";
-      error.resolvedByToolCallId = toolCall.call_id;
-    }
+    const diagnosticCallId = error.toolCallId ?? error.id;
+    if (error.status !== "active" || !resolutions.has(diagnosticCallId)) continue;
+    error.status = "resolved";
+    const resolvedBy = resolutions.get(diagnosticCallId);
+    if (resolvedBy) error.resolvedByToolCallId = resolvedBy;
   }
 }
 
@@ -366,6 +379,10 @@ function readCriteria(value: unknown): FinishCriterion[] | null {
   if (!Array.isArray(value)) return null;
   const criteria: FinishCriterion[] = [];
   for (const item of value) {
+    if (typeof item === "string" && item.trim().length > 0) {
+      criteria.push({ criterion: item.trim() });
+      continue;
+    }
     if (typeof item !== "object" || item === null) return null;
     const record = item as Record<string, unknown>;
     if (typeof record.criterion !== "string" || record.criterion.trim().length === 0) return null;

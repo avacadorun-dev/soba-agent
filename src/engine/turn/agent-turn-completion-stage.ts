@@ -104,6 +104,7 @@ export async function handleAgentTurnCompletionStage(input: {
       allowUnverifiedCompletion,
       runAutoVerification: () => runAutoVerification("finish"),
       appendAssistantMessagesToSession,
+      supersedeVisibleAssistantMessages,
       session,
       allItems,
       turn: turnIndex,

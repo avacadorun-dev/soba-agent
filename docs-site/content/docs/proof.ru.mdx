@@ -46,9 +46,11 @@ Proof receipt может включать:
 Смысл простой: финальный ответ можно проверить. Если агент пишет "tests passed", рядом должен быть check,
 который реально запускался. Если подтверждений нет, claim должен оставаться явно unverified.
 
-Если completion gate принимает criteria без явных evidence IDs, SOBA связывает их только с уже записанными в этом
-turn успешными mutation, verification и inspection evidence. SOBA не придумывает evidence: если подходящей записи нет,
-claim остаётся unverified.
+Если completion gate принимает criteria без явных evidence IDs, SOBA связывает каждый критерий только с релевантным
+evidence текущего turn. Сначала используются лексические и семантические признаки, затем явные связи mutation/check;
+все успешные inspection больше не прикрепляются ко всем claims автоматически. Без подходящей записи claim остаётся
+unverified. Компактный TUI handoff показывает счётчики активности без внутренних evidence IDs, а persisted proof
+сохраняет полные ссылки для `soba prove` и `soba explain-claim`.
 
 Новые Proof Bundle v1 sealed перед записью: SOBA рекурсивно редактирует распознаваемые credentials, канонизирует JSON,
 выводит `proofId` и записывает `integrity.digest`. `soba prove` показывает proof ID, run ID и digest.

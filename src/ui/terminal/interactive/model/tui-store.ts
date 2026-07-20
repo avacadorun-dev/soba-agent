@@ -74,6 +74,7 @@ export class TuiStore {
   private readonly setFileTree: Setter<string[]>;
   readonly changes: Accessor<ChangeStat[]>;
   readonly confirmation: Accessor<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
+  readonly clarification: Accessor<Extract<RuntimeEvent, { type: "clarification_request" }> | null>;
   readonly inputValue: Accessor<string>;
   readonly composerBlocks: Accessor<ComposerBlock[]>;
   readonly lastAssistantText: Accessor<string>;
@@ -108,6 +109,7 @@ export class TuiStore {
   private readonly setEffectiveContextTokens: Setter<number>;
   private readonly setChanges: Setter<ChangeStat[]>;
   private readonly setConfirmation: Setter<Extract<RuntimeEvent, { type: "dangerous_confirmation" }> | null>;
+  private readonly setClarification: Setter<Extract<RuntimeEvent, { type: "clarification_request" }> | null>;
   private readonly _toolSummaries = new Map<string, string>();
   private readonly _toolDetails = new Map<string, string[]>();
   private readonly _liveToolResultIds = new Map<string, number>();
@@ -168,6 +170,10 @@ export class TuiStore {
     [this.confirmation, this.setConfirmation] = createSignal<Extract<
       RuntimeEvent,
       { type: "dangerous_confirmation" }
+    > | null>(null);
+    [this.clarification, this.setClarification] = createSignal<Extract<
+      RuntimeEvent,
+      { type: "clarification_request" }
     > | null>(null);
     [this.inputValue, this.setInputValue] = createSignal("");
     [this.composerBlocks, this.setComposerBlocks] = createSignal<ComposerBlock[]>([]);
@@ -380,6 +386,15 @@ export class TuiStore {
     if (this.confirmation()) {
       return this.l("tui.placeholder.dangerous");
     }
+    const clarification = this.clarification();
+    if (clarification) {
+      return this.l(
+        clarification.request.allowOther
+          ? "tui.placeholder.clarificationOther"
+          : "tui.placeholder.clarification",
+        { count: clarification.request.options.length },
+      );
+    }
     return this.l("tui.placeholder.default");
   }
 
@@ -442,6 +457,7 @@ export class TuiStore {
 
   /** Stop the active tool, or cancel the turn when no tool is running. */
   cancel(): void {
+    this.cancelClarification();
     if (this.options.agentLoop.abortActiveTool()) {
       this.setStatus(this.l("tui.status.working"));
       this.add({ type: "info", content: this.l("tui.info.toolStopped") });
@@ -531,6 +547,10 @@ export class TuiStore {
     if (parsedInput.mode === "empty" && blocks.length === 0) return;
     if (this.confirmation()) {
       this.resolveConfirmation(trimmedInput);
+      return;
+    }
+    if (this.clarification()) {
+      this.resolveClarificationInput(trimmedInput);
       return;
     }
     this.setInputValue("");
@@ -653,9 +673,15 @@ export class TuiStore {
           sessionId: this.getSessionId(),
           source: "tui",
           content: this.buildRuntimeContent(input, blocks),
+          clarificationAvailable: true,
         });
       } else {
-        await this.options.agentLoop.runTurn(blocks.length === 0 ? input : this.buildAgentLoopContent(input, blocks));
+        this.options.agentLoop.setClarificationAvailable?.(true);
+        try {
+          await this.options.agentLoop.runTurn(blocks.length === 0 ? input : this.buildAgentLoopContent(input, blocks));
+        } finally {
+          this.options.agentLoop.setClarificationAvailable?.(false);
+        }
       }
     } catch (error) {
       this.add({
@@ -972,6 +998,15 @@ export class TuiStore {
         );
         this.setStatus(this.l("tui.status.confirmation"));
         break;
+      case "clarification_request":
+        // Claim synchronously: the event bus resolves unclaimed requests as unavailable
+        // immediately after listeners return.
+        event.claim();
+        this.finalizeStreamingReasoning();
+        this.stopNoodle();
+        this.setClarification(event);
+        this.setStatus(this.l("tui.status.clarification"));
+        break;
       case "skill_activated":
         this._notificationStore?.notify(
           "success",
@@ -1030,6 +1065,7 @@ export class TuiStore {
     this.unsubscribeProxy?.();
 
     this.confirmation()?.resolve("deny");
+    this.clarification()?.resolve({ status: "cancelled" });
   }
 
   private enqueue(content: string, kind: QueuedMessage["kind"] = "message", blocks: ComposerBlock[] = []): void {
@@ -1332,6 +1368,51 @@ export class TuiStore {
       ),
     });
     this.setStatus(this.isProcessing() ? this.l("tui.status.working") : this.l("tui.status.idle"));
+  }
+
+  answerClarification(choice: string, other?: string): void {
+    const event = this.clarification();
+    if (!event) return;
+    event.resolve({ status: "answered", choice, ...(other ? { other } : {}) });
+    this.setClarification(null);
+    this.setInputValue("");
+    this.setStatus(this.isProcessing() ? this.l("tui.status.working") : this.l("tui.status.idle"));
+    if (this.isProcessing()) this.startNoodle();
+  }
+
+  declineClarification(): void {
+    const event = this.clarification();
+    if (!event) return;
+    event.resolve({ status: "declined" });
+    this.setClarification(null);
+    this.setInputValue("");
+    this.setStatus(this.isProcessing() ? this.l("tui.status.working") : this.l("tui.status.idle"));
+    if (this.isProcessing()) this.startNoodle();
+  }
+
+  cancelClarification(): void {
+    const event = this.clarification();
+    if (!event) return;
+    event.resolve({ status: "cancelled" });
+    this.setClarification(null);
+    this.setInputValue("");
+  }
+
+  private resolveClarificationInput(input: string): void {
+    const event = this.clarification();
+    if (!event || !input) return;
+    const normalized = input.toLocaleLowerCase();
+    const numericIndex = /^\d+$/.test(normalized) ? Number(normalized) - 1 : -1;
+    const selected = numericIndex >= 0
+      ? event.request.options[numericIndex]
+      : event.request.options.find((option) =>
+          option.id.toLocaleLowerCase() === normalized || option.label.toLocaleLowerCase() === normalized
+        );
+    if (selected) {
+      this.answerClarification(selected.id);
+      return;
+    }
+    if (event.request.allowOther) this.answerClarification("other", input);
   }
 
   private resolveConfirmation(input: string): void {

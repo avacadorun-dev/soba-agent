@@ -132,6 +132,7 @@ export interface RuntimeAgentHandle {
   getTrustManager?(): RuntimeAgentTrustController;
   getWorkMode?(): WorkMode;
   setWorkMode?(mode: WorkMode): void;
+  setClarificationAvailable?(available: boolean): void;
   getModel(): string;
   getSessionManager(): RuntimeAgentSessionView;
   getContextManager(): RuntimeAgentContextView | undefined;

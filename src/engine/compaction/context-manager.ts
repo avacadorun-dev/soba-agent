@@ -26,7 +26,11 @@ import type {
   ProviderIdentity,
 } from "../../kernel/transcript/types-v2";
 import { isContextCapsuleEntry } from "../../kernel/transcript/types-v2";
-import { CapsuleGenerator, type CapsuleGeneratorConfig } from "./capsule-generator";
+import {
+  type CapsuleGenerationResult,
+  CapsuleGenerator,
+  type CapsuleGeneratorConfig,
+} from "./capsule-generator";
 import type { CapsuleValidationResult } from "./capsule-validator";
 import { findCutPoint } from "./compaction";
 import { ContextMeter, type ContextSnapshot } from "./context-meter";
@@ -131,6 +135,7 @@ export class ContextManager {
       config.contextWindow,
       config.maxOutputTokens,
       config.compaction.safetyReserveTokens,
+      config.capabilities.continuationCompatibilityKey,
     );
     this._policy = new TriggerPolicy(config.compaction);
     this._generator = new CapsuleGenerator(config.generatorConfig);
@@ -541,11 +546,15 @@ export class ContextManager {
     const startedAt = Date.now();
     const { snapshot, trigger } = plan;
     const controller = new AbortController();
+    let timedOut = false;
     const forwardAbort = () => controller.abort(externalSignal?.reason);
     if (externalSignal?.aborted) forwardAbort();
     else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
     const timeout = setTimeout(
-      () => controller.abort(new Error(`Compaction timed out after ${this._config.compaction.timeoutMs}ms`)),
+      () => {
+        timedOut = true;
+        controller.abort(new Error(`Compaction timed out after ${this._config.compaction.timeoutMs}ms`));
+      },
       this._config.compaction.timeoutMs,
     );
     const cleanup = () => {
@@ -664,12 +673,33 @@ export class ContextManager {
         plan.required,
         controller.signal,
       );
-      const result = await raceWithAbort(generation, controller.signal);
+      let result: CapsuleGenerationResult;
+      let usedTimeoutFallback = false;
+      try {
+        result = await raceWithAbort(generation, controller.signal);
+      } catch (error) {
+        // A provider deadline is a model-strategy failure, not an instruction
+        // to discard the whole barrier. Stop waiting for the provider and use
+        // the bounded local strategy. A real user/turn abort must still append
+        // nothing, including when it races with the deadline.
+        if (!timedOut || externalSignal?.aborted) throw error;
+        const fallbackSignal = externalSignal ?? new AbortController().signal;
+        result = await this._generator.generateDeterministic(
+          generationInput,
+          compactedItems,
+          keptItems,
+          plan.required,
+          fallbackSignal,
+        );
+        usedTimeoutFallback = true;
+      }
 
-      // The generator may ignore cancellation. Never append after the barrier was cancelled.
-      if (controller.signal.aborted) {
+      // The provider may ignore cancellation. Never append after an external
+      // abort; only the explicit local timeout fallback may outlive the model
+      // controller's deadline.
+      if (externalSignal?.aborted || (controller.signal.aborted && !usedTimeoutFallback)) {
         return this._makeOutcome(plan, "cancelled", startedAt, {
-          reason: abortReason(controller.signal),
+          reason: externalSignal?.aborted ? abortReason(externalSignal) : abortReason(controller.signal),
         });
       }
 
@@ -683,12 +713,26 @@ export class ContextManager {
         });
       }
 
-      if (plan.required && !result.validation.valid) {
+      if (!result.validation.valid) {
         return this._makeOutcome(plan, "failed", startedAt, {
           strategy: result.strategyUsed,
+          quality: result.draft.quality,
           metrics: result.draft.metrics,
           validation: result.validation,
-          reason: `Validation failed: ${result.validation.errors.map((e) => e.message).join("; ")}`,
+          reason: plan.required && usedTimeoutFallback
+            ? `Compaction model timed out after ${this._config.compaction.timeoutMs}ms; deterministic fallback validation failed: ${result.validation.errors.map((e) => e.message).join("; ")}`
+            : `Validation failed: ${result.validation.errors.map((e) => e.message).join("; ")}`,
+        });
+      }
+
+      const roiFailure = this._actualSoftRoiFailure(plan, result.draft.metrics);
+      if (roiFailure) {
+        return this._makeOutcome(plan, "skipped", startedAt, {
+          strategy: result.strategyUsed,
+          quality: result.draft.quality,
+          metrics: result.draft.metrics,
+          validation: result.validation,
+          reason: roiFailure,
         });
       }
 
@@ -720,7 +764,9 @@ export class ContextManager {
         metrics: result.draft.metrics,
         validation: result.validation,
         reason: result.validation.valid
-          ? `Compaction completed using ${result.strategyUsed} strategy`
+          ? usedTimeoutFallback
+            ? `Compaction model timed out after ${this._config.compaction.timeoutMs}ms; completed using deterministic fallback`
+            : `Compaction completed using ${result.strategyUsed} strategy`
           : `Compaction completed with warnings: ${result.validation.warnings.map((w) => w.message).join("; ")}`,
       });
     } catch (error) {
@@ -762,14 +808,31 @@ export class ContextManager {
       .getEntries()
       .find((candidate): candidate is ContextCapsuleEntry => candidate.id === entryId && isContextCapsuleEntry(candidate));
     if (!entry) return;
-    // A degraded deterministic capsule is safe for in-session continuity, but
-    // too noisy to become durable cross-session project memory automatically.
-    if (entry.quality === "degraded") return;
+    // Automatic working summaries belong to the canonical session transcript,
+    // not durable cross-session Project Memory. Only an explicit /compact may
+    // mirror a validated portable capsule; /capsule create remains the richer
+    // explicit handoff path.
+    if (entry.trigger !== "user_request" || entry.quality === "degraded") return;
     try {
       this._memory.addCapsule(contextCapsuleToMemoryInput(entry, this._session.getSessionId()));
     } catch {
       // Memory mirrors are advisory; a storage failure must not invalidate the session capsule.
     }
+  }
+
+  private _actualSoftRoiFailure(
+    plan: CompactionPlan,
+    metrics: ContextCapsuleEntry["metrics"],
+  ): string | null {
+    if (plan.required || plan.trigger === "user_request") return null;
+    const { minReclaimableTokens, minSavingsRatio } = this._config.compaction;
+    if (metrics.reclaimedTokens < minReclaimableTokens) {
+      return `Actual reclaimed tokens (${metrics.reclaimedTokens}) below minReclaimableTokens (${minReclaimableTokens})`;
+    }
+    if (metrics.savingsRatio < minSavingsRatio) {
+      return `Actual savings ratio (${metrics.savingsRatio.toFixed(2)}) below minSavingsRatio (${minSavingsRatio})`;
+    }
+    return null;
   }
 }
 

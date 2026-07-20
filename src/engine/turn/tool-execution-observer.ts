@@ -3,7 +3,7 @@ import type { SessionPort } from "../../kernel/session/session-port";
 import { type CheckpointEvent, extractCheckpointEvent } from "../../kernel/tools/checkpoint";
 import { hasToolEffect } from "../../kernel/tools/semantics";
 import { toolResultToOutputItem } from "../../kernel/tools/types";
-import { recordToolOutcome } from "../completion/completion-gate";
+import { recordToolOutcome, synchronizeErrorsWithDiagnosticEvidence } from "../completion/completion-gate";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { isVerificationCommand } from "../evidence/evidence-ledger";
 import type { ProjectMemorySource } from "../memory/memory-injector";
@@ -117,6 +117,7 @@ export function observeToolExecutionResult(
     details: result.details,
     semantics: execution.semantics,
   });
+  synchronizeErrorsWithDiagnosticEvidence(input.errors, input.evidenceLedger.getEntries());
 
   const checkpointEvent = observeCheckpoint(input);
   observeSkillLifecycle(input);

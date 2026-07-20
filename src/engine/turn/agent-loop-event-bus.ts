@@ -69,15 +69,38 @@ export class AgentLoopEventBus {
     this.dispatch(recordingEvent);
   }
 
-  requestClarification(request: AskUserArgs): Promise<ClarificationOutcome> {
+  requestClarification(request: AskUserArgs, signal?: AbortSignal): Promise<ClarificationOutcome> {
     return new Promise((resolve) => {
       let claimed = false;
       let settled = false;
+      const onAbort = () => settle({ status: "cancelled" });
       const settle = (outcome: ClarificationOutcome) => {
         if (settled) return;
         settled = true;
+        signal?.removeEventListener("abort", onAbort);
+        this.options.flight({
+          kind: "runtime_event",
+          payload: {
+            event: "clarification_resolved",
+            status: outcome.status,
+            ...(outcome.status === "answered" ? { choice: outcome.choice } : {}),
+          },
+        });
         resolve(outcome);
       };
+      if (signal?.aborted) {
+        settle({ status: "cancelled" });
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.options.flight({
+        kind: "runtime_event",
+        payload: {
+          event: "clarification_requested",
+          optionCount: request.options.length,
+          allowOther: request.allowOther === true,
+        },
+      });
       const event: ClarificationRequestEvent = {
         type: "clarification_request",
         timestamp: Date.now(),

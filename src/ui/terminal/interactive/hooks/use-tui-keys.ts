@@ -1,5 +1,6 @@
 import type { CliRenderer, ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
+import type { ClarificationDialogManager } from "../lib/clarification-dialog-manager";
 import { keyMatchesAction } from "../lib/keymap";
 import type { TrustDialogManager } from "../lib/trust-dialog-manager";
 import type { NotificationStore } from "../model/notification-store";
@@ -16,11 +17,33 @@ interface TuiKeysOptions {
   shutdown: () => void;
   renderer: CliRenderer;
   trustDialogManager?: TrustDialogManager;
+  clarificationDialogManager?: ClarificationDialogManager;
   openSearch?: () => void;
 }
 
 export function useTuiKeys(options: TuiKeysOptions): void {
   useKeyboard((key) => {
+    if (options.store.clarification() && options.clarificationDialogManager) {
+      if (key.ctrl && key.name === "c") {
+        key.preventDefault();
+        options.store.cancel();
+        return;
+      }
+      const handled = options.clarificationDialogManager.handleKey(
+        key,
+        (index) => {
+          const option = options.store.clarification()?.request.options[index];
+          if (option) options.store.answerClarification(option.id);
+        },
+        () => options.store.declineClarification(),
+      );
+      if (handled) {
+        key.preventDefault();
+        return;
+      }
+      // Printable keys continue to the input editor so allowOther can accept text.
+    }
+
     // When trust dialog is open, route all keys through the dialog manager.
     if (options.store.confirmation() && options.trustDialogManager) {
       if (key.ctrl && key.name === "c") {

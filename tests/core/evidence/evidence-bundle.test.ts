@@ -629,7 +629,7 @@ describe("Evidence Bundle builder", () => {
     });
 
     expect(formatEvidenceBundleForHandoff(bundle)).toBe(
-      "\n**Evidence**\n- Status: verified\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Permissions: bash: bun test auto trust=safe\n- Risks: none",
+      "\n**Evidence**\n- Status: verified\n- Activity: 2 successful · 1 change, 1 check\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Risks: none",
     );
   });
 

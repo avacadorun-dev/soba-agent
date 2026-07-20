@@ -24,7 +24,8 @@ describe("plan mode policy", () => {
 
   test("filters tool names in restricted work modes", () => {
     const tools = ["read", "write", "edit", "bash", "ask_user", "checkpoint"];
-    expect(filterToolsForWorkMode(tools, "agent")).toEqual(tools);
+    expect(filterToolsForWorkMode(tools, "agent")).toEqual(["read", "write", "edit", "bash", "checkpoint"]);
+    expect(filterToolsForWorkMode(tools, "agent", { clarificationAvailable: true })).toEqual(tools);
     expect(filterToolsForWorkMode(tools, "plan")).toEqual(["read", "checkpoint"]);
     expect(filterToolsForWorkMode(tools, "plan", { clarificationAvailable: true })).toEqual(["read", "ask_user", "checkpoint"]);
     expect(filterToolsForWorkMode(tools, "goal")).toEqual(["read", "checkpoint"]);

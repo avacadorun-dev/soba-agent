@@ -5,6 +5,7 @@
  * Spec: internal-design-notes § Context Meter
  */
 
+import { buildContextCapsuleInput } from "../../kernel/session/context-capsule-input";
 import { estimateTokens } from "../../kernel/session/estimation";
 import type { ItemParam, SessionEntry, SessionItemEntry } from "../../kernel/transcript/types";
 import type { ContextCapsuleEntry } from "../../kernel/transcript/types-v2";
@@ -51,13 +52,20 @@ export class ContextMeter {
   private _contextWindow: number;
   private _maxOutputTokens: number;
   private _safetyReserveTokens: number;
+  private _providerCompatibilityKey?: string;
 
-  constructor(contextWindow: number, maxOutputTokens: number, safetyReserveTokens: number) {
+  constructor(
+    contextWindow: number,
+    maxOutputTokens: number,
+    safetyReserveTokens: number,
+    providerCompatibilityKey?: string,
+  ) {
     this._providerInputTokens = 0;
     this._watermark = undefined;
     this._contextWindow = contextWindow;
     this._maxOutputTokens = maxOutputTokens;
     this._safetyReserveTokens = safetyReserveTokens;
+    this._providerCompatibilityKey = providerCompatibilityKey;
   }
 
   /**
@@ -227,11 +235,13 @@ export class ContextMeter {
       return branch.filter((e) => e.type === "item").map((e) => (e as SessionItemEntry).item);
     }
 
-    // Capsule found: only return items from firstKeptEntryId onwards
+    const items = buildContextCapsuleInput(lastCapsule, this._providerCompatibilityKey);
+
+    // Capsule found: prepend its exact model input, then retain items from firstKeptEntryId onwards.
     const firstKeptEntryId = lastCapsule.provenance?.firstKeptEntryId;
     if (!firstKeptEntryId || firstKeptEntryId === "root") {
-      // No kept entries specified — capsule compacted everything
-      return [];
+      // No kept entries specified — capsule compacted everything except its own continuation state.
+      return items;
     }
 
     const firstKeptIdx = branch.findIndex((e) => e.id === firstKeptEntryId);
@@ -241,16 +251,18 @@ export class ContextMeter {
       if (capsuleIdx === -1) {
         return branch.filter((e) => e.type === "item").map((e) => (e as SessionItemEntry).item);
       }
-      return branch
+      items.push(...branch
         .slice(capsuleIdx + 1)
         .filter((e) => e.type === "item")
-        .map((e) => (e as SessionItemEntry).item);
+        .map((e) => (e as SessionItemEntry).item));
+      return items;
     }
 
-    return branch
+    items.push(...branch
       .slice(firstKeptIdx)
       .filter((e) => e.type === "item")
-      .map((e) => (e as SessionItemEntry).item);
+      .map((e) => (e as SessionItemEntry).item));
+    return items;
   }
 
   // ─── Getters ───

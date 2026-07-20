@@ -26,7 +26,7 @@ export interface CompactionConfig {
   safetyReserveTokens: number;
   /** Fraction of the hard limit at which proactive compaction becomes eligible */
   autoCompactThresholdRatio: number;
-  /** Timeout for a preflight compaction operation in ms */
+  /** Model-summary deadline before deterministic fallback, in ms */
   timeoutMs: number;
   /** @deprecated Use timeoutMs. Accepted for one compatibility release. */
   backgroundTimeoutMs?: number;

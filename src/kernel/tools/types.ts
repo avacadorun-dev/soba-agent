@@ -24,6 +24,8 @@ export interface JsonSchemaProperty {
   additionalProperties?: boolean;
   maxLength?: number;
   minLength?: number;
+  minItems?: number;
+  maxItems?: number;
   pattern?: string;
 }
 
@@ -92,7 +94,7 @@ export interface ToolContext {
   /** Maximum timeout any bash tool call may request, in seconds */
   bashMaxTimeoutSeconds?: number;
   /** Optional interactive clarification bridge supplied by the active host. */
-  requestClarification?: (request: AskUserArgs) => Promise<ClarificationOutcome>;
+  requestClarification?: (request: AskUserArgs, signal?: AbortSignal) => Promise<ClarificationOutcome>;
   /** Optional ephemeral output sink for tools that can report progress while running. */
   onOutput?: (chunk: string) => void;
 }

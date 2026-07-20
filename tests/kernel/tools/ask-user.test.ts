@@ -29,9 +29,20 @@ describe("ask_user tool", () => {
     expect(result.content[0]?.text).toContain("Release candidate (rc)");
   });
 
-  test("returns an actionable error when no structured UI claims the request", async () => {
+  test("returns a neutral control outcome when no structured UI claims the request", async () => {
     const result = await askUserTool.execute(rawArgs, { cwd: "/repo" });
-    expect(result.isError).toBe(true);
-    expect(result.error?.code).toBe("clarification_unavailable");
+    expect(result.isError).toBe(false);
+    expect(result.details).toMatchObject({ status: "unavailable", controlOutcome: "clarification" });
+  });
+
+  test("returns declined and cancelled as neutral control outcomes", async () => {
+    for (const status of ["declined", "cancelled"] as const) {
+      const result = await askUserTool.execute(rawArgs, {
+        cwd: "/repo",
+        requestClarification: async () => ({ status }),
+      });
+      expect(result.isError).toBe(false);
+      expect(result.details).toMatchObject({ status, controlOutcome: "clarification" });
+    }
   });
 });

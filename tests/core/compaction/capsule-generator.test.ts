@@ -19,6 +19,8 @@ import { DeterministicStrategy } from "../../../src/engine/compaction/strategies
 import { type NativeCompactor, NativePortableStrategy } from "../../../src/engine/compaction/strategies/native-portable";
 import { type ModelInvoker, PortableOnlyStrategy } from "../../../src/engine/compaction/strategies/portable-only";
 import type { CapsuleGenerationInput, ContextCapsuleDraft } from "../../../src/engine/compaction/strategies/types";
+import { serializeCapsuleContext } from "../../../src/kernel/session/context-capsule-input";
+import { estimateTokens } from "../../../src/kernel/session/estimation";
 import { toolResultToOutputItem } from "../../../src/kernel/tools/types";
 import type { ItemParam } from "../../../src/kernel/transcript/types";
 import type {
@@ -351,6 +353,44 @@ describe("DeterministicStrategy", () => {
     });
   });
 
+  it("supersedes stale clarification waits after an answered ask_user call", async () => {
+    const strategy = new DeterministicStrategy();
+    const callId = "call_choose_subdir";
+    const sourceItems: ItemParam[] = [
+      functionCall("ask_user", {
+        question: "Какую поддиректорию src/engine/ изучаем досконально?",
+        options: [
+          { id: "turn", label: "turn/" },
+          { id: "verification", label: "verification/" },
+        ],
+      }, callId),
+      functionCallOutput(callId, "User selected: turn/ (turn)"),
+    ];
+
+    const draft = await strategy.generate(makeGenerationInput({
+      sourceItems,
+      previousPortableState: {
+        goal: "Study the engine",
+        constraints: [],
+        completed: [],
+        inProgress: ["Awaiting user selection of the subdirectory"],
+        pending: ["User must specify which subdirectory to inspect", "Survey other directories"],
+        decisions: [],
+        blockers: ["The specific subdirectory has not yet been provided by the user", "Network unavailable"],
+        nextSteps: ["Ask the user to name the subdirectory", "Survey other directories"],
+      },
+    }), ABORT_SIGNAL);
+
+    expect(draft.portableState.inProgress).toEqual([]);
+    expect(draft.portableState.pending).toEqual(["Survey other directories"]);
+    expect(draft.portableState.blockers).toEqual(["Network unavailable"]);
+    expect(draft.portableState.nextSteps).toEqual(["Survey other directories"]);
+    expect(draft.portableState.decisions).toContainEqual({
+      decision: "Clarification answered: Какую поддиректорию src/engine/ изучаем досконально? → turn/ (turn)",
+      rationale: "Structured ask_user response",
+    });
+  });
+
   it("uses a final-answer message as deterministic completed-work evidence", async () => {
     const strategy = new DeterministicStrategy();
     const finalAnswer: Extract<ItemParam, { type: "message"; role: "assistant" }> = {
@@ -491,6 +531,37 @@ describe("PortableOnlyStrategy", () => {
 
     expect(prompt).toContain("Previous context capsule state");
     expect(prompt).toContain("Mapped turn loop");
+  });
+
+  it("reconciles an answered ask_user outcome after model summarization", async () => {
+    const callId = "call_scope";
+    const strategy = new PortableOnlyStrategy({
+      invoke: async () => JSON.stringify({
+        goal: "Inspect engine",
+        constraints: [],
+        completed: [],
+        inProgress: ["Awaiting user selection"],
+        pending: ["User must select a scope"],
+        decisions: [],
+        blockers: ["Confirmation is required from the user"],
+        nextSteps: ["Ask the user to select a scope"],
+      }),
+    });
+    const draft = await strategy.generate(makeGenerationInput({
+      sourceItems: [
+        functionCall("ask_user", {
+          question: "Choose the scope",
+          options: [{ id: "turn", label: "turn/" }, { id: "all", label: "all engine" }],
+        }, callId),
+        functionCallOutput(callId, "User selected: turn/ (turn)"),
+      ],
+    }), ABORT_SIGNAL);
+
+    expect(draft.portableState.inProgress).toEqual([]);
+    expect(draft.portableState.pending).toEqual([]);
+    expect(draft.portableState.blockers).toEqual([]);
+    expect(draft.portableState.nextSteps).toEqual([]);
+    expect(draft.portableState.decisions[0]?.decision).toContain("Choose the scope → turn/ (turn)");
   });
 
   it("falls back на deterministic при network error", async () => {
@@ -1109,9 +1180,23 @@ describe("CapsuleGenerator", () => {
     });
 
     const result = await generator.generate(input, items, keptItems, false, ABORT_SIGNAL);
+    const expectedCapsuleTokens = estimateTokens([{
+      type: "message",
+      role: "system",
+      content: [{
+        type: "input_text",
+        text: `SOBA Context Capsule\n\n${serializeCapsuleContext(
+          result.draft.portableState,
+          result.draft.artifacts,
+          result.draft.activatedSkills,
+        )}`,
+      }],
+    }]);
 
     expect(result.draft.metrics.effectiveTokensBefore).toBe(50_000);
-    expect(result.draft.metrics.estimatedTokensAfter).toBeGreaterThan(0);
+    expect(result.draft.metrics.estimatedTokensAfter).toBe(
+      3_000 + expectedCapsuleTokens + estimateTokens(keptItems),
+    );
     expect(result.draft.metrics.reclaimedTokens).toBeGreaterThan(0);
     expect(result.draft.metrics.savingsRatio).toBeGreaterThan(0);
   });

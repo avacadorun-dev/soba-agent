@@ -16,6 +16,7 @@
 
 import type { ItemParam } from "../../../kernel/transcript/types";
 import type { ArtifactLedger, PortableContextState, ProviderCapabilities } from "../../../kernel/transcript/types-v2";
+import { reconcileStructuredState } from "../structured-state-reducer";
 import { toolFailureOutput } from "../tool-output-failure";
 import type { CapsuleGenerationInput, CapsuleStrategy, ContextCapsuleDraft } from "./types";
 
@@ -38,10 +39,13 @@ export class DeterministicStrategy implements CapsuleStrategy {
   async generate(input: CapsuleGenerationInput, _signal: AbortSignal): Promise<ContextCapsuleDraft> {
     const startTime = Date.now();
 
-    const portableState = this._extractPortableState(
+    const portableState = reconcileStructuredState(
+      this._extractPortableState(
+        input.sourceItems,
+        input.customInstructions,
+        input.previousPortableState,
+      ),
       input.sourceItems,
-      input.customInstructions,
-      input.previousPortableState,
     );
     const artifacts = this._extractArtifactLedger(input.sourceItems);
 

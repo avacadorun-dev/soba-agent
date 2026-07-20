@@ -112,7 +112,57 @@ describe("OpenTUI Solid store", () => {
       sessionId: "session_tui",
       source: "tui",
       content: [{ type: "text", text: "inspect runtime" }],
+      clarificationAvailable: true,
     });
+  });
+
+  test("claims and resolves a structured clarification without ending the turn", async () => {
+    const store = createStore();
+    let claimed = false;
+    let outcome: unknown;
+    store.onAgentEvent(event({
+      type: "clarification_request",
+      request: {
+        question: "Choose a scope",
+        options: [
+          { id: "small", label: "Small" },
+          { id: "large", label: "Large" },
+        ],
+        allowOther: true,
+      },
+      claim: () => { claimed = true; },
+      resolve: (value: unknown) => { outcome = value; },
+    }));
+
+    expect(claimed).toBe(true);
+    expect(store.clarification()?.request.question).toBe("Choose a scope");
+    expect(store.status()).toContain("paused");
+
+    await store.submit("custom scope");
+
+    expect(outcome).toEqual({ status: "answered", choice: "other", other: "custom scope" });
+    expect(store.clarification()).toBeNull();
+  });
+
+  test("declines or cancels clarification as a control outcome", () => {
+    const outcomes: unknown[] = [];
+    const makeRequest = () => event({
+      type: "clarification_request",
+      request: {
+        question: "Choose",
+        options: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+      },
+      claim: () => {},
+      resolve: (value: unknown) => outcomes.push(value),
+    });
+    const store = createStore();
+
+    store.onAgentEvent(makeRequest());
+    store.declineClarification();
+    store.onAgentEvent(makeRequest());
+    store.cancelClarification();
+
+    expect(outcomes).toEqual([{ status: "declined" }, { status: "cancelled" }]);
   });
 
   test("submits composer blocks as runtime content before typed prompt", async () => {

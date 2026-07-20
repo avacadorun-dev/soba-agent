@@ -1909,7 +1909,37 @@ describe("AgentLoop", () => {
     expect(result.activeErrors).toHaveLength(0);
   });
 
-  test("tool_error auto-resolved by forward progress — any successful call after error", async () => {
+  test("rejected finish supersedes its visible draft before the corrected final answer", async () => {
+    const invalidFinish = makeToolCallResponse(
+      "finish",
+      JSON.stringify({ summary: "Draft duplicate", status: "completed", criteria: [42] }),
+      "finish_invalid",
+    );
+    invalidFinish.output.unshift(makeTextResponse("Draft duplicate").output[0]!);
+    const events: AgentEvent[] = [];
+    const loop = new AgentLoop(
+      makeClient([invalidFinish, makeFinishResponse("Correct final")]),
+      SessionManager.inMemory("/test"),
+      new ToolRegistry(),
+      "/test",
+      { emitEvents: true },
+    );
+    loop.onEvent((event) => events.push(event));
+
+    await loop.runTurn("Finish cleanly");
+
+    const draftEvent = events.find((event) =>
+      event.type === "assistant_message" && event.text === "Draft duplicate"
+    );
+    expect(draftEvent?.type).toBe("assistant_message");
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "assistant_message_superseded",
+      messageId: draftEvent?.type === "assistant_message" ? draftEvent.messageId : "missing",
+    }));
+    expect(events.filter((event) => event.type === "assistant_message" && event.text.includes("Correct final"))).toHaveLength(1);
+  });
+
+  test("unrelated forward progress does not resolve a tool error; a matching tool recovery does", async () => {
     const responses = [
       makeToolCallResponse(
         "optional-check",
@@ -1917,15 +1947,17 @@ describe("AgentLoop", () => {
         "git_missing",
       ),
       makeToolCallResponse("check", '{"input":"tests"}', "tests_passed"),
+      makeToolCallResponse("optional-check", '{"input":"status --safe"}', "git_recovered"),
       makeFinishResponse("Готово.", ["Requested work is verified"]),
     ];
     const tools = new ToolRegistry();
-    tools.register(
-      makeDummyTool("optional-check", async () => ({
-        content: [{ type: "text", text: "not a git repository" }],
-        isError: true,
-      })),
-    );
+    let optionalAttempts = 0;
+    tools.register(makeDummyTool("optional-check", async () => {
+      optionalAttempts++;
+      return optionalAttempts === 1
+        ? { content: [{ type: "text", text: "not a git repository" }], isError: true }
+        : { content: [{ type: "text", text: "status recovered" }], isError: false };
+    }));
     tools.register(makeDummyTool("check"));
     const loop = new AgentLoop(
       makeClient(responses),
@@ -1936,9 +1968,8 @@ describe("AgentLoop", () => {
 
     const result = await loop.runTurn("Проверь результат");
 
-    // Error auto-resolved by forward progress (check succeeded after optional-check failed)
     expect(result.errors[0]?.status).toBe("resolved");
-    expect(result.errors[0]?.resolvedByToolCallId).toBe("tests_passed");
+    expect(result.errors[0]?.resolvedByToolCallId).toBe("git_recovered");
     expect(result.activeErrors).toHaveLength(0);
   });
 
@@ -2123,7 +2154,8 @@ describe("AgentLoop", () => {
       expect(text).toContain("Verification passed");
       expect(text).toContain("**Evidence**");
       expect(text).toContain("Status: verified");
-      expect(text).toContain("supported (ev_verification_verify_1)");
+      expect(text).toContain("Verification passed and the requested work is complete. supported");
+      expect(text).not.toContain("ev_verification_verify_1");
     }
   });
 

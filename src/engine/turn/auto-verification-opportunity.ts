@@ -3,7 +3,7 @@ import type { SessionPort } from "../../kernel/session/session-port";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import { type ToolContext, toolResultToOutputItem } from "../../kernel/tools/types";
 import type { DebugEntry } from "../../kernel/transcript/types";
-import { recordToolOutcome } from "../completion/completion-gate";
+import { recordToolOutcome, synchronizeErrorsWithDiagnosticEvidence } from "../completion/completion-gate";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import type { TrustController } from "../permissions/trust-controller";
 import type { ProjectCommandFileReader } from "../verification/types";
@@ -128,6 +128,7 @@ export async function runAutoVerificationOpportunity(
   }
 
   const summaryAfter = input.ledger.getSummary();
+  synchronizeErrorsWithDiagnosticEvidence(input.errors, summaryAfter.entries);
   if (!autoVerification.didExecute) {
     return {
       didExecute: false,
