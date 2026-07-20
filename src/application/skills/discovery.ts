@@ -130,7 +130,13 @@ export class SkillDiscovery {
       diagnostics.push(...discovered.diagnostics);
     }
 
-    skills.push(...skillsByName.values());
+    skills.push(
+      ...Array.from(skillsByName.values()).sort((left, right) => {
+        if (left.name < right.name) return -1;
+        if (left.name > right.name) return 1;
+        return 0;
+      }),
+    );
 
     return { skills, diagnostics };
   }

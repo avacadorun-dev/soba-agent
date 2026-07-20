@@ -195,14 +195,17 @@ Stop when the task-specific output is complete.
       const catalogForPrompt = skillManager.getCatalogForPrompt();
 
       expect(catalogForPrompt).toHaveLength(2);
-      expect(catalogForPrompt[0].name).toBe("test-skill");
-      expect(catalogForPrompt[1].name).toBe("another-skill");
+      expect(catalogForPrompt.map((skill) => skill.name)).toEqual([
+        "another-skill",
+        "test-skill",
+      ]);
 
       // Verify catalog contains required fields
-      expect(catalogForPrompt[0].description).toBe(
+      const testSkill = catalogForPrompt.find((skill) => skill.name === "test-skill");
+      expect(testSkill?.description).toBe(
         "A test skill for integration testing",
       );
-      expect(catalogForPrompt[0].location).toContain("test-skill");
+      expect(testSkill?.location).toContain("test-skill");
     });
 
     it("catalog is empty when no skills exist", () => {
