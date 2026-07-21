@@ -216,7 +216,7 @@ soba provider add my-llm \
 
 自定义 providers 保存在 `registry.customProviders` 中。
 
-模型特定的 wire-format 兼容性应在完整的 provider JSON 中声明，并通过 `soba provider add <id> --from-file <path>` 加载。例如，`"compatibility": ["single_system_message"]` 会让 SOBA 为拒绝多条 system messages 的 chat template 只发送一条位于开头的 system message。完整 schema 和支持的 features 请参阅[模型兼容性元数据](/zh/docs/providers#43-模型兼容性元数据)。
+模型特定的 wire-format 兼容性应在完整的 provider JSON 中声明，并通过 `soba provider add <id> --from-file <path>` 加载。例如，`"compatibility": ["single_system_message"]` 会让 SOBA 为拒绝多条 system messages 的 chat template 只发送一条位于开头的 system message。完整 schema 和支持的 features 请参阅[模型兼容性元数据](/zh/docs/v0.6/providers#43-模型兼容性元数据)。
 
 ---
 
