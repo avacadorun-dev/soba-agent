@@ -100,7 +100,7 @@ const sampleProvider: ProviderDefinition = {
       maxOutput: 4_000,
       supportsStreaming: true,
       supportsThinking: false,
-      compatibility: ["prefer_max_completion_tokens"],
+      compatibility: ["prefer_max_completion_tokens", "single_system_message"],
     },
     { id: "my-llm-13b", name: "My LLM 13B", contextWindow: 16_000, maxOutput: 4_000, supportsStreaming: true, supportsThinking: false },
   ],
@@ -441,6 +441,7 @@ describe("provider add --from-file round-trip", () => {
     expect((reloaded!.customProviders[sampleProvider.id] as { models: unknown[] }).models.length).toBe(2);
     expect(reloaded!.customProviders[sampleProvider.id]?.models?.[0]?.compatibility).toEqual([
       "prefer_max_completion_tokens",
+      "single_system_message",
     ]);
   });
 });

@@ -216,6 +216,8 @@ soba provider add my-llm \
 
 Custom providers are saved in `registry.customProviders`.
 
+Model-specific wire compatibility is declared in a complete provider JSON loaded with `soba provider add <id> --from-file <path>`. For example, `"compatibility": ["single_system_message"]` makes SOBA emit one leading system message for chat templates that reject multiple system messages. See [model compatibility metadata](/en/docs/providers#43-model-compatibility-metadata) for the full schema and supported features.
+
 ---
 
 ## 6. Compaction configuration

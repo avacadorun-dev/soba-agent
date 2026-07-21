@@ -44,7 +44,11 @@ describe("provider discovery model selection", () => {
           id: "vendor-neutral-model",
           raw: {
             capabilities: { supports_reasoning: true, supports_streaming: false },
-            soba_compatibility: ["adaptive_thinking", "unknown-feature"],
+            soba_compatibility: [
+              "adaptive_thinking",
+              "single_system_message",
+              "unknown-feature",
+            ],
           },
         }],
       },
@@ -55,7 +59,7 @@ describe("provider discovery model selection", () => {
       id: "vendor-neutral-model",
       supportsThinking: true,
       supportsStreaming: false,
-      compatibility: ["adaptive_thinking"],
+      compatibility: ["adaptive_thinking", "single_system_message"],
     });
   });
 });

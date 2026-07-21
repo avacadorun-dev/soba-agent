@@ -168,12 +168,14 @@ Most OpenAI-compatible models need no special settings. If a model needs a diffe
     "maxOutput": 8192,
     "supportsStreaming": true,
     "supportsThinking": true,
-    "compatibility": ["adaptive_thinking", "reasoning_split"]
+    "compatibility": ["single_system_message"]
   }]
 }
 ```
 
-Supported compatibility features are `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, and `prefer_max_completion_tokens`. `supportsThinking` is display/capability metadata; it does not implicitly enable any wire-format feature. Dynamic discovery accepts the same list from upstream `soba_compatibility` or `compatibility` metadata and ignores unknown values.
+Supported compatibility features are `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, `prefer_max_completion_tokens`, and `single_system_message`. `supportsThinking` is display/capability metadata; it does not implicitly enable any wire-format feature. Dynamic discovery accepts the same list from upstream `soba_compatibility` or `compatibility` metadata and ignores unknown values.
+
+Use `single_system_message` for chat templates that accept at most one system message. At the OpenAI wire boundary, SOBA merges core instructions, active skill instructions, context capsules, and compaction summaries into one system message at index zero. Non-system messages keep their relative order. The flag is configured per model, so models exposed by the same endpoint can use different compatibility settings.
 
 ### 4.4. Manage custom providers
 

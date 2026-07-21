@@ -24,6 +24,7 @@ export const MODEL_COMPATIBILITY_FEATURES = [
   "reasoning_split",
   "reasoning_details_input",
   "prefer_max_completion_tokens",
+  "single_system_message",
 ] as const;
 
 export type ModelCompatibilityFeature = (typeof MODEL_COMPATIBILITY_FEATURES)[number];

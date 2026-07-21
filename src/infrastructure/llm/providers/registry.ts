@@ -744,6 +744,9 @@ export class ProviderRegistry {
       baseUrl,
       apiKey,
       model: model.id,
+      modelCompatibility: model.compatibility
+        ? [...model.compatibility]
+        : undefined,
       maxOutputTokens: model.maxOutput,
       contextWindow: model.contextWindow,
     };

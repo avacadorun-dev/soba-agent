@@ -104,6 +104,9 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       baseUrl: sobaConfig.baseUrl,
       apiKey: sobaConfig.apiKey,
       model: sobaConfig.model,
+      modelCompatibility: sobaConfig.modelCompatibility
+        ? [...sobaConfig.modelCompatibility]
+        : undefined,
       maxOutputTokens: sobaConfig.maxOutputTokens,
       maxCompletionTokens: sobaConfig.maxCompletionTokens,
       contextWindow: sobaConfig.contextWindow,
@@ -114,7 +117,12 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   }
 
   getConfig(): OpenResponsesClientConfig {
-    return { ...this.config };
+    return {
+      ...this.config,
+      modelCompatibility: this.config.modelCompatibility
+        ? [...this.config.modelCompatibility]
+        : undefined,
+    };
   }
 
   getProviderIdentity(): ProviderIdentity {
@@ -145,7 +153,11 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     if (partial.baseUrl !== undefined) this.config.baseUrl = partial.baseUrl;
     if (partial.apiKey !== undefined) this.config.apiKey = partial.apiKey;
     if (partial.model !== undefined) this.config.model = partial.model;
-    if (partial.modelCompatibility !== undefined) this.config.modelCompatibility = [...partial.modelCompatibility];
+    if ("modelCompatibility" in partial) {
+      this.config.modelCompatibility = partial.modelCompatibility
+        ? [...partial.modelCompatibility]
+        : undefined;
+    }
     if (partial.maxOutputTokens !== undefined) this.config.maxOutputTokens = partial.maxOutputTokens;
     if (partial.maxCompletionTokens !== undefined) this.config.maxCompletionTokens = partial.maxCompletionTokens;
     if (partial.contextWindow !== undefined) this.config.contextWindow = partial.contextWindow;

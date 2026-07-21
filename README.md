@@ -140,6 +140,40 @@ New receipts are sealed before persistence. `soba verify` returns exit `0` only 
 invalid, partially verified, unverified, and blocked outcomes return stable non-zero exit codes and machine-readable
 reasons. Legacy receipts without integrity metadata remain readable with a warning but are not tamper-evident.
 
+### Custom provider message compatibility
+
+Wire compatibility is configured per model, so one OpenAI-compatible endpoint
+can expose models with different chat-template requirements. Models whose chat
+template accepts at most one leading system message can opt in explicitly:
+
+```json
+{
+  "id": "strict-chat-provider",
+  "name": "Strict Chat Provider",
+  "baseUrl": "https://example.test/v1",
+  "apiKeyEnv": "STRICT_CHAT_API_KEY",
+  "adapter": "openai",
+  "defaultModel": "strict-model",
+  "models": [
+    {
+      "id": "strict-model",
+      "name": "Strict Model",
+      "contextWindow": 131072,
+      "maxOutput": 8192,
+      "supportsStreaming": true,
+      "supportsThinking": true,
+      "compatibility": ["single_system_message"]
+    }
+  ]
+}
+```
+
+With `single_system_message`, SOBA merges core instructions, active skill
+instructions, context capsules, and compaction summaries into one system
+message at index zero. The flag is never inferred from provider or model names.
+Providers without it retain their original wire format. Load a complete custom
+provider definition with `soba provider add <id> --from-file <path>`.
+
 ## Work modes
 
 Use `/plan agent`, `/plan plan`, or `/plan goal` to choose whether SOBA should implement, prepare a decision-complete

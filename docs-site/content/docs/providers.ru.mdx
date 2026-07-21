@@ -177,12 +177,14 @@ soba provider add my-api \
     "maxOutput": 8192,
     "supportsStreaming": true,
     "supportsThinking": true,
-    "compatibility": ["adaptive_thinking", "reasoning_split"]
+    "compatibility": ["single_system_message"]
   }]
 }
 ```
 
-Поддерживаются `adaptive_thinking`, `reasoning_split`, `reasoning_details_input` и `prefer_max_completion_tokens`. Поле `supportsThinking` — метаданные возможности для интерфейса; оно само не включает особенности wire-формата. Dynamic discovery принимает тот же список из upstream-полей `soba_compatibility` или `compatibility` и игнорирует неизвестные значения.
+Поддерживаются `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, `prefer_max_completion_tokens` и `single_system_message`. Поле `supportsThinking` — метаданные возможности для интерфейса; оно само не включает особенности wire-формата. Dynamic discovery принимает тот же список из upstream-полей `soba_compatibility` или `compatibility` и игнорирует неизвестные значения.
+
+Используйте `single_system_message` для chat templates, которые принимают не более одного системного сообщения. На границе OpenAI wire-формата SOBA объединяет основные инструкции, инструкции активных skills, context capsules и compaction summaries в одно системное сообщение с индексом 0. Относительный порядок несистемных сообщений сохраняется. Флаг задаётся для каждой модели отдельно, поэтому модели одного endpoint могут иметь разные настройки совместимости.
 
 ### 4.4. Управление кастомными провайдерами
 

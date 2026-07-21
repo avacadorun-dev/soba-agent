@@ -174,6 +174,26 @@ describe("OpenResponsesClient", () => {
     expect(client.getConfig().baseUrl).toBe("https://api.openai.com/v1");
   });
 
+  test("сохраняет model compatibility из SobaConfig", () => {
+    const modelCompatibility: NonNullable<SobaConfig["modelCompatibility"]> = [
+      "single_system_message",
+    ];
+    const client = createOpenResponsesClient({
+      ...makeTestConfig(),
+      modelCompatibility,
+    });
+
+    modelCompatibility.length = 0;
+    const returnedCompatibility = client.getConfig().modelCompatibility;
+    expect(returnedCompatibility).toEqual([
+      "single_system_message",
+    ]);
+    returnedCompatibility?.splice(0);
+    expect(client.getConfig().modelCompatibility).toEqual([
+      "single_system_message",
+    ]);
+  });
+
   // ── getConfig / updateConfig ──
 
   test("getConfig возвращает текущую конфигурацию", () => {
@@ -201,6 +221,16 @@ describe("OpenResponsesClient", () => {
     expect(client.getConfig().model).toBe("gpt-4o");
   });
 
+  test("updateConfig can clear model compatibility", () => {
+    const client = createOpenResponsesClient({
+      ...makeTestConfig(),
+      modelCompatibility: ["single_system_message"],
+    });
+
+    client.updateConfig({ modelCompatibility: undefined });
+    expect(client.getConfig().modelCompatibility).toBeUndefined();
+  });
+
   // ── Adapter delegation ──
 
   test("create вызывает adapter.convertRequest и adapter.convertResponse", async () => {
@@ -216,7 +246,13 @@ describe("OpenResponsesClient", () => {
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const adapter = makeMockAdapter();
-    const client = new OpenResponsesClientImpl(makeTestConfig(), adapter);
+    const client = new OpenResponsesClientImpl(
+      {
+        ...makeTestConfig(),
+        modelCompatibility: ["single_system_message"],
+      },
+      adapter,
+    );
 
     const params: CreateResponseParams = {
       model: "gpt-4o",
@@ -234,6 +270,10 @@ describe("OpenResponsesClient", () => {
     expect(response.status).toBe("completed");
     expect(adapter.convertRequest).toHaveBeenCalled();
     expect(adapter.convertResponse).toHaveBeenCalled();
+    const createCall = (adapter.convertRequest as ReturnType<typeof mock>).mock.calls[0];
+    expect(createCall?.[1]).toMatchObject({
+      compatibility: ["single_system_message"],
+    });
     expectSobaAppHeaders(fetchInitAt(mockFetch, 0));
 
     mockFetch.mockRestore();
@@ -280,7 +320,13 @@ describe("OpenResponsesClient", () => {
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const adapter = makeMockAdapter();
-    const client = new OpenResponsesClientImpl(makeTestConfig(), adapter);
+    const client = new OpenResponsesClientImpl(
+      {
+        ...makeTestConfig(),
+        modelCompatibility: ["single_system_message"],
+      },
+      adapter,
+    );
 
     const tools = [
       {
@@ -319,7 +365,13 @@ describe("OpenResponsesClient", () => {
     globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const adapter = makeMockAdapter();
-    const client = new OpenResponsesClientImpl(makeTestConfig(), adapter);
+    const client = new OpenResponsesClientImpl(
+      {
+        ...makeTestConfig(),
+        modelCompatibility: ["single_system_message"],
+      },
+      adapter,
+    );
 
     const params: CompactResponseParams = {
       model: "gpt-4o",
@@ -336,6 +388,10 @@ describe("OpenResponsesClient", () => {
 
     expect(result.object).toBe("response.compaction");
     expect(result.output[0].type).toBe("compaction");
+    const compactCall = (adapter.convertCompactRequest as ReturnType<typeof mock>).mock.calls[0];
+    expect(compactCall?.[1]).toMatchObject({
+      compatibility: ["single_system_message"],
+    });
 
     mockFetch.mockRestore();
   });

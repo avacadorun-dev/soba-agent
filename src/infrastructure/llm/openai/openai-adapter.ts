@@ -189,6 +189,38 @@ function hasCompatibility(
   return config.compatibility?.includes(feature) === true;
 }
 
+function systemContentToText(content: OpenAIMessage["content"]): string {
+  if (typeof content === "string") return content;
+  if (content === null) return "";
+  return content.map((part) => part.text ?? "").join("\n");
+}
+
+/**
+ * Some chat templates accept at most one system message and require it to
+ * occupy index zero. Keep this provider quirk at the wire boundary so session
+ * items, skill messages, and context capsules retain their canonical roles.
+ */
+function normalizeSingleSystemMessage(
+  messages: OpenAIMessage[],
+): OpenAIMessage[] {
+  const systemMessages = messages.filter((message) => message.role === "system");
+  if (systemMessages.length === 0) return messages;
+  if (systemMessages.length === 1 && messages[0]?.role === "system") {
+    return messages;
+  }
+
+  const content = systemMessages
+    .map((message) => systemContentToText(message.content))
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+  const firstSystem = systemMessages[0]!;
+
+  return [
+    { ...firstSystem, content },
+    ...messages.filter((message) => message.role !== "system"),
+  ];
+}
+
 function combineReasoningContent(
   first: string | undefined,
   second: string | undefined,
@@ -1358,9 +1390,13 @@ export class OpenAIAdapter implements ProviderAdapter {
       messages.push(...converted);
     }
 
+    const wireMessages = hasCompatibility(config, "single_system_message")
+      ? normalizeSingleSystemMessage(messages)
+      : messages;
+
     const request: ProviderRequest = {
       model: adjustedParams.model ?? config.model,
-      messages,
+      messages: wireMessages,
       stream: adjustedParams.stream ?? false,
       ...(adjustedParams.stream
         ? { stream_options: { include_usage: true } }
@@ -1408,7 +1444,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       request.reasoning_split = true;
     }
     if (hasCompatibility(config, "reasoning_details_input")) {
-      applyReasoningDetailsCompatibility(messages);
+      applyReasoningDetailsCompatibility(wireMessages);
     }
     if (hasCompatibility(config, "prefer_max_completion_tokens")) {
       if (request.max_tokens && !request.max_completion_tokens) {
@@ -1754,9 +1790,13 @@ export class OpenAIAdapter implements ProviderAdapter {
       messages.push(...converted);
     }
 
+    const wireMessages = hasCompatibility(config, "single_system_message")
+      ? normalizeSingleSystemMessage(messages)
+      : messages;
+
     return {
       model: config.model,
-      messages,
+      messages: wireMessages,
       max_tokens: 4096,
       temperature: 0.3,
     };

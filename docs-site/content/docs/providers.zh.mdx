@@ -168,12 +168,14 @@ soba provider add my-api \
     "maxOutput": 8192,
     "supportsStreaming": true,
     "supportsThinking": true,
-    "compatibility": ["adaptive_thinking", "reasoning_split"]
+    "compatibility": ["single_system_message"]
   }]
 }
 ```
 
-支持的 compatibility features 是 `adaptive_thinking`、`reasoning_split`、`reasoning_details_input` 和 `prefer_max_completion_tokens`。`supportsThinking` 只是供界面使用的能力元数据，不会隐式启用任何 wire-format feature。动态 discovery 也会读取 upstream 的 `soba_compatibility` 或 `compatibility` 列表，并忽略未知值。
+支持的 compatibility features 是 `adaptive_thinking`、`reasoning_split`、`reasoning_details_input`、`prefer_max_completion_tokens` 和 `single_system_message`。`supportsThinking` 只是供界面使用的能力元数据，不会隐式启用任何 wire-format feature。动态 discovery 也会读取 upstream 的 `soba_compatibility` 或 `compatibility` 列表，并忽略未知值。
+
+对于最多只接受一条 system message 的 chat template，请使用 `single_system_message`。在 OpenAI wire-format 边界，SOBA 会把 core instructions、已启用 skill 的 instructions、context capsules 和 compaction summaries 合并为位于索引 0 的一条 system message。非 system messages 的相对顺序保持不变。该 feature 按模型配置，因此同一 endpoint 暴露的不同模型可以使用不同的兼容性设置。
 
 ### 4.4. 管理自定义 providers
 

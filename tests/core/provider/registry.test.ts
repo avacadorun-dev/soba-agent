@@ -255,6 +255,7 @@ describe("ProviderRegistry custom providers", () => {
         maxOutput: 4096,
         supportsStreaming: true,
         supportsThinking: false,
+        compatibility: ["single_system_message"],
       },
     ],
   };
@@ -327,6 +328,42 @@ describe("ProviderRegistry.getClient", () => {
     // apiKey is empty when DEEPSEEK_API_KEY isn't set; the client
     // itself doesn't need a key at construction time.
     expect(typeof cfg.apiKey).toBe("string");
+  });
+
+  test("client config receives compatibility from a custom provider model", () => {
+    const reg = newRegistry();
+    reg.addProvider({
+      id: "strict-provider",
+      name: "Strict Provider",
+      baseUrl: "http://localhost:8000/v1",
+      apiKeyEnv: null,
+      adapter: "openai",
+      defaultModel: "strict-model",
+      models: [
+        {
+          id: "strict-model",
+          name: "Strict Model",
+          contextWindow: 32_000,
+          maxOutput: 4_096,
+          supportsStreaming: true,
+          supportsThinking: false,
+          compatibility: ["single_system_message"],
+        },
+        {
+          id: "permissive-model",
+          name: "Permissive Model",
+          contextWindow: 32_000,
+          maxOutput: 4_096,
+          supportsStreaming: true,
+          supportsThinking: false,
+        },
+      ],
+    });
+
+    expect(reg.getClient("strict-provider", "strict-model").getConfig().modelCompatibility).toEqual([
+      "single_system_message",
+    ]);
+    expect(reg.getClient("strict-provider", "permissive-model").getConfig().modelCompatibility).toBeUndefined();
   });
 
   test("client config uses a persisted baseUrl override when present", () => {
@@ -665,6 +702,46 @@ describe("ProviderRegistry.toSobaConfig", () => {
     // (see `discoverModels()`).
     expect(cfg.maxOutputTokens).toBe(DEFAULT_SYNTHETIC_MAX_OUTPUT);
     expect(cfg.contextWindow).toBe(DEFAULT_SYNTHETIC_CONTEXT_WINDOW);
+  });
+
+  test("includes compatibility from the active custom model", () => {
+    const reg = newRegistry();
+    reg.addProvider({
+      id: "strict-provider",
+      name: "Strict Provider",
+      baseUrl: "http://localhost:8000/v1",
+      apiKeyEnv: null,
+      adapter: "openai",
+      defaultModel: "strict-model",
+      models: [{
+        id: "strict-model",
+        name: "Strict Model",
+        contextWindow: 32_000,
+        maxOutput: 4_096,
+        supportsStreaming: true,
+        supportsThinking: false,
+        compatibility: ["single_system_message"],
+      }],
+    });
+    reg.setActive("strict-provider", "strict-model");
+    const cfg = reg.toSobaConfig({
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+      maxOutputTokens: 4096,
+      maxCompletionTokens: 0,
+      contextWindow: 128000,
+      temperature: 0.7,
+      maxAgentIterations: 0,
+      maxStalledIterations: 4,
+      maxRunMinutes: 0,
+      bashMaxTimeoutSeconds: 300,
+      sessionDir: "",
+      lang: "en",
+      theme: "graphite",
+    });
+
+    expect(cfg.modelCompatibility).toEqual(["single_system_message"]);
   });
 });
 
