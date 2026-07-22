@@ -14,7 +14,9 @@ describe("fallback TUI commands", () => {
     expect(message?.type).toBe("info");
     if (message?.type !== "info") throw new Error("Expected /keys to emit an info message");
     expect(message.content).toContain("F2");
+    expect(message.content).toContain("F4");
     expect(message.content).toContain("/model");
+    expect(message.content).toContain("/reasoning");
     expect(message.content).toContain("/sidebar");
   });
 

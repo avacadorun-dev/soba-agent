@@ -20,6 +20,8 @@ export interface SessionPort {
   appendItem(item: ItemParam): string;
   appendDebug(data: DebugEntry["data"]): void;
   appendFlightRecord(data: FlightRecordData): void;
+  appendSessionConfig(key: string, value: unknown): void;
+  getSessionConfig(key: string): unknown;
   appendCompaction(
     strategy: string,
     item: CompactionSummaryItemParam,

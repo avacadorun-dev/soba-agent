@@ -13,6 +13,8 @@ import { reasoningSummaryEnumSchema } from "./reasoningSummaryEnumSchema.ts";
 export const reasoningParamSchema = z
   .object({
     effort: z.optional(z.union([z.lazy(() => reasoningEffortEnumSchema), z.null()])),
+    max_tokens: z.optional(z.union([z.number().int().positive(), z.null()])),
+    enabled: z.optional(z.union([z.boolean(), z.null()])),
     summary: z.optional(z.union([z.lazy(() => reasoningSummaryEnumSchema).and(z.any()), z.null()])),
   })
   .describe(

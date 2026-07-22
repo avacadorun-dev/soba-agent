@@ -5,6 +5,7 @@ import type {
   ResponseResource,
   Usage,
 } from "../../kernel/model/openresponses-types";
+import type { ReasoningSelection } from "../../kernel/model/reasoning";
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ContextController } from "../context/context-controller";
@@ -22,6 +23,7 @@ export type ModelTurnExecutionResult =
       assistantMessages: MessageField[];
       systemPromptTokens: number;
       toolSchemaTokens: number;
+      latencyMs: number;
     }
   | {
       action: "retry" | "break";
@@ -39,6 +41,7 @@ export async function executeModelTurn(input: {
   maxOutputTokens: number;
   maxCompletionTokens: number;
   temperature: number;
+  reasoning: ReasoningSelection;
   stream: boolean;
   ephemeralMessages: Array<{ role: "developer"; content: string }>;
   allowParallelToolCalls: boolean;
@@ -70,6 +73,7 @@ export async function executeModelTurn(input: {
     input.ephemeralMessages,
     input.allowParallelToolCalls,
     input.allowedToolNames,
+    input.reasoning,
   );
 
   const systemPromptTokens = estimatePromptEnvelopeTokens(input.systemPrompt, input.ephemeralMessages);
@@ -124,9 +128,11 @@ export async function executeModelTurn(input: {
       input.ephemeralMessages,
       input.allowParallelToolCalls,
       input.allowedToolNames,
+      input.reasoning,
     );
   }
 
+  const requestStartedAt = Date.now();
   for (let attempt = 0; attempt <= MAX_MODEL_TRANSPORT_RETRIES; attempt++) {
     try {
       const modelTurn = await new ModelTurnRunner(input.client, {
@@ -142,6 +148,7 @@ export async function executeModelTurn(input: {
         assistantMessages: modelTurn.assistantMessages,
         systemPromptTokens,
         toolSchemaTokens,
+        latencyMs: Date.now() - requestStartedAt,
       };
     } catch (error) {
       input.emit({ type: "thinking", timestamp: Date.now(), active: false });

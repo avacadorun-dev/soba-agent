@@ -109,6 +109,15 @@ export function useTuiKeys(options: TuiKeysOptions): void {
       options.providerStore.open();
       return;
     }
+    if (
+      keyMatchesAction(key, "cycleReasoning") &&
+      !options.providerStore?.isOpen() &&
+      !options.store.isSearchOpen()
+    ) {
+      key.preventDefault();
+      void options.store.cycleReasoning();
+      return;
+    }
     if (keyMatchesAction(key, "toggleSidebar")) {
       key.preventDefault();
       options.store.toggleSidebar();

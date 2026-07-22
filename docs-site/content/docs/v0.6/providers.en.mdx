@@ -13,7 +13,7 @@ SOBA works with any OpenAI-compatible API. This guide explains how to use built-
 
 SOBA uses a provider **registry**. It combines:
 
-- **Built-in providers**: four providers with known base URLs
+- **Built-in providers**: five providers with known base URLs and transport profiles
 - **Custom providers**: any OpenAI-compatible API added by the user
 - **Dynamic model discovery**: model lists are fetched from provider APIs and cached in memory
 
@@ -23,7 +23,7 @@ SOBA uses a provider **registry**. It combines:
 │                                          │
 │  ┌────────────────┐  ┌────────────────┐ │
 │  │ Built-in       │  │ Custom         │ │
-│  │ Providers (4)  │  │ Providers (∞)  │ │
+│  │ Providers (5)  │  │ Providers (∞)  │ │
 │  └────────────────┘  └────────────────┘ │
 │                                          │
 │  ┌────────────────────────────────────┐  │
@@ -37,7 +37,7 @@ SOBA uses a provider **registry**. It combines:
 
 ## 2. Built-in providers
 
-SOBA v0.6.x ships with four built-in providers. All of them use the OpenAI-compatible adapter.
+SOBA v0.6.x ships with five built-in providers. The OpenAI entry uses the native Responses API; the others use provider-specific OpenAI-compatible transports.
 
 | ID | Name | Base URL | API key env | Notes |
 |---|---|---|---|---|
@@ -45,10 +45,13 @@ SOBA v0.6.x ships with four built-in providers. All of them use the OpenAI-compa
 | `kimi` | Moonshot Kimi | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | Kimi K2 is strong for code |
 | `alibaba` | Alibaba Qwen | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | Qwen3, Qwen-Coder, Singapore region |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | Meta-router for Claude, GPT, Gemini, Llama, and many more |
+| `openai-official` | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` | Native Responses API, including opaque reasoning items |
 
 ### 2.1. Dynamic discovery
 
-On startup, SOBA calls `GET {baseUrl}/models` for the active provider. The result is cached in the current process. For an automatic default, SOBA skips models that explicitly declare non-text output and otherwise preserves the provider's order. It does not infer capabilities from words such as `chat`, `code`, or a vendor name in the model ID.
+On startup, SOBA calls the provider's model-discovery endpoint. The result is cached in the current process. For an automatic default, SOBA skips models that explicitly declare non-text output and otherwise preserves the provider's order. It does not infer capabilities from words such as `chat`, `code`, or a vendor name in the model ID.
+
+Discovery also reads context/output limits and structured reasoning capabilities when the provider exposes them. Effective limits use this priority: explicit user model values → runtime limit → active route limit → model-wide limit → maintained exact-model profile → conservative fallback. Router route limits may narrow a larger model-wide context window. Fallback values are visibly marked as assumed (`~`) and selecting such a model produces a warning.
 
 The cache lives only in memory. To refresh it, restart SOBA or open the TUI model picker with `F2` or `/model`.
 
@@ -82,7 +85,13 @@ export SOBA_MODEL="anthropic/claude-sonnet-4.6"
 
 `soba provider use <id>` switches the active provider to its default model. For custom providers, the default model is set with `--default-model` or falls back to the first `--model`.
 
-### 3.3. Practical model choices
+### 3.3. Reasoning controls
+
+SOBA stores a provider-neutral requested policy and resolves an effective policy for the active model. Press `F4` to cycle the controls that model actually advertises, or use `/reasoning` for an exact effort, toggle, or token budget. The sidebar displays the effective mode; when a choice is incompatible it shows `effective ← requested` and reports the fallback reason.
+
+`provider default` means no reasoning field is sent. SOBA does not translate an unsupported level to a nearby one. If live capabilities are stale and the provider rejects a reasoning parameter, SOBA retries once without reasoning fields and records the fallback.
+
+### 3.4. Practical model choices
 
 This is a dated field guide, not a forever ranking. As of June 21, 2026, these are reasonable starting points. Before a large run, check `soba provider list`: aliases, prices, and limits move quickly.
 
@@ -143,9 +152,10 @@ soba provider add my-api \
 | `--base-url <url>` | Yes | OpenAI-compatible API base URL |
 | `--api-key-env <VAR>` | No | Environment variable with the API key. If omitted, the provider is treated as keyless |
 | `--name <name>` | No | Display name |
-| `--model <spec>` | Yes | Model spec: `id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]`. Can be repeated |
+| `--model <spec>` | Yes | Model spec: `id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]`. Limits may be omitted and filled by discovery. Can be repeated |
 | `--default-model <id>` | No | Default model. If omitted, the first `--model` is used |
-| `--adapter <openai\|anthropic>` | No | Provider adapter. The runtime path currently targets OpenAI-compatible APIs |
+| `--adapter <openai\|openai-responses\|anthropic>` | No | Provider adapter. Use `openai-responses` only for a Responses-compatible endpoint |
+| `--metadata-profile <profile>` | No | `auto`, `generic_openai`, `openrouter`, `vllm`, `ollama`, `lmstudio`, `llamacpp`, or `none` |
 | `--from-file <path>` | No | Load provider definition from a JSON file |
 | `--set-active` | No | Make the provider active right after adding it |
 
@@ -160,6 +170,8 @@ Most OpenAI-compatible models need no special settings. If a model needs a diffe
   "baseUrl": "https://my-llm.company.com/v1",
   "apiKeyEnv": "MY_LLM_KEY",
   "adapter": "openai",
+  "metadataProfile": "generic_openai",
+  "reasoningTransport": "openai_chat",
   "defaultModel": "company-model",
   "models": [{
     "id": "company-model",
@@ -167,13 +179,20 @@ Most OpenAI-compatible models need no special settings. If a model needs a diffe
     "contextWindow": 128000,
     "maxOutput": 8192,
     "supportsStreaming": true,
-    "supportsThinking": true,
+    "reasoning": {
+      "control": "effort",
+      "supportedEfforts": ["low", "medium", "high"]
+    },
     "compatibility": ["single_system_message"]
   }]
 }
 ```
 
-Supported compatibility features are `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, `prefer_max_completion_tokens`, and `single_system_message`. `supportsThinking` is display/capability metadata; it does not implicitly enable any wire-format feature. Dynamic discovery accepts the same list from upstream `soba_compatibility` or `compatibility` metadata and ignores unknown values.
+Supported compatibility features are `adaptive_thinking`, `reasoning_split`, `reasoning_details_input`, `prefer_max_completion_tokens`, and `single_system_message`. The legacy `supportsThinking` boolean is still read for one compatibility release but cannot describe levels or budgets; use structured `reasoning` for new definitions. Dynamic discovery accepts the same compatibility list from upstream `soba_compatibility` or `compatibility` metadata and ignores unknown values.
+
+Reasoning `control` can be `none`, `effort`, `budget`, `toggle`, or `fixed`. The transport must also be explicit: `openai_chat`, `openai_responses`, `openrouter`, `deepseek`, `kimi`, `minimax`, `qwen`, `ollama`, or `none`. A capability declaration controls what the user may select; the transport controls how it is serialized. Unknown endpoints receive no reasoning fields unless this profile is confirmed.
+
+`metadataProfile` controls only how model catalogue metadata is interpreted. `auto` is appropriate for most custom endpoints and uses endpoint probes for supported local servers; `vllm`, `ollama`, `lmstudio`, and `llamacpp` select their documented metadata shapes. `none` disables provider metadata interpretation. This is independent from reasoning transport.
 
 Use `single_system_message` for chat templates that accept at most one system message. At the OpenAI wire boundary, SOBA merges core instructions, active skill instructions, context capsules, and compaction summaries into one system message at index zero. Non-system messages keep their relative order. The flag is configured per model, so models exposed by the same endpoint can use different compatibility settings.
 

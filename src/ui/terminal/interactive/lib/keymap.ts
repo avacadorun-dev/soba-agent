@@ -7,6 +7,7 @@ export type TuiKeyAction =
   | "openSearch"
   | "clearMessages"
   | "openModelSelector"
+  | "cycleReasoning"
   | "toggleSidebar"
   | "nextSidebarMode"
   | "previousSidebarMode"
@@ -43,6 +44,7 @@ export const TUI_KEYMAP: Record<TuiKeyAction, KeyBinding[]> = {
     // Legacy alias. Ctrl+M is indistinguishable from Enter in many terminals.
     { name: "m", label: "Ctrl+M", ctrl: true },
   ],
+  cycleReasoning: [{ name: "f4", label: "F4" }],
   toggleSidebar: [{ name: "s", label: "Ctrl+Shift+S", ctrl: true, shift: true }],
   nextSidebarMode: [
     { name: "f6", label: "F6" },
@@ -63,6 +65,7 @@ export const TUI_KEYMAP: Record<TuiKeyAction, KeyBinding[]> = {
 export const TUI_KEYMAP_HELP_ORDER: TuiKeyAction[] = [
   "openHelp",
   "openModelSelector",
+  "cycleReasoning",
   "openSearch",
   "nextSidebarMode",
   "previousSidebarMode",
@@ -82,6 +85,7 @@ export const TUI_KEYMAP_ACTION_LABELS: Record<TuiKeyAction, string> = {
   openSearch: "Search conversation",
   clearMessages: "Clear messages",
   openModelSelector: "Open model selector",
+  cycleReasoning: "Cycle reasoning level",
   toggleSidebar: "Collapse or expand sidebar",
   nextSidebarMode: "Next sidebar panel",
   previousSidebarMode: "Previous sidebar panel",

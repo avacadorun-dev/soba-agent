@@ -277,6 +277,55 @@ describe("provider add (flags)", () => {
     expect((result as { exitCode: number }).exitCode).toBe(0);
     expect(reg.getProvider("corp")?.models?.length).toBe(2);
   });
+
+  test("keeps omitted model limits unknown and enables auto metadata discovery", async () => {
+    const reg = makeRegistry();
+    const result = await runProviderCli(
+      "add",
+      {
+        positional: ["local-vllm"],
+        flags: {
+          "base-url": "http://127.0.0.1:8000/v1",
+          "default-model": "served-model",
+          model: "served-model",
+          "metadata-profile": "vllm",
+        },
+      },
+      reg,
+      makeI18n(),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(reg.getProvider("local-vllm")).toMatchObject({
+      metadataProfile: "vllm",
+      models: [{ id: "served-model", name: "served-model" }],
+    });
+    expect(reg.getProvider("local-vllm")?.models?.[0]?.contextWindow).toBeUndefined();
+    expect(reg.getProvider("local-vllm")?.models?.[0]?.maxOutput).toBeUndefined();
+  });
+
+  test("accepts a default model without requiring a full model definition", async () => {
+    const reg = makeRegistry();
+    const result = await runProviderCli(
+      "add",
+      {
+        positional: ["discoverable"],
+        flags: {
+          "base-url": "https://models.example.test/v1",
+          "default-model": "provider/model",
+        },
+      },
+      reg,
+      makeI18n(),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(reg.getProvider("discoverable")).toMatchObject({
+      metadataProfile: "auto",
+      defaultModel: "provider/model",
+      models: [{ id: "provider/model" }],
+    });
+  });
 });
 
 // ─── add validation ───
@@ -323,6 +372,21 @@ describe("provider add validation", () => {
     );
     expect(result.exitCode).toBe(1);
     expect(result.stderr[0]).toMatch(/adapter/i);
+  });
+
+  test("invalid --metadata-profile is rejected", async () => {
+    const reg = makeRegistry();
+    const result = await runProviderCli(
+      "add",
+      {
+        positional: ["my-llm"],
+        flags: { ...baseFlags.flags, "metadata-profile": "guess-by-model-name" },
+      },
+      reg,
+      makeI18n(),
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr[0]).toMatch(/metadata profile/i);
   });
 
   test("no --model and no --from-file is rejected", async () => {

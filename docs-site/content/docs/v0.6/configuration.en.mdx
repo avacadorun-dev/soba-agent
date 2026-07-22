@@ -18,6 +18,7 @@ The configuration file is `~/.soba/config.json`. SOBA creates it on first run, o
   "model": "deepseek/deepseek-v4-flash",
   "maxOutputTokens": 8192,
   "maxCompletionTokens": 0,
+  "reasoning": { "mode": "provider_default" },
   "contextWindow": 65536,
   "temperature": 0.7,
   "maxAgentIterations": 0,
@@ -73,8 +74,9 @@ Minimal configuration:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `maxOutputTokens` | `number` | `8192` | Max output tokens per model response. The default is a placeholder; the real value is read from the active model definition when available |
-| `maxCompletionTokens` | `number` | `0` | Max reasoning/thinking tokens. `0` means no explicit limit and lets the provider default apply |
-| `contextWindow` | `number` | `128000` | Model context window. The default is a placeholder and is normally taken from the active model definition |
+| `maxCompletionTokens` | `number` | `0` | Maximum output plus reasoning tokens where the transport supports it. `0` leaves the provider default in place |
+| `reasoning` | `ReasoningSelection` | `{ "mode": "provider_default" }` | Requested reasoning policy. The effective policy is recomputed from the active model's capabilities |
+| `contextWindow` | `number` | `128000` | Model context window. Provider metadata wins when available; the fallback is marked as assumed in the UI |
 | `temperature` | `number` | `0.7` | Sampling temperature, from 0 to 2 |
 
 ### 2.3. Runtime safety
@@ -113,6 +115,9 @@ Environment variables override `config.json`.
 | `SOBA_MAX_OUTPUT_TOKENS` | `maxOutputTokens` | Output token limit |
 | `SOBA_MAX_TOKENS` | `maxOutputTokens` | Deprecated alias for `SOBA_MAX_OUTPUT_TOKENS` |
 | `SOBA_MAX_COMPLETION_TOKENS` | `maxCompletionTokens` | Reasoning token limit |
+| `SOBA_REASONING_EFFORT` | `reasoning` | `default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` |
+| `SOBA_REASONING_BUDGET` | `reasoning` | Positive numeric reasoning budget |
+| `SOBA_REASONING_ENABLED` | `reasoning` | `true`/`1` or `false`/`0` for toggle-based models |
 | `SOBA_CONTEXT_WINDOW` | `contextWindow` | Context window size |
 | `SOBA_MAX_AGENT_ITERATIONS` | `maxAgentIterations` | Iteration limit |
 | `SOBA_MAX_STALLED_ITERATIONS` | `maxStalledIterations` | No-progress iterations before stall recovery |
@@ -130,6 +135,7 @@ Environment variables override `config.json`.
 | `MOONSHOT_API_KEY` | Kimi provider key | Moonshot Kimi API key |
 | `DASHSCOPE_API_KEY` | Alibaba provider key | Alibaba Qwen API key |
 | `OPENROUTER_API_KEY` | OpenRouter provider key | OpenRouter API key |
+| `OPENAI_API_KEY` | OpenAI provider key | Official OpenAI API key |
 
 ---
 
@@ -161,6 +167,10 @@ CLI flags have the highest priority.
 | `--max-output-tokens <n>` | Output token limit |
 | `--max-tokens <n>` | Deprecated alias for `--max-output-tokens` |
 | `--max-completion-tokens <n>` | Reasoning/thinking token limit |
+| `--reasoning-effort <level>` | Requested effort: `default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` |
+| `--reasoning-budget <n>` | Positive numeric reasoning budget |
+| `--reasoning-enabled` | Enable reasoning for a toggle-based model |
+| `--no-reasoning` | Disable reasoning when the model allows it |
 | `--context-window <n>` | Override model context window |
 | `--budget <n>` | Set total token budget for the task |
 | `--max-agent-iterations <n>` | Emergency iteration limit |
@@ -202,8 +212,11 @@ Built-in providers:
 | `kimi` | Moonshot Kimi (K2 for code) | `https://api.moonshot.cn/v1` |
 | `alibaba` | Alibaba Qwen (Singapore) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` |
+| `openai-official` | OpenAI Responses API | `https://api.openai.com/v1` |
 
 Models are discovered dynamically through `GET /models` and cached in the current process. Opening the model picker in the TUI with `F2` or `/model` refreshes built-in providers.
+
+Discovery also resolves model limits and reasoning controls when the provider publishes them. Explicit user limits take priority, followed by runtime/route/model metadata, maintained exact-model profiles, and finally conservative assumed values. SOBA does not infer capabilities from a model name. An assumed context window is shown with `~` in the model picker and produces a warning when selected.
 
 Add a custom provider:
 
@@ -264,7 +277,9 @@ Example: if `config.json` contains `"theme": "graphite"`, `SOBA_THEME=forest` is
 
 Special rules:
 
-- **`maxOutputTokens` and `contextWindow`** are taken from the active model definition when possible. CLI flags override them for advanced cases such as local proxies with incorrect model metadata.
+- **Reasoning precedence** is request/session override → CLI → environment → config → provider default. `/reasoning` and `F4` affect the next model request without restarting SOBA.
+- **Requested and effective reasoning are separate.** Unsupported controls fall back to provider default with a visible reason; SOBA never silently clamps to a nearby level.
+- **`maxOutputTokens` and `contextWindow`** are taken from the active model definition when possible. CLI flags and explicitly configured model limits override provider metadata for local proxies or incorrect catalogues.
 - **`compaction.auto`** can be overridden by `SOBA_AUTO_COMPACT=false` or `--no-auto-compact`.
 - Disabling auto-compaction turns off only soft triggers. Hard-limit and provider-overflow recovery remain mandatory.
 - Turn and milestone triggers are deferred: SOBA shows progress and awaits compaction immediately before the next model call.

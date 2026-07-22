@@ -50,6 +50,8 @@ export interface AssistantMessageItemParam {
   status?: string | null;
   phase?: "commentary" | "final_answer";
   reasoning_content?: string;
+  /** Provider-opaque reasoning blocks/signatures. Preserve without inspection. */
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface SystemMessageItemParam {
@@ -78,6 +80,7 @@ export interface FunctionCallItemParam {
   id?: string | null;
   status?: "in_progress" | "completed" | "failed" | null;
   reasoning_content?: string;
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface FunctionCallOutputItemParam {
@@ -120,6 +123,8 @@ export interface ReasoningItemParam {
   type: "reasoning";
   encrypted_content: string;
   id?: string | null;
+  /** Provider-owned fields (summary, signatures, status, etc.) are opaque. */
+  [key: string]: unknown;
 }
 
 // ─── Item reference (for passing items by reference) ───
@@ -166,8 +171,14 @@ export type ToolChoiceParam = "auto" | "none" | "required" | { type: "function";
 
 // ─── Reasoning ───
 
+import type { ReasoningEffort } from "./reasoning";
+
 export interface ReasoningParam {
-  effort?: "low" | "medium" | "high" | null;
+  effort?: ReasoningEffort | null;
+  /** Provider-neutral numeric thinking budget. */
+  max_tokens?: number | null;
+  /** Provider-neutral toggle for models without ranked effort. */
+  enabled?: boolean | null;
   summary?: "auto" | null;
 }
 
@@ -196,7 +207,7 @@ export interface CreateResponseParams {
   model?: string;
   input?: ItemParam[] | string;
   previous_response_id?: string | null;
-  include?: Array<"message.input_image.image_url" | "file_search_call.results">;
+  include?: Array<"message.input_image.image_url" | "file_search_call.results" | "reasoning.encrypted_content">;
   tools?: ToolParam[] | null;
   tool_choice?: ToolChoiceParam | null;
   metadata?: Record<string, unknown> | null;
@@ -288,6 +299,7 @@ export interface MessageField {
   content: Array<OutputTextContent | RefusalContent>;
   phase?: "commentary" | "final_answer";
   reasoning_content?: string;
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface FunctionCallField {
@@ -298,6 +310,7 @@ export interface FunctionCallField {
   arguments: string;
   status: string;
   reasoning_content?: string;
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface FunctionCallOutputField {
@@ -312,6 +325,8 @@ export interface ReasoningField {
   type: "reasoning";
   id: string;
   encrypted_content: string;
+  /** Preserve native Responses/provider fields without interpreting them. */
+  [key: string]: unknown;
 }
 
 export interface CompactionField {

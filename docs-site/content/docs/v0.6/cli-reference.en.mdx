@@ -52,6 +52,10 @@ An unqualified model ID stays on the configured default provider. A qualified va
 | `--max-output-tokens <n>` | Limit response output tokens |
 | `--max-tokens <n>` | Deprecated alias for `--max-output-tokens` |
 | `--max-completion-tokens <n>` | Limit reasoning/completion tokens |
+| `--reasoning-effort <level>` | Request `default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` |
+| `--reasoning-budget <n>` | Request a positive numeric reasoning budget |
+| `--reasoning-enabled` | Enable a toggle-based reasoning control |
+| `--no-reasoning` | Disable reasoning when supported |
 | `--context-window <n>` | Override the model context window |
 | `--max-agent-iterations <n>` | Emergency limit for model/tool loop iterations |
 | `--max-stalled-iterations <n>` | Iterations without progress before stall recovery |
@@ -165,7 +169,8 @@ Supported flags:
 | `--name <name>` | Human-readable name |
 | `--base-url <url>` | OpenAI-compatible base URL |
 | `--api-key-env <VAR>` | Env var with the API key; empty value means a keyless provider |
-| `--adapter <openai\|anthropic>` | Adapter id; runtime path is oriented around OpenAI-compatible APIs |
+| `--adapter <openai\|openai-responses\|anthropic>` | Adapter id. Use `openai-responses` only for an endpoint that implements the Responses API |
+| `--metadata-profile <profile>` | Discovery profile: `auto`, `generic_openai`, `openrouter`, `vllm`, `ollama`, `lmstudio`, `llamacpp`, or `none` |
 | `--default-model <id>` | Default model |
 | `--model <spec>` | Model spec; the flag can be repeated |
 | `--from-file <path>` | Load provider definition from JSON |
@@ -174,7 +179,7 @@ Supported flags:
 `--model` format:
 
 ```text
-id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
+id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]
 ```
 
 Example keyless local provider:
@@ -187,6 +192,10 @@ soba provider add ollama \
 ```
 
 `8192,2048` is a gentle starting point for a local model: context window first, max output tokens second. Larger values such as `128000,8192` can put a lot of pressure on memory and make a laptop feel painfully slow.
+
+Limits are optional. For example, `--model local-code="Local Code" --metadata-profile vllm` lets SOBA fill context/output values from the endpoint when it exposes them. If metadata is absent, SOBA uses conservative assumed values and marks them with `~`; pass explicit numbers when the server catalogue is incomplete.
+
+Structured reasoning capabilities and the provider-specific wire transport are declared in a full JSON definition loaded with `--from-file`. SOBA never sends reasoning fields to an unknown endpoint merely because the model name looks familiar.
 
 ---
 

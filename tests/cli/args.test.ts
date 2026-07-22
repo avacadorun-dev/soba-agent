@@ -92,3 +92,22 @@ describe("parseArgs — B1e: --max-tokens alias", () => {
     }
   });
 });
+
+describe("parseArgs — reasoning controls", () => {
+  test("parses ranked effort", () => {
+    expect(parseArgs(["--reasoning-effort", "xhigh"]).reasoning)
+      .toEqual({ mode: "effort", effort: "xhigh" });
+  });
+
+  test("parses provider default", () => {
+    expect(parseArgs(["--reasoning-effort", "default"]).reasoning)
+      .toEqual({ mode: "provider_default" });
+  });
+
+  test("parses numeric budget and toggle", () => {
+    expect(parseArgs(["--reasoning-budget", "8192"]).reasoning)
+      .toEqual({ mode: "budget", maxTokens: 8192 });
+    expect(parseArgs(["--no-reasoning"]).reasoning)
+      .toEqual({ mode: "toggle", enabled: false });
+  });
+});

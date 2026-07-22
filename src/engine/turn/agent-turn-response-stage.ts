@@ -1,6 +1,6 @@
 import type { ItemParam, ResponseResource, Usage } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
-import type { DebugEntry } from "../../kernel/transcript/types";
+import type { DebugEntry, FlightRecordData } from "../../kernel/transcript/types";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
 import { createAssistantSessionRecorder } from "./assistant-session-recorder";
@@ -48,6 +48,7 @@ export function handleAgentTurnResponseStage(input: {
   autonomousFollowUps: number;
   emit(event: AgentEvent): void;
   debug(data: DebugEntry["data"]): void;
+  flight(data: Omit<FlightRecordData, "version">): void;
   emitStopReason(reason: TurnStopReasonEvent["reason"], detail: string): void;
   narrate: (eventType: WorkingNarrationEventType, message: string, evidenceIds?: string[]) => void;
 }): AgentTurnResponseStageResult {
@@ -68,10 +69,35 @@ export function handleAgentTurnResponseStage(input: {
     autonomousFollowUps,
     emit,
     debug,
+    flight,
     emitStopReason,
     narrate,
   } = input;
   const { response, toolCalls, assistantMessages, systemPromptTokens, toolSchemaTokens } = execution;
+  const modelConfig = runtime.client.getConfig();
+  const providerIdentity = typeof runtime.client.getProviderIdentity === "function"
+    ? runtime.client.getProviderIdentity()
+    : undefined;
+
+  flight({
+    kind: "model_request",
+    turn: turnIndex,
+    iteration,
+    payload: {
+      provider: providerIdentity?.adapterId,
+      endpointOrigin: providerIdentity?.endpointOrigin,
+      model: modelConfig.model,
+      reasoningRequested: modelConfig.reasoning ?? { mode: "provider_default" },
+      reasoningEffective: modelConfig.reasoningEffective ?? { mode: "provider_default" },
+      reasoningFallbackReason: modelConfig.reasoningFallbackReason,
+      inputTokens: response.usage?.input_tokens ?? 0,
+      outputTokens: response.usage?.output_tokens ?? 0,
+      reasoningTokens: response.usage?.output_tokens_details.reasoning_tokens ?? 0,
+      latencyMs: execution.latencyMs,
+      responseId: response.id,
+      responseStatus: response.status,
+    },
+  });
 
   runtime.contextController.recordProviderUsage(response, `turn_${turnCount}`, session.getLeafId());
   debug({
@@ -119,6 +145,7 @@ export function handleAgentTurnResponseStage(input: {
     session,
     allItems,
     assistantMessages,
+    reasoningItems: response.output.filter((item) => item.type === "reasoning"),
     emit,
   });
   const continuationDecision = decideResponseContinuation({

@@ -33,6 +33,7 @@ import type {
   FlightRecordData,
   FlightRecordEntry,
   ItemParam,
+  SessionConfigEntry,
   SessionEntry,
   SessionHeader,
   SessionInfo,
@@ -132,6 +133,8 @@ export function estimateItemTokens(item: ItemParam): number {
   } else if (item.type === "local_shell_call_output") {
     text = item.output;
   } else if (item.type === "compaction") {
+    text = item.encrypted_content;
+  } else if (item.type === "reasoning") {
     text = item.encrypted_content;
   }
   return Math.ceil(text.length / CHARS_PER_TOKEN);
@@ -596,6 +599,27 @@ export class SessionManager {
 
   getFlightRecords(): FlightRecordEntry[] {
     return this.fileEntries.filter((e): e is FlightRecordEntry => e.type === "flight_record");
+  }
+
+  appendSessionConfig(key: string, value: unknown): void {
+    const entry: SessionConfigEntry = {
+      type: "session_config",
+      timestamp: new Date().toISOString(),
+      key,
+      value: structuredClone(value),
+    };
+    this.fileEntries.push(entry);
+    this._persist(entry);
+  }
+
+  getSessionConfig(key: string): unknown {
+    for (let index = this.fileEntries.length - 1; index >= 0; index--) {
+      const entry = this.fileEntries[index];
+      if (entry?.type === "session_config" && entry.key === key) {
+        return structuredClone(entry.value);
+      }
+    }
+    return undefined;
   }
 
   /** Get session working directory */

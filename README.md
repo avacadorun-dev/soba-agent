@@ -35,6 +35,7 @@ before risky operations, run the project's own checks, and leave behind receipts
 SOBA is a coding agent with a local workflow:
 
 - **Interactive TUI** for agent sessions, shell commands, slash commands, permissions, context, and model state.
+- **Capability-aware reasoning controls** through `F4`, `/reasoning`, CLI/env/config, with requested/effective fallback visibility.
 - **Sealed Proof Bundle v1 receipts** in `.soba/evidence/*.soba-proof.json`, with stable run/proof IDs, recursive
   redaction, and whole-receipt SHA-256 integrity.
 - **Proof claim mapping** through `soba verify` and `soba explain-claim`, making unsupported claims visible instead of
@@ -107,6 +108,8 @@ soba -i
    soba -i --lang en --theme graphite
    ```
 
+   Press `F4` to cycle only the reasoning modes declared by the active model. Use `/reasoning` to inspect requested and effective values or set an exact effort/budget.
+
 4. In the TUI, start with a bounded task:
 
    ```text
@@ -153,6 +156,8 @@ template accepts at most one leading system message can opt in explicitly:
   "baseUrl": "https://example.test/v1",
   "apiKeyEnv": "STRICT_CHAT_API_KEY",
   "adapter": "openai",
+  "metadataProfile": "generic_openai",
+  "reasoningTransport": "openai_chat",
   "defaultModel": "strict-model",
   "models": [
     {
@@ -161,7 +166,10 @@ template accepts at most one leading system message can opt in explicitly:
       "contextWindow": 131072,
       "maxOutput": 8192,
       "supportsStreaming": true,
-      "supportsThinking": true,
+      "reasoning": {
+        "control": "effort",
+        "supportedEfforts": ["low", "medium", "high"]
+      },
       "compatibility": ["single_system_message"]
     }
   ]
@@ -173,6 +181,8 @@ instructions, context capsules, and compaction summaries into one system
 message at index zero. The flag is never inferred from provider or model names.
 Providers without it retain their original wire format. Load a complete custom
 provider definition with `soba provider add <id> --from-file <path>`.
+
+Context/output limits may be omitted from a custom model so discovery can fill them from provider metadata. SOBA marks conservative fallback limits as assumed and never infers reasoning support from a model name; custom endpoints must declare both reasoning capabilities and their transport explicitly.
 
 ## Work modes
 

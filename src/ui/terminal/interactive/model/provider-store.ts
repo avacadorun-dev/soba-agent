@@ -15,6 +15,7 @@ import { batch, createSignal } from "solid-js";
 import type {
   ModelDefinition,
   ProviderDefinition,
+  ReasoningSelection,
   RuntimeModelChangeSource,
   RuntimeProviderCatalog,
   TranslationKey,
@@ -23,7 +24,9 @@ import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
   findBuiltinProvider,
+  formatReasoningSelection,
   I18n,
+  reasoningSelectionToConfigValue,
 } from "../../../../application/ui/public";
 import type { NotificationStore } from "./notification-store";
 
@@ -31,6 +34,57 @@ export type ModelSelectorModel = ModelDefinition & {
   selectable: boolean;
   discoveryStatus?: "pending" | "failed";
 };
+
+/** Build the finite, safe keyboard cycle exposed by an active model. */
+export function buildReasoningCycle(
+  capabilities: ModelDefinition["reasoning"],
+  current: ReasoningSelection,
+  rememberedBudget?: number,
+): ReasoningSelection[] {
+  const selections: ReasoningSelection[] = [{ mode: "provider_default" }];
+  if (!capabilities || capabilities.control === "none" || capabilities.control === "fixed") {
+    return selections;
+  }
+
+  if (capabilities.control === "effort" && capabilities.supportedEfforts?.length) {
+    selections.push(
+      ...capabilities.supportedEfforts.map((effort): ReasoningSelection => ({ mode: "effort", effort })),
+    );
+  }
+
+  if (
+    capabilities.control !== "effort" &&
+    (capabilities.control === "toggle" || capabilities.supportsToggle === true)
+  ) {
+    selections.push({ mode: "toggle", enabled: true });
+    if (!capabilities.mandatory) selections.push({ mode: "toggle", enabled: false });
+  }
+
+  // A numeric budget has no safe implicit preset. Once the user chooses one
+  // explicitly, F4 can still toggle between that budget and provider default.
+  const budget = current.mode === "budget" ? current.maxTokens : rememberedBudget;
+  if (
+    budget &&
+    (capabilities.control === "budget" || capabilities.supportsBudget === true)
+  ) {
+    selections.push({ mode: "budget", maxTokens: budget });
+  }
+  return selections;
+}
+
+export function nextReasoningSelection(
+  capabilities: ModelDefinition["reasoning"],
+  current: ReasoningSelection,
+  rememberedBudget?: number,
+): ReasoningSelection | null {
+  const cycle = buildReasoningCycle(capabilities, current, rememberedBudget);
+  if (cycle.length < 2) return null;
+  const currentValue = reasoningSelectionToConfigValue(current);
+  const currentIndex = cycle.findIndex(
+    (selection) => reasoningSelectionToConfigValue(selection) === currentValue,
+  );
+  return cycle[(currentIndex + 1 + cycle.length) % cycle.length] ?? cycle[0] ?? null;
+}
 
 export interface ModelGroup {
   provider: ProviderDefinition;
@@ -45,6 +99,7 @@ export interface ModelSelectorEntry {
   providerCustom: boolean;
   contextWindow: number;
   maxOutput: number;
+  limitsAssumed: boolean;
   supportsStreaming: boolean;
   supportsThinking: boolean;
   selectable: boolean;
@@ -69,6 +124,8 @@ export class ProviderStore {
   readonly proxy: RuntimeModelChangeSource;
   private readonly i18n: I18n;
   private notificationStore?: NotificationStore;
+  private readonly warnedAssumedLimits = new Set<string>();
+  private rememberedReasoningBudget?: number;
   // Detached change handler returned by proxy.onChange; called from dispose().
   private unsubscribeProxy: () => void = () => {};
 
@@ -113,6 +170,45 @@ export class ProviderStore {
   status = (): ModelSelectorStatus => this._status[0]();
   activeProviderId = (): string => this._activeProviderId[0]();
   activeModelId = (): string => this._activeModelId[0]();
+
+  activeReasoningLabel(): string {
+    try {
+      const config = this.registry.getActiveClientConfig();
+      const requested = config.reasoning ?? { mode: "provider_default" as const };
+      const effective = config.reasoningEffective ?? { mode: "provider_default" as const };
+      if (config.reasoningFallbackReason) {
+        return `${formatReasoningSelection(effective)} ← ${formatReasoningSelection(requested)}`;
+      }
+      return formatReasoningSelection(effective);
+    } catch {
+      return "provider default";
+    }
+  }
+
+  activeReasoningHasFallback(): boolean {
+    try {
+      return Boolean(this.registry.getActiveClientConfig().reasoningFallbackReason);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Return the next capability-safe `/reasoning` command for the F4 shortcut. */
+  nextReasoningCommand(): string | null {
+    try {
+      const config = this.registry.getActiveClientConfig();
+      const current = config.reasoning ?? { mode: "provider_default" as const };
+      if (current.mode === "budget") this.rememberedReasoningBudget = current.maxTokens;
+      const next = nextReasoningSelection(
+        this.registry.getActiveModel().reasoning,
+        current,
+        this.rememberedReasoningBudget,
+      );
+      return next ? `/reasoning ${reasoningSelectionToConfigValue(next)}` : null;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * All providers (built-in + custom) in registry order.
@@ -207,6 +303,9 @@ export class ProviderStore {
         providerCustom: group.provider.custom === true,
         contextWindow: model.contextWindow,
         maxOutput: model.maxOutput,
+        limitsAssumed:
+          model.limits?.contextWindow.source === "fallback" ||
+          model.limits?.maxOutput.source === "fallback",
         supportsStreaming: model.supportsStreaming,
         supportsThinking: model.supportsThinking,
         selectable: model.selectable,
@@ -229,6 +328,9 @@ export class ProviderStore {
       providerCustom: provider.custom === true,
       contextWindow: model.contextWindow,
       maxOutput: model.maxOutput,
+      limitsAssumed:
+        model.limits?.contextWindow.source === "fallback" ||
+        model.limits?.maxOutput.source === "fallback",
       supportsStreaming: model.supportsStreaming,
       supportsThinking: model.supportsThinking,
       selectable: true,
@@ -360,6 +462,38 @@ export class ProviderStore {
     // Force proxy change handlers to fire immediately so the sidebar
     // updates its model display without waiting for the next API call.
     this.proxy.notifyChange();
+    const activeModel = this.registry.getModel(target.providerId, target.modelId);
+    const warningKey = `${target.providerId}::${target.modelId}`;
+    if (
+      activeModel &&
+      !this.warnedAssumedLimits.has(warningKey) &&
+      (activeModel.limits?.contextWindow.source === "fallback" ||
+        activeModel.limits?.maxOutput.source === "fallback")
+    ) {
+      this.warnedAssumedLimits.add(warningKey);
+      this.notificationStore?.notify(
+        "warning",
+        this.t("tui.modelLimitsFallbackTitle"),
+        this.t("tui.modelLimitsFallback", {
+          context: activeModel.contextWindow.toLocaleString(),
+          output: activeModel.maxOutput.toLocaleString(),
+        }),
+      );
+    }
+    const reasoningConfig = this.registry.getActiveClientConfig();
+    if (reasoningConfig.reasoningFallbackReason) {
+      const requested = reasoningConfig.reasoning ?? { mode: "provider_default" as const };
+      const effective = reasoningConfig.reasoningEffective ?? { mode: "provider_default" as const };
+      this.notificationStore?.notify(
+        "warning",
+        this.t("tui.reasoningFallbackTitle"),
+        this.t("tui.reasoningFallback", {
+          requested: formatReasoningSelection(requested),
+          effective: formatReasoningSelection(effective),
+          reason: reasoningConfig.reasoningFallbackReason,
+        }),
+      );
+    }
 
     // Fire-and-forget test-connection; display result as notification (Phase 2.5 B1d).
     if (this.notificationStore) {

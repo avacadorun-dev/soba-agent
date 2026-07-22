@@ -14,7 +14,8 @@
  *   --api-key-env <ENV_VAR>         — env var name holding the API key
  *                                     (omit / pass `--api-key-env ""` for
  *                                     keyless local servers like Ollama)
- *   --adapter <openai|anthropic>    — adapter id (default: openai)
+ *   --adapter <openai|openai-responses|anthropic> — adapter id (default: openai)
+ *   --metadata-profile <auto|generic_openai|openrouter|vllm|ollama|lmstudio|llamacpp|none>
  *   --default-model <model-id>      — default model id (required)
  *   --model <id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]>
  *                                    — register a model. Repeat for multiple.
@@ -46,10 +47,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  type ConfiguredModelDefinition,
+  isReasoningTransport,
   MODEL_COMPATIBILITY_FEATURES,
+  MODEL_METADATA_PROFILES,
   type ModelCompatibilityFeature,
   type ModelDefinition,
+  type ModelMetadataProfile,
   type ProviderDefinition,
+  parseReasoningCapabilities,
 } from "../../application/cli/public";
 import type { I18n } from "../../shared/i18n/i18n";
 
@@ -363,7 +369,7 @@ function buildProviderFromFlags(
   // keyless servers without resorting to --api-key-env=none.
   const apiKeyEnv = apiKeyEnvRaw && apiKeyEnvRaw.length > 0 ? apiKeyEnvRaw : null;
   const adapterRaw = stringFlag(options.flags, "adapter") ?? "openai";
-  if (adapterRaw !== "openai" && adapterRaw !== "anthropic") {
+  if (adapterRaw !== "openai" && adapterRaw !== "openai-responses" && adapterRaw !== "anthropic") {
     throw new ProviderCliError(
       "validation",
       t("cli.provider.error.invalidAdapter", { adapter: adapterRaw }),
@@ -371,16 +377,23 @@ function buildProviderFromFlags(
   }
   const adapter = adapterRaw;
   const modelFlags = collectRepeatableFlag(options.flags, "model");
-  if (modelFlags.length === 0) {
+  const requestedDefaultModel = stringFlag(options.flags, "default-model");
+  if (modelFlags.length === 0 && !requestedDefaultModel) {
     throw new ProviderCliError("validation", t("cli.provider.error.noModels", { id }));
   }
-  const models: ModelDefinition[] = modelFlags.map((raw, idx) => parseModelFlag(raw, idx, t));
-  const defaultModel = stringFlag(options.flags, "default-model") ?? models[0].id;
+  const models: ConfiguredModelDefinition[] = modelFlags.length > 0
+    ? modelFlags.map((raw, idx) => parseModelFlag(raw, idx, t))
+    : [{ id: requestedDefaultModel! }];
+  const defaultModel = requestedDefaultModel ?? models[0]!.id;
   if (!models.some((m) => m.id === defaultModel)) {
     throw new ProviderCliError(
       "validation",
       t("cli.provider.error.defaultModelMissing", { model: defaultModel, id }),
     );
+  }
+  const metadataProfileRaw = stringFlag(options.flags, "metadata-profile") ?? "auto";
+  if (!MODEL_METADATA_PROFILES.includes(metadataProfileRaw as ModelMetadataProfile)) {
+    throw new ProviderCliError("validation", `Unknown metadata profile: "${metadataProfileRaw}"`);
   }
   return {
     id,
@@ -388,6 +401,7 @@ function buildProviderFromFlags(
     baseUrl,
     apiKeyEnv,
     adapter,
+    metadataProfile: metadataProfileRaw as ModelMetadataProfile,
     models,
     defaultModel,
   };
@@ -397,10 +411,11 @@ function parseModelFlag(
   raw: string,
   index: number,
   t: (k: string, v?: Record<string, string | number>) => string,
-): ModelDefinition {
+): ConfiguredModelDefinition {
   // Format: id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
   // or legacy: id,name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]
-  // The 4 trailing fields are optional; missing values fall back to safe defaults.
+  // The 4 trailing fields are optional; missing limits remain unknown so live
+  // provider metadata can fill them later.
   //
   // First split on the first `=` (if present before the first `,`) to
   // extract the id and name, then split the remainder by `,` for numeric fields.
@@ -433,15 +448,22 @@ function parseModelFlag(
   }
   const parts = remainder.length > 0 ? remainder.split(",").map((p) => p.trim()) : [];
   const [contextRaw, outputRaw, streamRaw, thinkingRaw] = parts;
-  const contextWindow = parsePositiveInt(contextRaw, 8192, `model[${index}].contextWindow`);
-  const maxOutput = parsePositiveInt(outputRaw, 4096, `model[${index}].maxOutput`);
-  const supportsStreaming = streamRaw === undefined ? true : streamRaw === "true" || streamRaw === "1";
-  const supportsThinking = thinkingRaw === undefined ? false : thinkingRaw === "true" || thinkingRaw === "1";
-  return { id, name, contextWindow, maxOutput, supportsStreaming, supportsThinking };
+  const contextWindow = parseOptionalPositiveInt(contextRaw, `model[${index}].contextWindow`);
+  const maxOutput = parseOptionalPositiveInt(outputRaw, `model[${index}].maxOutput`);
+  const supportsStreaming = streamRaw === undefined ? undefined : streamRaw === "true" || streamRaw === "1";
+  const supportsThinking = thinkingRaw === undefined ? undefined : thinkingRaw === "true" || thinkingRaw === "1";
+  return {
+    id,
+    name,
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+    ...(maxOutput !== undefined ? { maxOutput } : {}),
+    ...(supportsStreaming !== undefined ? { supportsStreaming } : {}),
+    ...(supportsThinking !== undefined ? { supportsThinking } : {}),
+  };
 }
 
-function parsePositiveInt(raw: string | undefined, fallback: number, label: string): number {
-  if (raw === undefined || raw.length === 0) return fallback;
+function parseOptionalPositiveInt(raw: string | undefined, label: string): number | undefined {
+  if (raw === undefined || raw.length === 0) return undefined;
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) {
     throw new ProviderCliError("validation", `Invalid integer for ${label}: "${raw}"`);
@@ -483,27 +505,34 @@ function loadProviderFromFile(
   if (typeof obj.id !== "string" || typeof obj.name !== "string" || typeof obj.baseUrl !== "string") {
     throw new ProviderCliError("json-parse", t("cli.provider.error.jsonShape"));
   }
-  if (!Array.isArray(obj.models) || obj.models.length === 0) {
+  if ((!Array.isArray(obj.models) || obj.models.length === 0) && typeof obj.defaultModel !== "string") {
     throw new ProviderCliError("json-parse", t("cli.provider.error.jsonShape"));
   }
-  const models: ModelDefinition[] = [];
-  for (const m of obj.models) {
+  const models: ConfiguredModelDefinition[] = [];
+  for (const m of Array.isArray(obj.models) ? obj.models : []) {
     if (typeof m !== "object" || m === null) {
       throw new ProviderCliError("json-parse", t("cli.provider.error.jsonShape"));
     }
     const mm = m as Record<string, unknown>;
-    if (typeof mm.id !== "string" || typeof mm.name !== "string") {
+    if (typeof mm.id !== "string") {
       throw new ProviderCliError("json-parse", t("cli.provider.error.jsonShape"));
     }
     models.push({
       id: mm.id,
-      name: mm.name,
-      contextWindow: typeof mm.contextWindow === "number" ? mm.contextWindow : 8192,
-      maxOutput: typeof mm.maxOutput === "number" ? mm.maxOutput : 4096,
-      supportsStreaming: typeof mm.supportsStreaming === "boolean" ? mm.supportsStreaming : true,
-      supportsThinking: typeof mm.supportsThinking === "boolean" ? mm.supportsThinking : false,
+      name: typeof mm.name === "string" ? mm.name : mm.id,
+      contextWindow: typeof mm.contextWindow === "number" ? mm.contextWindow : undefined,
+      maxOutput: typeof mm.maxOutput === "number" ? mm.maxOutput : undefined,
+      supportsStreaming: typeof mm.supportsStreaming === "boolean" ? mm.supportsStreaming : undefined,
+      supportsThinking: typeof mm.supportsThinking === "boolean" ? mm.supportsThinking : undefined,
       compatibility: readModelCompatibility(mm.compatibility),
+      reasoning: parseReasoningCapabilities(mm.reasoning),
+      reasoningTransport: isReasoningTransport(mm.reasoningTransport)
+        ? mm.reasoningTransport
+        : undefined,
     });
+  }
+  if (models.length === 0 && typeof obj.defaultModel === "string") {
+    models.push({ id: obj.defaultModel, name: obj.defaultModel });
   }
   const defaultModel = typeof obj.defaultModel === "string" ? obj.defaultModel : models[0].id;
   if (!models.some((m) => m.id === defaultModel)) {
@@ -517,7 +546,17 @@ function loadProviderFromFile(
     name: obj.name,
     baseUrl: obj.baseUrl,
     apiKeyEnv: typeof obj.apiKeyEnv === "string" ? obj.apiKeyEnv : null,
-    adapter: obj.adapter === "anthropic" ? "anthropic" : "openai",
+    adapter:
+      obj.adapter === "anthropic" || obj.adapter === "openai-responses"
+        ? obj.adapter
+        : "openai",
+    metadataProfile: MODEL_METADATA_PROFILES.includes(obj.metadataProfile as ModelMetadataProfile)
+      ? obj.metadataProfile as ModelMetadataProfile
+      : "auto",
+    reasoning: parseReasoningCapabilities(obj.reasoning),
+    reasoningTransport: isReasoningTransport(obj.reasoningTransport)
+      ? obj.reasoningTransport
+      : undefined,
     models,
     defaultModel,
   };

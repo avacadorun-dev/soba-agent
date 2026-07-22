@@ -48,10 +48,10 @@ function newRegistry(initial?: Partial<ProviderRegistryState>): ProviderRegistry
 // ─── Defaults ───
 
 describe("ProviderRegistry defaults", () => {
-  test("getAllProviders returns the 4 built-in providers when no state is given", () => {
+  test("getAllProviders returns all built-in providers when no state is given", () => {
     const reg = newRegistry();
-    expect(reg.getAllProviders().length).toBe(4);
-    expect(reg.getBuiltinProviders().length).toBe(4);
+    expect(reg.getAllProviders().length).toBe(5);
+    expect(reg.getBuiltinProviders().length).toBe(5);
     expect(reg.getCustomProviders().length).toBe(0);
   });
 
@@ -264,7 +264,7 @@ describe("ProviderRegistry custom providers", () => {
     const reg = newRegistry();
     reg.addProvider(custom);
     expect(reg.getCustomProviders().map((p) => p.id)).toContain("my-llm");
-    expect(reg.getAllProviders().length).toBe(5);
+    expect(reg.getAllProviders().length).toBe(6);
   });
 
   test("addProvider rejects a duplicate id", () => {
@@ -551,6 +551,35 @@ describe("ProviderRegistry.testConnection", () => {
     }
   });
 
+  test("uses the native Responses endpoint for the official OpenAI provider", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+    let requestedBody: Record<string, unknown> = {};
+    globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      requestedUrl = String(url);
+      requestedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const reg = newRegistry({
+        defaultProvider: "openai-official",
+        defaultModel: "gpt-5.6",
+        providers: { "openai-official": { apiKey: "k" } },
+        customProviders: {},
+      });
+      const result = await reg.testConnection("openai-official", "gpt-5.6");
+      expect(result.ok).toBe(true);
+      expect(requestedUrl).toBe("https://api.openai.com/v1/responses");
+      expect(requestedBody.input).toBeArray();
+      expect(requestedBody.messages).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("returns ok=false when fetch throws (network unreachable)", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(async () => {
@@ -659,6 +688,29 @@ describe("parseRegistryState", () => {
     expect(state.providers.bad).toBeUndefined();
     expect(state.customProviders.ok?.id).toBe("ok");
     expect(state.customProviders.bad).toBeUndefined();
+  });
+
+  test("preserves discovery-only custom providers and defaults their metadata profile", () => {
+    const state = parseRegistryState({
+      customProviders: {
+        local: {
+          id: "local",
+          name: "Local runtime",
+          baseUrl: "http://127.0.0.1:8000/v1",
+          apiKeyEnv: null,
+          adapter: "openai",
+          defaultModel: "served-model",
+        },
+      },
+    });
+
+    expect(state.customProviders.local).toMatchObject({
+      id: "local",
+      defaultModel: "served-model",
+      metadataProfile: "auto",
+      custom: true,
+    });
+    expect(state.customProviders.local?.models).toBeUndefined();
   });
 });
 

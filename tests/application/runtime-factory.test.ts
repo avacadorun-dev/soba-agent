@@ -683,7 +683,12 @@ describe("createSobaRuntime", () => {
               contextWindow: 64000,
               maxOutput: 8192,
               supportsStreaming: true,
-              supportsThinking: false,
+              supportsThinking: true,
+              reasoning: {
+                control: "effort",
+                supportedEfforts: ["low", "high"],
+              },
+              reasoningTransport: "openai_chat",
             },
           ],
           custom: true,
@@ -734,7 +739,27 @@ describe("createSobaRuntime", () => {
     await expect(composition.runtime.listSessionConfigOptions?.(runtimeSession.id)).resolves.toMatchObject([
       { id: "provider", currentValue: "first-provider" },
       { id: "model", currentValue: "first-model" },
+      {
+        id: "reasoning",
+        category: "thought_level",
+        currentValue: "default",
+        options: [
+          { value: "default" },
+          { value: "low" },
+          { value: "high" },
+        ],
+      },
     ]);
+
+    await composition.runtime.setSessionConfig({
+      sessionId: runtimeSession.id,
+      key: "reasoning",
+      value: "high",
+    });
+    expect(composition.client.getConfig()).toMatchObject({
+      reasoning: { mode: "effort", effort: "high" },
+      reasoningEffective: { mode: "effort", effort: "high" },
+    });
 
     await composition.runtime.setSessionConfig({
       sessionId: runtimeSession.id,
@@ -747,6 +772,18 @@ describe("createSobaRuntime", () => {
       baseUrl: "https://second.example.test/v1",
       model: "second-model",
       contextWindow: 128000,
+      reasoning: { mode: "effort", effort: "high" },
+      reasoningEffective: { mode: "provider_default" },
+    });
+
+    await composition.runtime.setSessionConfig({
+      sessionId: runtimeSession.id,
+      key: "provider",
+      value: "first-provider",
+    });
+    expect(composition.client.getConfig().reasoningEffective).toEqual({
+      mode: "effort",
+      effort: "high",
     });
   });
 

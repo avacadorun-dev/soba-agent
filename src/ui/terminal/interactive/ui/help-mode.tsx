@@ -31,6 +31,7 @@ const HOTKEYS: HotkeyEntry[] = [
   { key: formatKeyBindings("copyLastAssistant"), action: "Copy last assistant" },
   { key: `${formatKeyBindings("clearMessages")} / /clear`, action: "Clear messages" },
   { key: `${formatKeyBindings("openModelSelector")} / /model`, action: "Model selector" },
+  { key: `${formatKeyBindings("cycleReasoning")} / /reasoning`, action: "Cycle reasoning level" },
   { key: `${formatKeyBindings("openSearch")} / /search`, action: "Search conversation" },
   { key: formatKeyBindings("nextSidebarMode"), action: "Next sidebar mode" },
   { key: formatKeyBindings("previousSidebarMode"), action: "Previous mode" },

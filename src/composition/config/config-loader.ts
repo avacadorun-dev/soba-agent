@@ -29,6 +29,11 @@ import {
 } from "../../engine/compaction/trigger-policy";
 import { discoverModels, toModelDefinitions } from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
+import {
+  isReasoningEffort,
+  parseReasoningSelection,
+  type ReasoningSelection,
+} from "../../kernel/model/reasoning";
 import { type I18n, isLocale } from "../../shared/i18n/i18n";
 
 /** Path to the config file: ~/.soba/config.json */
@@ -203,6 +208,10 @@ async function readConfigFile(
     if (typeof parsed.model === "string") config.model = parsed.model;
     if (typeof parsed.temperature === "number")
       config.temperature = parsed.temperature;
+    if (typeof parsed.maxCompletionTokens === "number")
+      config.maxCompletionTokens = parsed.maxCompletionTokens;
+    const reasoning = parseReasoningSelection(parsed.reasoning);
+    if (reasoning) config.reasoning = reasoning;
     if (typeof parsed.maxAgentIterations === "number")
       config.maxAgentIterations = parsed.maxAgentIterations;
     if (typeof parsed.maxStalledIterations === "number")
@@ -323,6 +332,8 @@ export function loadConfigFromEnv(): Partial<SobaConfig> {
       10,
     );
   }
+  const reasoning = reasoningSelectionFromEnv(process.env);
+  if (reasoning) overrides.reasoning = reasoning;
   if (process.env.SOBA_CONTEXT_WINDOW) {
     overrides.contextWindow = Number.parseInt(
       process.env.SOBA_CONTEXT_WINDOW,
@@ -391,6 +402,29 @@ export function loadConfigFromEnv(): Partial<SobaConfig> {
   }
 
   return overrides;
+}
+
+function reasoningSelectionFromEnv(
+  env: NodeJS.ProcessEnv,
+): ReasoningSelection | undefined {
+  const effort = env.SOBA_REASONING_EFFORT?.trim().toLowerCase();
+  if (effort === "default" || effort === "provider_default") {
+    return { mode: "provider_default" };
+  }
+  if (isReasoningEffort(effort)) return { mode: "effort", effort };
+
+  const budget = env.SOBA_REASONING_BUDGET?.trim();
+  if (budget) {
+    const maxTokens = Number.parseInt(budget, 10);
+    if (Number.isInteger(maxTokens) && maxTokens > 0) {
+      return { mode: "budget", maxTokens };
+    }
+  }
+
+  const enabled = env.SOBA_REASONING_ENABLED?.trim().toLowerCase();
+  if (enabled === "true" || enabled === "1") return { mode: "toggle", enabled: true };
+  if (enabled === "false" || enabled === "0") return { mode: "toggle", enabled: false };
+  return undefined;
 }
 
 /**
@@ -994,16 +1028,16 @@ async function firstTimeSetupCustom(
   const apiKey = (await ask(i18n.t("config.setup.apiKey"))).trim() || null;
   const apiKeyEnv = apiKey ? null : "CUSTOM_API_KEY";
 
-  // Build a transient ProviderDefinition so we can reuse the same
-  // discovery path as built-ins. Custom providers use id "custom"
-  // and inherit the discovered models into `models` (which is
-  // hard-coded for custom providers; see ProviderRegistry.addProvider).
+  // Build a transient ProviderDefinition so custom endpoints use the same
+  // capability-aware metadata path as built-ins. Only the user's selected id
+  // is persisted; live limits are refreshed from the endpoint at runtime.
   const transient: ProviderDefinition = {
     id: "custom",
     name: "Custom",
     baseUrl,
     apiKeyEnv,
     adapter: "openai",
+    metadataProfile: "auto",
   };
 
   printSetupStep(3, i18n.t("config.setup.chooseModelFor", { provider: "Custom" }));
@@ -1054,13 +1088,12 @@ async function firstTimeSetupCustom(
     baseUrl,
     apiKeyEnv,
     adapter: "openai",
+    metadataProfile: "auto",
     defaultModel: chosenModel.id,
     custom: true,
-    // Custom providers keep their full model list (no need for the
-    // discoverable catalogue split — the user added it by hand and
-    // it doesn't change as often as the vendor catalogue). The
-    // definition is persisted verbatim by `persistConfig()`.
-    models: available.length > 0 ? available : [chosenModel],
+    // Persist only the user's selection. Live limits/capabilities remain
+    // runtime metadata so a server reconfiguration is visible next launch.
+    models: [{ id: chosenModel.id, name: chosenModel.name }],
   });
   registry.setActive("custom", chosenModel.id);
   // Persist the API key in the registry so resolveApiKey() can find it

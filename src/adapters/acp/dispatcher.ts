@@ -929,6 +929,7 @@ const ACP_COMMAND_DESCRIPTIONS: Record<string, string> = {
   "auto-compact": "Show or change automatic compaction.",
   budget: "Show token budget usage.",
   config: "Show active configuration.",
+  reasoning: "Show or change model reasoning effort.",
   lang: "Change the response language.",
   permissions: "Show or change permission mode.",
   skill: "Manage skills.",

@@ -105,6 +105,7 @@ export async function runAgentTurn(
       maxCompletionTokens,
       contextWindow,
       temperature,
+      reasoning,
     } = preparedPrompt;
     // Main loop: continue until no more tool calls
     let currentResponse: ResponseResource | null = null;
@@ -204,6 +205,7 @@ export async function runAgentTurn(
         maxOutputTokens,
         maxCompletionTokens,
         temperature,
+        reasoning,
         stream: runtime.options.stream,
         ephemeralMessages,
         allowParallelToolCalls: !needsVerification,
@@ -249,6 +251,7 @@ export async function runAgentTurn(
         autonomousFollowUps,
         emit: (event) => emit(event),
         debug: (data) => debug(data),
+        flight: (data) => flight(data),
         emitStopReason: (reason, detail) => {
           emitStopReason(
             turnIndex,

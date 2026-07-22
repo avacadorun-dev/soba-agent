@@ -26,6 +26,9 @@ let savedContextWindow: string | undefined;
 let savedApiKey: string | undefined;
 let savedModel: string | undefined;
 let savedBaseUrl: string | undefined;
+let savedReasoningEffort: string | undefined;
+let savedReasoningBudget: string | undefined;
+let savedReasoningEnabled: string | undefined;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "soba-config-loader-"));
@@ -35,11 +38,17 @@ beforeEach(() => {
   savedApiKey = process.env.SOBA_API_KEY;
   savedModel = process.env.SOBA_MODEL;
   savedBaseUrl = process.env.SOBA_BASE_URL;
+  savedReasoningEffort = process.env.SOBA_REASONING_EFFORT;
+  savedReasoningBudget = process.env.SOBA_REASONING_BUDGET;
+  savedReasoningEnabled = process.env.SOBA_REASONING_ENABLED;
   delete process.env.SOBA_MAX_OUTPUT_TOKENS;
   delete process.env.SOBA_CONTEXT_WINDOW;
   delete process.env.SOBA_API_KEY;
   delete process.env.SOBA_MODEL;
   delete process.env.SOBA_BASE_URL;
+  delete process.env.SOBA_REASONING_EFFORT;
+  delete process.env.SOBA_REASONING_BUDGET;
+  delete process.env.SOBA_REASONING_ENABLED;
   _resetDeprecationWarningsForTests();
 });
 
@@ -70,6 +79,9 @@ afterEach(() => {
   } else {
     delete process.env.SOBA_BASE_URL;
   }
+  restoreEnv("SOBA_REASONING_EFFORT", savedReasoningEffort);
+  restoreEnv("SOBA_REASONING_BUDGET", savedReasoningBudget);
+  restoreEnv("SOBA_REASONING_ENABLED", savedReasoningEnabled);
   _resetDeprecationWarningsForTests();
 });
 
@@ -94,6 +106,58 @@ describe("loadConfigFromFile — B1e: maxTokens / contextWindow no longer read f
     expect(cfg?.contextWindow).not.toBe(999999);
   });
 });
+
+describe("loadConfigFromFile — reasoning", () => {
+  test("loads reasoning policy and completion cap from the persisted config", async () => {
+    writeConfig({
+      baseUrl: "https://example.com/v1",
+      apiKey: "k",
+      model: "x",
+      maxCompletionTokens: 16_384,
+      reasoning: { mode: "effort", effort: "high" },
+    });
+
+    const cfg = await loadConfigFromFile(configPath);
+    expect(cfg?.maxCompletionTokens).toBe(16_384);
+    expect(cfg?.reasoning).toEqual({ mode: "effort", effort: "high" });
+  });
+
+  test("ignores malformed reasoning policies", async () => {
+    writeConfig({
+      baseUrl: "https://example.com/v1",
+      apiKey: "k",
+      model: "x",
+      reasoning: { mode: "effort", effort: "ultra" },
+    });
+
+    const cfg = await loadConfigFromFile(configPath);
+    expect(cfg?.reasoning).toEqual({ mode: "provider_default" });
+  });
+
+  test("applies CLI over env over file precedence", async () => {
+    writeConfig({
+      baseUrl: "https://example.com/v1",
+      apiKey: "k",
+      model: "x",
+      reasoning: { mode: "effort", effort: "low" },
+    });
+    process.env.SOBA_REASONING_EFFORT = "high";
+
+    const envConfig = await loadConfig({}, { configPath });
+    expect(envConfig.reasoning).toEqual({ mode: "effort", effort: "high" });
+
+    const cliConfig = await loadConfig(
+      { reasoning: { mode: "effort", effort: "xhigh" } },
+      { configPath },
+    );
+    expect(cliConfig.reasoning).toEqual({ mode: "effort", effort: "xhigh" });
+  });
+});
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 describe("loadConfigFromFile — B1e: legacy selectedModels[*][*].apiKey migration", () => {
   test("lifts apiKey from selectedModels into providers[]", async () => {

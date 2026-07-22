@@ -69,6 +69,13 @@ export const RUNTIME_COMMANDS = [
     surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
+    id: "reasoning",
+    name: "/reasoning",
+    descriptionKey: "command.description.reasoning",
+    usage: "/reasoning [default|none|minimal|low|medium|high|xhigh|max|on|off|budget <tokens>]",
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
+  },
+  {
     id: "lang",
     name: "/lang",
     descriptionKey: "command.description.lang",

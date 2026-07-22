@@ -361,7 +361,7 @@ function looksLikeFinalText(text: string): boolean {
  * Convert agent output items to session ItemParam items.
  */
 export function outputItemToSessionItem(
-  item: MessageField | FunctionCallField,
+  item: MessageField | FunctionCallField | import("../../kernel/model/openresponses-types").ReasoningField,
 ): ItemParam | null {
   switch (item.type) {
     case "message": {
@@ -375,6 +375,7 @@ export function outputItemToSessionItem(
       if (item.phase) msg.phase = item.phase;
       if (item.reasoning_content)
         msg.reasoning_content = item.reasoning_content;
+      if (item.reasoning_details) msg.reasoning_details = structuredClone(item.reasoning_details);
       return msg;
     }
 
@@ -388,8 +389,14 @@ export function outputItemToSessionItem(
         status: "completed",
       };
       if (item.reasoning_content) fc.reasoning_content = item.reasoning_content;
+      if (item.reasoning_details) fc.reasoning_details = structuredClone(item.reasoning_details);
       return fc;
     }
+
+    case "reasoning":
+      return item.encrypted_content
+        ? structuredClone(item)
+        : null;
 
     default:
       return null;
@@ -421,7 +428,14 @@ export function buildRequest(
   ephemeralMessages: Array<{ role: "developer"; content: string }> = [],
   allowParallelToolCalls = true,
   allowedToolNames?: ReadonlySet<string>,
+  reasoning: import("../../kernel/model/reasoning").ReasoningSelection = { mode: "provider_default" },
 ): CreateResponseParams {
+  // `maxOutputTokens` is the model/provider capability used by local context
+  // planning. It is not a per-request request budget. A zero
+  // `maxCompletionTokens` deliberately omits the wire limit and lets the
+  // provider apply its own default.
+  void maxOutputTokens;
+  const requestOutputLimit = maxCompletionTokens > 0 ? maxCompletionTokens : null;
   const input = session.buildInput();
   const items = input.items as ItemParam[];
 
@@ -452,10 +466,26 @@ export function buildRequest(
     previous_response_id: input.previousResponseId ?? undefined,
     parallel_tool_calls: allowParallelToolCalls,
     store: false,
-    max_output_tokens: maxOutputTokens,
-    max_completion_tokens: maxCompletionTokens > 0 ? maxCompletionTokens : null,
+    max_output_tokens: requestOutputLimit,
+    max_completion_tokens: null,
     temperature,
+    reasoning: reasoningToRequestParam(reasoning),
   };
+}
+
+function reasoningToRequestParam(
+  selection: import("../../kernel/model/reasoning").ReasoningSelection,
+): import("../../kernel/model/openresponses-types").ReasoningParam | null {
+  switch (selection.mode) {
+    case "provider_default":
+      return null;
+    case "effort":
+      return { effort: selection.effort };
+    case "budget":
+      return { max_tokens: selection.maxTokens };
+    case "toggle":
+      return { enabled: selection.enabled };
+  }
 }
 
 function toStringArray(value: unknown): string[] {

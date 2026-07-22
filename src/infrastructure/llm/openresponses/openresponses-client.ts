@@ -18,6 +18,13 @@ import type {
   ResponseResource,
   StreamingEvent,
 } from "../../../kernel/model/openresponses-types";
+import {
+  DEFAULT_REASONING_SELECTION,
+  type ReasoningCapabilities,
+  type ReasoningSelection,
+  type ReasoningTransport,
+  resolveReasoningSelection,
+} from "../../../kernel/model/reasoning";
 import type {
   NativeContinuation,
   ProviderCapabilities,
@@ -45,6 +52,11 @@ export interface OpenResponsesClientConfig {
   maxCompletionTokens: number;
   contextWindow: number;
   temperature: number;
+  reasoning?: ReasoningSelection;
+  reasoningEffective?: ReasoningSelection;
+  reasoningFallbackReason?: string;
+  modelReasoning?: ReasoningCapabilities;
+  modelReasoningTransport?: ReasoningTransport;
 }
 
 export interface OpenResponsesClient {
@@ -98,6 +110,7 @@ export interface OpenResponsesClient {
 export class OpenResponsesClientImpl implements OpenResponsesClient {
   private config: OpenResponsesClientConfig;
   private adapter: ProviderAdapter;
+  private runtimeReasoningFallbackReason: string | undefined;
 
   constructor(sobaConfig: SobaConfig, adapter?: ProviderAdapter) {
     this.config = {
@@ -111,17 +124,35 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       maxCompletionTokens: sobaConfig.maxCompletionTokens,
       contextWindow: sobaConfig.contextWindow,
       temperature: sobaConfig.temperature,
+      reasoning: structuredClone(sobaConfig.reasoning ?? DEFAULT_REASONING_SELECTION),
+      modelReasoning: sobaConfig.modelReasoning
+        ? structuredClone(sobaConfig.modelReasoning)
+        : undefined,
+      modelReasoningTransport: sobaConfig.modelReasoningTransport,
     };
 
     this.adapter = adapter ?? new OpenAIAdapter();
   }
 
   getConfig(): OpenResponsesClientConfig {
+    const resolvedReasoning = resolveReasoningSelection(
+      this.config.reasoning ?? DEFAULT_REASONING_SELECTION,
+      this.config.modelReasoning,
+    );
+    const effectiveReasoning = this.runtimeReasoningFallbackReason
+      ? DEFAULT_REASONING_SELECTION
+      : resolvedReasoning.effective;
     return {
       ...this.config,
       modelCompatibility: this.config.modelCompatibility
         ? [...this.config.modelCompatibility]
         : undefined,
+      reasoning: structuredClone(this.config.reasoning),
+      modelReasoning: this.config.modelReasoning
+        ? structuredClone(this.config.modelReasoning)
+        : undefined,
+      reasoningEffective: structuredClone(effectiveReasoning),
+      reasoningFallbackReason: this.runtimeReasoningFallbackReason ?? resolvedReasoning.fallbackReason,
     };
   }
 
@@ -150,6 +181,14 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   }
 
   updateConfig(partial: Partial<OpenResponsesClientConfig>): void {
+    if (
+      partial.model !== undefined ||
+      partial.reasoning !== undefined ||
+      "modelReasoning" in partial ||
+      "modelReasoningTransport" in partial
+    ) {
+      this.runtimeReasoningFallbackReason = undefined;
+    }
     if (partial.baseUrl !== undefined) this.config.baseUrl = partial.baseUrl;
     if (partial.apiKey !== undefined) this.config.apiKey = partial.apiKey;
     if (partial.model !== undefined) this.config.model = partial.model;
@@ -162,31 +201,56 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     if (partial.maxCompletionTokens !== undefined) this.config.maxCompletionTokens = partial.maxCompletionTokens;
     if (partial.contextWindow !== undefined) this.config.contextWindow = partial.contextWindow;
     if (partial.temperature !== undefined) this.config.temperature = partial.temperature;
+    if (partial.reasoning !== undefined) this.config.reasoning = structuredClone(partial.reasoning);
+    if ("modelReasoning" in partial) {
+      this.config.modelReasoning = partial.modelReasoning
+        ? structuredClone(partial.modelReasoning)
+        : undefined;
+    }
+    if ("modelReasoningTransport" in partial) {
+      this.config.modelReasoningTransport = partial.modelReasoningTransport;
+    }
   }
 
   async create(params: CreateResponseParams, options: { signal?: AbortSignal } = {}): Promise<ResponseResource> {
     // Convert to provider-specific request
-    const request = this.adapter.convertRequest(
+    const convertedRequest = this.adapter.convertRequest(
       { ...params, stream: false },
       this.getProviderConfig(),
     );
+    const request = this.runtimeReasoningFallbackReason
+      ? stripReasoningWireControl(convertedRequest)
+      : convertedRequest;
 
     // Send to provider
-    const response = await this.sendRequest(request, { signal: options.signal });
+    let response = await this.sendRequest(request, { signal: options.signal });
+    if (hasReasoningWireControl(request) && isUnsupportedReasoningResponse(response)) {
+      this.runtimeReasoningFallbackReason = "Provider rejected the reasoning control; provider default was used.";
+      response = await this.sendRequest(stripReasoningWireControl(request), {
+        signal: options.signal,
+        retries: 0,
+      });
+    }
 
     // Convert response back to OpenResponses format
     return this.adapter.convertResponse(response, this.getProviderConfig());
   }
 
   async *createStream(params: CreateResponseParams, options: { signal?: AbortSignal } = {}): AsyncIterable<StreamingEvent> {
-    const adapter = this.adapter as OpenAIAdapter;
+    const adapter = this.adapter as ProviderAdapter & {
+      createStreamAccumulator(): unknown;
+      processStreamLine(data: string, state: unknown): StreamingEvent[];
+    };
 
-    const request = this.adapter.convertRequest(
+    let request = this.adapter.convertRequest(
       { ...params, stream: true },
       this.getProviderConfig(),
     );
+    if (this.runtimeReasoningFallbackReason) {
+      request = stripReasoningWireControl(request);
+    }
 
-    const url = `${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const url = `${this.config.baseUrl.replace(/\/$/, "")}${this.adapter.getCreatePath?.() ?? "/chat/completions"}`;
 
     const retries = 3;
     const baseDelay = 1000;
@@ -205,6 +269,14 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => "Unknown error");
+          if (
+            hasReasoningWireControl(request) &&
+            isUnsupportedReasoningError(response.status, errorText)
+          ) {
+            this.runtimeReasoningFallbackReason = "Provider rejected the reasoning control; provider default was used.";
+            request = stripReasoningWireControl(request);
+            continue;
+          }
           yield {
             type: "response.failed",
             error: {
@@ -321,7 +393,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     request: Record<string, unknown>,
     options: { signal?: AbortSignal; retries?: number; baseDelay?: number } = {},
   ): Promise<Record<string, unknown>> {
-    const url = `${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const url = `${this.config.baseUrl.replace(/\/$/, "")}${this.adapter.getCreatePath?.() ?? "/chat/completions"}`;
     const retries = options.retries ?? 3;
     const baseDelay = options.baseDelay ?? 1000;
 
@@ -397,8 +469,47 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       apiKey: this.config.apiKey,
       model: this.config.model,
       compatibility: this.config.modelCompatibility,
+      reasoning: this.config.reasoning,
+      reasoningCapabilities: this.config.modelReasoning,
+      reasoningTransport: this.config.modelReasoningTransport,
     };
   }
+}
+
+const REASONING_WIRE_KEYS = [
+  "reasoning_effort",
+  "reasoning",
+  "thinking",
+  "enable_thinking",
+  "thinking_budget",
+  "think",
+] as const;
+
+function hasReasoningWireControl(request: Record<string, unknown>): boolean {
+  return REASONING_WIRE_KEYS.some((key) => key in request);
+}
+
+function stripReasoningWireControl(request: Record<string, unknown>): Record<string, unknown> {
+  const stripped = { ...request };
+  for (const key of REASONING_WIRE_KEYS) delete stripped[key];
+  return stripped;
+}
+
+function isUnsupportedReasoningResponse(response: Record<string, unknown>): boolean {
+  const error = response.error;
+  if (!error || typeof error !== "object") return false;
+  const status = typeof (error as Record<string, unknown>).status === "number"
+    ? (error as Record<string, unknown>).status as number
+    : 400;
+  return isUnsupportedReasoningError(status, JSON.stringify(error));
+}
+
+function isUnsupportedReasoningError(status: number, message: string): boolean {
+  if (status < 400 || status >= 500) return false;
+  const normalized = message.toLowerCase();
+  const mentionsControl = /reasoning|thinking|effort|enable_thinking|think/.test(normalized);
+  const rejectsControl = /unsupported|not supported|unknown|unrecognized|invalid|extra|unexpected|not permitted/.test(normalized);
+  return mentionsControl && rejectsControl;
 }
 
 function signalWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {

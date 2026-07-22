@@ -344,6 +344,7 @@ async function main() {
   if (cliArgs.theme) cliOverrides.theme = cliArgs.theme;
   if (cliArgs.maxOutputTokens) cliOverrides.maxOutputTokens = cliArgs.maxOutputTokens;
   if (cliArgs.maxCompletionTokens !== undefined) cliOverrides.maxCompletionTokens = cliArgs.maxCompletionTokens;
+  if (cliArgs.reasoning !== undefined) cliOverrides.reasoning = cliArgs.reasoning;
   if (cliArgs.contextWindow) cliOverrides.contextWindow = cliArgs.contextWindow;
   if (cliArgs.maxAgentIterations !== undefined) cliOverrides.maxAgentIterations = cliArgs.maxAgentIterations;
   if (cliArgs.maxStalledIterations !== undefined) cliOverrides.maxStalledIterations = cliArgs.maxStalledIterations;
@@ -566,6 +567,7 @@ async function main() {
       debug: cliArgs.debug,
       maxOutputTokens: config.maxOutputTokens,
       maxCompletionTokens: config.maxCompletionTokens,
+      reasoning: providerStore.activeReasoningLabel(),
       maxAgentIterations: config.maxAgentIterations,
       maxStalledIterations: config.maxStalledIterations,
       maxRunMinutes: config.maxRunMinutes,

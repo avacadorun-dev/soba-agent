@@ -1,3 +1,9 @@
+export type { ReasoningSelection } from "../../kernel/model/reasoning";
+export {
+  isReasoningEffort,
+  isReasoningTransport,
+  parseReasoningCapabilities,
+} from "../../kernel/model/reasoning";
 export type { SessionEntry, SessionInfo } from "../../kernel/transcript/types";
 export type {
   ActivatedSkillRef,
@@ -161,9 +167,11 @@ export type {
   McpToolRegistrySyncResult,
 } from "../mcp-runtime-controller";
 export type {
+  ConfiguredModelDefinition,
   CustomProviderMap,
   ModelCompatibilityFeature,
   ModelDefinition,
+  ModelMetadataProfile,
   ProviderAdapterId,
   ProviderConfigMap,
   ProviderDefinition,
@@ -177,6 +185,7 @@ export {
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
   findBuiltinProvider,
   MODEL_COMPATIBILITY_FEATURES,
+  MODEL_METADATA_PROFILES,
 } from "../providers/public";
 export type {
   RuntimeSessionHandle,

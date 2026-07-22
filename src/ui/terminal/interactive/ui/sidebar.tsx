@@ -145,12 +145,19 @@ function ModeLabel(props: { mode: SidebarMode; store: TuiStore }) {
 
 // ─── Section title ───
 
-function Section(props: { label: string; store: TuiStore }) {
+function Section(props: { label: string; store: TuiStore; hint?: string }) {
   const theme = () => getTuiTheme(props.store.themeName());
   return (
-    <text fg={theme().muted} wrapMode="none" truncate>
-      <b>{props.label.toUpperCase()}</b>
-    </text>
+    <box height={1} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+      <text fg={theme().muted} wrapMode="none" truncate>
+        <b>{props.label.toUpperCase()}</b>
+      </text>
+      <Show when={props.hint}>
+        <text fg={theme().dim} wrapMode="none" truncate>
+          {props.hint}
+        </text>
+      </Show>
+    </box>
   );
 }
 
@@ -170,6 +177,57 @@ function KV(props: {
       <span style={{ fg: theme().muted }}>{props.key.padEnd(10)}</span>
       {props.value}
     </text>
+  );
+}
+
+export function fitSidebarValue(value: string, maxWidth: number): string {
+  const width = Math.max(1, Math.floor(maxWidth));
+  if (value.length <= width) return value;
+  if (width === 1) return "…";
+  const remaining = width - 1;
+  const prefixLength = Math.ceil(remaining / 2);
+  const suffixLength = Math.floor(remaining / 2);
+  return `${value.slice(0, prefixLength)}…${value.slice(-suffixLength)}`;
+}
+
+function ModelIdentity(props: { store: TuiStore; width: number }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+  const contentWidth = () => Math.max(8, props.width - 3);
+  const provider = () => props.store.providerName() || "default";
+
+  return (
+    <>
+      <text fg={theme().text} wrapMode="none" truncate>
+        <b>{fitSidebarValue(props.store.model(), contentWidth())}</b>
+      </text>
+      <text wrapMode="none" truncate>
+        <span style={{ fg: theme().dim }}>via </span>
+        <span style={{ fg: theme().muted }}>
+          {fitSidebarValue(provider(), Math.max(1, contentWidth() - 4))}
+        </span>
+      </text>
+    </>
+  );
+}
+
+function ReasoningStatus(props: { store: TuiStore; width: number }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+  const tone = () =>
+    props.store.reasoningFallback()
+      ? theme().warning
+      : props.store.reasoningChanged()
+        ? theme().success
+        : theme().text;
+  const contentWidth = () => Math.max(8, props.width - 3);
+  return (
+    <>
+      <Section label="reasoning" hint="F4" store={props.store} />
+      <text fg={tone()} wrapMode="none" truncate>
+        <span style={{ bold: props.store.reasoningChanged() }}>
+          {fitSidebarValue(props.store.reasoning(), contentWidth())}
+        </span>
+      </text>
+    </>
   );
 }
 
@@ -254,9 +312,9 @@ function ProjectStatus(props: { store: TuiStore; cwd: string }) {
 
 // ─── Mode: Session ───
 
-function SessionMode(props: { store: TuiStore }) {
+function SessionMode(props: { store: TuiStore; width: number }) {
   const theme = () => getTuiTheme(props.store.themeName());
-  const cwd = () => shortenPath(props.store.options.cwd, 22);
+  const cwd = () => shortenPath(props.store.options.cwd, Math.max(8, props.width - 3));
   const ctxTokens = () => {
     const effective = props.store.effectiveContextTokens();
     if (effective > 0) return effective;
@@ -292,8 +350,10 @@ function SessionMode(props: { store: TuiStore }) {
       <text> </text>
 
       <Section label="model" store={props.store} />
-      <KV key="model" value={props.store.model()} store={props.store} />
-      <KV key="provider" value={props.store.providerName() || "default"} store={props.store} />
+      <ModelIdentity store={props.store} width={props.width} />
+      <text> </text>
+
+      <ReasoningStatus store={props.store} width={props.width} />
       <text> </text>
 
       <Section label="context" store={props.store} />
@@ -508,7 +568,7 @@ export function Sidebar(props: { store: TuiStore; width: number }) {
 
         <Switch>
           <Match when={mode() === "session"}>
-            <SessionMode store={props.store} />
+            <SessionMode store={props.store} width={props.width} />
           </Match>
           <Match when={mode() === "changes"}>
             <ChangesMode store={props.store} />

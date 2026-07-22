@@ -10,7 +10,6 @@
  */
 
 import type { ModelCompatibilityFeature } from "../../../application/providers/types";
-
 import type {
   CompactResource,
   CompactResponseParams,
@@ -18,6 +17,11 @@ import type {
   ResponseResource,
   StreamingEvent,
 } from "../../../kernel/model/openresponses-types";
+import type {
+  ReasoningCapabilities,
+  ReasoningSelection,
+  ReasoningTransport,
+} from "../../../kernel/model/reasoning";
 import type { ItemParam } from "../../../kernel/transcript/types";
 import type { NativeContinuation, ProviderCapabilities, ProviderIdentity } from "../../../kernel/transcript/types-v2";
 
@@ -29,6 +33,9 @@ export interface ProviderConfig {
   apiKey: string;
   model: string;
   compatibility?: readonly ModelCompatibilityFeature[];
+  reasoning?: ReasoningSelection;
+  reasoningCapabilities?: ReasoningCapabilities;
+  reasoningTransport?: ReasoningTransport;
 }
 
 /**
@@ -79,6 +86,9 @@ export type ProviderErrorKind = "context_overflow" | "rate_limit" | "authenticat
 export interface ProviderAdapter {
   /** Human-readable name for logging/debugging */
   readonly name: string;
+
+  /** Relative API path for response creation. Defaults to /chat/completions. */
+  getCreatePath?(): string;
 
   // ─── Phase 2: Identity & Capabilities ───
 

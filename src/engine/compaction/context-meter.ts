@@ -89,6 +89,13 @@ export class ContextMeter {
     this._providerInputTokens = 0;
   }
 
+  /** Apply limits for a newly selected model or refreshed provider profile. */
+  updateLimits(contextWindow: number, maxOutputTokens: number): void {
+    this._contextWindow = Math.max(1, Math.trunc(contextWindow));
+    this._maxOutputTokens = Math.max(1, Math.trunc(maxOutputTokens));
+    this.invalidateWatermark();
+  }
+
   /**
    * Compute a context snapshot for the current session branch.
    *

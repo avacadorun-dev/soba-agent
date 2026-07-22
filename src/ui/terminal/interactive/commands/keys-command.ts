@@ -14,7 +14,7 @@ export function createKeysCommand(): SlashCommand {
     name: "keys",
     description: "Show keyboard shortcuts",
     handler: (_args, ctx) => {
-      const lines = ["Keyboard shortcuts", ...getKeymapHelpRows(), "", "Fallback commands: /model, /search, /clear, /sidebar"];
+      const lines = ["Keyboard shortcuts", ...getKeymapHelpRows(), "", "Fallback commands: /model, /reasoning, /search, /clear, /sidebar"];
       ctx.addMessage?.({
         type: "info",
         content: lines.join("\n"),

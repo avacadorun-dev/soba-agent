@@ -5,10 +5,16 @@ import { OpenResponsesClientProxy } from "../../infrastructure/llm/providers/cli
 import {
   discoverModels,
   getCachedModels,
+  resolveMetadataProfile,
   supportsTextGeneration,
   toModelDefinitions,
 } from "../../infrastructure/llm/providers/discovery";
 import { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
+import {
+  formatReasoningSelection,
+  type ReasoningCapabilities,
+  reasoningSelectionToConfigValue,
+} from "../../kernel/model/reasoning";
 
 export interface ProviderStackInput {
   config: SobaConfig;
@@ -26,7 +32,14 @@ export interface ProviderStack {
 
 export async function createProviderStack(input: ProviderStackInput): Promise<ProviderStack> {
   const persistedRegistry = input.config.registry ?? await ProviderRegistry.loadFromFile(input.providerRegistryConfigPath);
-  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined, { configPath: input.providerRegistryConfigPath });
+  const providerRegistry = new ProviderRegistry(persistedRegistry ?? undefined, {
+    configPath: input.providerRegistryConfigPath,
+    clientDefaults: {
+      maxCompletionTokens: input.config.maxCompletionTokens,
+      temperature: input.config.temperature,
+      reasoning: input.config.reasoning,
+    },
+  });
   const hasRegistry = Boolean(persistedRegistry);
   let cliProviderId: string | undefined;
   if (input.modelExplicitlyPassed || (!hasRegistry && input.config.model)) {
@@ -86,8 +99,12 @@ export async function buildProviderConfigOptions(providerRegistry: ProviderRegis
   const modelOptions = (models.length > 0 ? models : [activeModel]).map((model) => ({
     value: model.id,
     name: model.name,
-    description: `${model.contextWindow.toLocaleString()} ctx, ${model.maxOutput.toLocaleString()} max output`,
+    description: `${model.contextWindow.toLocaleString()} ctx${model.limits?.contextWindow.source === "fallback" ? " (assumed)" : ""}, ${model.maxOutput.toLocaleString()} max output`,
   }));
+
+  const reasoningOption = buildReasoningConfigOption(
+    providerRegistry.getActiveClientConfig(),
+  );
 
   return [
     {
@@ -108,7 +125,73 @@ export async function buildProviderConfigOptions(providerRegistry: ProviderRegis
       currentValue: activeModel.id,
       options: modelOptions,
     },
+    reasoningOption,
   ];
+}
+
+function buildReasoningConfigOption(
+  config: ReturnType<ProviderRegistry["getActiveClientConfig"]>,
+): RuntimeSessionConfigOption {
+  const requested = config.reasoning ?? { mode: "provider_default" as const };
+  const effective = config.reasoningEffective ?? { mode: "provider_default" as const };
+  const currentValue = reasoningSelectionToConfigValue(requested);
+  const options = reasoningSelectOptions(config.modelReasoning);
+  if (!options.some((option) => option.value === currentValue)) {
+    options.push({
+      value: currentValue,
+      name: `${formatReasoningSelection(requested)} (unsupported)`,
+      description: "Provider default is effective for the active model.",
+    });
+  }
+  const fallback = config.reasoningFallbackReason
+    ? ` Requested ${formatReasoningSelection(requested)}; effective ${formatReasoningSelection(effective)}. ${config.reasoningFallbackReason}`
+    : ` Effective: ${formatReasoningSelection(effective)}.`;
+  return {
+    id: "reasoning",
+    name: "Reasoning",
+    description: `Reasoning policy used for new turns.${fallback}`,
+    category: "thought_level",
+    type: "select",
+    currentValue,
+    options,
+  };
+}
+
+function reasoningSelectOptions(
+  capabilities?: ReasoningCapabilities,
+): Array<{ value: string; name: string; description?: string }> {
+  const options: Array<{ value: string; name: string; description?: string }> = [{
+    value: "default",
+    name: "Provider default",
+    description: "Omit reasoning controls and let the provider choose.",
+  }];
+  if (!capabilities || capabilities.control === "none" || capabilities.control === "fixed") {
+    return options;
+  }
+  if (capabilities.control === "effort") {
+    for (const effort of capabilities.supportedEfforts ?? []) {
+      if (capabilities.mandatory && effort === "none") continue;
+      options.push({ value: effort, name: effort });
+    }
+  }
+  if (capabilities.control === "toggle" || capabilities.supportsToggle) {
+    options.push({ value: "on", name: "On" });
+    if (!capabilities.mandatory) options.push({ value: "off", name: "Off" });
+  }
+  if (capabilities.control === "budget" || capabilities.supportsBudget) {
+    for (const budget of reasoningBudgetPresets(capabilities)) {
+      options.push({ value: `budget:${budget}`, name: `${budget.toLocaleString()} tokens` });
+    }
+  }
+  return options;
+}
+
+function reasoningBudgetPresets(capabilities: ReasoningCapabilities): number[] {
+  const min = capabilities.minBudgetTokens ?? 1;
+  const max = capabilities.maxBudgetTokens ?? 32_768;
+  const candidates = [min, 1_024, 4_096, 8_192, 16_384, max];
+  return [...new Set(candidates.filter((value) => value >= min && value <= max))]
+    .sort((a, b) => a - b);
 }
 
 export function providerHasCredentials(providerRegistry: ProviderRegistry, provider: ProviderDefinition): boolean {
@@ -192,7 +275,10 @@ export async function usableModelForProvider(providerRegistry: ProviderRegistry,
 }
 
 async function refreshModelsForProvider(providerRegistry: ProviderRegistry, provider: ProviderDefinition): Promise<void> {
-  if (provider.models && provider.models.length > 0) return;
+  if (resolveMetadataProfile(provider) === "none") return;
   if (!providerHasCredentials(providerRegistry, provider)) return;
-  await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
+  const discovery = await discoverModels(provider, providerRegistry.resolveApiKey(provider.id), { timeoutMs: 4_000 });
+  if (discovery.ok) {
+    for (const model of discovery.models) providerRegistry.invalidateClient(provider.id, model.id);
+  }
 }

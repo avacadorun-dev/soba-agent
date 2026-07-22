@@ -45,6 +45,7 @@ export interface AssistantMessageItemParam {
   status?: string | null;
   phase?: "commentary" | "final_answer";
   reasoning_content?: string;
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface SystemMessageItemParam {
@@ -63,6 +64,7 @@ export interface FunctionCallItemParam {
   id?: string | null;
   status?: string | null;
   reasoning_content?: string;
+  reasoning_details?: Array<Record<string, unknown>>;
 }
 
 export interface FunctionCallOutputItemParam {
@@ -95,6 +97,14 @@ export interface CompactionSummaryItemParam {
   type: "compaction";
   encrypted_content: string;
   id?: string | null;
+}
+
+export interface ReasoningItemParam {
+  type: "reasoning";
+  encrypted_content: string;
+  id?: string | null;
+  /** Opaque provider-owned fields must survive session persistence verbatim. */
+  [key: string]: unknown;
 }
 
 /**
@@ -138,6 +148,7 @@ export interface DebugEntry {
 
 export type FlightRecordKind =
   | "prompt_snapshot"
+  | "model_request"
   | "runtime_event"
   | "tool_call"
   | "tool_result"
@@ -164,6 +175,14 @@ export interface FlightRecordEntry {
   data: FlightRecordData;
 }
 
+/** Append-only per-session runtime preference. It is not sent to the model. */
+export interface SessionConfigEntry {
+  type: "session_config";
+  timestamp: string;
+  key: string;
+  value: unknown;
+}
+
 /**
  * Union of all OpenResponses item types used in session entries.
  * Phase 1 covers: user_message, assistant_message, system_message,
@@ -178,6 +197,7 @@ export type ItemParam =
   | FunctionCallOutputItemParam
   | LocalShellCallItemParam
   | LocalShellCallOutputItemParam
+  | ReasoningItemParam
   | CompactionSummaryItemParam;
 
 // ─── Session File Format ───
@@ -234,7 +254,7 @@ export type SessionEntry = SessionItemEntry | CompactionEntry | ContextCapsuleEn
  * All entries in the file (includes SessionHeader, DebugEntry, and v2 sidecars).
  * Debug entries, migration markers, and cursor entries are sidecar metadata, not part of the conversation tree.
  */
-export type FileEntry = SessionHeader | SessionEntry | DebugEntry | FlightRecordEntry | SessionMigrationEntry | SessionCursorEntry;
+export type FileEntry = SessionHeader | SessionEntry | DebugEntry | FlightRecordEntry | SessionConfigEntry | SessionMigrationEntry | SessionCursorEntry;
 
 // ─── Tree view ───
 

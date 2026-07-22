@@ -1,3 +1,4 @@
+import { resolveOutputReserveTokens } from "../../kernel/model/model-limits";
 import type { FlightRecordData } from "../../kernel/transcript/types";
 import { filterToolsForWorkMode } from "../../kernel/work-mode/public";
 import type { AgentLoopRuntimeServices } from "./agent-loop-runtime";
@@ -20,6 +21,23 @@ export async function prepareAgentTurnPromptContext(input: {
     "Checking project instructions, available skills, and memory before choosing the next action.",
   );
   const workMode = runtime.workModeController.getWorkMode();
+  const modelConfig = runtime.client.getConfig();
+  // The provider proxy can replace a same-id client's synthetic limits after
+  // live metadata refresh. Directly constructed AgentLoops may intentionally
+  // use a ContextManager with independent test/application limits, so only
+  // synchronize proxy-backed runtimes.
+  if (
+    "getActiveSelection" in runtime.client &&
+    typeof runtime.contextManager?.updateModelLimits === "function"
+  ) {
+    runtime.contextManager.updateModelLimits(
+      modelConfig.contextWindow,
+      resolveOutputReserveTokens(
+        modelConfig.maxOutputTokens,
+        modelConfig.maxCompletionTokens,
+      ),
+    );
+  }
   const preparedPrompt = await prepareTurnPrompt({
     cwd,
     userText,
@@ -29,7 +47,7 @@ export async function prepareAgentTurnPromptContext(input: {
     contextReader: runtime.projectContextReader,
     skillManager: runtime.skillManager,
     projectMemory: runtime.projectMemory,
-    modelConfig: runtime.client.getConfig(),
+    modelConfig,
   });
   const { contextFiles, systemPrompt, model } = preparedPrompt;
   narrate(
@@ -46,6 +64,9 @@ export async function prepareAgentTurnPromptContext(input: {
       userInput: userText,
       taskKind,
       model,
+      reasoningRequested: modelConfig.reasoning ?? { mode: "provider_default" },
+      reasoningEffective: modelConfig.reasoningEffective ?? { mode: "provider_default" },
+      reasoningFallbackReason: modelConfig.reasoningFallbackReason,
       workMode,
       selectedTools: filterToolsForWorkMode(runtime.tools.getNames(), workMode, {
         clarificationAvailable: runtime.clarificationAvailable(),

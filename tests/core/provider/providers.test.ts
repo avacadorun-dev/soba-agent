@@ -37,12 +37,14 @@ function assertWellFormed(p: ProviderDefinition): void {
     }
     for (const m of p.models) {
       expect(m.id).toBeTruthy();
-      expect(m.name).toBeTruthy();
-      expect(m.contextWindow).toBeGreaterThan(0);
-      expect(m.maxOutput).toBeGreaterThan(0);
-      expect(m.maxOutput).toBeLessThanOrEqual(m.contextWindow);
-      expect(typeof m.supportsStreaming).toBe("boolean");
-      expect(typeof m.supportsThinking).toBe("boolean");
+      if (m.name !== undefined) expect(m.name).toBeTruthy();
+      if (m.contextWindow !== undefined) expect(m.contextWindow).toBeGreaterThan(0);
+      if (m.maxOutput !== undefined) expect(m.maxOutput).toBeGreaterThan(0);
+      if (m.maxOutput !== undefined && m.contextWindow !== undefined) {
+        expect(m.maxOutput).toBeLessThanOrEqual(m.contextWindow);
+      }
+      if (m.supportsStreaming !== undefined) expect(typeof m.supportsStreaming).toBe("boolean");
+      if (m.supportsThinking !== undefined) expect(typeof m.supportsThinking).toBe("boolean");
     }
   }
   // defaultModel is optional: built-ins leave it empty,
@@ -50,9 +52,9 @@ function assertWellFormed(p: ProviderDefinition): void {
 }
 
 describe("BUILTIN_PROVIDERS", () => {
-  test("contains the canonical 4 providers (UC-2.5.1 + B1d)", () => {
+  test("contains the canonical providers plus official OpenAI", () => {
     const ids = BUILTIN_PROVIDERS.map((p) => p.id).sort();
-    expect(ids).toEqual(["alibaba", "deepseek", "kimi", "openrouter"].sort());
+    expect(ids).toEqual(["alibaba", "deepseek", "kimi", "openrouter", "openai-official"].sort());
   });
 
   test("every built-in provider is well-formed", () => {
@@ -113,5 +115,15 @@ describe("Specific provider contracts", () => {
     const p = findBuiltinProvider("openrouter");
     expect(p?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(p?.apiKeyEnv).toBe("OPENROUTER_API_KEY");
+  });
+
+  test("official OpenAI uses a non-conflicting id and explicit reasoning transport", () => {
+    const provider = findBuiltinProvider("openai-official");
+    expect(provider).toMatchObject({
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyEnv: "OPENAI_API_KEY",
+      adapter: "openai-responses",
+      reasoningTransport: "openai_responses",
+    });
   });
 });

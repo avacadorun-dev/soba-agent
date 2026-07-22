@@ -1,3 +1,7 @@
+import {
+  formatReasoningSelection,
+  parseReasoningConfigValue,
+} from "../../../kernel/model/reasoning";
 import type { CommandResult } from "../public";
 import {
   buildConfigCommandView,
@@ -58,6 +62,48 @@ export function handleConfig(_args: string[], ctx: CommandContext): CommandResul
     message: lines.join("\n"),
   });
 
+  return { handled: true };
+}
+
+export async function handleReasoning(args: string[], ctx: CommandContext): Promise<CommandResult> {
+  const current = ctx.client.getConfig();
+  if (args.length === 0) {
+    const requested = current.reasoning ?? { mode: "provider_default" as const };
+    const effective = current.reasoningEffective ?? { mode: "provider_default" as const };
+    const suffix = current.reasoningFallbackReason ? ` — ${current.reasoningFallbackReason}` : "";
+    ctx.renderer.emit({
+      type: "info",
+      timestamp: Date.now(),
+      message: `Reasoning: requested ${formatReasoningSelection(requested)}, effective ${formatReasoningSelection(effective)}${suffix}`,
+    });
+    return { handled: true };
+  }
+
+  const raw = args[0] === "budget" && args[1] ? `budget:${args[1]}` : args[0];
+  const reasoning = parseReasoningConfigValue(raw);
+  if (!reasoning) {
+    ctx.renderer.emit({
+      type: "error",
+      timestamp: Date.now(),
+      message: "Usage: /reasoning [default|none|minimal|low|medium|high|xhigh|max|on|off|budget <tokens>]",
+    });
+    return { handled: true };
+  }
+
+  ctx.config.reasoning = reasoning;
+  ctx.client.updateConfig({ reasoning });
+  ctx.session.appendSessionConfig("reasoning", reasoning);
+  const next = ctx.client.getConfig();
+  const effective = next.reasoningEffective ?? { mode: "provider_default" as const };
+  const fallback = next.reasoningFallbackReason ? ` ${next.reasoningFallbackReason}` : "";
+  ctx.renderer.emit({
+    type: "reasoning_changed",
+    timestamp: Date.now(),
+    reasoning: formatReasoningSelection(reasoning),
+    effectiveReasoning: formatReasoningSelection(effective),
+    fallbackReason: next.reasoningFallbackReason,
+    message: `Reasoning set to ${formatReasoningSelection(reasoning)}; effective ${formatReasoningSelection(effective)}.${fallback}`,
+  });
   return { handled: true };
 }
 

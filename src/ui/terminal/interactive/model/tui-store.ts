@@ -97,6 +97,9 @@ export class TuiStore {
   readonly debug: Accessor<boolean>;
   readonly maxOutputTokens: Accessor<number>;
   readonly maxCompletionTokens: Accessor<number>;
+  readonly reasoning: Accessor<string>;
+  readonly reasoningChanged: Accessor<boolean>;
+  readonly reasoningFallback: Accessor<boolean>;
   readonly maxAgentIterations: Accessor<number>;
   readonly maxStalledIterations: Accessor<number>;
   readonly maxRunMinutes: Accessor<number>;
@@ -120,6 +123,9 @@ export class TuiStore {
   private readonly setActiveCompaction: Setter<boolean>;
   private readonly setThemeName: Setter<TuiThemeName>;
   private readonly setModel: Setter<string>;
+  private readonly setReasoning: Setter<string>;
+  private readonly setReasoningChanged: Setter<boolean>;
+  private readonly setReasoningFallback: Setter<boolean>;
   private readonly setProviderName: Setter<string>;
   private readonly setProjectTrusted: Setter<boolean>;
   private readonly setLocaleRevision: Setter<number>;
@@ -145,6 +151,7 @@ export class TuiStore {
   private noodleTimer: ReturnType<typeof setInterval> | null = null;
   private fileTreeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private changesRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private reasoningChangedTimer: ReturnType<typeof setTimeout> | null = null;
   private turnActive = false;
   private readonly onExit: () => void;
   private readonly i18n: I18n;
@@ -200,6 +207,13 @@ export class TuiStore {
     [this.debug] = createSignal(options.debug);
     [this.maxOutputTokens] = createSignal(options.maxOutputTokens);
     [this.maxCompletionTokens] = createSignal(options.maxCompletionTokens);
+    [this.reasoning, this.setReasoning] = createSignal(
+      options.reasoning ?? options.providerStore?.activeReasoningLabel() ?? "provider default",
+    );
+    [this.reasoningChanged, this.setReasoningChanged] = createSignal(false);
+    [this.reasoningFallback, this.setReasoningFallback] = createSignal(
+      options.providerStore?.activeReasoningHasFallback() ?? false,
+    );
     [this.maxAgentIterations] = createSignal(options.maxAgentIterations);
     [this.maxStalledIterations] = createSignal(options.maxStalledIterations);
     [this.maxRunMinutes] = createSignal(options.maxRunMinutes);
@@ -212,6 +226,8 @@ export class TuiStore {
         this.setModel(info.modelId);
         const provider = options.providerStore?.registry.getProvider(info.providerId);
         if (provider) this.setProviderName(provider.name);
+        this.setReasoning(options.providerStore?.activeReasoningLabel() ?? "provider default");
+        this.setReasoningFallback(options.providerStore?.activeReasoningHasFallback() ?? false);
       });
     }
 
@@ -318,6 +334,16 @@ export class TuiStore {
     const next = (index + direction + SIDEBAR_MODES.length) % SIDEBAR_MODES.length;
     this.setSidebarMode(SIDEBAR_MODES[next]);
     this.setActivePane("sidebar");
+  }
+
+  /** Apply the next reasoning mode declared by the active model. */
+  async cycleReasoning(): Promise<void> {
+    const command = this.options.providerStore?.nextReasoningCommand();
+    if (!command) {
+      this.setStatus(this.l("tui.status.reasoningUnavailable"));
+      return;
+    }
+    await this.options.executeCommand(command, (event) => this.onCommandOutput(event));
   }
 
   /** Open the help sidebar directly (Ctrl+H). Expands sidebar if collapsed. */
@@ -1060,8 +1086,10 @@ export class TuiStore {
     this.stopNoodle();
     if (this.fileTreeRefreshTimer) clearTimeout(this.fileTreeRefreshTimer);
     if (this.changesRefreshTimer) clearTimeout(this.changesRefreshTimer);
+    if (this.reasoningChangedTimer) clearTimeout(this.reasoningChangedTimer);
     this.fileTreeRefreshTimer = null;
     this.changesRefreshTimer = null;
+    this.reasoningChangedTimer = null;
     this.unsubscribeProxy?.();
 
     this.confirmation()?.resolve("deny");
@@ -1463,6 +1491,16 @@ export class TuiStore {
     if (event.type === "model_changed" && typeof event.model === "string") {
       this.setModel(event.model);
     }
+    if (event.type === "reasoning_changed") {
+      const requested = String(event.reasoning ?? "provider default");
+      const effective = String(event.effectiveReasoning ?? requested);
+      const fallback = typeof event.fallbackReason === "string" && event.fallbackReason.length > 0;
+      this.setReasoning(fallback ? `${effective} ← ${requested}` : effective);
+      this.setReasoningFallback(fallback);
+      this.setStatus(this.l("tui.status.reasoningChanged", { value: effective }));
+      this.flashReasoning();
+      this.add({ type: "info", content: String(event.message) });
+    }
     if (event.type === "trust_changed") {
       this.refreshProjectTrust();
     }
@@ -1478,6 +1516,16 @@ export class TuiStore {
       void this.runNextQueued();
     }
     if (event.type === "capsule_create_done") this.setStatus(this.l("tui.status.idle"));
+  }
+
+  private flashReasoning(): void {
+    if (this.reasoningChangedTimer) clearTimeout(this.reasoningChangedTimer);
+    this.setReasoningChanged(true);
+    this.reasoningChangedTimer = setTimeout(() => {
+      this.reasoningChangedTimer = null;
+      this.setReasoningChanged(false);
+      if (!this.isProcessing()) this.setStatus(this.l("tui.status.idle"));
+    }, 1800);
   }
 
   private addCompactionSummary(event: {

@@ -33,6 +33,7 @@ export const createResponseBodySchema = z.object({
   stream_options: z.optional(z.union([z.lazy(() => streamOptionsParamSchema).and(z.any()), z.null()])),
   background: z.optional(z.boolean().describe("Whether to run the request in the background and return immediately.")),
   max_output_tokens: z.optional(z.union([z.number().int(), z.null()])),
+  max_completion_tokens: z.optional(z.union([z.number().int(), z.null()])),
   max_tool_calls: z.optional(z.union([z.number().int(), z.null()])),
   reasoning: z.optional(z.union([z.lazy(() => reasoningParamSchema).and(z.any()), z.null()])),
   safety_identifier: z.optional(z.union([z.string(), z.null()])),

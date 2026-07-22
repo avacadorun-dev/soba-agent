@@ -666,3 +666,41 @@ describe("serializeItem", () => {
     expect(result).toContain("[Compaction");
   });
 });
+
+describe("session runtime configuration", () => {
+  test("persists the latest reasoning selection as a sidecar", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "soba-test-session-config-"));
+    try {
+      const session = SessionManager.create("/test/project", sessionDir);
+      session.appendSessionConfig("reasoning", { mode: "effort", effort: "low" });
+      session.appendSessionConfig("reasoning", { mode: "effort", effort: "high" });
+
+      const reopened = SessionManager.open(session.getSessionFile()!);
+      expect(reopened.getSessionConfig("reasoning"))
+        .toEqual({ mode: "effort", effort: "high" });
+      expect(reopened.getEntries()).toHaveLength(0);
+    } finally {
+      rmSync(sessionDir, { recursive: true, force: true });
+    }
+  });
+
+  test("round-trips opaque reasoning fields without exposing or rewriting them", () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "soba-test-reasoning-item-"));
+    try {
+      const opaqueReasoning = {
+        type: "reasoning" as const,
+        id: "rs_opaque",
+        encrypted_content: "ciphertext",
+        signature: "provider-signature",
+        summary: [{ type: "summary_text", text: "Safe summary" }],
+      };
+      const session = SessionManager.create("/test/project", sessionDir);
+      session.appendItem(opaqueReasoning);
+
+      const reopened = SessionManager.open(session.getSessionFile()!);
+      expect(reopened.buildInput().items).toEqual([opaqueReasoning]);
+    } finally {
+      rmSync(sessionDir, { recursive: true, force: true });
+    }
+  });
+});

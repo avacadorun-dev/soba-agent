@@ -120,6 +120,7 @@ export class OpenResponsesClientProxy implements OpenResponsesClient {
   }
 
   public updateConfig(partial: Partial<OpenResponsesClientConfig>): void {
+    this.registry.updateClientDefaults(partial);
     this.delegate().updateConfig(partial);
   }
 

@@ -389,7 +389,10 @@ describe("AgentLoop", () => {
     const result = await loop.runTurn("Complete a long task");
 
     expect(requests).toHaveLength(2);
-    expect(requests[0].max_output_tokens).toBe(16384);
+    // Model maxOutput is a capability used for context planning, not an
+    // implicit per-request cap. With no explicit completion limit, the
+    // provider default remains in force.
+    expect(requests[0].max_output_tokens).toBeNull();
     expect(requests[0].temperature).toBe(0.7);
     expect(result.errors).toHaveLength(0);
     expect(result.items.map((item) => item.type)).toEqual([

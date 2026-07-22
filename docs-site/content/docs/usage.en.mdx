@@ -73,6 +73,7 @@ soba -r
 | `F1` | Open the help sidebar | Main area |
 | `F2` / `/model` | Open the provider/model selector | Main area |
 | `F3` / `/search` | Search conversation history | Main area |
+| `F4` / `/reasoning` | Cycle reasoning modes supported by the active model | Main area |
 | `F6` / `/sidebar` | Cycle sidebar panels | Main area |
 | `Ctrl+Shift+S` / `/sidebar toggle` | Collapse or expand the sidebar | Main area |
 | `/keys` | Show the runtime keymap and command fallbacks | Main area |
@@ -82,6 +83,12 @@ soba -r
 `F2` or `/model` opens a dense two-column selector. Providers are on the left, models for the highlighted provider are on the right, and the search box filters both provider and model names/ids. `Ctrl+M` is still accepted as a legacy alias when the terminal sends it, but many terminals encode it as Enter, so do not rely on it.
 
 Use `↑` / `↓` to move through models, `←` / `→` or `Tab` / `Shift+Tab` to change provider, and `Enter` to select the highlighted model. The header shows the current provider/model, and each model row shows context window, max output, streaming, and thinking support when that metadata is available. Opening the selector refreshes built-in provider discovery, so newly available provider models can appear without restarting the whole session.
+
+### Reasoning control
+
+`F4` cycles only controls declared by the active model. Effort models cycle through provider default and their advertised effort levels; toggle models cycle through provider default, on, and off. Numeric-budget models require an explicit `/reasoning budget <tokens>` first, so the hotkey never invents an expensive budget.
+
+The sidebar keeps Reasoning visible next to the model and flashes it after a change. A fallback is rendered as `effective ← requested`, for example `provider default ← max`, and the command output explains why the request was not applied. The setting affects the next model request immediately. Changing models recomputes the effective value without discarding the requested preference.
 
 ---
 
@@ -106,7 +113,17 @@ All slash commands start with `/`. Command names are case-insensitive.
 | `/budget` | Show the current token and context budget |
 | `/capsule` | Show the latest capsule |
 
-### 3.3. Skills
+### 3.3. Reasoning
+
+| Command | Action |
+|---|---|
+| `/reasoning` | Show requested and effective reasoning plus any fallback reason |
+| `/reasoning default` | Omit reasoning parameters and use the provider default |
+| `/reasoning none\|minimal\|low\|medium\|high\|xhigh\|max` | Request an effort level; availability depends on the active model |
+| `/reasoning on\|off` | Control a toggle-based model |
+| `/reasoning budget <tokens>` | Set an explicit numeric thinking budget |
+
+### 3.4. Skills
 
 | Command | Action |
 |---|---|
@@ -119,7 +136,7 @@ All slash commands start with `/`. Command names are case-insensitive.
 | `/skill remove <name>` | Remove a skill |
 | `/skill:<name>` | Activate a skill with the colon form |
 
-### 3.4. Interface settings
+### 3.5. Interface settings
 
 | Command | Action |
 |---|---|
@@ -133,7 +150,7 @@ All slash commands start with `/`. Command names are case-insensitive.
 | `/search` | Search conversation history |
 | `/notifications` | Show notification history |
 
-### 3.5. Other commands
+### 3.6. Other commands
 
 | Command | Action |
 |---|---|

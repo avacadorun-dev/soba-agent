@@ -1,4 +1,5 @@
 import type { OpenResponsesClientConfig } from "../../kernel/model/model-gateway";
+import type { ReasoningSelection } from "../../kernel/model/reasoning";
 import {
   filterToolsForWorkMode,
   type WorkMode,
@@ -21,6 +22,7 @@ export interface PreparedTurnPrompt {
   maxCompletionTokens: number;
   contextWindow: number;
   temperature: number;
+  reasoning: ReasoningSelection;
 }
 
 export async function prepareTurnPrompt(input: {
@@ -69,5 +71,6 @@ export async function prepareTurnPrompt(input: {
     maxCompletionTokens: input.modelConfig.maxCompletionTokens ?? 0,
     contextWindow: input.modelConfig.contextWindow,
     temperature: input.modelConfig.temperature,
+    reasoning: input.modelConfig.reasoning ?? { mode: "provider_default" },
   };
 }

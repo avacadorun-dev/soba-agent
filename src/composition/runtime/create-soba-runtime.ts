@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import type { PortableCapsuleServiceFactory } from "../../application/capsules/service";
 import type { CompactFallbackCompactorPort } from "../../application/commands/compact";
 import type { CompactionConfig, SobaConfig } from "../../application/config/types";
+import { resolveOutputReserveTokens } from "../../application/providers/model-defaults";
 import type { SessionLifecycleService } from "../../application/session-lifecycle";
 import type { SkillCatalog } from "../../application/skills/catalog";
 import type { SkillCommands } from "../../application/skills/commands";
@@ -26,6 +27,8 @@ import { FilesystemEvidenceProofStorage } from "../../infrastructure/persistence
 import { ProjectMemory } from "../../infrastructure/persistence/memory/project-memory";
 import { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import type { ReasoningParam } from "../../kernel/model/openresponses-types";
+import type { ReasoningCapabilities } from "../../kernel/model/reasoning";
 import { ToolRegistry } from "../../kernel/tools/tool-registry";
 import { AgentLoopRuntimeAdapter } from "./agent-loop-runtime-adapter";
 import { EngineCompactFallbackCompactor } from "./compact-fallback-compactor";
@@ -144,20 +147,33 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
 
   const providerIdentity = client.getProviderIdentity();
   const providerCapabilities = client.getProviderCapabilities();
+  const activeModelConfig = client.getConfig();
   const contextManager = new ContextManager(session, {
     compaction: compactionConfig,
-    contextWindow: config.contextWindow,
-    maxOutputTokens: config.maxOutputTokens,
+    contextWindow: activeModelConfig.contextWindow,
+    maxOutputTokens: resolveOutputReserveTokens(
+      activeModelConfig.maxOutputTokens,
+      activeModelConfig.maxCompletionTokens,
+    ),
     provider: providerIdentity,
     capabilities: providerCapabilities,
     memory: projectMemory,
     generatorConfig: {
       modelInvoker: {
         invoke: async (prompt: string, signal: AbortSignal): Promise<string> => {
+          const activeConfig = client.getConfig();
+          const internalOutputLimit = Math.min(
+            4_096,
+            resolveOutputReserveTokens(
+              activeConfig.maxOutputTokens,
+              activeConfig.maxCompletionTokens,
+            ),
+          );
           const response = await client.create({
-            model: config.model,
+            model: activeConfig.model,
             input: [{ type: "message", role: "user", content: [{ type: "input_text", text: prompt }] }],
-            max_output_tokens: config.maxOutputTokens,
+            max_output_tokens: internalOutputLimit,
+            reasoning: cheapInternalReasoning(activeConfig.modelReasoning),
           }, { signal });
           const textOutput = response.output.find((output) => output.type === "message" && output.role === "assistant");
           return textOutput && "content" in textOutput
@@ -166,6 +182,16 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
         },
       },
     },
+  });
+  client.onChange(() => {
+    const activeConfig = client.getConfig();
+    contextManager.updateModelLimits(
+      activeConfig.contextWindow,
+      resolveOutputReserveTokens(
+        activeConfig.maxOutputTokens,
+        activeConfig.maxCompletionTokens,
+      ),
+    );
   });
   const { skillManager, skillCommands, skillCatalog, trustStore } = await createSkillStack({
     projectPath: cwd,
@@ -248,4 +274,29 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     portableCapsuleServiceFactory,
     fallbackCompactor,
   };
+}
+
+function cheapInternalReasoning(
+  capabilities?: ReasoningCapabilities,
+): ReasoningParam | undefined {
+  if (!capabilities || capabilities.control === "none" || capabilities.control === "fixed") {
+    return undefined;
+  }
+  if (capabilities.control === "effort") {
+    for (const effort of ["low", "minimal", "none"] as const) {
+      if (capabilities.supportedEfforts?.includes(effort)) return { effort };
+    }
+  }
+  if (capabilities.control === "budget" || capabilities.supportsBudget) {
+    const min = capabilities.minBudgetTokens ?? 1;
+    const max = capabilities.maxBudgetTokens ?? 1_024;
+    return { max_tokens: Math.min(max, Math.max(min, 1_024)) };
+  }
+  if (
+    (capabilities.control === "toggle" || capabilities.supportsToggle) &&
+    !capabilities.mandatory
+  ) {
+    return { enabled: false };
+  }
+  return undefined;
 }

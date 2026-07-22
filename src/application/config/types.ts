@@ -7,6 +7,12 @@
 
 import type { CompactionConfig } from "../../kernel/compaction/config";
 import {
+  DEFAULT_REASONING_SELECTION,
+  type ReasoningCapabilities,
+  type ReasoningSelection,
+  type ReasoningTransport,
+} from "../../kernel/model/reasoning";
+import {
   DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   DEFAULT_SYNTHETIC_MAX_OUTPUT,
 } from "../providers/model-defaults";
@@ -101,6 +107,10 @@ export interface SobaConfig {
   model: string;
   /** Adapter wire-compatibility features derived from the active ModelDefinition. */
   modelCompatibility?: ModelCompatibilityFeature[];
+  /** Structured reasoning controls derived from the active model. */
+  modelReasoning?: ReasoningCapabilities;
+  /** Explicit provider/model wire mapping for reasoning controls. */
+  modelReasoningTransport?: ReasoningTransport;
   /**
    * Maximum output tokens per response. **Derived from the active model**
    * (`ModelDefinition.maxOutput`) — not read from disk. CLI flag
@@ -123,6 +133,8 @@ export interface SobaConfig {
    * Overridable via --max-completion-tokens CLI flag or SOBA_MAX_COMPLETION_TOKENS env.
    */
   maxCompletionTokens: number;
+  /** Requested reasoning policy. Effective policy is capability-dependent. */
+  reasoning?: ReasoningSelection;
   /** Sampling temperature (0-2). User preference. */
   temperature: number;
   /** Emergency ceiling for model invocations in one task (0 = unlimited) */
@@ -168,6 +180,7 @@ export const DEFAULT_CONFIG: SobaConfig = {
   maxOutputTokens: DEFAULT_SYNTHETIC_MAX_OUTPUT,
   contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
   maxCompletionTokens: 0,
+  reasoning: DEFAULT_REASONING_SELECTION,
   temperature: 0.7,
   maxAgentIterations: 0,
   maxStalledIterations: 4,

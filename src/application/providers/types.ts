@@ -17,7 +17,14 @@
  */
 
 /** Adapter identifier — selects the provider adapter implementation. */
-export type ProviderAdapterId = "openai" | "anthropic";
+export type ProviderAdapterId = "openai" | "openai-responses" | "anthropic";
+
+import type {
+  ReasoningCapabilities,
+  ReasoningTransport,
+} from "../../kernel/model/reasoning";
+
+export type { ReasoningCapabilities, ReasoningTransport } from "../../kernel/model/reasoning";
 
 export const MODEL_COMPATIBILITY_FEATURES = [
   "adaptive_thinking",
@@ -28,6 +35,58 @@ export const MODEL_COMPATIBILITY_FEATURES = [
 ] as const;
 
 export type ModelCompatibilityFeature = (typeof MODEL_COMPATIBILITY_FEATURES)[number];
+
+export const MODEL_METADATA_PROFILES = [
+  "auto",
+  "generic_openai",
+  "openrouter",
+  "vllm",
+  "ollama",
+  "lmstudio",
+  "llamacpp",
+  "none",
+] as const;
+
+export type ModelMetadataProfile = (typeof MODEL_METADATA_PROFILES)[number];
+
+export type ModelLimitSource =
+  | "user_config"
+  | "provider_runtime"
+  | "provider_route"
+  | "provider_model"
+  | "builtin_profile"
+  | "fallback";
+
+export type ModelLimitScope = "runtime" | "route" | "model" | "assumed";
+
+export interface ModelLimitValue {
+  value: number;
+  source: ModelLimitSource;
+  scope: ModelLimitScope;
+  stale?: boolean;
+}
+
+export interface ResolvedModelLimits {
+  contextWindow: ModelLimitValue;
+  maxOutput: ModelLimitValue;
+  /** Model-wide maximum when a router also declares a narrower active route. */
+  modelContextWindow?: number;
+  /** Limit declared by the route/provider currently preferred by a router. */
+  routeContextWindow?: number;
+}
+
+/** Persisted/user-authored model entry. Missing limits remain genuinely unknown. */
+export interface ConfiguredModelDefinition {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxOutput?: number;
+  supportsStreaming?: boolean;
+  supportsThinking?: boolean;
+  reasoning?: ReasoningCapabilities;
+  reasoningTransport?: ReasoningTransport;
+  compatibility?: ModelCompatibilityFeature[];
+}
 
 /**
  * A model exposed by a provider.
@@ -43,10 +102,19 @@ export interface ModelDefinition {
   maxOutput: number;
   /** Whether the provider supports streaming for this model. */
   supportsStreaming: boolean;
-  /** Whether the provider exposes explicit thinking/reasoning control. */
+  /**
+   * @deprecated Use `reasoning`. Read for one compatibility release so old
+   * custom-provider files continue to work.
+   */
   supportsThinking: boolean;
+  /** Structured reasoning controls declared for this exact model. */
+  reasoning?: ReasoningCapabilities;
+  /** Optional model-level override for the provider reasoning wire format. */
+  reasoningTransport?: ReasoningTransport;
   /** Explicit wire-compatibility features; never inferred from vendor/model names. */
   compatibility?: ModelCompatibilityFeature[];
+  /** Provenance and scope for the effective runtime limits. */
+  limits?: ResolvedModelLimits;
 }
 
 /**
@@ -71,12 +139,20 @@ export interface ProviderDefinition {
   apiKeyEnv: string | null;
   /** Adapter to instantiate for this provider. */
   adapter: ProviderAdapterId;
+  /** Independent model-metadata discovery strategy. Defaults to `auto` for custom providers. */
+  metadataProfile?: ModelMetadataProfile;
+  /** Default wire mapping for models that declare reasoning capabilities. */
+  reasoningTransport?: ReasoningTransport;
+  /** Conservative provider-level fallback for models with no richer metadata. */
+  reasoning?: ReasoningCapabilities;
+  /** Maintained exact-id profiles; model names are never pattern-matched. */
+  reasoningProfiles?: Record<string, ReasoningCapabilities>;
   /**
    * Models exposed by this provider. Optional — see interface doc.
    * When undefined, the registry will call `discoverModels()` on first
    * access and cache the result in memory (not on disk).
    */
-  models?: ModelDefinition[];
+  models?: ConfiguredModelDefinition[];
   /**
    * Default model id. Optional — when empty, the user must pick a model
    * through discovery in the wizard or /model selector.

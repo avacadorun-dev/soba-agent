@@ -24,6 +24,7 @@ import type { AgentEvent } from "../../engine/turn/types";
 import type { ProviderRegistry } from "../../infrastructure/llm/providers/registry";
 import type { PersistentSessionLifecycleService } from "../../infrastructure/persistence/sessions/session-lifecycle-service";
 import type { SessionManager } from "../../infrastructure/persistence/sessions/session-manager";
+import { parseReasoningConfigValue } from "../../kernel/model/reasoning";
 import type { PermissionMode } from "../../kernel/permissions/trust";
 import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
 import { normalizeWorkModeId } from "../../kernel/work-mode/public";
@@ -43,6 +44,7 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   private commandExecutor?: RuntimeCommandExecutor;
   private readonly runtimeListeners = new Set<RuntimeEventListener>();
   private sessionGate: Promise<void> = Promise.resolve();
+  private readonly defaultReasoning: ReturnType<typeof parseReasoningConfigValue>;
 
   constructor(
     loop: AgentLoop,
@@ -56,6 +58,16 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
     this.sessionLifecycle = sessionLifecycle;
     this.providerRegistry = providerRegistry;
     this.skillManager = skillManager;
+    const activeClientConfig = (this.providerRegistry as ProviderRegistry & {
+      getActiveClientConfig?: ProviderRegistry["getActiveClientConfig"];
+    }).getActiveClientConfig?.();
+    this.defaultReasoning = activeClientConfig?.reasoning ?? { mode: "provider_default" };
+    const persistedReasoning = parseReasoningConfigValue(
+      (session as SessionManager & {
+        getSessionConfig?: SessionManager["getSessionConfig"];
+      }).getSessionConfig?.("reasoning"),
+    );
+    if (persistedReasoning) this.updateReasoningDefaults(persistedReasoning);
   }
 
   async createSession(input: CreateSessionInput): Promise<RuntimeSessionInfo> {
@@ -124,7 +136,12 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   async setSessionConfig(input: SetSessionConfigInput): Promise<RuntimeSessionInfo> {
     this.assertActiveSession(input.sessionId);
     const value = typeof input.value === "string" ? input.value : "";
-    if (input.key === "provider") {
+    if (input.key === "reasoning") {
+      const reasoning = parseReasoningConfigValue(input.value);
+      if (!reasoning) throw new Error(`Invalid reasoning policy "${String(input.value)}".`);
+      this.updateReasoningDefaults(reasoning);
+      this.session.appendSessionConfig("reasoning", reasoning);
+    } else if (input.key === "provider") {
       const provider = this.providerRegistry.getProvider(value);
       if (!provider) throw new Error(`Unknown provider "${value}"`);
       if (!providerHasCredentials(this.providerRegistry, provider)) {
@@ -245,9 +262,25 @@ export class AgentLoopRuntimeAdapter implements SobaRuntime {
   private activateSession(session: SessionManager): void {
     this.session = session;
     this.loop.setSessionManager(session);
+    const sessionReasoning = parseReasoningConfigValue(
+      (session as SessionManager & {
+        getSessionConfig?: SessionManager["getSessionConfig"];
+      }).getSessionConfig?.("reasoning"),
+    );
+    this.updateReasoningDefaults(
+      sessionReasoning ?? this.defaultReasoning ?? { mode: "provider_default" },
+    );
     if (this.skillManager) {
       reconcileActiveSkills(this.skillManager, session);
     }
+  }
+
+  private updateReasoningDefaults(
+    reasoning: NonNullable<ReturnType<typeof parseReasoningConfigValue>>,
+  ): void {
+    (this.providerRegistry as ProviderRegistry & {
+      updateClientDefaults?: ProviderRegistry["updateClientDefaults"];
+    }).updateClientDefaults?.({ reasoning });
   }
 }
 

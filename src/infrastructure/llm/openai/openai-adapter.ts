@@ -26,10 +26,15 @@ import type {
   FunctionCallField,
   ItemParam,
   MessageField,
+  ReasoningParam,
   ResponseResource,
   StreamingEvent,
   Usage,
 } from "../../../kernel/model/openresponses-types";
+import {
+  type ReasoningSelection,
+  resolveReasoningSelection,
+} from "../../../kernel/model/reasoning";
 import type { ProviderCapabilities, ProviderIdentity } from "../../../kernel/transcript/types-v2";
 import type {
   ProviderAdapter,
@@ -53,6 +58,7 @@ interface OpenAIMessage {
   name?: string;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
+  reasoning?: string;
   reasoning_content?: string;
   reasoning_details?: OpenAIReasoningDetail[];
 }
@@ -86,6 +92,8 @@ interface OpenAIUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  completion_tokens_details?: { reasoning_tokens?: number };
 }
 
 interface OpenAIResponse {
@@ -98,7 +106,7 @@ interface OpenAIResponse {
   error?: { message: string; type: string; code: string };
 }
 
-interface OpenAIReasoningDetail {
+interface OpenAIReasoningDetail extends Record<string, unknown> {
   type?: string;
   text?: string;
 }
@@ -113,6 +121,7 @@ interface OpenAIDeltaChunk {
     delta: {
       role?: string;
       content?: string;
+      reasoning?: string;
       reasoning_content?: string;
       reasoning_details?: OpenAIReasoningDetail[];
       tool_calls?: Array<{
@@ -189,6 +198,124 @@ function hasCompatibility(
   return config.compatibility?.includes(feature) === true;
 }
 
+function reasoningControlWasRequested(reasoning: ReasoningParam | null | undefined): boolean {
+  return Boolean(
+    reasoning &&
+    (reasoning.effort != null || reasoning.max_tokens != null || reasoning.enabled != null),
+  );
+}
+
+function reasoningParamToSelection(
+  reasoning: ReasoningParam | null | undefined,
+): ReasoningSelection {
+  if (reasoning?.effort != null) return { mode: "effort", effort: reasoning.effort };
+  if (reasoning?.max_tokens != null) return { mode: "budget", maxTokens: reasoning.max_tokens };
+  if (reasoning?.enabled != null) return { mode: "toggle", enabled: reasoning.enabled };
+  return { mode: "provider_default" };
+}
+
+function applyReasoningControl(
+  request: ProviderRequest,
+  reasoning: ReasoningParam | null | undefined,
+  config: ProviderConfig,
+): boolean {
+  const requested = reasoningParamToSelection(reasoning);
+  const { effective } = resolveReasoningSelection(
+    requested,
+    config.reasoningCapabilities,
+  );
+  const transport = config.reasoningTransport ?? "none";
+  if (effective.mode === "provider_default" || transport === "none") return false;
+  let applied = false;
+
+  const completionLimit = typeof request.max_completion_tokens === "number"
+    ? request.max_completion_tokens
+    : typeof request.max_tokens === "number"
+      ? request.max_tokens
+      : undefined;
+  if (
+    effective.mode === "budget" &&
+    completionLimit !== undefined &&
+    effective.maxTokens >= completionLimit
+  ) {
+    throw new Error(
+      `Reasoning budget (${effective.maxTokens}) must be lower than the completion limit (${completionLimit}).`,
+    );
+  }
+
+  switch (transport) {
+    case "openai_chat":
+      if (effective.mode === "effort") {
+        request.reasoning_effort = effective.effort;
+        applied = true;
+      }
+      break;
+    case "openrouter":
+      if (effective.mode === "effort") request.reasoning = { effort: effective.effort };
+      if (effective.mode === "budget") request.reasoning = { max_tokens: effective.maxTokens };
+      if (effective.mode === "toggle") request.reasoning = { enabled: effective.enabled };
+      applied = true;
+      break;
+    case "deepseek":
+      if (effective.mode === "effort") {
+        request.reasoning_effort = effective.effort;
+        applied = true;
+      }
+      if (effective.mode === "toggle") {
+        request.thinking = { type: effective.enabled ? "enabled" : "disabled" };
+        applied = true;
+      }
+      break;
+    case "kimi":
+      if (effective.mode === "effort") {
+        request.reasoning_effort = effective.effort;
+        applied = true;
+      }
+      if (effective.mode === "toggle") {
+        request.thinking = { type: effective.enabled ? "enabled" : "disabled" };
+        applied = true;
+      }
+      break;
+    case "minimax":
+      if (effective.mode === "toggle") {
+        request.thinking = { type: effective.enabled ? "enabled" : "disabled" };
+        applied = true;
+      }
+      break;
+    case "qwen":
+      if (effective.mode === "effort") {
+        request.reasoning_effort = effective.effort;
+        applied = true;
+      }
+      if (effective.mode === "budget") {
+        request.enable_thinking = true;
+        request.thinking_budget = effective.maxTokens;
+        applied = true;
+      }
+      if (effective.mode === "toggle") {
+        request.enable_thinking = effective.enabled;
+        applied = true;
+      }
+      break;
+    case "ollama":
+      if (effective.mode === "effort") {
+        request.think = effective.effort;
+        applied = true;
+      }
+      if (effective.mode === "toggle") {
+        request.think = effective.enabled;
+        applied = true;
+      }
+      break;
+  }
+
+  return applied && (
+    effective.mode === "budget" ||
+    (effective.mode === "effort" && effective.effort !== "none") ||
+    (effective.mode === "toggle" && effective.enabled)
+  );
+}
+
 function systemContentToText(content: OpenAIMessage["content"]): string {
   if (typeof content === "string") return content;
   if (content === null) return "";
@@ -221,12 +348,9 @@ function normalizeSingleSystemMessage(
   ];
 }
 
-function combineReasoningContent(
-  first: string | undefined,
-  second: string | undefined,
-): string | undefined {
+function combineReasoningContent(...values: Array<string | undefined>): string | undefined {
   const parts: string[] = [];
-  for (const value of [first, second]) {
+  for (const value of values) {
     const trimmed = value?.trim();
     if (trimmed && !parts.includes(trimmed)) {
       parts.push(trimmed);
@@ -256,6 +380,7 @@ function extractReasoningDetailsText(details: unknown): string | undefined {
 
 function extractMessageReasoning(message: OpenAIMessage): string | undefined {
   return combineReasoningContent(
+    message.reasoning,
     message.reasoning_content,
     extractReasoningDetailsText(message.reasoning_details),
   );
@@ -445,6 +570,7 @@ function itemToOpenAIMessage(item: ItemParam): OpenAIMessage | null {
             msg.reasoning_content = (item as unknown as Record<string, unknown>)
               .reasoning_content as string;
           }
+          if (item.reasoning_details) msg.reasoning_details = structuredClone(item.reasoning_details);
           return msg;
         }
         case "system": {
@@ -572,17 +698,20 @@ function convertItemsToMessages(items: ItemParam[]): OpenAIMessage[] {
       // Extract provider-native reasoning from a function-call item.
       const reasoningContent = (item as unknown as Record<string, unknown>)
         .reasoning_content as string | undefined;
+      const reasoningDetails = item.type === "function_call" ? item.reasoning_details : undefined;
 
       if (lastMsg?.role === "assistant" && lastMsg.tool_calls) {
         lastMsg.tool_calls.push(toolCall);
         if (reasoningContent && !lastMsg.reasoning_content) {
           lastMsg.reasoning_content = reasoningContent;
         }
+        if (reasoningDetails && !lastMsg.reasoning_details) lastMsg.reasoning_details = structuredClone(reasoningDetails);
       } else if (lastMsg?.role === "assistant") {
         lastMsg.tool_calls = [toolCall];
         if (reasoningContent && !lastMsg.reasoning_content) {
           lastMsg.reasoning_content = reasoningContent;
         }
+        if (reasoningDetails && !lastMsg.reasoning_details) lastMsg.reasoning_details = structuredClone(reasoningDetails);
       } else {
         // Keep content present for compatible endpoints that reject omission/null.
         const msg: OpenAIMessage = {
@@ -591,6 +720,7 @@ function convertItemsToMessages(items: ItemParam[]): OpenAIMessage[] {
           tool_calls: [toolCall],
         };
         if (reasoningContent) msg.reasoning_content = reasoningContent;
+        if (reasoningDetails) msg.reasoning_details = structuredClone(reasoningDetails);
         messages.push(msg);
       }
     } else {
@@ -609,9 +739,9 @@ function applyReasoningDetailsCompatibility(messages: OpenAIMessage[]): void {
     if (message.role !== "assistant" || !message.reasoning_content) {
       continue;
     }
-    message.reasoning_details = buildReasoningDetails(
-      message.reasoning_content,
-    );
+    if (!message.reasoning_details) {
+      message.reasoning_details = buildReasoningDetails(message.reasoning_content);
+    }
     delete message.reasoning_content;
   }
 }
@@ -707,6 +837,7 @@ interface StreamAccumulator {
     { id: string; name: string; args: string }
   >;
   reasoningContent: Map<number, string>;
+  reasoningDetails: Map<number, OpenAIReasoningDetail[]>;
   taggedReasoningContent: Map<number, string>;
   /** Append-only reasoning prefix already emitted to the UI. */
   streamedReasoningContent: Map<number, string>;
@@ -780,6 +911,7 @@ function parseOpenAIChunk(
     for (const [index, fc] of accumulator.functionCallArguments) {
       const hasVisibleMessageForIndex = (accumulator.textContent.get(index) ?? "").trim().length > 0;
       const reasoning = hasVisibleMessageForIndex ? undefined : getCombinedStreamReasoning(accumulator, index);
+      const reasoningDetails = hasVisibleMessageForIndex ? undefined : accumulator.reasoningDetails.get(index);
       if (!accumulator.sentFunctionCallItemAdded.has(index)) {
         accumulator.sentFunctionCallItemAdded.add(index);
         const fcItem: FunctionCallField = {
@@ -791,6 +923,7 @@ function parseOpenAIChunk(
           status: "completed",
         };
         if (reasoning) fcItem.reasoning_content = reasoning;
+        if (reasoningDetails) fcItem.reasoning_details = structuredClone(reasoningDetails);
         events.push({
           type: "response.output_item.added",
           item: fcItem,
@@ -812,6 +945,7 @@ function parseOpenAIChunk(
         status: "completed",
       };
       if (reasoning) fcDoneItem.reasoning_content = reasoning;
+      if (reasoningDetails) fcDoneItem.reasoning_details = structuredClone(reasoningDetails);
       events.push({
         type: "response.output_item.done",
         item: fcDoneItem,
@@ -825,11 +959,13 @@ function parseOpenAIChunk(
       ...accumulator.textContent.keys(),
       ...accumulator.reasoningContent.keys(),
       ...accumulator.taggedReasoningContent.keys(),
+      ...accumulator.reasoningDetails.keys(),
     ]);
     for (const index of messageIndexes) {
       const reasoning = getCombinedStreamReasoning(accumulator, index);
       const text = accumulator.textContent.get(index) ?? "";
-      if (!text.trim() && !reasoning) {
+      const reasoningDetails = accumulator.reasoningDetails.get(index);
+      if (!text.trim() && !reasoning && !reasoningDetails) {
         continue;
       }
       if (!text.trim() && flushedFunctionCallIndexes.has(index)) {
@@ -862,6 +998,7 @@ function parseOpenAIChunk(
           : [],
       };
       if (reasoning) item.reasoning_content = reasoning;
+      if (reasoningDetails) item.reasoning_details = structuredClone(reasoningDetails);
       events.push({
         type: "response.output_item.done",
         item,
@@ -1065,12 +1202,13 @@ function parseOpenAIChunk(
       }
 
       // Capture provider-native reasoning content.
-      if (choice.delta?.reasoning_content) {
+      for (const reasoningDelta of [
+        choice.delta?.reasoning,
+        choice.delta?.reasoning_content,
+      ]) {
+        if (!reasoningDelta) continue;
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
-        const nextReasoning = mergeProviderContentDelta(
-          previousReasoning,
-          choice.delta.reasoning_content,
-        );
+        const nextReasoning = mergeProviderContentDelta(previousReasoning, reasoningDelta);
         accumulator.reasoningContent.set(index, nextReasoning);
         events.push(
           ...buildReasoningDeltaEvents(
@@ -1084,6 +1222,13 @@ function parseOpenAIChunk(
       const reasoningDetailsText = extractReasoningDetailsText(
         choice.delta?.reasoning_details,
       );
+      if (choice.delta?.reasoning_details?.length) {
+        const previousDetails = accumulator.reasoningDetails.get(index) ?? [];
+        accumulator.reasoningDetails.set(index, [
+          ...previousDetails,
+          ...structuredClone(choice.delta.reasoning_details),
+        ]);
+      }
       if (reasoningDetailsText) {
         const previousReasoning = accumulator.reasoningContent.get(index) ?? "";
         const nextReasoning = mergeProviderContentDelta(previousReasoning, reasoningDetailsText);
@@ -1149,11 +1294,13 @@ function buildFinalResponse(accumulator: StreamAccumulator): ResponseResource {
     ...accumulator.textContent.keys(),
     ...accumulator.reasoningContent.keys(),
     ...accumulator.taggedReasoningContent.keys(),
+    ...accumulator.reasoningDetails.keys(),
   ]);
   for (const index of messageIndexes) {
     const content = accumulator.textContent.get(index) ?? "";
     const reasoning = getCombinedStreamReasoning(accumulator, index);
-    if (!content.trim() && !reasoning) {
+    const reasoningDetails = accumulator.reasoningDetails.get(index);
+    if (!content.trim() && !reasoning && !reasoningDetails) {
       continue;
     }
     if (!content.trim() && functionCallIndexes.has(index)) {
@@ -1169,6 +1316,7 @@ function buildFinalResponse(accumulator: StreamAccumulator): ResponseResource {
         : [],
     };
     if (reasoning) msg.reasoning_content = reasoning;
+    if (reasoningDetails) msg.reasoning_details = structuredClone(reasoningDetails);
     output.push(msg);
   }
 
@@ -1185,6 +1333,8 @@ function buildFinalResponse(accumulator: StreamAccumulator): ResponseResource {
     const hasVisibleMessageForIndex = (accumulator.textContent.get(index) ?? "").trim().length > 0;
     const reasoning = hasVisibleMessageForIndex ? undefined : getCombinedStreamReasoning(accumulator, index);
     if (reasoning) fcItem.reasoning_content = reasoning;
+    const reasoningDetails = hasVisibleMessageForIndex ? undefined : accumulator.reasoningDetails.get(index);
+    if (reasoningDetails) fcItem.reasoning_details = structuredClone(reasoningDetails);
     output.push(fcItem);
     void index;
   }
@@ -1420,7 +1570,8 @@ export class OpenAIAdapter implements ProviderAdapter {
       }
     }
 
-    // Sampling params
+    // Sampling params. Active reasoning may remove these below when the
+    // target API treats sampling and thinking controls as incompatible.
     if (
       adjustedParams.temperature !== undefined &&
       adjustedParams.temperature !== null
@@ -1430,6 +1581,18 @@ export class OpenAIAdapter implements ProviderAdapter {
     if (adjustedParams.top_p !== undefined && adjustedParams.top_p !== null) {
       request.top_p = adjustedParams.top_p;
     }
+    if (
+      adjustedParams.presence_penalty !== undefined &&
+      adjustedParams.presence_penalty !== null
+    ) {
+      request.presence_penalty = adjustedParams.presence_penalty;
+    }
+    if (
+      adjustedParams.frequency_penalty !== undefined &&
+      adjustedParams.frequency_penalty !== null
+    ) {
+      request.frequency_penalty = adjustedParams.frequency_penalty;
+    }
     if (adjustedParams.max_output_tokens) {
       request.max_tokens = adjustedParams.max_output_tokens;
     }
@@ -1437,7 +1600,31 @@ export class OpenAIAdapter implements ProviderAdapter {
       request.max_completion_tokens = adjustedParams.max_completion_tokens;
     }
 
-    if (hasCompatibility(config, "adaptive_thinking")) {
+    const reasoningActive = applyReasoningControl(
+      request,
+      adjustedParams.reasoning,
+      config,
+    );
+    if (
+      reasoningActive &&
+      config.reasoningTransport !== "minimax" &&
+      config.reasoningTransport !== "openrouter"
+    ) {
+      delete request.temperature;
+      delete request.top_p;
+      delete request.presence_penalty;
+      delete request.frequency_penalty;
+      if (
+        config.reasoningTransport === "openai_chat" &&
+        request.max_tokens &&
+        !request.max_completion_tokens
+      ) {
+        request.max_completion_tokens = request.max_tokens;
+        delete request.max_tokens;
+      }
+    }
+
+    if (hasCompatibility(config, "adaptive_thinking") && !reasoningControlWasRequested(adjustedParams.reasoning)) {
       request.thinking = { type: "adaptive" };
     }
     if (hasCompatibility(config, "reasoning_split")) {
@@ -1515,6 +1702,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         extractMessageReasoning(choice.message),
         parsedContent.reasoningContent,
       );
+      const reasoningDetails = choice.message.reasoning_details;
 
       // Text content (or reasoning-only message)
       if (parsedContent.visibleText || reasoningContent) {
@@ -1534,6 +1722,7 @@ export class OpenAIAdapter implements ProviderAdapter {
             : [],
         };
         if (reasoningContent) msg.reasoning_content = reasoningContent;
+        if (reasoningDetails) msg.reasoning_details = structuredClone(reasoningDetails);
         output.push(msg);
       }
 
@@ -1550,6 +1739,9 @@ export class OpenAIAdapter implements ProviderAdapter {
             status: "completed",
           };
           if (reasoningContent && attachReasoningToToolCall) fc.reasoning_content = reasoningContent;
+          if (reasoningDetails && attachReasoningToToolCall) {
+            fc.reasoning_details = structuredClone(reasoningDetails);
+          }
           output.push(fc);
         }
       }
@@ -1560,8 +1752,12 @@ export class OpenAIAdapter implements ProviderAdapter {
           input_tokens: response.usage.prompt_tokens,
           output_tokens: response.usage.completion_tokens,
           total_tokens: response.usage.total_tokens,
-          input_tokens_details: { cached_tokens: 0 },
-          output_tokens_details: { reasoning_tokens: 0 },
+          input_tokens_details: {
+            cached_tokens: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: response.usage.completion_tokens_details?.reasoning_tokens ?? 0,
+          },
         }
       : null;
 
@@ -1634,6 +1830,7 @@ export class OpenAIAdapter implements ProviderAdapter {
       streamedTextContent: new Map(),
       functionCallArguments: new Map(),
       reasoningContent: new Map(),
+      reasoningDetails: new Map(),
       taggedReasoningContent: new Map(),
       streamedReasoningContent: new Map(),
       itemIds: new Map(),
@@ -1814,8 +2011,12 @@ export class OpenAIAdapter implements ProviderAdapter {
           input_tokens: response.usage.prompt_tokens,
           output_tokens: response.usage.completion_tokens,
           total_tokens: response.usage.total_tokens,
-          input_tokens_details: { cached_tokens: 0 },
-          output_tokens_details: { reasoning_tokens: 0 },
+          input_tokens_details: {
+            cached_tokens: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: response.usage.completion_tokens_details?.reasoning_tokens ?? 0,
+          },
         }
       : {
           input_tokens: 0,

@@ -35,6 +35,7 @@ import {
   handleConfig,
   handleHelp,
   handleLang,
+  handleReasoning,
   handleRewind,
   handleTheme,
 } from "./general";
@@ -126,6 +127,7 @@ const COMMAND_HANDLERS: Record<
   "auto-compact": handleAutoCompact,
   budget: handleBudget,
   config: handleConfig,
+  reasoning: handleReasoning,
   lang: handleLang,
   theme: handleTheme,
   permissions: handlePermissions,

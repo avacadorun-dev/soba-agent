@@ -16,6 +16,24 @@
 
 import type { ProviderDefinition } from "./types";
 
+/** OpenAI — native Responses API with exact-id reasoning profiles. */
+const OPENAI: ProviderDefinition = {
+  id: "openai-official",
+  name: "OpenAI",
+  baseUrl: "https://api.openai.com/v1",
+  apiKeyEnv: "OPENAI_API_KEY",
+  adapter: "openai-responses",
+  metadataProfile: "generic_openai",
+  reasoningTransport: "openai_responses",
+  reasoningProfiles: {
+    "gpt-5.6": {
+      control: "effort",
+      supportedEfforts: ["none", "low", "medium", "high", "xhigh", "max"],
+      defaultEffort: "medium",
+    },
+  },
+};
+
 /** DeepSeek — OpenAI-compatible. */
 const DEEPSEEK: ProviderDefinition = {
   id: "deepseek",
@@ -23,6 +41,9 @@ const DEEPSEEK: ProviderDefinition = {
   baseUrl: "https://api.deepseek.com",
   apiKeyEnv: "DEEPSEEK_API_KEY",
   adapter: "openai",
+  metadataProfile: "generic_openai",
+  reasoningTransport: "deepseek",
+  reasoning: { control: "toggle", defaultEnabled: true },
 };
 
 /** Moonshot Kimi — OpenAI-compatible. Focus on coding models (Kimi K2). */
@@ -32,6 +53,9 @@ const KIMI: ProviderDefinition = {
   baseUrl: "https://api.moonshot.cn/v1",
   apiKeyEnv: "MOONSHOT_API_KEY",
   adapter: "openai",
+  metadataProfile: "generic_openai",
+  reasoningTransport: "kimi",
+  reasoning: { control: "toggle", defaultEnabled: true },
 };
 
 /** Alibaba (Singapore region) — Qwen, OpenAI-compatible. */
@@ -41,6 +65,9 @@ const ALIBABA: ProviderDefinition = {
   baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
   apiKeyEnv: "DASHSCOPE_API_KEY",
   adapter: "openai",
+  metadataProfile: "generic_openai",
+  reasoningTransport: "qwen",
+  reasoning: { control: "toggle" },
 };
 
 /** OpenRouter — meta-router for many models, OpenAI-compatible. */
@@ -50,6 +77,8 @@ const OPENROUTER: ProviderDefinition = {
   baseUrl: "https://openrouter.ai/api/v1",
   apiKeyEnv: "OPENROUTER_API_KEY",
   adapter: "openai",
+  metadataProfile: "openrouter",
+  reasoningTransport: "openrouter",
 };
 
 /**
@@ -58,7 +87,7 @@ const OPENROUTER: ProviderDefinition = {
  * reachable via `soba provider add` and lives in
  * `~/.soba/config.json` under `customProviders`.
  */
-export const BUILTIN_PROVIDERS: ProviderDefinition[] = [DEEPSEEK, KIMI, ALIBABA, OPENROUTER];
+export const BUILTIN_PROVIDERS: ProviderDefinition[] = [DEEPSEEK, KIMI, ALIBABA, OPENROUTER, OPENAI];
 
 /** Lookup a built-in provider by id. */
 export function findBuiltinProvider(id: string): ProviderDefinition | undefined {

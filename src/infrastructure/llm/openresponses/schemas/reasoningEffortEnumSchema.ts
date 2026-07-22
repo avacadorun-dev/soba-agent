@@ -5,4 +5,12 @@
 
 import { z } from "zod";
 
-export const reasoningEffortEnumSchema = z.enum(["none", "low", "medium", "high", "xhigh"]);
+export const reasoningEffortEnumSchema = z.enum([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);

@@ -33,6 +33,8 @@ export interface InteractiveTUIOptions {
   maxOutputTokens: number;
   /** Maximum reasoning/completion tokens per model response (0 = unlimited). */
   maxCompletionTokens: number;
+  /** Effective reasoning policy displayed in the sidebar. */
+  reasoning?: string;
   /** Emergency ceiling for model invocations per task (0 = unlimited). */
   maxAgentIterations: number;
   /** Consecutive no-progress tool iterations before stall recovery. */

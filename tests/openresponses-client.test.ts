@@ -11,6 +11,7 @@
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { SobaConfig } from "../src/application/config/types";
+import { OpenAIResponsesAdapter } from "../src/infrastructure/llm/openai/openai-responses-adapter";
 import type { ProviderAdapter } from "../src/infrastructure/llm/openai/types";
 import { createOpenResponsesClient, OpenResponsesClientImpl } from "../src/infrastructure/llm/openresponses/openresponses-client";
 import type { CompactResponseParams, CreateResponseParams, ResponseResource, StreamingEvent } from "../src/kernel/model/openresponses-types";
@@ -351,6 +352,49 @@ describe("OpenResponsesClient", () => {
     mockFetch.mockRestore();
   });
 
+  test("native OpenAI adapter sends create requests to /responses", async () => {
+    const mockFetch = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({
+          id: "resp_native",
+          object: "response",
+          created_at: 1,
+          status: "completed",
+          model: "gpt-5.6",
+          output: [],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const client = new OpenResponsesClientImpl({
+      ...makeTestConfig(),
+      model: "gpt-5.6",
+      reasoning: { mode: "effort", effort: "high" },
+      modelReasoning: { control: "effort", supportedEfforts: ["high"] },
+      modelReasoningTransport: "openai_responses",
+    }, new OpenAIResponsesAdapter());
+
+    await client.create({
+      input: [{
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Hello" }],
+      }],
+      reasoning: { effort: "high" },
+    });
+
+    const call = (mockFetch as unknown as {
+      mock: { calls: Array<[RequestInfo | URL, RequestInit?]> };
+    }).mock.calls[0];
+    expect(String(call?.[0])).toBe("https://api.openai.com/v1/responses");
+    const body = JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>;
+    expect(body.reasoning).toEqual({ effort: "high" });
+    mockFetch.mockRestore();
+  });
+
   // ── compact ──
 
   test("compact вызывает adapter.convertCompactRequest и convertCompactResponse", async () => {
@@ -586,6 +630,63 @@ describe("OpenResponsesClient", () => {
     } finally {
       globalThis.fetch = originalFetch;
       mockFetch.mockRestore();
+    }
+  });
+});
+
+describe("OpenResponsesClient reasoning fallback", () => {
+  test("retries once without rejected reasoning controls and records the effective fallback", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { message: "reasoning_effort is not supported", type: "invalid_request_error", code: "invalid_parameter" },
+      }), { status: 400, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "chatcmpl-fallback",
+        object: "chat.completion",
+        created: 1,
+        model: "reasoning-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "chatcmpl-remembered-fallback",
+        object: "chat.completion",
+        created: 2,
+        model: "reasoning-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "ok again" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const client = new OpenResponsesClientImpl({
+        ...makeTestConfig(),
+        model: "reasoning-model",
+        reasoning: { mode: "effort", effort: "high" },
+        modelReasoning: { control: "effort", supportedEfforts: ["high"] },
+        modelReasoningTransport: "openai_chat",
+      });
+
+      const response = await client.create({
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "solve" }] }],
+        reasoning: { effort: "high" },
+      });
+
+      expect(response.status).toBe("completed");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const firstBody = JSON.parse(String(fetchInitAt(fetchMock, 0)?.body));
+      const secondBody = JSON.parse(String(fetchInitAt(fetchMock, 1)?.body));
+      expect(firstBody.reasoning_effort).toBe("high");
+      expect(secondBody.reasoning_effort).toBeUndefined();
+      expect(client.getConfig().reasoningEffective).toEqual({ mode: "provider_default" });
+      expect(client.getConfig().reasoningFallbackReason).toContain("Provider rejected");
+
+      await client.create({ input: [], reasoning: { effort: "high" } });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const rememberedFallbackBody = JSON.parse(String(fetchInitAt(fetchMock, 2)?.body));
+      expect(rememberedFallbackBody.reasoning_effort).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

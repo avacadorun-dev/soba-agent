@@ -5,7 +5,13 @@
  * Priority: CLI args > env vars > config file > defaults
  */
 
-import { isTuiThemeName, TUI_THEME_NAMES, type TuiThemeName } from "../../application/cli/public";
+import {
+  isReasoningEffort,
+  isTuiThemeName,
+  type ReasoningSelection,
+  TUI_THEME_NAMES,
+  type TuiThemeName,
+} from "../../application/cli/public";
 import { I18n } from "../../shared/i18n/i18n";
 import type { Locale } from "../../shared/i18n/types";
 
@@ -38,6 +44,8 @@ export interface CliArgs {
   maxOutputTokens?: number;
   /** Maximum thinking/reasoning tokens per response (DeepSeek, o1, etc.) */
   maxCompletionTokens?: number;
+  /** Runtime reasoning preference (capability-validated per model). */
+  reasoning?: ReasoningSelection;
   /** Model context window used for compaction */
   contextWindow?: number;
   /** Emergency ceiling for model invocations in one task */
@@ -244,6 +252,41 @@ export function parseArgs(argv: string[]): CliArgs {
       case "--max-completion-tokens":
         args.maxCompletionTokens = Number.parseInt(argv[i + 1], 10);
         i += 2;
+        break;
+
+      case "--reasoning-effort": {
+        const value = argv[i + 1]?.trim().toLowerCase();
+        if (value === "default" || value === "provider_default") {
+          args.reasoning = { mode: "provider_default" };
+        } else if (isReasoningEffort(value)) {
+          args.reasoning = { mode: "effort", effort: value };
+        } else {
+          console.error("Error: --reasoning-effort requires default, none, minimal, low, medium, high, xhigh, or max.");
+          process.exit(1);
+        }
+        i += 2;
+        break;
+      }
+
+      case "--reasoning-budget": {
+        const maxTokens = Number.parseInt(argv[i + 1], 10);
+        if (!Number.isInteger(maxTokens) || maxTokens <= 0) {
+          console.error("Error: --reasoning-budget must be a positive integer.");
+          process.exit(1);
+        }
+        args.reasoning = { mode: "budget", maxTokens };
+        i += 2;
+        break;
+      }
+
+      case "--reasoning-enabled":
+        args.reasoning = { mode: "toggle", enabled: true };
+        i++;
+        break;
+
+      case "--no-reasoning":
+        args.reasoning = { mode: "toggle", enabled: false };
+        i++;
         break;
 
       case "--context-window":

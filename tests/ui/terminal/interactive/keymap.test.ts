@@ -19,9 +19,11 @@ describe("TUI keymap", () => {
     expect(keyMatchesAction(key({ name: "m" }), "openModelSelector")).toBe(false);
   });
 
-  test("uses F3 for search and F6 for sidebar navigation", () => {
+  test("uses F3 for search, F4 for reasoning, and F6 for sidebar navigation", () => {
     expect(keyMatchesAction(key({ name: "f3" }), "openSearch")).toBe(true);
     expect(keyMatchesAction(key({ name: "f", ctrl: true }), "openSearch")).toBe(true);
+    expect(keyMatchesAction(key({ name: "f4" }), "cycleReasoning")).toBe(true);
+    expect(keyMatchesAction(key({ name: "f4", shift: true }), "cycleReasoning")).toBe(false);
     expect(keyMatchesAction(key({ name: "f6" }), "nextSidebarMode")).toBe(true);
     expect(keyMatchesAction(key({ name: "f6", shift: true }), "previousSidebarMode")).toBe(true);
     expect(keyMatchesAction(key({ name: "f6", shift: true }), "nextSidebarMode")).toBe(false);
@@ -44,5 +46,6 @@ describe("TUI keymap", () => {
   test("formats labels for help output", () => {
     expect(formatKeyBindings("openModelSelector")).toContain("F2");
     expect(formatKeyBindings("openSearch")).toContain("F3");
+    expect(formatKeyBindings("cycleReasoning")).toContain("F4");
   });
 });

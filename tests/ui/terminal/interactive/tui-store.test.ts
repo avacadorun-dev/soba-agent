@@ -12,6 +12,7 @@ import { NotificationStore } from "../../../../src/ui/terminal/interactive/model
 import { TuiStore } from "../../../../src/ui/terminal/interactive/model/tui-store";
 import type { InteractiveTUIOptions } from "../../../../src/ui/terminal/interactive/model/types";
 import {
+  fitSidebarValue,
   getProgressBarSegments,
   getTrustBadgeParts,
   SIDEBAR_COMPACT_LOGO_MAX_WIDTH,
@@ -1498,6 +1499,11 @@ describe("Sidebar reactivity", () => {
   test("brand logo switches to compact one-line variant for narrow sidebar", () => {
     expect(shouldUseCompactSidebarLogo(SIDEBAR_COMPACT_LOGO_MAX_WIDTH)).toBe(true);
     expect(shouldUseCompactSidebarLogo(SIDEBAR_COMPACT_LOGO_MAX_WIDTH + 1)).toBe(false);
+  });
+
+  test("long sidebar identities keep both recognizable ends", () => {
+    expect(fitSidebarValue("anthropic/claude-sonnet-5", 18)).toBe("anthropic…sonnet-5");
+    expect(fitSidebarValue("MiniMax", 18)).toBe("MiniMax");
   });
 
   test("budget_update обновляет effective context tokens для sidebar без смены режима", () => {

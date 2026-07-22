@@ -1,8 +1,14 @@
+import type { ReasoningSelection } from "../../kernel/model/reasoning";
 import type { InputImageContent, InputTextContent } from "../../kernel/transcript/types";
 import type { WorkMode } from "../../kernel/work-mode/public";
 import type { ModelDefinition, ProviderDefinition, TestResult } from "../providers/public";
 import type { PermissionMode } from "../trust/trust-manager";
 
+export type { ReasoningSelection } from "../../kernel/model/reasoning";
+export {
+  formatReasoningSelection,
+  reasoningSelectionToConfigValue,
+} from "../../kernel/model/reasoning";
 export { CURRENT_SESSION_VERSION } from "../../kernel/session/version";
 export type { InputImageContent, InputTextContent, SessionInfo } from "../../kernel/transcript/types";
 export type { WorkMode } from "../../kernel/work-mode/public";
@@ -168,6 +174,11 @@ export interface RuntimeProviderCatalog {
   getModelDiscoveryStatus(providerId: string): RuntimeModelDiscoveryStatus;
   getProvider(providerId: string): ProviderDefinition | undefined;
   getModel(providerId: string, modelId: string): ModelDefinition | undefined;
+  getActiveClientConfig(): {
+    reasoning?: ReasoningSelection;
+    reasoningEffective?: ReasoningSelection;
+    reasoningFallbackReason?: string;
+  };
   switchModel(providerId: string, modelId: string): unknown;
   refreshBuiltinModels(onUpdate?: () => void): Promise<void>;
   testConnection(

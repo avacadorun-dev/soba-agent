@@ -483,6 +483,29 @@ export class ContextManager {
     return this._meter;
   }
 
+  /** Reconfigure context planning without rebuilding the agent runtime. */
+  updateModelLimits(contextWindow: number, outputReserveTokens: number): void {
+    const normalizedContextWindow = Math.max(1, Math.trunc(contextWindow));
+    const largestValidReserve = Math.max(
+      1,
+      normalizedContextWindow - this._meter.safetyReserveTokens - 1,
+    );
+    const normalizedReserve = Math.min(
+      Math.max(1, Math.trunc(outputReserveTokens)),
+      largestValidReserve,
+    );
+    if (
+      normalizedContextWindow === this._meter.contextWindow &&
+      normalizedReserve === this._meter.maxOutputTokens
+    ) {
+      return;
+    }
+    this._config.contextWindow = normalizedContextWindow;
+    this._config.maxOutputTokens = normalizedReserve;
+    this._meter.updateLimits(normalizedContextWindow, normalizedReserve);
+    this._lastSnapshot = null;
+  }
+
   /**
    * Returns debug information for the sidebar.
    * Does not require systemPromptTokens/toolSchemaTokens — uses cached state only.

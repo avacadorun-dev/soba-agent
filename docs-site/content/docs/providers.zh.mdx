@@ -1,6 +1,6 @@
 ---
 title: Provider 与模型
-description: 内置 DeepSeek、Moonshot Kimi、Alibaba Qwen、OpenRouter providers，动态模型发现和自定义 providers。
+description: 内置 DeepSeek、Moonshot Kimi、Alibaba Qwen、OpenRouter 和 OpenAI providers，动态模型发现和自定义 providers。
 ---
 
 SOBA 可以使用任何 OpenAI-compatible API。本页说明如何使用内置 providers、切换模型、添加自定义 providers，以及排查常见连接问题。
@@ -13,7 +13,7 @@ SOBA 可以使用任何 OpenAI-compatible API。本页说明如何使用内置 p
 
 SOBA 使用 provider **registry**。它包含：
 
-- **内置 providers**：4 个预置 base URL 的 provider
+- **内置 providers**：5 个带已知 base URL 和 transport profile 的 provider
 - **自定义 providers**：用户添加的任意 OpenAI-compatible API
 - **动态模型发现**：从 provider API 拉取模型列表，并缓存在内存中
 
@@ -23,7 +23,7 @@ SOBA 使用 provider **registry**。它包含：
 │                                          │
 │  ┌────────────────┐  ┌────────────────┐ │
 │  │ Built-in       │  │ Custom         │ │
-│  │ Providers (4)  │  │ Providers (∞)  │ │
+│  │ Providers (5)  │  │ Providers (∞)  │ │
 │  └────────────────┘  └────────────────┘ │
 │                                          │
 │  ┌────────────────────────────────────┐  │
@@ -37,7 +37,7 @@ SOBA 使用 provider **registry**。它包含：
 
 ## 2. 内置 providers
 
-SOBA v0.6.x 提供 4 个内置 providers。它们都使用 OpenAI-compatible adapter。
+SOBA v0.6.x 提供 5 个内置 providers。官方 OpenAI provider 使用原生 Responses API；其余 provider 使用各自的 OpenAI-compatible transport。
 
 | ID | 名称 | Base URL | API key env | 说明 |
 |---|---|---|---|---|
@@ -45,10 +45,13 @@ SOBA v0.6.x 提供 4 个内置 providers。它们都使用 OpenAI-compatible ada
 | `kimi` | Moonshot Kimi | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | Kimi K2 很适合代码 |
 | `alibaba` | Alibaba Qwen | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | Qwen3、Qwen-Coder，新加坡区域 |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | 可路由 Claude、GPT、Gemini、Llama 等大量模型 |
+| `openai-official` | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` | 原生 Responses API，包括 opaque reasoning items |
 
 ### 2.1. 动态发现
 
 启动时，SOBA 会对 active provider 调用 `GET {baseUrl}/models`。结果缓存在当前进程内。自动选择默认模型时，SOBA 会跳过明确声明非文本输出的模型，其余情况保持 provider 返回的顺序。它不会根据模型 ID 中的 `chat`、`code` 或 vendor 名称推断能力。
+
+如果 provider 提供相关信息，discovery 还会读取 context/output limits 和结构化 reasoning capabilities。Effective limits 的优先级是：用户显式模型值 → runtime limit → active route limit → model-wide limit → 维护的精确模型 profile → 保守 fallback。Router route limit 可以缩小模型的全局 context window。Fallback 值会用 `~` 标为推定值，选择这类模型时也会显示警告。
 
 缓存只存在于内存中。要刷新它，请重启 SOBA，或在 TUI 里用 `F2` 或 `/model` 打开模型选择器。
 
@@ -82,7 +85,13 @@ export SOBA_MODEL="anthropic/claude-sonnet-4.6"
 
 `soba provider use <id>` 会把 active provider 切到它的 default model。自定义 providers 可以用 `--default-model` 设置默认模型；未设置时使用第一个 `--model`。
 
-### 3.3. 实用模型选择
+### 3.3. Reasoning 控制
+
+SOBA 保存 provider-neutral 的 requested policy，并为 active model 计算 effective policy。按 `F4` 只会循环模型实际声明支持的 controls；也可以使用 `/reasoning` 精确设置 effort、toggle 或 token budget。Sidebar 显示 effective mode；如果选择不兼容，会显示 `effective ← requested` 并报告 fallback 原因。
+
+`provider default` 表示请求中不发送任何 reasoning field。SOBA 不会把不支持的 level 静默替换成最接近的 level。如果 live capabilities 已过期且 provider 拒绝 reasoning 参数，SOBA 只会在移除 reasoning fields 后安全重试一次，并记录 fallback。
+
+### 3.4. 实用模型选择
 
 这不是永久排行榜，只是截至 2026 年 6 月 21 日的实用参考。跑大任务前建议先看 `soba provider list`：模型别名、价格和限制都变得很快。
 
@@ -143,9 +152,10 @@ soba provider add my-api \
 | `--base-url <url>` | 是 | OpenAI-compatible API base URL |
 | `--api-key-env <VAR>` | 否 | 存放 API key 的环境变量名。省略时认为 provider 不需要 key |
 | `--name <name>` | 否 | 展示名称 |
-| `--model <spec>` | 是 | 模型规格：`id=name,contextWindow,maxOutput[,supportsStreaming[,supportsThinking]]`。可重复 |
+| `--model <spec>` | 是 | 模型规格：`id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]`。Limits 可省略并由 discovery 填充。可重复 |
 | `--default-model <id>` | 否 | 默认模型。省略时使用第一个 `--model` |
-| `--adapter <openai\|anthropic>` | 否 | Provider adapter。当前 runtime 路径主要面向 OpenAI-compatible API |
+| `--adapter <openai\|openai-responses\|anthropic>` | 否 | Provider adapter。仅对实现 Responses API 的 endpoint 使用 `openai-responses` |
+| `--metadata-profile <profile>` | 否 | Discovery profile：`auto`、`generic_openai`、`openrouter`、`vllm`、`ollama`、`lmstudio`、`llamacpp` 或 `none` |
 | `--from-file <path>` | 否 | 从 JSON 文件加载 provider 定义 |
 | `--set-active` | 否 | 添加后立即设为 active provider |
 
@@ -160,6 +170,8 @@ soba provider add my-api \
   "baseUrl": "https://my-llm.company.com/v1",
   "apiKeyEnv": "MY_LLM_KEY",
   "adapter": "openai",
+  "metadataProfile": "generic_openai",
+  "reasoningTransport": "openai_chat",
   "defaultModel": "company-model",
   "models": [{
     "id": "company-model",
@@ -167,13 +179,20 @@ soba provider add my-api \
     "contextWindow": 128000,
     "maxOutput": 8192,
     "supportsStreaming": true,
-    "supportsThinking": true,
+    "reasoning": {
+      "control": "effort",
+      "supportedEfforts": ["low", "medium", "high"]
+    },
     "compatibility": ["single_system_message"]
   }]
 }
 ```
 
-支持的 compatibility features 是 `adaptive_thinking`、`reasoning_split`、`reasoning_details_input`、`prefer_max_completion_tokens` 和 `single_system_message`。`supportsThinking` 只是供界面使用的能力元数据，不会隐式启用任何 wire-format feature。动态 discovery 也会读取 upstream 的 `soba_compatibility` 或 `compatibility` 列表，并忽略未知值。
+支持的 compatibility features 是 `adaptive_thinking`、`reasoning_split`、`reasoning_details_input`、`prefer_max_completion_tokens` 和 `single_system_message`。Legacy boolean `supportsThinking` 会再读取一个 compatibility release，但它无法描述 level 或 budget；新的 definitions 应使用结构化 `reasoning`。动态 discovery 也会读取 upstream 的 `soba_compatibility` 或 `compatibility` 列表，并忽略未知值。
+
+Reasoning `control` 可以是 `none`、`effort`、`budget`、`toggle` 或 `fixed`。Transport 也必须显式声明为 `openai_chat`、`openai_responses`、`openrouter`、`deepseek`、`kimi`、`minimax`、`qwen`、`ollama` 或 `none`。Capability declaration 决定用户可以选择什么，transport 决定如何序列化。除非 profile 已确认，未知 endpoint 不会收到 reasoning fields。
+
+`metadataProfile` 只控制 model catalogue metadata 的解释方式。`auto` 适用于大多数 custom endpoints，并会对受支持的本地服务器执行 endpoint probes；`vllm`、`ollama`、`lmstudio` 和 `llamacpp` 使用各自文档化的 metadata shape。`none` 会关闭 provider metadata 解释。这与 reasoning transport 相互独立。
 
 对于最多只接受一条 system message 的 chat template，请使用 `single_system_message`。在 OpenAI wire-format 边界，SOBA 会把 core instructions、已启用 skill 的 instructions、context capsules 和 compaction summaries 合并为位于索引 0 的一条 system message。非 system messages 的相对顺序保持不变。该 feature 按模型配置，因此同一 endpoint 暴露的不同模型可以使用不同的兼容性设置。
 

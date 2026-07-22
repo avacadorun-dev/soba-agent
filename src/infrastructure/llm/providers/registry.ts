@@ -31,6 +31,7 @@ import {
 } from "../../../application/providers/model-defaults";
 import { BUILTIN_PROVIDERS, findBuiltinProvider } from "../../../application/providers/providers";
 import type {
+  ConfiguredModelDefinition,
   CustomProviderMap,
   ModelDefinition,
   ProviderConfigMap,
@@ -38,14 +39,26 @@ import type {
   ProviderRegistryState,
   TestResult,
 } from "../../../application/providers/types";
+import { MODEL_METADATA_PROFILES } from "../../../application/providers/types";
+import {
+  DEFAULT_REASONING_SELECTION,
+  type ReasoningSelection,
+} from "../../../kernel/model/reasoning";
 import { OpenAIAdapter } from "../openai/openai-adapter";
+import { OpenAIResponsesAdapter } from "../openai/openai-responses-adapter";
 import type { ProviderAdapter } from "../openai/types";
 import {
   createOpenResponsesClient,
   type OpenResponsesClient,
   type OpenResponsesClientConfig,
 } from "../openresponses/openresponses-client";
-import { discoverModels, getCachedModels, toModelDefinitions } from "./discovery";
+import {
+  discoverModels,
+  getCachedModels,
+  resolveMetadataProfile,
+  resolveModelsForProvider,
+  toModelDefinitions,
+} from "./discovery";
 
 /** Default path to the user config file. */
 export function getProviderRegistryConfigPath(): string {
@@ -59,6 +72,8 @@ function createAdapterFor(
   switch (adapterId) {
     case "openai":
       return new OpenAIAdapter();
+    case "openai-responses":
+      return new OpenAIResponsesAdapter();
     case "anthropic":
       // Phase 2.5: no Anthropic adapter yet. Throwing at construction time
       // is intentional — testConnection surfaces a clear "adapter pending"
@@ -83,6 +98,11 @@ export class ProviderRegistry {
   private activeProvider: string = "";
   private activeModel: string = "";
   private clientCache: Map<string, OpenResponsesClient> = new Map();
+  private clientDefaults: {
+    maxCompletionTokens: number;
+    temperature: number;
+    reasoning: ReasoningSelection;
+  };
   private readonly configPath: string;
   /** Optional callback to be notified of state changes (for tests and TUI). */
   public readonly onChange?: (state: ProviderRegistryState) => void;
@@ -92,10 +112,20 @@ export class ProviderRegistry {
     options: {
       configPath?: string;
       onChange?: (state: ProviderRegistryState) => void;
+      clientDefaults?: Partial<{
+        maxCompletionTokens: number;
+        temperature: number;
+        reasoning: ReasoningSelection;
+      }>;
     } = {},
   ) {
     this.configPath = options.configPath ?? getProviderRegistryConfigPath();
     this.onChange = options.onChange;
+    this.clientDefaults = {
+      maxCompletionTokens: options.clientDefaults?.maxCompletionTokens ?? 0,
+      temperature: options.clientDefaults?.temperature ?? 0.7,
+      reasoning: structuredClone(options.clientDefaults?.reasoning ?? DEFAULT_REASONING_SELECTION),
+    };
 
     // Seed built-in providers.
     for (const p of BUILTIN_PROVIDERS) {
@@ -219,14 +249,7 @@ export class ProviderRegistry {
     // No model selected yet — return a synthetic placeholder so the
     // runtime doesn't crash. The wizard / discovery will fill it in.
     if (!this.activeModel) {
-      return {
-        id: "",
-        name: provider.name,
-        contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-        maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
-        supportsStreaming: true,
-        supportsThinking: false,
-      };
+      return syntheticModelDefinition(provider, "", provider.name);
     }
     const model = this.getModelsFor(provider.id).find(
       (m) => m.id === this.activeModel,
@@ -239,14 +262,7 @@ export class ProviderRegistry {
       // compaction) keeps working. The user will get a real model
       // definition the next time they pick from the wizard.
       if (this.activeModel) {
-        return {
-          id: this.activeModel,
-          name: this.activeModel,
-          contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-          maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
-          supportsStreaming: true,
-          supportsThinking: false,
-        };
+        return syntheticModelDefinition(provider, this.activeModel);
       }
       throw new Error(
         `Active model "${this.activeModel}" not found in provider "${provider.id}"`,
@@ -267,15 +283,8 @@ export class ProviderRegistry {
     // approved by discovery yet (e.g. user typed it on the CLI).
     // Return a synthetic ModelDefinition so /model, /model set, and
     // the TUI picker can work with arbitrary ids.
-    if (modelId && findBuiltinProvider(providerId)) {
-      return {
-        id: modelId,
-        name: modelId,
-        contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
-        maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
-        supportsStreaming: true,
-        supportsThinking: false,
-      };
+    if (modelId && (findBuiltinProvider(providerId) || !provider.models || provider.models.length === 0)) {
+      return syntheticModelDefinition(provider, modelId);
     }
     return undefined;
   }
@@ -295,18 +304,9 @@ export class ProviderRegistry {
   public getModelsFor(providerId: string): ModelDefinition[] {
     const provider = this.providers.get(providerId);
     if (!provider) return [];
-    if (provider.models && provider.models.length > 0) {
-      return provider.models;
-    }
-    // Built-in provider — read the live discovery cache.
-    if (findBuiltinProvider(providerId)) {
-      const cached = getCachedModels(provider, this.resolveApiKey(providerId));
-      if (cached && cached.ok) {
-        return toModelDefinitions(cached, provider);
-      }
-      return [];
-    }
-    return [];
+    const cached = getCachedModels(provider, this.resolveApiKey(providerId));
+    const discovered = cached && cached.ok ? toModelDefinitions(cached, provider) : [];
+    return resolveModelsForProvider(provider, discovered);
   }
 
   public getModelDiscoveryStatus(
@@ -317,10 +317,10 @@ export class ProviderRegistry {
     | { kind: "failed"; message: string } {
     const provider = this.providers.get(providerId);
     if (!provider) return { kind: "failed", message: "Unknown provider" };
-    if (provider.models && provider.models.length > 0) {
+    if (provider.models && provider.models.length > 0 && resolveMetadataProfile(provider) === "none") {
       return { kind: "loaded" };
     }
-    if (!findBuiltinProvider(providerId)) {
+    if (resolveMetadataProfile(provider) === "none") {
       return { kind: "loaded" };
     }
     const cached = getCachedModels(provider, this.resolveApiKey(providerId));
@@ -343,7 +343,7 @@ export class ProviderRegistry {
   }
 
   /**
-   * Trigger model catalogue discovery for all built-in providers.
+   * Trigger model catalogue discovery for every provider that enables it.
    * Called when the ModelSelector opens so the picker shows real
    * model entries instead of synthetic fallbacks.
    *
@@ -353,16 +353,25 @@ export class ProviderRegistry {
   public async refreshBuiltinModels(
     onProviderSettled?: (providerId: string) => void,
   ): Promise<void> {
-    const promises = BUILTIN_PROVIDERS.map(async (p) => {
-      const apiKey = this.resolveApiKey(p.id);
-      try {
-        await discoverModels(p, apiKey, { timeoutMs: 8_000 });
-      } catch {
-        // Discovery failure is non-fatal — synthetic entries stay visible.
-      } finally {
-        onProviderSettled?.(p.id);
-      }
-    });
+    const promises = this.getAllProviders()
+      .filter((provider) => resolveMetadataProfile(provider) !== "none")
+      .map(async (p) => {
+        const apiKey = this.resolveApiKey(p.id);
+        try {
+          const outcome = await discoverModels(p, apiKey, { timeoutMs: 8_000 });
+          if (outcome.ok) {
+            for (const model of toModelDefinitions(outcome, p)) {
+              // A cached client may still contain synthetic or stale limits.
+              // Rebuild it lazily so compaction and UI use the refreshed data.
+              this.invalidateClient(p.id, model.id);
+            }
+          }
+        } catch {
+          // Discovery failure is non-fatal — synthetic entries stay visible.
+        } finally {
+          onProviderSettled?.(p.id);
+        }
+      });
     await Promise.allSettled(promises);
   }
 
@@ -386,7 +395,7 @@ export class ProviderRegistry {
       // /model set UX will surface the available list.
       // Built-in providers don't carry a hard-coded catalogue;
       // empty model ids are allowed — discovery fills them later.
-      if (findBuiltinProvider(providerId)) {
+      if (findBuiltinProvider(providerId) || !provider.models || provider.models.length === 0) {
         this.activeProvider = providerId;
         this.activeModel = modelId;
         this.clientCache.delete(this.clientCacheKey(providerId, modelId));
@@ -433,6 +442,22 @@ export class ProviderRegistry {
     const existing = this.providerSecrets[providerId] ?? { apiKey: "" };
     this.providerSecrets[providerId] = { ...existing, baseUrl };
     this.emitChange();
+  }
+
+  /** Runtime preferences shared by all per-model clients, including future ones. */
+  public updateClientDefaults(
+    partial: Partial<Pick<OpenResponsesClientConfig, "maxCompletionTokens" | "temperature" | "reasoning">>,
+  ): void {
+    if (partial.maxCompletionTokens !== undefined) {
+      this.clientDefaults.maxCompletionTokens = partial.maxCompletionTokens;
+    }
+    if (partial.temperature !== undefined) {
+      this.clientDefaults.temperature = partial.temperature;
+    }
+    if (partial.reasoning !== undefined) {
+      this.clientDefaults.reasoning = structuredClone(partial.reasoning);
+    }
+    for (const client of this.clientCache.values()) client.updateConfig(partial);
   }
 
   // ─── Custom providers ───
@@ -524,16 +549,22 @@ export class ProviderRegistry {
     const overrideBase = this.providerSecrets[providerId]?.baseUrl;
     const baseUrl = overrideBase ?? provider.baseUrl;
     const apiKey = this.resolveApiKey(providerId) ?? "";
+    const reasoningTransport = model.reasoningTransport ?? provider.reasoningTransport;
 
     const sobaConfig: SobaConfig = {
       baseUrl,
       apiKey,
       model: model.id,
       modelCompatibility: model.compatibility ? [...model.compatibility] : undefined,
+      modelReasoning: reasoningTransport && reasoningTransport !== "none"
+        ? model.reasoning ?? (model.supportsThinking ? { control: "toggle" as const } : undefined)
+        : undefined,
+      modelReasoningTransport: reasoningTransport,
       maxOutputTokens: model.maxOutput,
-      maxCompletionTokens: 0,
+      maxCompletionTokens: this.clientDefaults.maxCompletionTokens,
+      reasoning: structuredClone(this.clientDefaults.reasoning),
       contextWindow: model.contextWindow,
-      temperature: 0.7,
+      temperature: this.clientDefaults.temperature,
       maxAgentIterations: 0,
       maxStalledIterations: 4,
       maxRunMinutes: 0,
@@ -584,9 +615,9 @@ export class ProviderRegistry {
   /**
    * Issue a tiny ping to the given provider/model and report success/failure.
    *
-   * Implementation: a non-streaming /chat/completions call with max_tokens=1
-   * and a minimal user message. The model is expected to echo or refuse
-   * gracefully — we only care about the HTTP status.
+   * Implementation: a non-streaming request built by the active adapter with
+   * a one-token cap and a minimal user message. We only care about the HTTP
+   * status and a JSON response body.
    *
    * For unsupported adapters (e.g. Anthropic today) this returns
    * `{ ok: false, error: "..." }` synchronously.
@@ -623,18 +654,36 @@ export class ProviderRegistry {
       };
     }
 
+    let adapter: ProviderAdapter;
     try {
       // Validate adapter availability up-front so unsupported providers
       // (e.g. anthropic in Phase 2.5) report a clear "not implemented"
       // error instead of a confusing wire failure.
-      createAdapterFor(provider.adapter);
+      adapter = createAdapterFor(provider.adapter);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { ok: false, error: message };
     }
 
     const start = Date.now();
-    const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const url = `${baseUrl.replace(/\/$/, "")}${adapter.getCreatePath?.() ?? "/chat/completions"}`;
+    const request = adapter.convertRequest({
+      model: model.id,
+      input: [{
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "ping" }],
+      }],
+      max_output_tokens: 1,
+      stream: false,
+    }, {
+      baseUrl,
+      apiKey,
+      model: model.id,
+      compatibility: model.compatibility,
+      reasoningCapabilities: model.reasoning,
+      reasoningTransport: model.reasoningTransport ?? provider.reasoningTransport,
+    });
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -642,12 +691,7 @@ export class ProviderRegistry {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          model: model.id,
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 1,
-          stream: false,
-        }),
+        body: JSON.stringify(request),
         signal: options.signal ?? AbortSignal.timeout(15000),
       });
       const latencyMs = Date.now() - start;
@@ -747,6 +791,11 @@ export class ProviderRegistry {
       modelCompatibility: model.compatibility
         ? [...model.compatibility]
         : undefined,
+      modelReasoning: model.reasoning,
+      modelReasoningTransport: model.reasoningTransport ?? provider.reasoningTransport,
+      maxCompletionTokens: this.clientDefaults.maxCompletionTokens,
+      temperature: this.clientDefaults.temperature,
+      reasoning: structuredClone(this.clientDefaults.reasoning),
       maxOutputTokens: model.maxOutput,
       contextWindow: model.contextWindow,
     };
@@ -756,6 +805,36 @@ export class ProviderRegistry {
   public getActiveClientConfig(): OpenResponsesClientConfig {
     return this.getClient(this.activeProvider, this.activeModel).getConfig();
   }
+}
+
+function syntheticModelDefinition(
+  provider: ProviderDefinition,
+  modelId: string,
+  name = modelId,
+): ModelDefinition {
+  const reasoning = provider.reasoningProfiles?.[modelId] ?? provider.reasoning;
+  return {
+    id: modelId,
+    name,
+    contextWindow: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
+    maxOutput: DEFAULT_SYNTHETIC_MAX_OUTPUT,
+    supportsStreaming: true,
+    supportsThinking: Boolean(reasoning && reasoning.control !== "none"),
+    limits: {
+      contextWindow: {
+        value: DEFAULT_SYNTHETIC_CONTEXT_WINDOW,
+        source: "fallback",
+        scope: "assumed",
+      },
+      maxOutput: {
+        value: DEFAULT_SYNTHETIC_MAX_OUTPUT,
+        source: "fallback",
+        scope: "assumed",
+      },
+    },
+    ...(reasoning ? { reasoning: structuredClone(reasoning) } : {}),
+    ...(provider.reasoningTransport ? { reasoningTransport: provider.reasoningTransport } : {}),
+  };
 }
 
 /**
@@ -789,12 +868,8 @@ export function parseRegistryState(raw: unknown): ProviderRegistryState {
     for (const [id, value] of Object.entries(
       obj.customProviders as Record<string, unknown>,
     )) {
-      if (typeof value === "object" && value !== null) {
-        const def = value as ProviderDefinition;
-        if (def.id && def.name && Array.isArray(def.models)) {
-          customProviders[id] = { ...def, custom: true };
-        }
-      }
+      const def = parseCustomProviderDefinition(value);
+      if (def) customProviders[id] = def;
     }
   }
   const fallback = BUILTIN_PROVIDERS[0]!;
@@ -815,6 +890,36 @@ export function parseRegistryState(raw: unknown): ProviderRegistryState {
         ? (obj.activeModel as string)
         : (fallback.defaultModel ?? "");
   return { defaultProvider, defaultModel, providers, customProviders };
+}
+
+function parseCustomProviderDefinition(value: unknown): ProviderDefinition | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (
+    typeof raw.id !== "string" ||
+    typeof raw.name !== "string" ||
+    typeof raw.baseUrl !== "string" ||
+    (raw.adapter !== "openai" && raw.adapter !== "openai-responses" && raw.adapter !== "anthropic")
+  ) {
+    return null;
+  }
+  if (raw.models !== undefined && !Array.isArray(raw.models)) return null;
+  const models = Array.isArray(raw.models)
+    ? raw.models.filter(
+      (model): model is ConfiguredModelDefinition =>
+        typeof model === "object" && model !== null && typeof (model as { id?: unknown }).id === "string",
+    )
+    : undefined;
+  const metadataProfile = MODEL_METADATA_PROFILES.includes(raw.metadataProfile as never)
+    ? raw.metadataProfile as ProviderDefinition["metadataProfile"]
+    : "auto";
+  return {
+    ...(raw as unknown as ProviderDefinition),
+    apiKeyEnv: typeof raw.apiKeyEnv === "string" ? raw.apiKeyEnv : null,
+    metadataProfile,
+    ...(models ? { models } : {}),
+    custom: true,
+  };
 }
 
 function emptyRegistryState(): ProviderRegistryState {

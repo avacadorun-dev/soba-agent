@@ -35,7 +35,7 @@ function modelBadges(entry: ModelSelectorEntry, store: ProviderStore): string {
       : store.t("tui.modelSelector.discoveryPending");
   }
   const badges = [
-    store.t("tui.modelSelector.contextShort", { tokens: formatTokens(entry.contextWindow) }),
+    `${entry.limitsAssumed ? "~" : ""}${store.t("tui.modelSelector.contextShort", { tokens: formatTokens(entry.contextWindow) })}`,
     store.t("tui.modelSelector.outputShort", { tokens: formatTokens(entry.maxOutput) }),
   ];
   if (entry.supportsStreaming) badges.push(store.t("tui.modelSelector.streamingBadge"));
@@ -325,6 +325,9 @@ export function ModelSelector(props: {
                     providerCustom: group.provider.custom === true,
                     contextWindow: model.contextWindow,
                     maxOutput: model.maxOutput,
+                    limitsAssumed:
+                      model.limits?.contextWindow.source === "fallback" ||
+                      model.limits?.maxOutput.source === "fallback",
                     supportsStreaming: model.supportsStreaming,
                     supportsThinking: model.supportsThinking,
                     selectable: model.selectable,

@@ -4,8 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OpenResponsesClientProxy } from "../../../../src/infrastructure/llm/providers/client-proxy";
 import { ProviderRegistry } from "../../../../src/infrastructure/llm/providers/registry";
+import type { ReasoningCapabilities } from "../../../../src/kernel/model/reasoning";
 import { I18n } from "../../../../src/shared/i18n/i18n";
-import { ProviderStore } from "../../../../src/ui/terminal/interactive/model/provider-store";
+import {
+  buildReasoningCycle,
+  nextReasoningSelection,
+  ProviderStore,
+} from "../../../../src/ui/terminal/interactive/model/provider-store";
 
 let configPath: string;
 
@@ -77,6 +82,50 @@ function makeStore(registry = makeRegistry()) {
   const store = new ProviderStore({ registry, proxy, i18n: new I18n("en") });
   return { registry, proxy, store };
 }
+
+describe("reasoning hotkey cycle", () => {
+  test("cycles only efforts declared by the active model", () => {
+    const capabilities: ReasoningCapabilities = {
+      control: "effort",
+      supportedEfforts: ["low", "high", "xhigh"],
+    };
+
+    expect(buildReasoningCycle(capabilities, { mode: "provider_default" })).toEqual([
+      { mode: "provider_default" },
+      { mode: "effort", effort: "low" },
+      { mode: "effort", effort: "high" },
+      { mode: "effort", effort: "xhigh" },
+    ]);
+    expect(nextReasoningSelection(capabilities, { mode: "effort", effort: "high" })).toEqual({
+      mode: "effort",
+      effort: "xhigh",
+    });
+    expect(nextReasoningSelection(capabilities, { mode: "effort", effort: "xhigh" })).toEqual({
+      mode: "provider_default",
+    });
+  });
+
+  test("uses default/on/off for toggle models and never invents a budget", () => {
+    expect(nextReasoningSelection({ control: "toggle" }, { mode: "provider_default" })).toEqual({
+      mode: "toggle",
+      enabled: true,
+    });
+    expect(nextReasoningSelection({ control: "toggle" }, { mode: "toggle", enabled: false })).toEqual({
+      mode: "provider_default",
+    });
+    expect(nextReasoningSelection({ control: "budget" }, { mode: "provider_default" })).toBeNull();
+  });
+
+  test("preserves an explicitly selected numeric budget in the two-state cycle", () => {
+    expect(nextReasoningSelection({ control: "budget" }, { mode: "budget", maxTokens: 4096 })).toEqual({
+      mode: "provider_default",
+    });
+    expect(nextReasoningSelection({ control: "budget" }, { mode: "provider_default" }, 4096)).toEqual({
+      mode: "budget",
+      maxTokens: 4096,
+    });
+  });
+});
 
 describe("ProviderStore", () => {
   let cleanup: Array<() => void> = [];
