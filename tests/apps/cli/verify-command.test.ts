@@ -62,10 +62,9 @@ describe("soba verify CLI", () => {
 
       expect(code).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("# SOBA Proof Verification");
-      expect(stdout).toContain("`valid`");
-      expect(stdout).toContain("Errors: 0");
-      expect(stdout).toContain("Claims: 1");
+      expect(stdout).toContain("# SOBA Proof Verification · Verified");
+      expect(stdout).toContain("**verified**");
+      expect(stdout).toContain("Issues: 0 errors, 0 warnings");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -123,9 +122,9 @@ describe("soba verify CLI", () => {
 
       expect(code).toBe(1);
       expect(stdout).toBe("");
-      expect(stderr).toContain("SOBA Proof Verification");
-      expect(stderr).toContain("Result: invalid");
-      expect(stderr).toContain("passed_check_without_passed_command");
+      expect(stderr).toContain("SOBA Proof Verification · Needs attention");
+      expect(stderr).toContain("Verification: invalid proof");
+      expect(stderr).toContain("Passed check references command");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

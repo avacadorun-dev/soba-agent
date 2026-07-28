@@ -8,6 +8,7 @@ import type { ItemParam, ResponseResource, Usage } from "../../kernel/model/open
 import type { PermissionAlternative } from "../../kernel/permissions/trust";
 import type { AskUserArgs, ClarificationOutcome } from "../../kernel/tools/ask-user";
 import type { ToolResult } from "../../kernel/tools/types";
+import type { EvidenceHandoff } from "../evidence/evidence-bundle";
 import type { EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import type { WorkingNarrationEventType } from "./narration";
 
@@ -83,6 +84,7 @@ export interface AssistantMessageEvent extends BaseAgentEvent {
   messageId: string;
   text: string;
   reasoningContent?: string;
+  proof?: EvidenceHandoff;
 }
 
 export interface AssistantMessageSupersededEvent extends BaseAgentEvent {

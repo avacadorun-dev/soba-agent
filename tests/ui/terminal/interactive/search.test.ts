@@ -89,8 +89,10 @@ describe("SearchEngine: extractSearchText", () => {
       summary: {
         status: "verified",
         changedFiles: ["modified src/app.ts (+1/-0)"],
+        claims: [],
         checks: ["Tests passed (bun test)"],
         risks: [],
+        permissions: [],
         reviewActions: ["Accepted file change: src/app.ts"],
         rawLines: [],
       },

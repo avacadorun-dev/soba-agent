@@ -104,18 +104,23 @@ content integrity, ссылки supported claims, outcomes команд, пор�
 
 | Команда | Назначение |
 |---|---|
-| `soba prove` | Показать последний proof bundle для текущего проекта |
+| `soba prove` | Показать компактный verdict `Проверено` / `Нужно внимание` для последнего proof |
 | `soba prove --last` | Явно показать последний proof bundle |
+| `soba prove --verbose` | Показать contract-level IDs, digests, commands и evidence references |
 | `soba prove --format markdown` | Вывести последний proof как Markdown |
 | `soba prove --format json` | Вывести последний proof как JSON с `proofPath` |
 | `soba prove <path>` | Показать конкретный `.soba-proof.json` файл |
-| `soba verify` | Проверить структуру и внутренние ссылки последнего proof bundle |
+| `soba verify` | Запустить строгую policy validation и показать компактный результат |
+| `soba verify --verbose` | Показать все validation counts и issues |
 | `soba verify --format json` | Вывести найденные ошибки проверки как JSON |
 | `soba verify <path>` | Проверить конкретный `.soba-proof.json` файл |
-| `soba explain-claim <claim>` | Объяснить claim из последнего proof с раскрытыми ссылками на evidence |
+| `soba explain-claim 1` | Объяснить первое показанное утверждение без копирования внутреннего ID |
+| `soba explain-claim <claim> --verbose` | Показать полные evidence references утверждения |
 | `soba explain-claim <claim> --proof <path>` | Объяснить claim из конкретного `.soba-proof.json` файла |
 
 `soba prove`, `soba verify` и `soba explain-claim` не запускают agent runtime и не требуют credentials провайдера.
+Их human output по умолчанию компактный. `--verbose` возвращает технические детали, а JSON schemas и exit codes
+остаются неизменными для автоматизации.
 
 У `soba verify` стабильные policy exits: `0` verified, `1` invalid, `2` partially verified, `3` unverified и `4`
 blocked. JSON содержит `accepted`, `outcome`, `reason` и `exitCode`. Legacy receipts без integrity metadata остаются

@@ -38,8 +38,8 @@ SOBA is a coding agent with a local workflow:
 - **Capability-aware reasoning controls** through `F4`, `/reasoning`, CLI/env/config, with requested/effective fallback visibility.
 - **Sealed Proof Bundle v1 receipts** in `.soba/evidence/*.soba-proof.json`, with stable run/proof IDs, recursive
   redaction, and whole-receipt SHA-256 integrity.
-- **Proof claim mapping** through `soba verify` and `soba explain-claim`, making unsupported claims visible instead of
-  hiding them in prose.
+- **Human-readable proof summaries** through `soba prove`, with claim drill-down in `soba explain-claim` and a strict
+  `soba verify` policy gate for scripts and CI.
 - **Run metrics in sealed receipts** for model calls and input/output/total tokens, so eval consumers do not have to
   infer usage from terminal output.
 - **Project Memory** in `.soba/memory/` with source receipts, stale checks, doctor output, and explanations.
@@ -132,12 +132,13 @@ soba -i
 
    ```bash
    soba prove --last
-   soba verify --last
-   soba explain-claim "No test regressions detected"
+   soba explain-claim 1
    ```
 
-If a claim is not backed by evidence, SOBA should keep that visible. The receipt is the handoff artifact, not just a
-transcript summary.
+`soba prove` starts with one verdict — `Verified` or `Needs attention` — then shows changed files, checks, claims, and
+risks without internal IDs or digests. Use `soba prove --last --verbose` for the complete receipt and
+`soba verify --last --format json` for a strict automation gate. If a claim is not backed by evidence, SOBA keeps that
+visible instead of hiding it in prose.
 
 New receipts are sealed before persistence. `soba verify` returns exit `0` only for an accepted `verified` proof;
 invalid, partially verified, unverified, and blocked outcomes return stable non-zero exit codes and machine-readable

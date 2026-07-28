@@ -282,6 +282,49 @@ describe("OpenTUI Solid store", () => {
     expect(store.getTranscriptText()).toContain("Evidence\nStatus: verified");
   });
 
+  test("structured proof replaces a parsed fallback for an already finalized message", () => {
+    const store = createStore();
+    store.onAgentEvent(event({ type: "assistant_message_start", messageId: "m1" }));
+    store.onAgentEvent(event({ type: "assistant_text_delta", messageId: "m1", delta: "Готово" }));
+    store.onAgentEvent(
+      event({
+        type: "assistant_text_done",
+        messageId: "m1",
+        fullText: "Готово\n\n**Evidence**\n- Status: verified",
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "assistant_message",
+        messageId: "m1",
+        text: "Готово\n\n**Evidence**\n- Status: verified",
+        proof: {
+          headline: "needs_attention",
+          outcome: "blocked",
+          reason: "proof_blocked",
+          summary: "Waiting for an external dependency.",
+          receipt: { saved: true, path: "/repo/.soba/evidence/proof.json" },
+          changedFiles: [],
+          claims: [],
+          checks: [],
+          risks: [],
+          approvals: [],
+          reviewActions: [],
+        },
+      }),
+    );
+
+    expect(store.messages().filter((message) => message.type === "evidence")).toHaveLength(1);
+    expect(store.messages().find((message) => message.type === "evidence")).toMatchObject({
+      type: "evidence",
+      summary: {
+        headline: "needs_attention",
+        outcome: "blocked",
+        reason: "proof_blocked",
+      },
+    });
+  });
+
   test("стримит reasoning в один блок и не дублирует его на финале", () => {
     const store = createStore();
     store.onAgentEvent(event({ type: "assistant_reasoning_delta", messageId: "m1", delta: "Думаю" }));

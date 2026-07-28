@@ -36,7 +36,7 @@ export type ExplainClaimCommandView =
   | { kind: "error"; message: string }
   | { kind: "not_found"; query: string; proofPath: string }
   | { kind: "ambiguous"; query: string; proofPath: string; matches: Array<{ id: string; claim: string }> }
-  | { kind: "claim"; format: ExplainClaimFormat; explanation: ExplainedClaim };
+  | { kind: "claim"; format: ExplainClaimFormat; verbose: boolean; explanation: ExplainedClaim };
 
 type ParsedExplainClaimArgs =
   | {
@@ -44,6 +44,7 @@ type ParsedExplainClaimArgs =
       target: "last";
       query: string;
       format: ExplainClaimFormat;
+      verbose: boolean;
     }
   | {
       kind: "parsed";
@@ -51,6 +52,7 @@ type ParsedExplainClaimArgs =
       path: string;
       query: string;
       format: ExplainClaimFormat;
+      verbose: boolean;
     };
 
 export function executeExplainClaimCommand(input: {
@@ -83,6 +85,7 @@ export function executeExplainClaimCommand(input: {
     return {
       kind: "claim",
       format: parsed.format,
+      verbose: parsed.verbose,
       explanation: explainClaim(proof, match.claim),
     };
   } catch (error) {
@@ -106,7 +109,7 @@ export function renderExplainClaimCommandView(view: ExplainClaimCommandView): st
     case "ambiguous":
       return renderAmbiguous(view);
     case "claim":
-      return renderExplanation(view.explanation, view.format);
+      return renderExplanation(view.explanation, view.format, view.verbose);
   }
 }
 
@@ -120,6 +123,7 @@ function parseExplainClaimArgs(
   let target: "last" | "path" = "last";
   let path: string | undefined;
   let format: ExplainClaimFormat = "text";
+  let verbose = false;
   const queryParts: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
@@ -127,6 +131,10 @@ function parseExplainClaimArgs(
     if (arg === "--last") {
       target = "last";
       path = undefined;
+      continue;
+    }
+    if (arg === "--verbose" || arg === "-V") {
+      verbose = true;
       continue;
     }
     if (arg === "--proof" || arg === "--path") {
@@ -181,17 +189,18 @@ function parseExplainClaimArgs(
   if (!query) return usage("Missing claim id or text.");
   if (target === "path") {
     if (!path) return usage("Missing proof path.");
-    return { kind: "parsed", target, path, query, format };
+    return { kind: "parsed", target, path, query, format, verbose };
   }
-  return { kind: "parsed", target, query, format };
+  return { kind: "parsed", target, query, format, verbose };
 }
 
 function usage(prefix?: string): Extract<ExplainClaimCommandView, { kind: "usage" }> {
   const message = [
     prefix,
-    "Usage: soba explain-claim <claim-id-or-text> [--proof <path>|--last] [--format text|markdown|json]",
+    "Usage: soba explain-claim <claim-id-or-text> [--proof <path>|--last] [--format text|markdown|json] [--verbose]",
     "Examples:",
     "  soba explain-claim claim_1",
+    "  soba explain-claim 1",
     "  soba explain-claim \"All TypeScript errors are fixed\" --last --format markdown",
     "  soba explain-claim claim_1 --proof .soba/evidence/2026-06-30T10-20-30Z-session-turn.soba-proof.json",
   ].filter(Boolean).join("\n");
@@ -207,7 +216,8 @@ function findClaim(claims: Record<string, unknown>[], query: string):
   | { kind: "ambiguous"; matches: Record<string, unknown>[] }
   | { kind: "not_found" } {
   const normalizedQuery = normalize(query);
-  const byId = claims.find((claim) => normalize(stringField(claim.id, "")) === normalizedQuery);
+  const normalizedIdQuery = /^\d+$/.test(normalizedQuery) ? `claim_${normalizedQuery}` : normalizedQuery;
+  const byId = claims.find((claim) => normalize(stringField(claim.id, "")) === normalizedIdQuery);
   if (byId) return { kind: "found", claim: byId };
 
   const byExactText = claims.find((claim) => normalize(stringField(claim.claim, "")) === normalizedQuery);
@@ -296,10 +306,56 @@ function buildEvidenceIndex(bundle: Record<string, unknown>): Map<string, Explai
   return index;
 }
 
-function renderExplanation(explanation: ExplainedClaim, format: ExplainClaimFormat): string {
+function renderExplanation(
+  explanation: ExplainedClaim,
+  format: ExplainClaimFormat,
+  verbose: boolean,
+): string {
   if (format === "json") return `${JSON.stringify(explanation, null, 2)}\n`;
+  if (!verbose) {
+    return format === "markdown"
+      ? renderExplanationSummaryMarkdown(explanation)
+      : renderExplanationSummaryText(explanation);
+  }
   if (format === "markdown") return renderExplanationMarkdown(explanation);
   return renderExplanationText(explanation);
+}
+
+function renderExplanationSummaryText(explanation: ExplainedClaim): string {
+  return [
+    `SOBA Claim · ${explanation.status === "supported" ? "Supported" : "Needs attention"}`,
+    `Claim: ${explanation.claim}`,
+    `Status: ${explanation.status}`,
+    "Evidence:",
+    ...humanEvidenceLines(explanation.evidence, "  "),
+    `Receipt: ${explanation.proofPath}`,
+    `Technical detail: soba explain-claim ${explanation.id} --proof ${explanation.proofPath} --verbose`,
+  ].join("\n");
+}
+
+function renderExplanationSummaryMarkdown(explanation: ExplainedClaim): string {
+  return [
+    `# SOBA Claim · ${explanation.status === "supported" ? "Supported" : "Needs attention"}`,
+    "",
+    explanation.claim,
+    "",
+    `- Status: **${explanation.status}**`,
+    `- Receipt: \`${explanation.proofPath}\``,
+    "",
+    "## Evidence",
+    ...humanEvidenceLines(explanation.evidence, "- "),
+    "",
+    `Technical detail: \`soba explain-claim ${explanation.id} --proof ${explanation.proofPath} --verbose\``,
+    "",
+  ].join("\n");
+}
+
+function humanEvidenceLines(evidence: ExplainedClaimEvidence[], prefix: string): string[] {
+  if (evidence.length === 0) return [`${prefix}none recorded`];
+  return evidence.map((item) => {
+    const icon = item.status === "failure" || item.status === "failed" || item.status === "error" ? "×" : "✓";
+    return `${prefix}${icon} ${item.summary}${item.status ? ` · ${item.status}` : ""}`;
+  });
 }
 
 function renderExplanationText(explanation: ExplainedClaim): string {

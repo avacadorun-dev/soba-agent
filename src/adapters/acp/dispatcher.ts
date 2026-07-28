@@ -5,6 +5,7 @@ import type {
   RuntimeCommandMetadata,
   RuntimeContentBlock,
   RuntimeEvent,
+  RuntimeProofHandoff,
   RuntimeSessionConfigOption,
   RuntimeSessionInfo,
   SobaRuntime,
@@ -590,6 +591,7 @@ export class AcpDispatcher {
           messageId: event.messageId,
           text: event.text,
           metadataOnly,
+          proof: event.proof,
         });
       }
       case "assistant_reasoning_delta":
@@ -1029,19 +1031,24 @@ function acpContentToRuntime(content: z.infer<typeof sessionPromptParamsSchema>[
   };
 }
 
-function agentMessageUpdate(input: { messageId: string; text: string; metadataOnly?: boolean }): JsonValue | undefined {
+function agentMessageUpdate(input: {
+  messageId: string;
+  text: string;
+  metadataOnly?: boolean;
+  proof?: RuntimeProofHandoff;
+}): JsonValue | undefined {
   const evidence = splitEvidenceHandoff(input.text).evidence;
-  if (!evidence && input.metadataOnly) return undefined;
+  if (!evidence && !input.proof && input.metadataOnly) return undefined;
 
   const update: { [key: string]: JsonValue } = {
     sessionUpdate: "agent_message_chunk",
     messageId: input.messageId,
     content: { type: "text", text: input.metadataOnly ? "" : input.text },
   };
-  if (evidence) {
+  if (input.proof ?? evidence) {
     update._meta = {
       soba: {
-        evidence: evidenceHandoffMeta(evidence),
+        evidence: input.proof ? proofHandoffMeta(input.proof) : evidenceHandoffMeta(evidence!),
       },
     };
   }
@@ -1237,13 +1244,40 @@ function toolMeta(
 function evidenceHandoffMeta(evidence: ParsedEvidenceHandoff): JsonValue {
   return compactJsonObject({
     source: "assistant_handoff",
+    verdict: evidence.verdict,
+    outcome: evidence.outcome,
+    reason: evidence.reason,
+    receipt: evidence.receipt,
     status: evidence.status,
     changedFiles: evidence.changedFiles,
     diff: evidence.diff,
+    claims: evidence.claims,
     checks: evidence.checks,
     risks: evidence.risks,
+    permissions: evidence.permissions,
     reviewActions: evidence.reviewActions,
+    nextCommand: evidence.nextCommand,
     rawLines: evidence.rawLines,
+  });
+}
+
+function proofHandoffMeta(proof: RuntimeProofHandoff): JsonValue {
+  return compactJsonObject({
+    source: "runtime_proof_handoff",
+    headline: proof.headline,
+    outcome: proof.outcome,
+    reason: proof.reason,
+    summary: proof.summary,
+    receipt: jsonValueFromUnknown(proof.receipt),
+    activity: proof.activity,
+    changedFiles: jsonValueFromUnknown(proof.changedFiles),
+    diff: jsonValueFromUnknown(proof.diff),
+    claims: jsonValueFromUnknown(proof.claims),
+    checks: jsonValueFromUnknown(proof.checks),
+    risks: jsonValueFromUnknown(proof.risks),
+    permissions: jsonValueFromUnknown(proof.approvals),
+    reviewActions: jsonValueFromUnknown(proof.reviewActions),
+    nextCommand: proof.nextCommand,
   });
 }
 

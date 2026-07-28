@@ -121,7 +121,7 @@ export class EvidenceLedger {
     if (shellMutation) return shellMutation;
 
     if (hasToolEffect(semantics, "mutation")) {
-      const files = readFiles(outcome.arguments);
+      const files = readFiles(outcome.arguments, outcome.cwd);
       return this.addEntry({
         id: evidenceId("mutation", outcome.toolCallId),
         kind: "mutation",
@@ -188,7 +188,7 @@ export class EvidenceLedger {
     }
 
     if (hasToolEffect(semantics, "inspect")) {
-      const files = readFiles(outcome.arguments);
+      const files = readFiles(outcome.arguments, outcome.cwd);
       const mutationIds = this.resolveDocsMutationsWithInspection(files, outcome.toolCallId);
       return this.addEntry({
         id: evidenceId("inspect", outcome.toolCallId),
@@ -486,7 +486,7 @@ export class EvidenceLedger {
   }
 
   private recordShellMutation(outcome: EvidenceToolOutcome): EvidenceEntry | null {
-    const files = readChangedFiles(outcome.details);
+    const files = normalizeEvidenceFiles(readChangedFiles(outcome.details), outcome.cwd);
     if (files.length === 0) return null;
 
     return this.addEntry({
@@ -577,18 +577,41 @@ function unresolvedVerificationFailures(entries: EvidenceEntry[]): EvidenceEntry
   return unresolved.reverse();
 }
 
-function readFiles(args: string): string[] {
+function readFiles(args: string, cwd?: string): string[] {
   try {
     const parsed = JSON.parse(args) as Record<string, unknown>;
-    return ["path", "file", "filePath", "target", "input"]
+    const files = ["path", "file", "filePath", "target", "input"]
       .flatMap((key) => {
         const value = parsed[key];
         return typeof value === "string" ? [value] : [];
       })
       .filter((value) => !value.includes("\n") && value.length < 500);
+    return normalizeEvidenceFiles(files, cwd);
   } catch {
     return [];
   }
+}
+
+function normalizeEvidenceFiles(files: string[], cwd?: string): string[] {
+  const normalizedCwd = cwd ? normalizePathSeparators(cwd).replace(/\/+$/, "") : undefined;
+  return [...new Set(files.map((file) => {
+    const normalizedFile = normalizePathSeparators(file);
+    if (!normalizedCwd) return stripCurrentDirectoryPrefix(normalizedFile);
+    if (normalizedFile === normalizedCwd) return normalizedFile;
+    const projectPrefix = `${normalizedCwd}/`;
+    if (normalizedFile.startsWith(projectPrefix)) {
+      return normalizedFile.slice(projectPrefix.length);
+    }
+    return stripCurrentDirectoryPrefix(normalizedFile);
+  }))];
+}
+
+function normalizePathSeparators(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
+function stripCurrentDirectoryPrefix(value: string): string {
+  return value.replace(/^\.\/+/, "");
 }
 
 function entryFilesAreDocs(entry: EvidenceEntry): boolean {

@@ -136,7 +136,22 @@ describe("verify command", () => {
     expect(view.kind).toBe("verification");
     expect(verifyCommandExitCode(view)).toBe(0);
     const rendered = renderVerifyCommandView(view);
-    expect(rendered).toContain("SOBA Proof Verification");
+    expect(rendered).toContain("SOBA Proof Verification · Verified");
+    expect(rendered).toContain("Verification: verified");
+    expect(rendered).toContain("Issues: 0 errors, 0 warnings");
+    expect(rendered).not.toContain("$.claims");
+  });
+
+  test("renders validation codes and counts with --verbose", () => {
+    const view = executeVerifyCommand({
+      args: ["--verbose"],
+      reader: {
+        readLatestEvidenceBundle: () => proof,
+        readEvidenceBundle: () => proof,
+      },
+    });
+
+    const rendered = renderVerifyCommandView(view);
     expect(rendered).toContain("Result: valid");
     expect(rendered).toContain("Errors: 0");
     expect(rendered).toContain("Claims: 1");

@@ -2,6 +2,7 @@ import type { ScrollBoxRenderable } from "@opentui/core";
 import { For, Match, Show, Switch, batch, createMemo, createSignal } from "solid-js";
 import { BLOCK } from "../lib/message-blocks";
 import { computeReasoningExpanded, isReasoningCollapsible } from "../lib/reasoning-collapse";
+import { evidenceNeedsAttention } from "../lib/evidence-summary";
 import { getMarkdownStyle, getTuiTheme } from "../lib/theme";
 import { computeTurnMap, computeTurnStarts, isTurnStart as checkTurnStart } from "../lib/turn-grouping";
 import type { TuiStore } from "../model/tui-store";
@@ -24,7 +25,8 @@ export interface ToolResultFocusRef {
 }
 
 export function shouldAutoExpandMessage(message: TuiMessage): boolean {
-  return message.type === "evidence" || (message.type === "tool-result" && Boolean(message.isError || message.streaming));
+  return (message.type === "evidence" && evidenceNeedsAttention(message.summary)) ||
+    (message.type === "tool-result" && Boolean(message.isError || message.streaming));
 }
 
 function UserMessage(props: { content: string; store: TuiStore }) {

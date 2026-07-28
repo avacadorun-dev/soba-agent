@@ -11,3 +11,10 @@ export {
   sealProofBundle,
   stableRunId,
 } from "./proof-contract";
+export type {
+  EvidenceProofDocument,
+  ProofVerificationIssue,
+  ProofVerificationResult,
+  ProofVerificationSeverity,
+} from "./verification";
+export { verifyEvidenceProof } from "./verification";

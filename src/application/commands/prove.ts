@@ -1,3 +1,5 @@
+import { type ProofVerificationResult, verifyEvidenceProof } from "../evidence/public";
+
 export type ProveFormat = "text" | "markdown" | "json";
 
 export interface EvidenceProofDocument {
@@ -14,19 +16,27 @@ export type ProveCommandView =
   | { kind: "usage"; message: string }
   | { kind: "empty"; evidenceDir?: string }
   | { kind: "error"; message: string }
-  | { kind: "proof"; format: ProveFormat; proof: EvidenceProofDocument };
+  | {
+      kind: "proof";
+      format: ProveFormat;
+      verbose: boolean;
+      proof: EvidenceProofDocument;
+      verification: ProofVerificationResult;
+    };
 
 type ParsedProveArgs =
   | {
       kind: "parsed";
       target: "last";
       format: ProveFormat;
+      verbose: boolean;
     }
   | {
       kind: "parsed";
       target: "path";
       path: string;
       format: ProveFormat;
+      verbose: boolean;
     };
 
 export function executeProveCommand(input: {
@@ -42,7 +52,13 @@ export function executeProveCommand(input: {
       ? input.reader.readLatestEvidenceBundle()
       : input.reader.readEvidenceBundle(parsed.path);
     if (!proof) return { kind: "empty", evidenceDir: input.evidenceDir };
-    return { kind: "proof", format: parsed.format, proof };
+    return {
+      kind: "proof",
+      format: parsed.format,
+      verbose: parsed.verbose,
+      proof,
+      verification: verifyEvidenceProof(proof),
+    };
   } catch (error) {
     return {
       kind: "error",
@@ -60,7 +76,7 @@ export function renderProveCommandView(view: ProveCommandView): string {
     case "error":
       return `Proof error: ${view.message}`;
     case "proof":
-      return renderProof(view.proof, view.format);
+      return renderProof(view.proof, view.verification, view.format, view.verbose);
   }
 }
 
@@ -72,12 +88,17 @@ function parseProveArgs(args: string[]): ParsedProveArgs | Extract<ProveCommandV
   let target: "last" | "path" = "last";
   let path: string | undefined;
   let format: ProveFormat = "text";
+  let verbose = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--last") {
       target = "last";
       path = undefined;
+      continue;
+    }
+    if (arg === "--verbose" || arg === "-V") {
+      verbose = true;
       continue;
     }
     if (arg === "--format") {
@@ -111,21 +132,22 @@ function parseProveArgs(args: string[]): ParsedProveArgs | Extract<ProveCommandV
   }
 
   if (target === "last") {
-    return { kind: "parsed", target, format };
+    return { kind: "parsed", target, format, verbose };
   }
 
   if (!path) {
     return usage("Missing proof path.");
   }
-  return { kind: "parsed", target, path, format };
+  return { kind: "parsed", target, path, format, verbose };
 }
 
 function usage(prefix?: string): Extract<ProveCommandView, { kind: "usage" }> {
   const message = [
     prefix,
-    "Usage: soba prove [--last|<path>] [--format text|markdown|json]",
+    "Usage: soba prove [--last|<path>] [--format text|markdown|json] [--verbose]",
     "Examples:",
     "  soba prove",
+    "  soba prove --verbose",
     "  soba prove --last --format markdown",
     "  soba prove .soba/evidence/2026-06-30T10-20-30Z-session-turn.soba-proof.json",
   ].filter(Boolean).join("\n");
@@ -136,14 +158,169 @@ function isProveFormat(value: unknown): value is ProveFormat {
   return value === "text" || value === "markdown" || value === "json";
 }
 
-function renderProof(proof: EvidenceProofDocument, format: ProveFormat): string {
+function renderProof(
+  proof: EvidenceProofDocument,
+  verification: ProofVerificationResult,
+  format: ProveFormat,
+  verbose: boolean,
+): string {
   if (format === "json") {
     return `${JSON.stringify({ proofPath: proof.path, ...proof.bundle }, null, 2)}\n`;
+  }
+  if (!verbose) {
+    return format === "markdown"
+      ? renderProofSummaryMarkdown(proof, verification)
+      : renderProofSummaryText(proof, verification);
   }
   if (format === "markdown") {
     return renderProofMarkdown(proof);
   }
   return renderProofText(proof);
+}
+
+function renderProofSummaryText(
+  proof: EvidenceProofDocument,
+  verification: ProofVerificationResult,
+): string {
+  const bundle = proof.bundle;
+  const verified = verification.outcome === "verified";
+  const lines = [
+    `SOBA Proof · ${verified ? "Verified" : "Needs attention"}`,
+    `Summary: ${stringField(bundle, "summary", "none")}`,
+    `Verification: ${humanOutcome(verification.outcome)}`,
+  ];
+  if (!verified) lines.push(`Why: ${humanVerificationReason(verification)}`);
+  lines.push(
+    `Changed files: ${humanChangedFiles(bundle.changedFiles)}`,
+    `Checks: ${humanCheckCounts(bundle.checks)}`,
+    "Claims:",
+    ...humanClaimLines(bundle.claims, "  "),
+    `Risks: ${humanRisks(bundle.risks)}`,
+    `Receipt: ${proof.path}`,
+    "More detail: soba prove --last --verbose",
+  );
+  return lines.join("\n");
+}
+
+function renderProofSummaryMarkdown(
+  proof: EvidenceProofDocument,
+  verification: ProofVerificationResult,
+): string {
+  const bundle = proof.bundle;
+  const verified = verification.outcome === "verified";
+  const lines = [
+    `# SOBA Proof · ${verified ? "Verified" : "Needs attention"}`,
+    "",
+    stringField(bundle, "summary", "none"),
+    "",
+    `- Verification: **${humanOutcome(verification.outcome)}**`,
+  ];
+  if (!verified) lines.push(`- Why: ${humanVerificationReason(verification)}`);
+  lines.push(
+    `- Changed files: ${humanChangedFiles(bundle.changedFiles)}`,
+    `- Checks: ${humanCheckCounts(bundle.checks)}`,
+    `- Risks: ${humanRisks(bundle.risks)}`,
+    `- Receipt: \`${proof.path}\``,
+    "",
+    "## Claims",
+    ...humanClaimLines(bundle.claims, "- "),
+    "",
+    "More detail: `soba prove --last --verbose`",
+    "",
+  );
+  return lines.join("\n");
+}
+
+function humanOutcome(outcome: ProofVerificationResult["outcome"]): string {
+  switch (outcome) {
+    case "verified":
+      return "verified";
+    case "partially_verified":
+      return "partially verified";
+    case "unverified":
+      return "unverified";
+    case "blocked":
+      return "blocked";
+    case "invalid":
+      return "invalid proof";
+  }
+}
+
+function humanVerificationReason(verification: ProofVerificationResult): string {
+  if (verification.outcome === "invalid") {
+    const firstIssue = verification.issues.find((issue) => issue.severity === "error");
+    return firstIssue?.message ?? "The receipt failed contract validation.";
+  }
+  if (verification.outcome === "partially_verified") {
+    return "Some results are supported, but verification is incomplete.";
+  }
+  if (verification.outcome === "unverified") {
+    return "The result does not have enough verification evidence.";
+  }
+  if (verification.outcome === "blocked") {
+    return "The task stopped on an unresolved blocker.";
+  }
+  return verification.reason;
+}
+
+function humanChangedFiles(value: unknown): string {
+  const files = arrayField(value);
+  if (files.length === 0) return "none";
+  const added = files.reduce((total, file) => total + (numberField(file, "added") ?? 0), 0);
+  const removed = files.reduce((total, file) => total + (numberField(file, "removed") ?? 0), 0);
+  return `${files.length} ${files.length === 1 ? "file" : "files"} (+${added}/-${removed})`;
+}
+
+function humanCheckCounts(value: unknown): string {
+  const checks = arrayField(value);
+  if (checks.length === 0) return "none recorded";
+  const primary = checks.filter((check) => !isInspectionCheck(check));
+  const visible = primary.length > 0 ? primary : latestInspectionChecks(checks);
+  return statusCounts(visible, "status", ["passed", "failed", "skipped", "not_run"]);
+}
+
+function isInspectionCheck(check: Record<string, unknown>): boolean {
+  const kind = stringField(check, "verificationKind", "");
+  return kind === "manual_inspection" || kind === "diff_inspection";
+}
+
+function latestInspectionChecks(checks: Record<string, unknown>[]): Record<string, unknown>[] {
+  const latestByKind = new Map<string, Record<string, unknown>>();
+  for (const check of checks) {
+    latestByKind.set(stringField(check, "verificationKind", stringField(check, "label", "inspection")), check);
+  }
+  return [...latestByKind.values()];
+}
+
+function humanClaimLines(value: unknown, prefix: string): string[] {
+  const claims = arrayField(value);
+  if (claims.length === 0) return [`${prefix}none recorded`];
+  return claims.slice(0, 8).map((claim, index) => {
+    const status = stringField(claim, "status", "unverified");
+    const icon = status === "supported" ? "✓" : "!";
+    return `${prefix}${icon} ${index + 1}. ${stringField(claim, "claim", "unnamed claim")} · ${status}`;
+  });
+}
+
+function humanRisks(value: unknown): string {
+  const risks = arrayField(value);
+  if (risks.length === 0) return "none";
+  return `${risks.length} ${risks.length === 1 ? "risk" : "risks"} — ${risks
+    .slice(0, 2)
+    .map((risk) => stringField(risk, "message", stringField(risk, "kind", "risk")))
+    .join("; ")}`;
+}
+
+function statusCounts(
+  records: Record<string, unknown>[],
+  field: string,
+  statuses: string[],
+): string {
+  const parts = statuses.flatMap((status) => {
+    const count = records.filter((record) => stringField(record, field, "") === status).length;
+    return count > 0 ? [`${count} ${status.replaceAll("_", " ")}`] : [];
+  });
+  return parts.length > 0 ? parts.join(", ") : `${records.length} recorded`;
 }
 
 function renderProofText(proof: EvidenceProofDocument): string {

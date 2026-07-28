@@ -67,13 +67,28 @@ describe("explain-claim command", () => {
     expect(view.kind).toBe("claim");
     expect(explainClaimCommandExitCode(view)).toBe(0);
     const rendered = renderExplainClaimCommandView(view);
+    expect(rendered).toContain("SOBA Claim · Supported");
+    expect(rendered).toContain("Claim: Explain claim command is implemented");
+    expect(rendered).toContain("✓ Verification command passed: bun test · success");
+    expect(rendered).not.toContain("proof_aaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(rendered).not.toContain("ev_verification_1:");
+  });
+
+  test("accepts a claim number and restores technical ids with --verbose", () => {
+    const view = executeExplainClaimCommand({
+      args: ["1", "--verbose"],
+      reader: {
+        readLatestEvidenceBundle: () => proof,
+        readEvidenceBundle: () => proof,
+      },
+    });
+
+    const rendered = renderExplainClaimCommandView(view);
     expect(rendered).toContain("SOBA Claim Explanation");
     expect(rendered).toContain("Proof id: proof_aaaaaaaaaaaaaaaaaaaaaaaa");
     expect(rendered).toContain("Run id: run_bbbbbbbbbbbbbbbbbbbbbbbb");
-    expect(rendered).toContain("Claim: Explain claim command is implemented");
     expect(rendered).toContain("ev_verification_1: verification success: Verification command passed: bun test");
     expect(rendered).toContain(`cmd_1: command passed: bun test exit=0 digest=${DIGEST}`);
-    expect(rendered).toContain("check_1: check passed: Tests. Command passed.");
   });
 
   test("explains a claim from an explicit proof path as json", () => {

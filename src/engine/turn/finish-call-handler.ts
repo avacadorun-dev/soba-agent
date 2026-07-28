@@ -8,7 +8,15 @@ import type {
 } from "../../kernel/transcript/types";
 import type { CompletionController } from "../completion/completion-controller";
 import { acknowledgeErrors, type FinishCriterion } from "../completion/completion-gate";
-import { buildEvidenceBundle, type EvidenceApproval, type EvidenceProofSink, formatEvidenceBundleForHandoff } from "../evidence";
+import {
+  buildEvidenceBundle,
+  buildEvidenceHandoff,
+  type EvidenceApproval,
+  type EvidenceChangedFile,
+  type EvidenceProofReceipt,
+  type EvidenceProofSink,
+  formatEvidenceBundleForHandoff,
+} from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
 import { extractTextFromOutput } from "../model-turn/model-turn-runner";
 import type { TaskKind } from "../verification/verification-policy";
@@ -144,13 +152,34 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     input.evidenceLedger.getSummary().entries,
   );
   input.evidenceLedger.recordFinishAttempt("accepted", finishRequest.summary);
+  const ledgerSummary = input.evidenceLedger.getSummary();
+  let changedFiles: EvidenceChangedFile[] | undefined;
+  const changedFilePaths = uniqueStrings(
+    ledgerSummary.entries.flatMap((entry) => entry.kind === "mutation" ? entry.files ?? [] : []),
+  );
+  if (changedFilePaths.length > 0 && input.evidenceProofSink?.captureEvidenceChangedFiles) {
+    try {
+      changedFiles = await input.evidenceProofSink.captureEvidenceChangedFiles(changedFilePaths);
+    } catch (error) {
+      input.flight({
+        kind: "runtime_event",
+        turn: input.turn,
+        iteration: input.iteration,
+        payload: {
+          event: "evidence_changed_files_snapshot_failed",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
   const evidenceBundle = buildEvidenceBundle({
     sessionId: input.session.getSessionId(),
     turnId: `turn_${input.turn}`,
     completionStatus: finishRequest.status,
     summary: finishRequest.summary,
     criteria: linkedCriteria,
-    ledger: input.evidenceLedger.getSummary(),
+    ledger: ledgerSummary,
+    changedFiles,
     approvals: input.approvalReceipts,
     metrics: {
       modelCalls: input.iteration + 1,
@@ -163,24 +192,50 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
   });
   let proofPath: string | undefined;
   let proofMetadata: { proofId?: string; runId?: string; digest?: string } | undefined;
+  let proofReceipt: EvidenceProofReceipt | undefined;
   if (input.evidenceProofSink) {
     try {
       const receipt = await input.evidenceProofSink.saveEvidenceBundle(evidenceBundle);
+      proofReceipt = receipt;
       proofPath = receipt.path;
       proofMetadata = { proofId: receipt.proofId, runId: receipt.runId, digest: receipt.digest };
+      if (receipt.saved === false || receipt.validation?.valid === false) {
+        input.flight({
+          kind: "runtime_event",
+          turn: input.turn,
+          iteration: input.iteration,
+          payload: {
+            event: "evidence_proof_rejected",
+            message: receipt.error ?? `Proof contract validation failed: ${receipt.validation?.reason ?? "invalid_proof"}`,
+            validation: receipt.validation,
+          },
+        });
+      }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      proofReceipt = { saved: false, error: message };
       input.flight({
         kind: "runtime_event",
         turn: input.turn,
         iteration: input.iteration,
         payload: {
           event: "evidence_proof_persist_failed",
-          message: error instanceof Error ? error.message : String(error),
+          message,
         },
       });
     }
+  } else {
+    proofReceipt = {
+      saved: false,
+      error: "Proof receipt storage is unavailable.",
+    };
   }
-  const evidenceFlightPayload = proofPath ? { ...evidenceBundle, proofPath, ...proofMetadata } : evidenceBundle;
+  const evidenceFlightPayload = {
+    ...evidenceBundle,
+    ...(proofPath ? { proofPath, ...proofMetadata } : {}),
+    proofValidation: proofReceipt?.validation,
+    proofSaved: proofReceipt?.saved ?? Boolean(proofPath),
+  };
   if (evidenceBundle.diff) {
     input.flight({
       kind: "diff_summary",
@@ -211,8 +266,9 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     input.finishCall,
     finishRequest.summary,
     finishRequest.status,
-    formatEvidenceBundleForHandoff(evidenceBundle),
+    formatEvidenceBundleForHandoff(evidenceBundle, proofReceipt),
   );
+  const proofHandoff = buildEvidenceHandoff(evidenceBundle, proofReceipt);
   const text = extractTextFromOutput(finishMessage);
   const sessionItem = outputItemToSessionItem(finishMessage);
   if (sessionItem) {
@@ -224,6 +280,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
     timestamp: Date.now(),
     messageId: finishMessage.id,
     text,
+    proof: proofHandoff,
   });
   input.narrate(
     finishRequest.status === "blocked" ? "blocked" : "completion",
@@ -331,4 +388,8 @@ function semanticEvidenceMatch(
   if (kind === "mutation") return hasCue(mutationCues);
   if (kind === "inspect" || kind === "search") return false;
   return false;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }

@@ -845,8 +845,10 @@ export class TuiStore {
           if (event.reasoningContent) {
             this.add({ type: "reasoning", content: event.reasoningContent, streaming: false });
           }
-          this.addAssistantFinalText(event.text);
+          this.addAssistantFinalText(event.text, event.proof);
           this.setLastAssistantText(event.text);
+        } else if (event.proof) {
+          this.replaceFinalizedEvidence(event.messageId, event.proof);
         }
         break;
       case "working_narration":
@@ -1246,14 +1248,42 @@ export class TuiStore {
     return withId;
   }
 
-  private addAssistantFinalText(text: string): void {
+  private addAssistantFinalText(
+    text: string,
+    proof?: Extract<RuntimeEvent, { type: "assistant_message" }>["proof"],
+  ): void {
     const split = splitAssistantEvidence(text);
-    if (split.body.trim().length > 0 || !split.evidence) {
+    if (split.body.trim().length > 0 || (!split.evidence && !proof)) {
       this.add({ type: "assistant", content: split.body, streaming: false });
     }
-    if (split.evidence) {
-      this.add({ type: "evidence", summary: split.evidence });
+    if (proof ?? split.evidence) {
+      this.add({ type: "evidence", summary: proof ?? split.evidence! });
     }
+  }
+
+  private replaceFinalizedEvidence(
+    messageId: string,
+    proof: NonNullable<Extract<RuntimeEvent, { type: "assistant_message" }>["proof"]>,
+  ): void {
+    const relatedIds = this.assistantRelatedTuiIds.get(messageId) ?? [];
+    const relatedIdSet = new Set(relatedIds);
+    let replaced = false;
+    this.setMessages((messages) => {
+      const index = messages.findIndex((message) =>
+        message.type === "evidence" && relatedIdSet.has(message.id)
+      );
+      if (index < 0) return messages;
+      const next = messages.slice();
+      next[index] = { ...messages[index], summary: proof } as TuiMessage;
+      replaced = true;
+      return next;
+    });
+    if (replaced) return;
+
+    const assistantId = this.assistantTuiIds.get(messageId);
+    if (assistantId === undefined) return;
+    const evidence = this.insertAfter(assistantId, { type: "evidence", summary: proof });
+    this.assistantRelatedTuiIds.set(messageId, [...relatedIds, evidence.id]);
   }
 
   private removeAssistantMessageByModelId(messageId: string): void {

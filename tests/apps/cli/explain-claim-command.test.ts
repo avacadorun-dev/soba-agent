@@ -60,10 +60,10 @@ describe("soba explain-claim CLI", () => {
 
       expect(code).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("SOBA Claim Explanation");
+      expect(stdout).toContain("SOBA Claim · Supported");
       expect(stdout).toContain("Claim: CLI claim explained");
-      expect(stdout).toContain("ev_verification_cli: verification success");
-      expect(stdout).toContain(`cmd_1: command passed: bun test exit=0 digest=${DIGEST}`);
+      expect(stdout).toContain("Verification command passed: bun test");
+      expect(stdout).not.toContain("ev_verification_cli:");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

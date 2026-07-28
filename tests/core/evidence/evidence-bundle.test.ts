@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildEvidenceBundle,
+  buildEvidenceHandoff,
   type EvidenceChangedFile,
   type EvidenceCommandRun,
   formatEvidenceBundleForHandoff,
@@ -279,6 +280,26 @@ describe("Evidence Bundle builder", () => {
     expect(bundle.status).toBe("verified");
     expect(bundle.checks).toMatchObject([{ label: "Manual inspection", status: "passed", verificationKind: "manual_inspection" }]);
     expect(bundle.risks).toEqual([]);
+  });
+
+  test("normalizes absolute tool paths inside the project before building proof references", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_absolute",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "/repo/src/app.ts" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+      cwd: "/repo",
+    });
+
+    expect(ledger.getSummary().entries).toMatchObject([
+      {
+        kind: "mutation",
+        files: ["src/app.ts"],
+      },
+    ]);
   });
 
   test("does not keep active diagnostic risk after corrected project memory write", () => {
@@ -629,8 +650,35 @@ describe("Evidence Bundle builder", () => {
     });
 
     expect(formatEvidenceBundleForHandoff(bundle)).toBe(
-      "\n**Evidence**\n- Status: verified\n- Activity: 2 successful · 1 change, 1 check\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Risks: none",
+      "\n**Evidence**\n- Verdict: verified\n- Outcome: verified\n- Activity: 2 successful · 1 change, 1 check\n- Changed files: modified src/app.ts (+3/-1)\n- Diff: 1 file, +3/-1\n- Checks: Tests passed (bun test)\n- Risks: none",
     );
+  });
+
+  test("keeps routine inspections out of user-facing checks when a command check exists", () => {
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_checks",
+      completionStatus: "completed",
+      summary: "Checked.",
+      ledger: summary([
+        inspectEntry({ id: "ev_inspect_read_1", files: ["src/app.ts"] }),
+        inspectEntry({ id: "ev_inspect_read_2", files: ["tests/app.test.ts"] }),
+        verificationEntry({
+          id: "ev_verification_bash_1",
+          status: "success",
+          toolCallId: "bash_1",
+          command: "bun test",
+          verificationKind: "test",
+        }),
+      ]),
+      now: () => NOW,
+    });
+
+    expect(bundle.checks).toHaveLength(3);
+    expect(buildEvidenceHandoff(bundle).checks).toMatchObject([
+      { label: "Tests", status: "passed", command: "bun test" },
+    ]);
+    expect(formatEvidenceBundleForHandoff(bundle)).not.toContain("Manual inspection");
   });
 
   test("formats diff summary in handoff text when available", () => {

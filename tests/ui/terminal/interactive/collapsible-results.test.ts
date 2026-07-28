@@ -72,6 +72,28 @@ describe("B2 — Collapsible Tool Results", () => {
     ).toBe(true);
   });
 
+  test("auto-expands only proof cards that need attention", () => {
+    const base = {
+      changedFiles: [],
+      claims: [],
+      checks: [],
+      risks: [],
+      permissions: [],
+      reviewActions: [],
+      rawLines: [],
+    };
+    expect(shouldAutoExpandMessage({
+      id: 2,
+      type: "evidence",
+      summary: { ...base, verdict: "verified", outcome: "verified" },
+    })).toBe(false);
+    expect(shouldAutoExpandMessage({
+      id: 3,
+      type: "evidence",
+      summary: { ...base, verdict: "needs attention", outcome: "unverified" },
+    })).toBe(true);
+  });
+
   describe("Mouse interaction", () => {
     test("plain mouse click toggles collapsed tool result", () => {
       let toggles = 0;

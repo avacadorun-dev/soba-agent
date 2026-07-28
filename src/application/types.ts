@@ -63,6 +63,77 @@ export interface RuntimeAssistantMessageEvent extends BaseRuntimeEvent {
   messageId: string;
   text: string;
   reasoningContent?: string;
+  proof?: RuntimeProofHandoff;
+}
+
+export type RuntimeProofOutcome = "verified" | "partially_verified" | "unverified" | "blocked" | "invalid";
+
+export interface RuntimeProofHandoff {
+  headline: "verified" | "needs_attention";
+  outcome: RuntimeProofOutcome;
+  reason: string;
+  summary: string;
+  receipt: {
+    saved: boolean;
+    path?: string;
+    proofId?: string;
+  };
+  activity?: string;
+  changedFiles: Array<{
+    path: string;
+    operation: "created" | "modified" | "deleted" | "renamed" | "unknown";
+    source: string;
+    added?: number;
+    removed?: number;
+    mutationIds: string[];
+    remainsChanged?: boolean;
+  }>;
+  diff?: {
+    fileCount: number;
+    added: number;
+    removed: number;
+    truncated: boolean;
+    files: unknown[];
+  };
+  claims: Array<{
+    id: string;
+    claim: string;
+    status: "supported" | "unsupported" | "unverified";
+    evidenceIds: string[];
+  }>;
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "passed" | "failed" | "skipped" | "not_run" | "not_required";
+    verificationKind?: string;
+    commandId?: string;
+    command?: string;
+    reason?: string;
+  }>;
+  risks: Array<{
+    id: string;
+    kind: string;
+    severity: "info" | "warning" | "error";
+    message: string;
+    evidenceIds: string[];
+  }>;
+  approvals: Array<{
+    toolCallId: string;
+    toolName?: string;
+    decision: "auto" | "deny" | "once" | "session" | "repo" | "full";
+    approved?: boolean;
+    trustLevel?: "safe" | "normal" | "dangerous";
+    approvalKind?: "command" | "tool";
+    approvalValue?: string;
+    description?: string;
+    reason?: string;
+    alternatives?: unknown[];
+  }>;
+  reviewActions: Array<{
+    summary: string;
+    status: string;
+  }>;
+  nextCommand?: string;
 }
 
 export interface RuntimeAssistantMessageSupersededEvent extends BaseRuntimeEvent {

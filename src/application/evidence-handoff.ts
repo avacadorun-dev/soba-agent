@@ -1,11 +1,18 @@
 export interface ParsedEvidenceHandoff {
+  verdict?: string;
+  outcome?: string;
+  reason?: string;
+  receipt?: string;
   status?: string;
   activity?: string;
   changedFiles: string[];
+  claims: string[];
   checks: string[];
   risks: string[];
+  permissions: string[];
   reviewActions: string[];
   diff?: string;
+  nextCommand?: string;
   rawLines: string[];
 }
 
@@ -28,21 +35,30 @@ export function splitEvidenceHandoff(content: string): SplitEvidenceHandoffResul
 
 export function formatParsedEvidenceHandoff(summary: ParsedEvidenceHandoff): string {
   const lines = ["Evidence"];
+  if (summary.verdict) lines.push(`Verdict: ${summary.verdict}`);
+  if (summary.outcome) lines.push(`Outcome: ${summary.outcome}`);
+  if (summary.reason) lines.push(`Reason: ${summary.reason}`);
+  if (summary.receipt) lines.push(`Receipt: ${summary.receipt}`);
   if (summary.status) lines.push(`Status: ${summary.status}`);
   if (summary.activity) lines.push(`Activity: ${summary.activity}`);
   if (summary.diff) lines.push(`Diff: ${summary.diff}`);
   if (summary.changedFiles.length > 0) lines.push(`Changed files: ${summary.changedFiles.join(", ")}`);
+  if (summary.claims.length > 0) lines.push(`Claims: ${summary.claims.join("; ")}`);
   if (summary.checks.length > 0) lines.push(`Checks: ${summary.checks.join(", ")}`);
   if (summary.risks.length > 0) lines.push(`Risks: ${summary.risks.join("; ")}`);
+  if (summary.permissions.length > 0) lines.push(`Permissions: ${summary.permissions.join("; ")}`);
   if (summary.reviewActions.length > 0) lines.push(`Review: ${summary.reviewActions.join("; ")}`);
+  if (summary.nextCommand) lines.push(`Details: ${summary.nextCommand}`);
   return lines.join("\n");
 }
 
 function parseEvidenceLines(lines: string[]): ParsedEvidenceHandoff {
   const summary: ParsedEvidenceHandoff = {
     changedFiles: [],
+    claims: [],
     checks: [],
     risks: [],
+    permissions: [],
     reviewActions: [],
     rawLines: lines.slice(),
   };
@@ -52,6 +68,18 @@ function parseEvidenceLines(lines: string[]): ParsedEvidenceHandoff {
     if (!parsed) continue;
 
     switch (parsed.key) {
+      case "verdict":
+        summary.verdict = parsed.value;
+        break;
+      case "outcome":
+        summary.outcome = parsed.value;
+        break;
+      case "reason":
+        summary.reason = parsed.value;
+        break;
+      case "receipt":
+        summary.receipt = parsed.value;
+        break;
       case "status":
         summary.status = parsed.value;
         break;
@@ -64,14 +92,23 @@ function parseEvidenceLines(lines: string[]): ParsedEvidenceHandoff {
       case "checks":
         summary.checks = splitCommaList(parsed.value);
         break;
+      case "claims":
+        summary.claims = splitSemicolonList(parsed.value);
+        break;
       case "risks":
         summary.risks = splitSemicolonList(parsed.value);
+        break;
+      case "permissions":
+        summary.permissions = splitSemicolonList(parsed.value);
         break;
       case "review":
         summary.reviewActions = splitSemicolonList(parsed.value);
         break;
       case "diff":
         summary.diff = parsed.value;
+        break;
+      case "details":
+        summary.nextCommand = parsed.value;
         break;
     }
   }

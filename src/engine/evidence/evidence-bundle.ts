@@ -135,13 +135,64 @@ export interface EvidenceBundle {
 }
 
 export interface EvidenceProofReceipt {
-  path: string;
+  saved?: boolean;
+  path?: string;
   proofId?: string;
   runId?: string;
   digest?: string;
+  validation?: EvidenceProofValidation;
+  error?: string;
+}
+
+export interface EvidenceProofValidationIssue {
+  severity: "error" | "warning";
+  code: string;
+  path: string;
+  message: string;
+}
+
+export interface EvidenceProofValidation {
+  valid: boolean;
+  accepted: boolean;
+  outcome: EvidenceBundleStatus | "invalid";
+  reason: string;
+  exitCode: 0 | 1 | 2 | 3 | 4;
+  errors: number;
+  warnings: number;
+  issues: EvidenceProofValidationIssue[];
+}
+
+export type EvidenceProofHeadline = "verified" | "needs_attention";
+
+export interface EvidenceHandoffCheck extends EvidenceCheck {
+  command?: string;
+}
+
+export interface EvidenceHandoff {
+  headline: EvidenceProofHeadline;
+  outcome: EvidenceBundleStatus | "invalid";
+  reason: string;
+  summary: string;
+  receipt: {
+    saved: boolean;
+    path?: string;
+    proofId?: string;
+  };
+  activity?: string;
+  changedFiles: EvidenceChangedFile[];
+  diff?: EvidenceDiffSummary;
+  claims: EvidenceClaim[];
+  checks: EvidenceHandoffCheck[];
+  risks: EvidenceRisk[];
+  approvals: EvidenceApproval[];
+  reviewActions: DiffReviewActionRecord[];
+  nextCommand?: string;
 }
 
 export interface EvidenceProofSink {
+  captureEvidenceChangedFiles?(
+    paths: string[],
+  ): EvidenceChangedFile[] | Promise<EvidenceChangedFile[]>;
   saveEvidenceBundle(bundle: EvidenceBundle): EvidenceProofReceipt | Promise<EvidenceProofReceipt>;
 }
 
@@ -201,28 +252,113 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
   };
 }
 
-export function formatEvidenceBundleForHandoff(bundle: EvidenceBundle): string {
-  const lines = ["", "**Evidence**", `- Status: ${formatBundleStatus(bundle.status)}`];
-
-  const activity = formatEvidenceActivity(bundle.evidence);
-  if (activity) lines.push(`- Activity: ${activity}`);
-  lines.push(`- Changed files: ${formatChangedFiles(bundle.changedFiles)}`);
-  if (bundle.diff) {
-    lines.push(`- Diff: ${formatDiffSummary(bundle.diff)}`);
-  }
-  if (bundle.claims.length > 0) {
-    lines.push(`- Claims: ${formatClaims(bundle.claims)}`);
-  }
-  lines.push(`- Checks: ${formatChecks(bundle.checks, bundle.commands)}`);
-  const visibleApprovals = bundle.approvals.filter((approval) =>
+export function buildEvidenceHandoff(
+  bundle: EvidenceBundle,
+  receipt?: EvidenceProofReceipt,
+): EvidenceHandoff {
+  const receiptStateKnown = receipt !== undefined;
+  const saved = receipt?.saved ?? Boolean(receipt?.path);
+  const outcome = receipt?.validation?.outcome ?? bundle.status;
+  const reason = receipt?.validation?.reason ??
+    (receipt?.error ? "proof_receipt_not_saved" : `proof_${outcome}`);
+  const headline: EvidenceProofHeadline = outcome === "verified" && (!receiptStateKnown || saved)
+    ? "verified"
+    : "needs_attention";
+  const commandsById = new Map(bundle.commands.map((command) => [command.id, command.command]));
+  const approvals = bundle.approvals.filter((approval) =>
     approval.decision !== "auto" || approval.trustLevel === "dangerous"
   );
-  if (visibleApprovals.length > 0) {
-    lines.push(`- Permissions: ${formatApprovals(visibleApprovals)}`);
+  const checks = userFacingChecks(bundle.checks);
+
+  return {
+    headline,
+    outcome,
+    reason,
+    summary: bundle.summary,
+    receipt: {
+      saved,
+      path: receipt?.path,
+      proofId: receipt?.proofId,
+    },
+    activity: formatEvidenceActivity(bundle.evidence) ?? undefined,
+    changedFiles: bundle.changedFiles.map((file) => ({
+      ...file,
+      mutationIds: file.mutationIds.slice(),
+    })),
+    diff: bundle.diff,
+    claims: bundle.claims.map((claim) => ({
+      ...claim,
+      evidenceIds: claim.evidenceIds.slice(),
+    })),
+    checks: checks.map((check) => ({
+      ...check,
+      command: check.commandId ? commandsById.get(check.commandId) : undefined,
+    })),
+    risks: bundle.risks.map((risk) => ({
+      ...risk,
+      evidenceIds: risk.evidenceIds.slice(),
+    })),
+    approvals: approvals.map((approval) => ({
+      ...approval,
+      alternatives: approval.alternatives?.map((alternative) => ({ ...alternative })),
+    })),
+    reviewActions: bundle.reviewActions.map((action) => ({ ...action })),
+    nextCommand: saved ? "soba prove --last --verbose" : undefined,
+  };
+}
+
+function userFacingChecks(checks: EvidenceCheck[]): EvidenceCheck[] {
+  const primary = checks.filter((check) => !isInspectionCheck(check));
+  if (primary.length > 0) return primary;
+
+  const latestByKind = new Map<string, EvidenceCheck>();
+  for (const check of checks) {
+    latestByKind.set(check.verificationKind ?? check.label, check);
   }
-  lines.push(`- Risks: ${formatRisks(bundle.risks)}`);
-  if (bundle.reviewActions.length > 0) {
-    lines.push(`- Review: ${formatReviewActions(bundle.reviewActions)}`);
+  return [...latestByKind.values()];
+}
+
+function isInspectionCheck(check: EvidenceCheck): boolean {
+  return check.verificationKind === "manual_inspection" || check.verificationKind === "diff_inspection";
+}
+
+export function formatEvidenceBundleForHandoff(
+  bundle: EvidenceBundle,
+  receipt?: EvidenceProofReceipt,
+): string {
+  const handoff = buildEvidenceHandoff(bundle, receipt);
+  const lines = [
+    "",
+    "**Evidence**",
+    `- Verdict: ${handoff.headline === "verified" ? "verified" : "needs attention"}`,
+    `- Outcome: ${formatBundleStatus(handoff.outcome)}`,
+  ];
+
+  if (handoff.headline === "needs_attention") {
+    lines.push(`- Reason: ${receipt?.error ?? handoff.reason}`);
+  }
+  if (receipt !== undefined) {
+    lines.push(`- Receipt: ${handoff.receipt.saved ? handoff.receipt.path ?? "saved" : "not saved"}`);
+  }
+  const activity = handoff.activity;
+  if (activity) lines.push(`- Activity: ${activity}`);
+  lines.push(`- Changed files: ${formatChangedFiles(handoff.changedFiles)}`);
+  if (handoff.diff) {
+    lines.push(`- Diff: ${formatDiffSummary(handoff.diff)}`);
+  }
+  if (handoff.claims.length > 0) {
+    lines.push(`- Claims: ${formatClaims(handoff.claims)}`);
+  }
+  lines.push(`- Checks: ${formatChecks(handoff.checks, bundle.commands)}`);
+  if (handoff.approvals.length > 0) {
+    lines.push(`- Permissions: ${formatApprovals(handoff.approvals)}`);
+  }
+  lines.push(`- Risks: ${formatRisks(handoff.risks)}`);
+  if (handoff.reviewActions.length > 0) {
+    lines.push(`- Review: ${formatReviewActions(handoff.reviewActions)}`);
+  }
+  if (handoff.nextCommand) {
+    lines.push(`- Details: ${handoff.nextCommand}`);
   }
 
   return lines.join("\n");
@@ -658,7 +794,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function formatBundleStatus(status: EvidenceBundleStatus): string {
+function formatBundleStatus(status: EvidenceBundleStatus | "invalid"): string {
   switch (status) {
     case "verified":
       return "verified";
@@ -668,6 +804,8 @@ function formatBundleStatus(status: EvidenceBundleStatus): string {
       return "unverified";
     case "blocked":
       return "blocked";
+    case "invalid":
+      return "invalid";
   }
 }
 

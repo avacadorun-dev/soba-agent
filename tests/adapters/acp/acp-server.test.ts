@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { ACP_LIFECYCLE_FEATURES, type AcpFeatureSet } from "../../../src/adapters/acp/capabilities";
 import type { JsonValue } from "../../../src/adapters/acp/json-rpc";
 import { runAcpServer } from "../../../src/adapters/acp/server";
-import { listRuntimeCommands, type RuntimeEvent, type RuntimeSessionInfo, type SobaRuntime, type UserTurnInput } from "../../../src/application/acp/public";
+import {
+  listRuntimeCommands,
+  type RuntimeEvent,
+  type RuntimeProofHandoff,
+  type RuntimeSessionInfo,
+  type SobaRuntime,
+  type UserTurnInput,
+} from "../../../src/application/acp/public";
 import { APP_VERSION } from "../../../src/shared/version";
 
 interface MockRuntimeState {
@@ -28,6 +35,7 @@ interface MockRuntimeState {
   loadEntries?: unknown[];
   assistantDeltas?: string[];
   assistantMessage?: string;
+  assistantProof?: RuntimeProofHandoff;
   /** When true with assistantDeltas, also emit a final assistant_message (simulates finish/non-stream handoff). */
   emitAssistantMessageAfterDeltas?: boolean;
   assistantMessageAfterDeltas?: string;
@@ -297,6 +305,7 @@ function makeRuntime(state: MockRuntimeState = {}): SobaRuntime {
           timestamp: Date.now(),
           messageId: "msg_1",
           text: state.assistantMessage ?? "",
+          proof: state.assistantProof,
         } as RuntimeEvent));
       }
       assistantDeltas.forEach((delta) => {
@@ -1403,6 +1412,64 @@ describe("ACP stdio server foundation", () => {
                 checks: ["Tests passed (bun test)"],
                 risks: ["Some file mutations are not covered by passing verification evidence."],
                 reviewActions: ["Rejected file change: src/generated.ts"],
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  test("prefers structured runtime proof metadata over parsing assistant text", async () => {
+    const result = await runLines(
+      [
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "prompt",
+          method: "session/prompt",
+          params: { sessionId: "session_1", prompt: [{ type: "text", text: "finish" }] },
+        })}\n`,
+      ],
+      {
+        state: {
+          assistantMessage: "Done.",
+          assistantProof: {
+            headline: "needs_attention",
+            outcome: "blocked",
+            reason: "proof_blocked",
+            summary: "Waiting for an external dependency.",
+            receipt: { saved: true, path: "/repo/.soba/evidence/proof.json", proofId: "proof_1" },
+            changedFiles: [],
+            claims: [],
+            checks: [{ id: "check_1", label: "Tests", status: "failed", command: "bun test" }],
+            risks: [{
+              id: "risk_1",
+              kind: "failed_check",
+              severity: "error",
+              message: "Tests are still failing.",
+              evidenceIds: ["check_1"],
+            }],
+            approvals: [],
+            reviewActions: [],
+            nextCommand: "soba prove --last --verbose",
+          },
+        },
+      },
+    );
+
+    expect(result.messages[0]).toMatchObject({
+      method: "session/update",
+      params: {
+        update: {
+          _meta: {
+            soba: {
+              evidence: {
+                source: "runtime_proof_handoff",
+                headline: "needs_attention",
+                outcome: "blocked",
+                receipt: { saved: true, path: "/repo/.soba/evidence/proof.json" },
+                checks: [{ label: "Tests", status: "failed", command: "bun test" }],
+                risks: [{ severity: "error", message: "Tests are still failing." }],
               },
             },
           },

@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { sealProofBundle } from "../../../src/application/evidence/public";
 
 const CLI_PATH = resolve("src/cli.ts");
+const DIGEST = `sha256:${"a".repeat(64)}`;
 
 describe("soba prove CLI", () => {
   test("renders latest proof without loading provider configuration", async () => {
@@ -14,7 +16,7 @@ describe("soba prove CLI", () => {
       const proofPath = join(evidenceDir, "proof.soba-proof.json");
       writeFileSync(
         proofPath,
-        JSON.stringify({
+        JSON.stringify(sealProofBundle({
           version: 1,
           sessionId: "sess_cli",
           turnId: "turn_1",
@@ -40,11 +42,19 @@ describe("soba prove CLI", () => {
             },
           ],
           changedFiles: [],
-          commands: [{ id: "cmd_1", command: "bun test", status: "passed", exitCode: 0 }],
-          checks: [{ label: "Tests", status: "passed", commandId: "cmd_1" }],
+          commands: [{
+            id: "cmd_1",
+            command: "bun test",
+            status: "passed",
+            exitCode: 0,
+            outputDigest: DIGEST,
+          }],
+          checks: [{ id: "check_1", label: "Tests", status: "passed", commandId: "cmd_1" }],
+          approvals: [],
           risks: [],
+          reviewActions: [],
           createdAt: "2026-06-30T10:20:30.000Z",
-        }),
+        })),
         "utf-8",
       );
 
@@ -58,10 +68,10 @@ describe("soba prove CLI", () => {
 
       expect(code).toBe(0);
       expect(stderr).toBe("");
-      expect(stdout).toContain("# SOBA Proof");
+      expect(stdout).toContain("# SOBA Proof · Verified");
       expect(stdout).toContain("CLI proof rendered.");
-      expect(stdout).toContain("CLI proof rendered supported (ev_verification_cli)");
-      expect(stdout).toContain("Tests passed (bun test)");
+      expect(stdout).toContain("✓ 1. CLI proof rendered · supported");
+      expect(stdout).not.toContain("ev_verification_cli");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

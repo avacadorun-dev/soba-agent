@@ -89,6 +89,8 @@ export type {
   RuntimeContentBlock,
   RuntimeEvent,
   RuntimeEventListener,
+  RuntimeProofHandoff,
+  RuntimeProofOutcome,
   RuntimeSessionConfigOption,
   RuntimeSessionInfo,
   RuntimeSessionSnapshot,

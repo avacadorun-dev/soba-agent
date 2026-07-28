@@ -17,12 +17,17 @@ Evidence proof receipts — это сохранённые proof-файлы, ко
 `soba prove --last`, чтобы открыть последний receipt, или передайте конкретный
 `.soba/evidence/<id>.soba-proof.json`, если проверяете старую задачу.
 
+Обычный вид намеренно короткий. Сначала показывается один verdict — `Проверено` или `Нужно внимание`, затем summary,
+изменённые файлы, проверки, утверждения, риски и путь к receipt. Проверенный proof остаётся свёрнутым в TUI.
+Partially verified, unverified, blocked, invalid и несохранённые proofs раскрываются автоматически и объясняют причину
+обычным языком. Строгий outcome остаётся внутри раскрытой карточки.
+
 Proof claim mapping означает, что важные finish claims привязаны к evidence ids. Claim может ссылаться на command,
 check, changed file, file mutation, risk или review action. `soba verify` проверяет, что поддержанные ссылки указывают
 на известные ids, а не висят обычным текстом.
 
-Proof claim explanations читаются через `soba explain-claim`. Передавайте текст или id claim, а для не последнего proof
-добавляйте `--proof .soba/evidence/<id>.soba-proof.json`.
+Proof claim explanations читаются через `soba explain-claim`. Передавайте показанный номер, текст или id claim, а для
+не последнего proof добавляйте `--proof .soba/evidence/<id>.soba-proof.json`.
 
 Proof permission receipts записывают trust level, approval kind, approval value, decision, reason и
 least-privilege alternatives, если SOBA может вывести более безопасную команду.
@@ -52,10 +57,12 @@ evidence текущего turn. Сначала используются лекс
 unverified. Компактный TUI handoff показывает счётчики активности без внутренних evidence IDs, а persisted proof
 сохраняет полные ссылки для `soba prove` и `soba explain-claim`.
 
-Новые Proof Bundle v1 sealed перед записью: SOBA рекурсивно редактирует распознаваемые credentials, канонизирует JSON,
-выводит `proofId` и записывает `integrity.digest`. `soba prove` показывает proof ID, run ID и digest.
-Повторный sealing той же пары session/turn сохраняет run ID, а другой turn получает другой run ID. Изменение любого
-покрытого поля после sealing приводит к ошибке `proof_digest_mismatch` в `soba verify`.
+Новые Proof Bundle v1 проходят sealing и validation перед записью: SOBA рекурсивно редактирует распознаваемые
+credentials, канонизирует JSON, выводит `proofId` и записывает `integrity.digest`. Структурно невалидный результат
+producer не записывается как обычный proof receipt; диагноз остаётся во flight record. `soba prove --verbose`
+показывает proof ID, run ID и digest. Повторный sealing той же пары session/turn сохраняет run ID, а другой turn
+получает другой run ID. Изменение любого покрытого поля после sealing приводит к ошибке `proof_digest_mismatch`
+в `soba verify`.
 
 Старые v1 receipts без integrity metadata остаются читаемыми, но verification показывает
 `legacy_unsealed_proof`: структуру можно изучить, однако защита от изменения файла отсутствует.
@@ -68,19 +75,23 @@ unverified. Компактный TUI handoff показывает счётчик
 ```bash
 soba prove
 soba prove --last
+soba prove --last --verbose
 soba prove --format markdown
 soba prove --format json
 soba prove .soba/evidence/<id>.soba-proof.json
 
 soba verify
+soba verify --verbose
 soba verify --format json
 soba verify .soba/evidence/<id>.soba-proof.json
 
-soba explain-claim "All TypeScript errors are fixed"
+soba explain-claim 1
 soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
 ```
 
 Эти команды читают уже сохранённые proof-файлы. Они не запускают agent runtime и не требуют API ключей.
+Human output по умолчанию компактный; `--verbose` возвращает contract-level IDs, digests, commands и references.
+`--format json` остаётся стабильным machine-readable форматом.
 
 ### Outcomes и exit codes проверки
 

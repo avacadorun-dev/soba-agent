@@ -1525,12 +1525,13 @@ describe("AgentLoop", () => {
         };
       }),
     };
+    const events: AgentEvent[] = [];
     const loop = new AgentLoop(
       client,
       session,
       tools,
       "/test",
-      { emitEvents: false },
+      { emitEvents: true },
       undefined,
       undefined,
       undefined,
@@ -1542,6 +1543,7 @@ describe("AgentLoop", () => {
       undefined,
       proofSink,
     );
+    loop.onEvent((event) => events.push(event));
 
     await loop.runTurn("Use tool");
 
@@ -1572,6 +1574,20 @@ describe("AgentLoop", () => {
       proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
       runId: "run_bbbbbbbbbbbbbbbbbbbbbbbb",
       digest: `sha256:${"c".repeat(64)}`,
+    });
+    const finalEvent = events.find((event) => event.type === "assistant_message");
+    expect(finalEvent).toMatchObject({
+      type: "assistant_message",
+      proof: {
+        headline: "verified",
+        outcome: "verified",
+        receipt: {
+          saved: true,
+          path: "/test/.soba/evidence/proof.soba-proof.json",
+          proofId: "proof_aaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+        nextCommand: "soba prove --last --verbose",
+      },
     });
   });
 
@@ -1653,6 +1669,15 @@ describe("AgentLoop", () => {
       undefined,
       undefined,
       {
+        captureEvidenceChangedFiles: async (paths: string[]) => paths.map((path) => ({
+          path,
+          operation: "modified" as const,
+          source: "git" as const,
+          added: 7,
+          removed: 1,
+          mutationIds: [],
+          remainsChanged: true,
+        })),
         saveEvidenceBundle: async (bundle) => {
           savedBundles.push(bundle as unknown as Record<string, unknown>);
           return { path: "/test/proof.json" };
@@ -1672,6 +1697,18 @@ describe("AgentLoop", () => {
         evidenceIds: ["ev_mutation_edit_1", "ev_verification_bash_1"],
       },
     ]);
+    expect(savedBundles[0]?.changedFiles).toEqual([
+      {
+        path: "src/app.ts",
+        operation: "modified",
+        source: "git",
+        added: 7,
+        removed: 1,
+        mutationIds: ["ev_mutation_edit_1"],
+        remainsChanged: true,
+      },
+    ]);
+    expect(savedBundles[0]?.diff).toMatchObject({ fileCount: 1, added: 7, removed: 1 });
   });
 
   test("не эмитит события при emitEvents: false", async () => {
@@ -2073,7 +2110,8 @@ describe("AgentLoop", () => {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Completed with unverified changes:");
       expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: unverified");
+      expect(text).toContain("Verdict: needs attention");
+      expect(text).toContain("Outcome: unverified");
       expect(text).toContain("verification not run");
       expect(text).toContain("Some file mutations are not covered by passing verification evidence.");
     }
@@ -2156,7 +2194,8 @@ describe("AgentLoop", () => {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Verification passed");
       expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: verified");
+      expect(text).toContain("Verdict: needs attention");
+      expect(text).toContain("Outcome: verified");
       expect(text).toContain("Verification passed and the requested work is complete. supported");
       expect(text).not.toContain("ev_verification_verify_1");
     }
@@ -2229,7 +2268,8 @@ describe("AgentLoop", () => {
       const text = finalMessage.content[0]?.type === "output_text" ? finalMessage.content[0].text : "";
       expect(text).toContain("Blocked:");
       expect(text).toContain("**Evidence**");
-      expect(text).toContain("Status: blocked");
+      expect(text).toContain("Verdict: needs attention");
+      expect(text).toContain("Outcome: blocked");
     }
   });
 
