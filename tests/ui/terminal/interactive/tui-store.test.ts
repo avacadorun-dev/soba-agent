@@ -517,6 +517,161 @@ describe("OpenTUI Solid store", () => {
     store.dispose();
   });
 
+  test("показывает live output model-initiated bash до завершения", () => {
+    const store = createStore();
+    store.onAgentEvent(
+      event({
+        type: "tool_call_start",
+        toolCallId: "agent_bash_1",
+        toolName: "bash",
+        args: { command: "bun test" },
+      }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["tool-start", "tool-result"]);
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      toolCallId: "agent_bash_1",
+      content: "",
+      streaming: true,
+    });
+
+    store.onAgentEvent(
+      event({
+        type: "tool_call_output",
+        toolCallId: "agent_bash_1",
+        toolName: "bash",
+        chunk: "first test passed\n",
+      }),
+    );
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      content: "first test passed\n",
+      streaming: true,
+    });
+
+    store.onAgentEvent(
+      event({
+        type: "tool_call_result",
+        toolCallId: "agent_bash_1",
+        toolName: "bash",
+        result: { content: [{ type: "text", text: "first test passed\nall tests passed\n" }], isError: false },
+      }),
+    );
+    store.onAgentEvent(
+      event({ type: "tool_call_end", toolCallId: "agent_bash_1", toolName: "bash", durationMs: 750 }),
+    );
+
+    expect(store.messages().map((message) => message.type)).toEqual(["tool-start", "tool-result", "tool-end"]);
+    expect(store.messages()[1]).toMatchObject({
+      type: "tool-result",
+      content: "first test passed\nall tests passed\n",
+      streaming: false,
+      durationMs: 750,
+    });
+    store.dispose();
+  });
+
+  test("не смешивает interleaved live output параллельных model bash вызовов", () => {
+    const store = createStore();
+    for (const [toolCallId, command] of [["agent_bash_a", "test a"], ["agent_bash_b", "test b"]] as const) {
+      store.onAgentEvent(
+        event({
+          type: "tool_call_start",
+          toolCallId,
+          toolName: "bash",
+          args: { command },
+        }),
+      );
+    }
+
+    store.onAgentEvent(
+      event({ type: "tool_call_output", toolCallId: "agent_bash_b", toolName: "bash", chunk: "b1\n" }),
+    );
+    store.onAgentEvent(
+      event({ type: "tool_call_output", toolCallId: "agent_bash_a", toolName: "bash", chunk: "a1\n" }),
+    );
+    store.onAgentEvent(
+      event({ type: "tool_call_output", toolCallId: "agent_bash_b", toolName: "bash", chunk: "b2\n" }),
+    );
+
+    const liveResults = store.messages().filter((message) => message.type === "tool-result");
+    expect(liveResults).toHaveLength(2);
+    expect(liveResults.find((message) => message.toolCallId === "agent_bash_a")).toMatchObject({
+      content: "a1\n",
+      streaming: true,
+    });
+    expect(liveResults.find((message) => message.toolCallId === "agent_bash_b")).toMatchObject({
+      content: "b1\nb2\n",
+      streaming: true,
+    });
+    store.dispose();
+  });
+
+  test("сохраняет вывод отменённого model bash и игнорирует поздние чанки", () => {
+    const store = createStore();
+    store.onAgentEvent(
+      event({
+        type: "tool_call_start",
+        toolCallId: "agent_bash_cancelled",
+        toolName: "bash",
+        args: { command: "long test" },
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "tool_call_output",
+        toolCallId: "agent_bash_cancelled",
+        toolName: "bash",
+        chunk: "test one passed\n",
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "tool_call_result",
+        toolCallId: "agent_bash_cancelled",
+        toolName: "bash",
+        result: {
+          content: [{ type: "text", text: "test one passed\n\n[Command aborted]" }],
+          isError: true,
+        },
+      }),
+    );
+    store.onAgentEvent(
+      event({
+        type: "tool_call_end",
+        toolCallId: "agent_bash_cancelled",
+        toolName: "bash",
+        durationMs: 250,
+      }),
+    );
+
+    const finalResult = store.messages().find(
+      (message) => message.type === "tool-result" && message.toolCallId === "agent_bash_cancelled",
+    );
+    expect(finalResult).toMatchObject({
+      content: "test one passed\n\n[Command aborted]",
+      isError: true,
+      streaming: false,
+      durationMs: 250,
+    });
+
+    store.onAgentEvent(
+      event({
+        type: "tool_call_output",
+        toolCallId: "agent_bash_cancelled",
+        toolName: "bash",
+        chunk: "late output\n",
+      }),
+    );
+    expect(
+      store.messages().find(
+        (message) => message.type === "tool-result" && message.toolCallId === "agent_bash_cancelled",
+      ),
+    ).toEqual(finalResult);
+    store.dispose();
+  });
+
   test("рендерит ошибку тул-колла", () => {
     const store = createStore();
     store.onAgentEvent(

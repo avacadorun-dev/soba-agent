@@ -5,7 +5,7 @@ import { ToolCallExecutor } from "../../../src/engine/tool-calls/tool-call-execu
 import type { AgentEvent, ApprovalDecision } from "../../../src/engine/turn/types";
 import type { FunctionCallField } from "../../../src/kernel/model/openresponses-types";
 import { ToolRegistry } from "../../../src/kernel/tools/tool-registry";
-import type { ToolDefinition } from "../../../src/kernel/tools/types";
+import type { ToolContext, ToolDefinition } from "../../../src/kernel/tools/types";
 
 function toolCall(name: string, args: string): FunctionCallField {
   return {
@@ -42,6 +42,7 @@ function makeExecutor(input: {
   confirmation?: () => ApprovalDecision | Promise<ApprovalDecision>;
   getWorkMode?: () => "agent" | "plan" | "goal";
   evaluateToolPolicy?: (toolName: string) => { allowed: boolean; reason?: string };
+  toolContext?: () => ToolContext;
 }): ToolCallExecutor {
   const trustManager = input.trustManager ?? new TrustManager({ repoRoot: "/repo" });
   return new ToolCallExecutor({
@@ -50,7 +51,7 @@ function makeExecutor(input: {
       trustManager,
       requestPermission: async () => input.confirmation?.() ?? "deny",
     }),
-    toolContext: () => ({ cwd: "/repo" }),
+    toolContext: input.toolContext ?? (() => ({ cwd: "/repo" })),
     emit: (event) => input.events?.push(event),
     getWorkMode: input.getWorkMode,
     evaluateToolPolicy: input.evaluateToolPolicy,
@@ -293,6 +294,91 @@ describe("ToolCallExecutor", () => {
       silent: false,
     });
     expect(events[1]).toMatchObject({ type: "tool_call_output", chunk: "step one\n" });
+  });
+
+  test("emits live output for a model-initiated bash call and preserves the configured sink", async () => {
+    const registry = new ToolRegistry();
+    registry.register(makeTool("bash", async (_args, context) => {
+      context.onOutput?.("test one\n");
+      context.onOutput?.("test two\n");
+      return { content: [{ type: "text", text: "test one\ntest two\n" }], isError: false };
+    }));
+    const events: AgentEvent[] = [];
+    const forwarded: string[] = [];
+    const executor = makeExecutor({
+      registry,
+      events,
+      toolContext: () => ({ cwd: "/repo", onOutput: (chunk) => forwarded.push(chunk) }),
+    });
+
+    await executor.executeToolCall(toolCall("bash", '{"command":"bun test"}'));
+
+    expect(events.map((event) => event.type)).toEqual([
+      "tool_call_start",
+      "tool_call_output",
+      "tool_call_output",
+      "tool_call_result",
+      "tool_call_end",
+    ]);
+    expect(events[1]).toMatchObject({
+      type: "tool_call_output",
+      toolCallId: "call_bash",
+      toolName: "bash",
+      chunk: "test one\n",
+    });
+    expect(forwarded).toEqual(["test one\n", "test two\n"]);
+  });
+
+  test("does not add a live output sink to non-bash model tools", async () => {
+    const registry = new ToolRegistry();
+    let receivedOutputSink = true;
+    registry.register(makeTool("read", async (_args, context) => {
+      receivedOutputSink = context.onOutput !== undefined;
+      return { content: [{ type: "text", text: "file" }], isError: false };
+    }));
+    const events: AgentEvent[] = [];
+    const executor = makeExecutor({ registry, events });
+
+    await executor.executeToolCall(toolCall("read", '{"path":"src/app.ts"}'));
+
+    expect(receivedOutputSink).toBe(false);
+    expect(events.map((event) => event.type)).toEqual(["tool_call_start", "tool_call_result", "tool_call_end"]);
+  });
+
+  test("stops emitting model bash output after the active tool is aborted", async () => {
+    const registry = new ToolRegistry();
+    let firstChunk = () => {};
+    const firstChunkEmitted = new Promise<void>((resolve) => {
+      firstChunk = resolve;
+    });
+    registry.register(makeTool("bash", async (_args, context, signal) => {
+      context.onOutput?.("before cancel\n");
+      firstChunk();
+      await new Promise<void>((resolve) => {
+        signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      context.onOutput?.("after cancel\n");
+      return {
+        content: [{ type: "text", text: "before cancel\n[Command aborted]" }],
+        isError: true,
+      };
+    }));
+    const events: AgentEvent[] = [];
+    const executor = makeExecutor({ registry, events });
+
+    const running = executor.executeToolCall(toolCall("bash", '{"command":"long test"}'));
+    await firstChunkEmitted;
+    expect(executor.abortActiveTool()).toBe(true);
+    const result = await running;
+
+    expect(result.result.isError).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      "tool_call_start",
+      "tool_call_output",
+      "tool_call_result",
+      "tool_call_end",
+    ]);
+    expect(events.some((event) => event.type === "tool_call_output" && event.chunk.includes("after cancel"))).toBe(false);
   });
 
   test("does not emit live output for a silent direct shell command", async () => {

@@ -869,7 +869,7 @@ export class TuiStore {
         this._toolSummaries.set(event.toolCallId, formatToolSummary(event.toolName, event.args));
         this._toolDetails.set(event.toolCallId, formatToolArgs(event.toolName, event.args));
         this.add({ type: "tool-start", toolName: event.toolName, summary: this._toolSummaries.get(event.toolCallId)! });
-        if (event.userInitiated && event.toolName === "bash" && !event.silent) {
+        if (event.toolName === "bash" && !event.silent) {
           const liveResult = this.add({
             type: "tool-result",
             content: "",

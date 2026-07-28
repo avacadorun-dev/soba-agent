@@ -227,7 +227,7 @@ export class ToolCallExecutor {
 
     let result: ToolResult;
     try {
-      result = await this.executeRegisteredTool(tool, preparedArgs, context, turnSignal);
+      result = await this.executeRegisteredTool(toolCall, tool, preparedArgs, context, turnSignal);
     } catch (error) {
       result = createToolErrorResult({
         code: "tool_execution_failed",
@@ -281,19 +281,7 @@ export class ToolCallExecutor {
         { command },
         silent
           ? context
-          : {
-              ...context,
-              onOutput: (chunk) => {
-                if (!chunk) return;
-                this.emit({
-                  type: "tool_call_output",
-                  timestamp: Date.now(),
-                  toolCallId: toolCall.call_id,
-                  toolName: toolCall.name,
-                  chunk,
-                });
-              },
-            },
+          : this.withLiveOutput(toolCall, context, controller.signal),
         controller.signal,
       );
     } catch (error) {
@@ -327,6 +315,7 @@ export class ToolCallExecutor {
   }
 
   private async executeRegisteredTool(
+    toolCall: Pick<FunctionCallField, "call_id" | "name">,
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
     args: Record<string, unknown>,
     context: ToolContext,
@@ -341,11 +330,36 @@ export class ToolCallExecutor {
       turnSignal?.addEventListener("abort", abortToolWithTurn, { once: true });
     }
     try {
-      return await tool.execute(args, context, toolAbortController.signal);
+      const executionContext = toolCall.name === "bash"
+        ? this.withLiveOutput(toolCall, context, toolAbortController.signal)
+        : context;
+      return await tool.execute(args, executionContext, toolAbortController.signal);
     } finally {
       turnSignal?.removeEventListener("abort", abortToolWithTurn);
       this.activeToolAbortControllers.delete(toolAbortController);
     }
+  }
+
+  private withLiveOutput(
+    toolCall: Pick<FunctionCallField, "call_id" | "name">,
+    context: ToolContext,
+    signal: AbortSignal,
+  ): ToolContext {
+    const existingOnOutput = context.onOutput;
+    return {
+      ...context,
+      onOutput: (chunk) => {
+        if (!chunk || signal.aborted) return;
+        this.emit({
+          type: "tool_call_output",
+          timestamp: Date.now(),
+          toolCallId: toolCall.call_id,
+          toolName: toolCall.name,
+          chunk,
+        });
+        existingOnOutput?.(chunk);
+      },
+    };
   }
 
   private emitToolResultAndEnd(
