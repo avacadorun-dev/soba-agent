@@ -35,6 +35,8 @@ before risky operations, run the project's own checks, and leave behind receipts
 SOBA is a coding agent with a local workflow:
 
 - **Interactive TUI** for agent sessions, shell commands, slash commands, permissions, context, and model state.
+- **Live agent shell output** that opens as soon as a model-started `bash` command runs, stays correlated across
+  parallel calls, and keeps redacted output visible when a command is cancelled.
 - **Capability-aware reasoning controls** through `F4`, `/reasoning`, CLI/env/config, with requested/effective fallback visibility.
 - **Sealed Proof Bundle v1 receipts** in `.soba/evidence/*.soba-proof.json`, with stable run/proof IDs, recursive
   redaction, and whole-receipt SHA-256 integrity.

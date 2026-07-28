@@ -60,7 +60,7 @@ soba -r
 | 按键 | 动作 | 场景 |
 |---|---|---|
 | `Enter` | 发送消息 | 输入行 |
-| `Ctrl+C` | 中断当前代理响应 | 代理正在工作时 |
+| `Ctrl+C` | 停止 active tool；没有 active tool 时中断当前代理响应 | 代理正在工作时 |
 | `Ctrl+Z` | 挂起 SOBA (SIGTSTP) | 始终可用 |
 | `Ctrl+L` / `/clear` | 清屏 | 始终可用 |
 | `Ctrl+D` | 退出 TUI | 输入行为空时 |
@@ -198,6 +198,8 @@ soba -r
 
 - **代理看不到 `!` 命令的输出**。这是一个快速操作方式，不会把输出花在 AI token 上。
 - **如果希望代理读取输出**，请发送普通 prompt，让代理自己调用 `bash` 工具。
+- **代理启动的 `bash` 在运行时可见**：命令块会立即出现并实时显示脱敏后的输出。按 `Ctrl+C`
+  会停止 active tool、保留已经收到的输出，并让 agent turn 继续。
 - **Trust 仍然生效**：`rm -rf`、`sudo` 等危险命令在 `safe` trust mode 下会被阻止，在 `normal` 下需要确认。见 [安全](/zh/docs/v0.6/security)。
 
 ---

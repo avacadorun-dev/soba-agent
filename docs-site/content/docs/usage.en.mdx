@@ -60,7 +60,7 @@ soba -r
 | Key | Action | Context |
 |---|---|---|
 | `Enter` | Send the message | Input line |
-| `Ctrl+C` | Interrupt the current agent response | While the agent is working |
+| `Ctrl+C` | Stop the active tool; otherwise interrupt the current agent response | While the agent is working |
 | `Ctrl+Z` | Suspend SOBA (SIGTSTP) | Always |
 | `Ctrl+L` / `/clear` | Clear the screen | Always |
 | `Ctrl+D` | Exit the TUI | Empty input line |
@@ -198,6 +198,8 @@ Use `!` to run shell commands directly, without asking the AI to execute them.
 
 - **The agent does not see the output** of `!` commands. It is a quick way to do something without spending tokens.
 - **If the agent should read the output**, send a normal prompt and let the agent call the `bash` tool.
+- **Agent-started `bash` is visible while it runs**: its block opens immediately and streams redacted output. `Ctrl+C`
+  stops the active tool, keeps the output received so far, and lets the agent turn continue.
 - **Trust still applies**: dangerous commands such as `rm -rf` or `sudo` are blocked in `safe` trust mode and require confirmation in `normal` mode. See [Security](/en/docs/security).
 
 ---

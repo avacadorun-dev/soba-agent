@@ -1,9 +1,9 @@
 ---
 title: Quick Start
-description: "Start SOBA Agent v0.6.8: install, provider, TUI, plan mode, proof receipts, Project Memory, MCP, skills, and verification."
+description: "Start SOBA Agent v0.6.15: install, provider, TUI, live agent shell output, proof receipts, Project Memory, MCP, skills, and verification."
 ---
 
-This guide takes you from a clean install to a working SOBA v0.6.8 workflow. It is the practical path: install, verify
+This guide takes you from a clean install to a working SOBA v0.6.15 workflow. It is the practical path: install, verify
 the provider, start the TUI, run a bounded task, inspect evidence proof receipts, save Project Memory, connect MCP, use
 skills, and finish with real checks.
 
@@ -138,6 +138,8 @@ Use `!!` when the command output should stay out of the transcript:
 ```
 
 If you want the agent to analyze command output, ask it in a normal message so it can call the `bash` tool itself.
+The command block appears immediately and streams redacted output while it runs. Press `Ctrl+C` to stop an active tool;
+the output received so far remains visible, and the agent turn continues.
 
 ---
 
@@ -291,14 +293,14 @@ After non-trivial work, inspect the local proof trail:
 
 ```bash
 soba prove --last
-soba verify --last
-soba explain-claim "No test regressions detected"
+soba explain-claim 1
+soba verify --last --format json
 ```
 
-Evidence proof receipts live in `.soba/evidence/*.soba-proof.json`. A good receipt shows changed files, checks, proof
-claim mapping, risks, and proof permission receipts. If a claim is not supported by evidence, it should stay visibly
-unverified. Use `soba explain-claim --proof .soba/evidence/<id>.soba-proof.json` for Proof claim explanations from a
-specific receipt.
+The default `soba prove` view starts with `Verified` or `Needs attention`, then shows changed files, checks, claims,
+risks, and the receipt path without exposing internal IDs. Add `--verbose` for contract-level details. Evidence proof
+receipts live in `.soba/evidence/*.soba-proof.json`; unsupported claims remain visibly unverified. Use
+`soba explain-claim 1 --proof .soba/evidence/<id>.soba-proof.json` to explain a displayed claim from a specific receipt.
 
 See [Proof receipts](/en/docs/proof).
 

@@ -19,7 +19,7 @@ description: SOBA Agent 的 built-in tools、direct shell、MCP tools，以及 t
 | `read` | 读取文件或行范围 |
 | `write` | 写入文件 |
 | `edit` | 修改文件 |
-| `bash` | 通过 agent loop 执行 shell 命令 |
+| `bash` | 通过 agent loop 执行 shell 命令，并在 TUI 中实时显示脱敏后的输出 |
 | `checkpoint` | 记录 milestone/checkpoint |
 | `activate_skill` | 从 catalog 激活 skill |
 | `read_project_memory` | 读取 Project Memory |
@@ -89,17 +89,24 @@ Direct shell 用于你自己快速执行命令：
 
 区别：
 
-| 方式 | 谁调用 | 代理能看到输出 |
-|---|---|---|
-| `!command` | 用户 | 否 |
-| `!!command` | 用户 | 否，输出会被隐藏 |
-| `bash` tool | 代理 | 是 |
+| 方式 | 谁调用 | 代理接收输出 | 用户看到实时输出 |
+|---|---|---|---|
+| `!command` | 用户 | 否 | 是 |
+| `!!command` | 用户 | 否 | 否 |
+| `bash` tool | 代理 | 是 | 是 |
 
 如果需要代理分析输出，请让它自己执行命令：
 
 ```text
 Run bun test and fix the real failures from the output.
 ```
+
+模型启动 `bash` 时，结果块会立即出现，在命令运行期间保持展开，并持续追加经过敏感信息脱敏的输出块。
+并行命令按 tool-call ID 分开，不会混合。最终 tool result 会替换实时预览，不产生重复内容。按 `Ctrl+C`
+会停止 active tool，保留已经收到的输出，同时 agent turn 继续。
+
+实时输出块只用于观察：不会写入 transcript、flight log 或 proof receipt。最终 tool result 仍是模型和
+proof 系统唯一持久化的来源。实时预览最多保留最近 50 KB。
 
 ---
 

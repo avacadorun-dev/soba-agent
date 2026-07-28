@@ -1,9 +1,9 @@
 ---
 title: 快速开始
-description: "快速启动 SOBA Agent v0.6.8：安装、provider、TUI、plan mode、proof receipts、Project Memory、MCP、skills 和验证。"
+description: "快速启动 SOBA Agent v0.6.15：安装、provider、TUI、代理命令实时输出、proof receipts、Project Memory、MCP、skills 和验证。"
 ---
 
-本指南从干净安装开始，带你完成 SOBA v0.6.8 的可用工作流：安装、检查 provider、启动 TUI、执行有边界的任务、
+本指南从干净安装开始，带你完成 SOBA v0.6.15 的可用工作流：安装、检查 provider、启动 TUI、执行有边界的任务、
 查看 evidence proof receipts、保存 Project Memory、连接 MCP、使用 skills，并用真实检查收尾。
 
 ---
@@ -134,6 +134,8 @@ Do not create a git commit.
 ```
 
 如果需要 agent 分析命令输出，请用普通消息要求它运行命令，这样它会通过 `bash` tool 获取输出。
+模型调用 `bash` 后，命令块会立即展开，并在运行期间实时显示经过敏感信息脱敏的输出。按 `Ctrl+C`
+可以停止 active tool；已经收到的输出会保留，agent turn 会继续。
 
 ---
 
@@ -287,14 +289,14 @@ Project skills 需要 trust：
 
 ```bash
 soba prove --last
-soba verify --last
-soba explain-claim "No test regressions detected"
+soba explain-claim 1
+soba verify --last --format json
 ```
 
-Evidence proof receipts 保存在 `.soba/evidence/*.soba-proof.json`。好的 receipt 会显示 changed files、checks、
-proof claim mapping、risks 和 proof permission receipts。如果 claim 没有证据，应保持明确 unverified。
-要查看指定 receipt 的 Proof claim explanations，使用
-`soba explain-claim --proof .soba/evidence/<id>.soba-proof.json`。
+默认 `soba prove` 会先显示 `已验证` 或 `需要注意`，然后显示变更文件、检查、声明、风险和 receipt 路径，
+不会暴露内部 IDs。添加 `--verbose` 可查看 contract-level 细节。Evidence proof receipts 保存在
+`.soba/evidence/*.soba-proof.json`，没有证据支持的声明会保持明确 unverified。要解释指定 receipt 中显示的声明，
+使用 `soba explain-claim 1 --proof .soba/evidence/<id>.soba-proof.json`。
 
 详见 [Proof receipts](/zh/docs/proof)。
 

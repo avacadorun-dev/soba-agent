@@ -1,9 +1,9 @@
 ---
 title: Быстрый старт
-description: "Актуальный быстрый старт SOBA v0.6.8: запуск, provider, TUI, plan mode, proof receipts, Project Memory, MCP, capsules и проверки."
+description: "Актуальный быстрый старт SOBA v0.6.15: запуск, provider, TUI, live-вывод команд агента, proof receipts, Project Memory, MCP, capsules и проверки."
 ---
 
-Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.8 workflow. Он не заменяет справочник, а показывает
+Этот гайд доводит от чистого запуска до рабочего SOBA v0.6.15 workflow. Он не заменяет справочник, а показывает
 минимальный безопасный путь: проверить provider, запустить TUI, выполнить задачу, посмотреть proof receipts, сохранить
 память проекта и проверить MCP.
 
@@ -143,6 +143,10 @@ soba -i --lang ru --theme graphite
 ```text
 !!bun run build
 ```
+
+Если агенту нужно проанализировать вывод, попросите его запустить команду обычным сообщением. Вызванный моделью `bash`
+сразу создаёт раскрытый блок и показывает отредактированный live-вывод. `Ctrl+C` останавливает активный tool;
+уже полученный вывод остаётся видимым, а ход агента продолжается.
 
 ---
 
@@ -348,14 +352,15 @@ Project skills требуют trust:
 
 ```bash
 soba prove --last
-soba verify --last
-soba explain-claim "No test regressions detected"
+soba explain-claim 1
+soba verify --last --format json
 ```
 
-Evidence proof receipts лежат в `.soba/evidence/*.soba-proof.json`. Proof receipt должен показывать changed files,
-checks, proof claim mapping, risks и proof permission receipts. Если важный claim не подтверждён, он должен оставаться
-явно unverified. Для Proof claim explanations по конкретному файлу используйте
-`soba explain-claim --proof .soba/evidence/<id>.soba-proof.json`.
+Обычный `soba prove` сначала показывает verdict `Проверено` или `Нужно внимание`, затем изменённые файлы, проверки,
+утверждения, риски и путь к receipt без внутренних IDs. Флаг `--verbose` возвращает contract-level детали. Evidence
+proof receipts лежат в `.soba/evidence/*.soba-proof.json`, а неподтверждённые утверждения остаются явно unverified.
+Чтобы объяснить показанное утверждение из конкретного receipt, используйте
+`soba explain-claim 1 --proof .soba/evidence/<id>.soba-proof.json`.
 
 Подробнее: [Proof receipts](/ru/docs/v0.6/proof).
 

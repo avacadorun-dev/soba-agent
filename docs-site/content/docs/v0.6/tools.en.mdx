@@ -19,7 +19,7 @@ Tools are functions the model can call during the agent loop. They are different
 | `read` | Read a file or a line range |
 | `write` | Write a file |
 | `edit` | Edit a file |
-| `bash` | Run a shell command through the agent loop |
+| `bash` | Run a shell command through the agent loop and stream redacted output in the TUI |
 | `checkpoint` | Record a milestone/checkpoint |
 | `activate_skill` | Activate a skill from the catalog |
 | `read_project_memory` | Read Project Memory |
@@ -89,17 +89,26 @@ Direct shell is for quickly running a command yourself:
 
 Difference:
 
-| Method | Caller | Agent sees output |
-|---|---|---|
-| `!command` | user | no |
-| `!!command` | user | no, output is hidden |
-| `bash` tool | agent | yes |
+| Method | Caller | Agent receives output | User sees live output |
+|---|---|---|---|
+| `!command` | user | no | yes |
+| `!!command` | user | no | no |
+| `bash` tool | agent | yes | yes |
 
 If you need the agent to analyze the output, ask it to run the command itself:
 
 ```text
 Run bun test and fix the real failures from the output.
 ```
+
+For a model-started `bash`, the result block appears immediately, stays expanded while the command runs, and updates
+with secret-redacted chunks. Parallel commands remain separated by tool-call ID. The final tool result replaces the live
+preview without duplication. `Ctrl+C` stops the active tool and preserves the output already received while the agent
+turn continues.
+
+Live chunks are observational only: they are not written to the transcript, flight log, or proof receipt. The final tool
+result remains the single persisted source for the model and proof system. The live preview keeps at most the latest
+50 KB.
 
 ---
 

@@ -16,11 +16,16 @@ provider connection to inspect.
 Evidence proof receipts are the persisted proof files SOBA writes after an accepted finish. Use `soba prove --last` to
 open the newest receipt, or pass a specific `.soba/evidence/<id>.soba-proof.json` file when reviewing an older task.
 
+The default view is deliberately small. It starts with `Verified` or `Needs attention`, then shows the summary, changed
+files, checks, claims, risks, and receipt path. A verified proof stays collapsed in the TUI. Anything partial,
+unverified, blocked, invalid, or not saved opens automatically with a plain-language reason. The strict outcome remains
+available inside the expanded card.
+
 Proof claim mapping means each important finish claim should be mapped to evidence ids. A claim can point to a command,
 check, changed file, file mutation, risk, or review action. `soba verify` checks that supported references point to known
 ids instead of dangling text.
 
-Proof claim explanations are read with `soba explain-claim`. Use the claim text or id, and add
+Proof claim explanations are read with `soba explain-claim`. Use the displayed claim number, text, or id, and add
 `--proof .soba/evidence/<id>.soba-proof.json` when the claim is not in the latest receipt.
 
 Proof permission receipts record trust level, approval kind, approval value, decision, reason, and least-privilege
@@ -51,10 +56,12 @@ relationships; it no longer attaches every successful inspection to every claim.
 remains unverified. The compact TUI handoff shows activity counts without exposing internal evidence IDs; the persisted
 proof keeps the complete references for `soba prove` and `soba explain-claim`.
 
-Newly written Proof Bundle v1 receipts are sealed before persistence. SOBA recursively redacts recognizable credentials,
-canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. `soba prove` shows the proof ID, run ID, and
-digest. Re-sealing the same session/turn identity preserves its run ID, while another turn gets a different run ID.
-Editing any covered field after sealing makes `soba verify` fail with `proof_digest_mismatch`.
+Newly written Proof Bundle v1 receipts are sealed and validated before persistence. SOBA recursively redacts
+recognizable credentials, canonicalizes the JSON, derives `proofId`, and stores `integrity.digest`. A structurally
+invalid producer result is not written as a normal proof receipt; its diagnosis remains in the flight record.
+`soba prove --verbose` shows the proof ID, run ID, and digest. Re-sealing the same session/turn identity preserves its
+run ID, while another turn gets a different run ID. Editing any covered field after sealing makes `soba verify` fail
+with `proof_digest_mismatch`.
 
 Older pre-integrity v1 receipts remain readable, but verification reports `legacy_unsealed_proof`: the structure can be
 inspected, but the file is not tamper-evident and is not policy-accepted as verified. Its policy outcome is
@@ -67,19 +74,23 @@ inspected, but the file is not tamper-evident and is not policy-accepted as veri
 ```bash
 soba prove
 soba prove --last
+soba prove --last --verbose
 soba prove --format markdown
 soba prove --format json
 soba prove .soba/evidence/<id>.soba-proof.json
 
 soba verify
+soba verify --verbose
 soba verify --format json
 soba verify .soba/evidence/<id>.soba-proof.json
 
-soba explain-claim "All TypeScript errors are fixed"
+soba explain-claim 1
 soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
 ```
 
 These commands read persisted proof data only. They do not start the agent runtime and do not require API credentials.
+Human output is compact by default; `--verbose` restores contract-level IDs, digests, commands, and references.
+`--format json` remains the stable machine-readable form.
 
 ### Verification outcomes and exit codes
 
