@@ -988,6 +988,110 @@ describe("OpenAIAdapter stream parsing", () => {
     }
   });
 
+  test("standard OpenAI tool-call deltas сохраняют совместимость", () => {
+    const acc = adapter.createStreamAccumulator();
+    const toolCallDeltas = [
+      { index: 0, id: "call_openai", type: "function", function: { name: "read", arguments: "" } },
+      { index: 0, function: { arguments: '{"path":' } },
+      { index: 0, function: { arguments: '"README.md"}' } },
+    ];
+
+    for (const [index, toolCall] of toolCallDeltas.entries()) {
+      adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-openai-tool",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              delta: { tool_calls: [toolCall] },
+              finish_reason: index === toolCallDeltas.length - 1 ? "tool_calls" : null,
+            },
+          ],
+        }),
+        acc,
+      );
+    }
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const done = events.find(
+      (event) => event.type === "response.output_item.done" && event.item.type === "function_call",
+    );
+
+    expect(done?.type).toBe("response.output_item.done");
+    if (done?.type === "response.output_item.done" && done.item.type === "function_call") {
+      expect(done.item).toMatchObject({
+        call_id: "call_openai",
+        name: "read",
+        arguments: '{"path":"README.md"}',
+      });
+    }
+  });
+
+  test("vLLM qwen3_xml repeated ids не стирают параллельные tool calls", () => {
+    const acc = adapter.createStreamAccumulator();
+    const chunks = [
+      [
+        { index: 0, id: "call_search", type: "function", function: { name: "search_files", arguments: "" } },
+        { index: 1, id: "call_read", type: "function", function: { name: "read", arguments: "" } },
+      ],
+      [
+        { index: 0, id: "call_search", type: "function", function: { arguments: '{"query": ' } },
+        { index: 1, id: "call_read", type: "function", function: { arguments: '{"path": ' } },
+      ],
+      [
+        { index: 0, id: "call_search", type: "function", function: { arguments: '"ACP"}' } },
+        { index: 1, id: "call_read", type: "function", function: { arguments: '"README.md"}' } },
+      ],
+      [
+        { index: 0, id: "call_search", type: "function", function: { arguments: "" } },
+        { index: 1, id: "call_read", type: "function", function: { arguments: "" } },
+      ],
+    ];
+
+    for (const [index, toolCalls] of chunks.entries()) {
+      adapter.processStreamLine(
+        JSON.stringify({
+          id: "chunk-qwen3-xml",
+          object: "chat.completion.chunk",
+          created: 1717000000,
+          model: "Qwen/Qwen3.6-35B-A3B-FP8",
+          choices: [
+            {
+              index: 0,
+              delta: { tool_calls: toolCalls },
+              finish_reason: index === chunks.length - 1 ? "tool_calls" : null,
+            },
+          ],
+        }),
+        acc,
+      );
+    }
+
+    const events = adapter.processStreamLine("[DONE]", acc);
+    const calls = events
+      .filter(
+        (event) => event.type === "response.output_item.done" && event.item.type === "function_call",
+      )
+      .map((event) => {
+        if (event.type !== "response.output_item.done" || event.item.type !== "function_call") {
+          throw new Error("Expected a completed function call");
+        }
+        return {
+          callId: event.item.call_id,
+          name: event.item.name,
+          arguments: JSON.parse(event.item.arguments),
+        };
+      });
+
+    expect(calls).toEqual([
+      { callId: "call_search", name: "search_files", arguments: { query: "ACP" } },
+      { callId: "call_read", name: "read", arguments: { path: "README.md" } },
+    ]);
+  });
+
   test("reasoning-only stream создаёт завершённое сообщение без подмены видимого текста", () => {
     const acc = adapter.createStreamAccumulator();
     const deltaEvents = adapter.processStreamLine(

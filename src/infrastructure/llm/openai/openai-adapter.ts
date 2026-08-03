@@ -1245,30 +1245,33 @@ function parseOpenAIChunk(
       if (choice.delta?.tool_calls) {
         for (const tc of choice.delta.tool_calls) {
           const tcIndex = tc.index;
+          const existing = accumulator.functionCallArguments.get(tcIndex);
 
-          if (tc.id) {
+          if (!existing && tc.id) {
             accumulator.functionCallArguments.set(tcIndex, {
               id: tc.id,
               name: tc.function?.name ?? "",
               args: tc.function?.arguments ?? "",
             });
-          } else {
-            const existing = accumulator.functionCallArguments.get(tcIndex);
-            if (existing) {
-              if (tc.function?.name) {
-                existing.name += tc.function.name;
-              }
-              if (tc.function?.arguments) {
-                const deltaArgs = tc.function.arguments;
-                existing.args += deltaArgs;
+          } else if (existing) {
+            // OpenAI normally sends the call id only on the first delta. Some
+            // compatible servers (including vLLM's qwen3_xml parser) repeat it
+            // on every arguments delta and on a final empty sentinel. Merge by
+            // tool-call index so those repeated ids cannot reset accumulated
+            // function data.
+            if (tc.function?.name) {
+              existing.name += tc.function.name;
+            }
+            if (tc.function?.arguments) {
+              const deltaArgs = tc.function.arguments;
+              existing.args += deltaArgs;
 
-                events.push({
-                  type: "response.function_call_arguments.delta",
-                  item_id: existing.id,
-                  output_index: tcIndex,
-                  delta: deltaArgs,
-                });
-              }
+              events.push({
+                type: "response.function_call_arguments.delta",
+                item_id: existing.id,
+                output_index: tcIndex,
+                delta: deltaArgs,
+              });
             }
           }
         }
