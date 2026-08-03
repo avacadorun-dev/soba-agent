@@ -111,6 +111,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   private config: OpenResponsesClientConfig;
   private adapter: ProviderAdapter;
   private runtimeReasoningFallbackReason: string | undefined;
+  private runtimeModelCompatibility = new Set<ModelCompatibilityFeature>();
 
   constructor(sobaConfig: SobaConfig, adapter?: ProviderAdapter) {
     this.config = {
@@ -189,6 +190,13 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     ) {
       this.runtimeReasoningFallbackReason = undefined;
     }
+    if (
+      partial.baseUrl !== undefined ||
+      partial.model !== undefined ||
+      "modelCompatibility" in partial
+    ) {
+      this.runtimeModelCompatibility.clear();
+    }
     if (partial.baseUrl !== undefined) this.config.baseUrl = partial.baseUrl;
     if (partial.apiKey !== undefined) this.config.apiKey = partial.apiKey;
     if (partial.model !== undefined) this.config.model = partial.model;
@@ -213,23 +221,27 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   }
 
   async create(params: CreateResponseParams, options: { signal?: AbortSignal } = {}): Promise<ResponseResource> {
-    // Convert to provider-specific request
-    const convertedRequest = this.adapter.convertRequest(
-      { ...params, stream: false },
-      this.getProviderConfig(),
-    );
-    const request = this.runtimeReasoningFallbackReason
-      ? stripReasoningWireControl(convertedRequest)
-      : convertedRequest;
-
-    // Send to provider
+    let request = this.convertCreateRequest(params, false);
     let response = await this.sendRequest(request, { signal: options.signal });
-    if (hasReasoningWireControl(request) && isUnsupportedReasoningResponse(response)) {
-      this.runtimeReasoningFallbackReason = "Provider rejected the reasoning control; provider default was used.";
-      response = await this.sendRequest(stripReasoningWireControl(request), {
-        signal: options.signal,
-        retries: 0,
-      });
+
+    while (true) {
+      if (
+        isSingleSystemMessageResponse(response) &&
+        this.enableRuntimeCompatibility("single_system_message")
+      ) {
+        request = this.convertCreateRequest(params, false);
+        response = await this.sendRequest(request, { signal: options.signal, retries: 0 });
+        continue;
+      }
+
+      if (hasReasoningWireControl(request) && isUnsupportedReasoningResponse(response)) {
+        this.runtimeReasoningFallbackReason = "Provider rejected the reasoning control; provider default was used.";
+        request = this.convertCreateRequest(params, false);
+        response = await this.sendRequest(request, { signal: options.signal, retries: 0 });
+        continue;
+      }
+
+      break;
     }
 
     // Convert response back to OpenResponses format
@@ -242,13 +254,7 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       processStreamLine(data: string, state: unknown): StreamingEvent[];
     };
 
-    let request = this.adapter.convertRequest(
-      { ...params, stream: true },
-      this.getProviderConfig(),
-    );
-    if (this.runtimeReasoningFallbackReason) {
-      request = stripReasoningWireControl(request);
-    }
+    let request = this.convertCreateRequest(params, true);
 
     const url = `${this.config.baseUrl.replace(/\/$/, "")}${this.adapter.getCreatePath?.() ?? "/chat/completions"}`;
 
@@ -256,7 +262,8 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
     const baseDelay = 1000;
     let hasYieldedEvents = false;
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
+    let networkRetryAttempt = 0;
+    while (true) {
       const accumulator = adapter.createStreamAccumulator();
 
       try {
@@ -270,11 +277,18 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
         if (!response.ok) {
           const errorText = await response.text().catch(() => "Unknown error");
           if (
+            isSingleSystemMessageError(response.status, errorText) &&
+            this.enableRuntimeCompatibility("single_system_message")
+          ) {
+            request = this.convertCreateRequest(params, true);
+            continue;
+          }
+          if (
             hasReasoningWireControl(request) &&
             isUnsupportedReasoningError(response.status, errorText)
           ) {
             this.runtimeReasoningFallbackReason = "Provider rejected the reasoning control; provider default was used.";
-            request = stripReasoningWireControl(request);
+            request = this.convertCreateRequest(params, true);
             continue;
           }
           yield {
@@ -357,8 +371,9 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
         return;
       } catch (error) {
         if (options.signal?.aborted) throw error;
-        if (!hasYieldedEvents && attempt < retries && this.isNetworkError(error)) {
-          const delay = baseDelay * 2 ** attempt;
+        if (!hasYieldedEvents && networkRetryAttempt < retries && this.isNetworkError(error)) {
+          const delay = baseDelay * 2 ** networkRetryAttempt;
+          networkRetryAttempt++;
           await sleepWithAbort(delay, options.signal);
           continue;
         }
@@ -418,7 +433,8 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
         const contentType = response.headers.get("content-type") ?? "";
 
         if (contentType.includes("application/json")) {
-          return (await response.json()) as Record<string, unknown>;
+          const payload = (await response.json()) as Record<string, unknown>;
+          return response.ok ? payload : attachHttpStatus(payload, response.status);
         }
 
         const text = await response.text();
@@ -464,15 +480,42 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   }
 
   private getProviderConfig() {
+    const compatibility = new Set(this.config.modelCompatibility);
+    for (const feature of this.runtimeModelCompatibility) compatibility.add(feature);
+
     return {
       baseUrl: this.config.baseUrl,
       apiKey: this.config.apiKey,
       model: this.config.model,
-      compatibility: this.config.modelCompatibility,
+      compatibility: compatibility.size > 0 ? [...compatibility] : undefined,
       reasoning: this.config.reasoning,
       reasoningCapabilities: this.config.modelReasoning,
       reasoningTransport: this.config.modelReasoningTransport,
     };
+  }
+
+  private convertCreateRequest(
+    params: CreateResponseParams,
+    stream: boolean,
+  ): Record<string, unknown> {
+    const request = this.adapter.convertRequest(
+      { ...params, stream },
+      this.getProviderConfig(),
+    );
+    return this.runtimeReasoningFallbackReason
+      ? stripReasoningWireControl(request)
+      : request;
+  }
+
+  private enableRuntimeCompatibility(feature: ModelCompatibilityFeature): boolean {
+    if (
+      this.config.modelCompatibility?.includes(feature) ||
+      this.runtimeModelCompatibility.has(feature)
+    ) {
+      return false;
+    }
+    this.runtimeModelCompatibility.add(feature);
+    return true;
   }
 }
 
@@ -510,6 +553,47 @@ function isUnsupportedReasoningError(status: number, message: string): boolean {
   const mentionsControl = /reasoning|thinking|effort|enable_thinking|think/.test(normalized);
   const rejectsControl = /unsupported|not supported|unknown|unrecognized|invalid|extra|unexpected|not permitted/.test(normalized);
   return mentionsControl && rejectsControl;
+}
+
+function isSingleSystemMessageResponse(response: Record<string, unknown>): boolean {
+  const error = response.error;
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const status = parseHttpStatus(record.status) ?? parseHttpStatus(record.code);
+  return status !== undefined && isSingleSystemMessageError(status, JSON.stringify(error));
+}
+
+function isSingleSystemMessageError(status: number, message: string): boolean {
+  if (status < 400 || status >= 500) return false;
+  const normalized = message.toLowerCase();
+  if (!/system (?:message|role)/.test(normalized)) return false;
+  return (
+    /must be at (?:the )?beginning/.test(normalized) ||
+    /must (?:appear|be) (?:only )?(?:at|in) (?:the )?(?:beginning|first position)/.test(normalized) ||
+    /must be (?:the )?first/.test(normalized) ||
+    /only one system (?:message|role)/.test(normalized) ||
+    /at most one system (?:message|role)/.test(normalized) ||
+    /multiple system (?:messages|roles)/.test(normalized)
+  );
+}
+
+function parseHttpStatus(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  if (typeof value !== "string" || !/^\d{3}$/.test(value.trim())) return undefined;
+  return Number.parseInt(value, 10);
+}
+
+function attachHttpStatus(
+  payload: Record<string, unknown>,
+  status: number,
+): Record<string, unknown> {
+  const error = payload.error;
+  if (!error || typeof error !== "object" || Array.isArray(error)) {
+    return payload;
+  }
+  const record = error as Record<string, unknown>;
+  if (parseHttpStatus(record.status) !== undefined) return payload;
+  return { ...payload, error: { ...record, status } };
 }
 
 function signalWithTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {

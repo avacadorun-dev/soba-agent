@@ -145,6 +145,65 @@ function fetchInitAt(fetchMock: unknown, index: number): RequestInit | undefined
   return (fetchMock as { mock: { calls: Array<[RequestInfo | URL, RequestInit?]> } }).mock.calls[index]?.[1];
 }
 
+function makeMultipleSystemMessageParams(): CreateResponseParams {
+  return {
+    model: "strict-system-model",
+    instructions: "Core agent instructions",
+    input: [
+      {
+        type: "message",
+        role: "developer",
+        content: [{ type: "input_text", text: "Activated skill instructions" }],
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Continue the task" }],
+      },
+    ],
+  };
+}
+
+function makeStrictSystemErrorResponse(): Response {
+  return new Response(JSON.stringify({
+    error: {
+      message: "litellm.BadRequestError: OpenAIException - System message must be at the beginning.",
+      code: "400",
+    },
+  }), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function makeChatCompletionResponse(id: string, content: string): Response {
+  return new Response(JSON.stringify({
+    id,
+    object: "chat.completion",
+    created: 1,
+    model: "strict-system-model",
+    choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function makeStreamingCompletionResponse(content: string): Response {
+  const chunk = JSON.stringify({
+    id: "chatcmpl-system-fallback",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "strict-system-model",
+    choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
+  });
+  return new Response(`data: ${chunk}\n\ndata: [DONE]\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 // ─── Tests ───
 
 describe("OpenResponsesClient", () => {
@@ -685,6 +744,111 @@ describe("OpenResponsesClient reasoning fallback", () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
       const rememberedFallbackBody = JSON.parse(String(fetchInitAt(fetchMock, 2)?.body));
       expect(rememberedFallbackBody.reasoning_effort).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("OpenResponsesClient system message capability fallback", () => {
+  test("retries non-streaming requests with one merged system message and remembers the capability", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock()
+      .mockResolvedValueOnce(makeStrictSystemErrorResponse())
+      .mockResolvedValueOnce(makeChatCompletionResponse("chatcmpl-recovered", "recovered"))
+      .mockResolvedValueOnce(makeChatCompletionResponse("chatcmpl-remembered", "remembered"))
+      .mockResolvedValueOnce(makeChatCompletionResponse("chatcmpl-reset", "reset"));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const client = createOpenResponsesClient({
+        ...makeTestConfig(),
+        model: "strict-system-model",
+      });
+      const params = makeMultipleSystemMessageParams();
+
+      const recovered = await client.create(params);
+      expect(recovered.status).toBe("completed");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      const firstBody = JSON.parse(String(fetchInitAt(fetchMock, 0)?.body));
+      const recoveredBody = JSON.parse(String(fetchInitAt(fetchMock, 1)?.body));
+      expect(firstBody.messages.map((message: { role: string }) => message.role)).toEqual([
+        "system",
+        "system",
+        "user",
+      ]);
+      expect(recoveredBody.messages.map((message: { role: string }) => message.role)).toEqual([
+        "system",
+        "user",
+      ]);
+      expect(recoveredBody.messages[0].content).toContain("Core agent instructions");
+      expect(recoveredBody.messages[0].content).toContain("Activated skill instructions");
+
+      await client.create(params);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const rememberedBody = JSON.parse(String(fetchInitAt(fetchMock, 2)?.body));
+      expect(rememberedBody.messages.filter((message: { role: string }) => message.role === "system")).toHaveLength(1);
+
+      client.updateConfig({ model: "another-model" });
+      await client.create(params);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      const resetBody = JSON.parse(String(fetchInitAt(fetchMock, 3)?.body));
+      expect(resetBody.messages.filter((message: { role: string }) => message.role === "system")).toHaveLength(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("retries streaming requests after the strict system-message error", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock()
+      .mockResolvedValueOnce(makeStrictSystemErrorResponse())
+      .mockResolvedValueOnce(makeStreamingCompletionResponse("recovered"));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const client = createOpenResponsesClient({
+        ...makeTestConfig(),
+        model: "strict-system-model",
+      });
+      const events: StreamingEvent[] = [];
+
+      for await (const event of client.createStream(makeMultipleSystemMessageParams())) {
+        events.push(event);
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(events.some((event) => event.type === "response.completed")).toBe(true);
+      const recoveredBody = JSON.parse(String(fetchInitAt(fetchMock, 1)?.body));
+      expect(recoveredBody.messages.filter((message: { role: string }) => message.role === "system")).toHaveLength(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("does not retry unrelated 400 errors or an already-enabled compatibility mode", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { message: "Tool choice is not supported", code: "400" },
+      }), { status: 400, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(makeStrictSystemErrorResponse());
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const defaultClient = createOpenResponsesClient(makeTestConfig());
+      const unrelated = await defaultClient.create(makeMultipleSystemMessageParams());
+      expect(unrelated.status).toBe("failed");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const configuredClient = createOpenResponsesClient({
+        ...makeTestConfig(),
+        modelCompatibility: ["single_system_message"],
+      });
+      const stillRejected = await configuredClient.create(makeMultipleSystemMessageParams());
+      expect(stillRejected.status).toBe("failed");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     } finally {
       globalThis.fetch = originalFetch;
     }
