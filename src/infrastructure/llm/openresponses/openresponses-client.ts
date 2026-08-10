@@ -383,21 +383,39 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
   }
 
   async compact(params: CompactResponseParams): Promise<CompactResource> {
-    const providerParams = this.adapter.convertCompactRequest?.(params, {
-      ...this.getProviderConfig(),
-    });
-
-    if (!providerParams) {
-      throw new Error(`Provider adapter "${this.adapter.name}" does not support compaction`);
-    }
-
-    const response = await this.sendRequest(providerParams);
+    let request = this.convertCompactRequest(params);
 
     if (!this.adapter.convertCompactResponse) {
       throw new Error(`Provider adapter "${this.adapter.name}" does not support compact response conversion`);
     }
 
-    return this.adapter.convertCompactResponse(response);
+    let response = await this.sendRequest(request);
+
+    if (
+      isSingleSystemMessageResponse(response) &&
+      this.enableRuntimeCompatibility("single_system_message")
+    ) {
+      request = this.convertCompactRequest(params);
+      response = await this.sendRequest(request, { retries: 0 });
+    }
+
+    const providerError = readProviderResponseError(response);
+    if (providerError) {
+      const status = providerError.status ? ` (${providerError.status})` : "";
+      throw new Error(`Provider compaction request failed${status}: ${providerError.message}`);
+    }
+
+    const compactResponse = this.adapter.convertCompactResponse(response);
+    const compactionItem = compactResponse.output.find((item) => item.type === "compaction");
+    if (
+      compactionItem?.type !== "compaction" ||
+      typeof compactionItem.encrypted_content !== "string" ||
+      compactionItem.encrypted_content.trim().length === 0
+    ) {
+      throw new Error("Provider compaction response did not contain a non-empty compaction item");
+    }
+
+    return compactResponse;
   }
 
   /**
@@ -507,6 +525,14 @@ export class OpenResponsesClientImpl implements OpenResponsesClient {
       : request;
   }
 
+  private convertCompactRequest(params: CompactResponseParams): Record<string, unknown> {
+    const request = this.adapter.convertCompactRequest?.(params, this.getProviderConfig());
+    if (!request) {
+      throw new Error(`Provider adapter "${this.adapter.name}" does not support compaction`);
+    }
+    return request;
+  }
+
   private enableRuntimeCompatibility(feature: ModelCompatibilityFeature): boolean {
     if (
       this.config.modelCompatibility?.includes(feature) ||
@@ -581,6 +607,23 @@ function parseHttpStatus(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isInteger(value)) return value;
   if (typeof value !== "string" || !/^\d{3}$/.test(value.trim())) return undefined;
   return Number.parseInt(value, 10);
+}
+
+function readProviderResponseError(
+  response: Record<string, unknown>,
+): { status?: number; message: string } | undefined {
+  const error = response.error;
+  if (typeof error === "string" && error.trim().length > 0) {
+    return { message: error.trim() };
+  }
+  if (!error || typeof error !== "object" || Array.isArray(error)) return undefined;
+
+  const record = error as Record<string, unknown>;
+  const status = parseHttpStatus(record.status) ?? parseHttpStatus(record.code);
+  const message = typeof record.message === "string" && record.message.trim().length > 0
+    ? record.message.trim()
+    : "Provider returned an error response.";
+  return { ...(status !== undefined ? { status } : {}), message };
 }
 
 function attachHttpStatus(

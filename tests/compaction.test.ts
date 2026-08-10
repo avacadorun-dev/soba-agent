@@ -383,6 +383,23 @@ describe("compact", () => {
     expect(instructions).toContain("Exclude secrets and credentials");
   });
 
+  test("rejects an empty summary without appending a compaction checkpoint", async () => {
+    const session = SessionManager.inMemory("/test");
+    const mockClient = makeMockClient({ type: "compaction", encrypted_content: "" });
+
+    session.appendItem(makeUserMsg("Old conversation"));
+    session.appendItem(makeAssistantMsg("Old response"));
+    session.appendItem(makeUserMsg("Recent conversation"));
+
+    const entriesBefore = session.getEntries();
+    await expect(compact(session, mockClient, { keepRecentTokens: 1 })).rejects.toThrow(
+      "did not contain a non-empty compaction item",
+    );
+
+    expect(session.getEntries()).toEqual(entriesBefore);
+    expect(session.buildInput().items.some((item) => item.type === "compaction")).toBe(false);
+  });
+
   test("no-op когда нечего компактить (всё помещается в keepRecentTokens)", async () => {
     const session = SessionManager.inMemory("/test");
     const mockClient = makeMockClient();

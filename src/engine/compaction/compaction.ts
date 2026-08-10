@@ -343,8 +343,12 @@ Exclude secrets and credentials; keep redaction markers when present. Focus on w
 
   // Extract compaction item from response
   const compactionOutput = compactResponse.output.find((o) => o.type === "compaction");
-  if (compactionOutput?.type !== "compaction") {
-    throw new Error("Compact response did not contain a compaction item");
+  if (
+    compactionOutput?.type !== "compaction" ||
+    typeof compactionOutput.encrypted_content !== "string" ||
+    compactionOutput.encrypted_content.trim().length === 0
+  ) {
+    throw new Error("Compact response did not contain a non-empty compaction item");
   }
 
   const compactionItem: CompactionSummaryItemParam = {

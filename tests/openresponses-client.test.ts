@@ -164,6 +164,25 @@ function makeMultipleSystemMessageParams(): CreateResponseParams {
   };
 }
 
+function makeMultipleSystemMessageCompactParams(): CompactResponseParams {
+  return {
+    model: "strict-system-model",
+    instructions: "Summarize the task state",
+    input: [
+      {
+        type: "message",
+        role: "developer",
+        content: [{ type: "input_text", text: "Activated skill instructions" }],
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Continue the task" }],
+      },
+    ],
+  };
+}
+
 function makeStrictSystemErrorResponse(): Response {
   return new Response(JSON.stringify({
     error: {
@@ -527,6 +546,42 @@ describe("OpenResponsesClient", () => {
     await expect(client.compact({ model: "gpt-4o" })).rejects.toThrow("does not support compaction");
   });
 
+  test("compact rejects provider errors instead of converting them to empty summaries", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock().mockResolvedValue(new Response(JSON.stringify({
+      error: { message: "Tool choice is not supported", code: "400" },
+    }), { status: 400, headers: { "content-type": "application/json" } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const client = createOpenResponsesClient(makeTestConfig());
+      await expect(client.compact(makeMultipleSystemMessageCompactParams())).rejects.toThrow(
+        "Provider compaction request failed (400): Tool choice is not supported",
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("compact rejects a successful response with an empty summary", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock().mockResolvedValue(new Response(JSON.stringify({
+      id: "chatcmpl-empty",
+      choices: [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }],
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const client = createOpenResponsesClient(makeTestConfig());
+      await expect(client.compact(makeMultipleSystemMessageCompactParams())).rejects.toThrow(
+        "did not contain a non-empty compaction item",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   // ── Error handling ──
 
   test("create обрабатывает HTTP ошибку — возвращает ResponseResource со status: failed", async () => {
@@ -751,6 +806,49 @@ describe("OpenResponsesClient reasoning fallback", () => {
 });
 
 describe("OpenResponsesClient system message capability fallback", () => {
+  test("retries compaction with one merged system message and remembers the capability", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = mock()
+      .mockResolvedValueOnce(makeStrictSystemErrorResponse())
+      .mockResolvedValueOnce(makeChatCompletionResponse("chatcmpl-compact-recovered", "Recovered summary"))
+      .mockResolvedValueOnce(makeChatCompletionResponse("chatcmpl-compact-remembered", "Remembered summary"));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      const client = createOpenResponsesClient({
+        ...makeTestConfig(),
+        model: "strict-system-model",
+      });
+      const params = makeMultipleSystemMessageCompactParams();
+
+      const recovered = await client.compact(params);
+      expect(recovered.output[0]).toMatchObject({
+        type: "compaction",
+        encrypted_content: "Recovered summary",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      const firstBody = JSON.parse(String(fetchInitAt(fetchMock, 0)?.body));
+      const recoveredBody = JSON.parse(String(fetchInitAt(fetchMock, 1)?.body));
+      expect(firstBody.messages.map((message: { role: string }) => message.role)).toEqual([
+        "system",
+        "system",
+        "user",
+      ]);
+      expect(recoveredBody.messages.map((message: { role: string }) => message.role)).toEqual([
+        "system",
+        "user",
+      ]);
+
+      await client.compact(params);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const rememberedBody = JSON.parse(String(fetchInitAt(fetchMock, 2)?.body));
+      expect(rememberedBody.messages.filter((message: { role: string }) => message.role === "system")).toHaveLength(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("retries non-streaming requests with one merged system message and remembers the capability", async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = mock()
