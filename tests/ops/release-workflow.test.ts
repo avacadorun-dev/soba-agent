@@ -65,6 +65,7 @@ describe("Release workflow", () => {
       "ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}",
     );
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("bun run check:extensibility");
     expect(workflow).toContain("bun run docs:changelog:check");
     expect(workflow).toContain("bun run docs:version:check");
     expect(workflow).toContain(

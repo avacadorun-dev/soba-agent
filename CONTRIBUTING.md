@@ -16,6 +16,7 @@ The hook runs:
 ```bash
 bun run lint
 bunx tsc --noEmit
+bun run check:extensibility
 bun test
 ```
 

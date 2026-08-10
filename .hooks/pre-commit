@@ -16,4 +16,5 @@ run() {
 
 run bun run lint
 run bunx tsc --noEmit
+run bun run check:extensibility
 run bun test

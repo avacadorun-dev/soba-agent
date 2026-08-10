@@ -33,6 +33,9 @@ jobs:
       - name: Architecture boundaries
         run: bun run check:boundaries
 
+      - name: Extensibility audit
+        run: bun run check:extensibility
+
       - name: Architecture dependency graph
         run: bun run docs:deps:check
 

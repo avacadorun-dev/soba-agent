@@ -42,6 +42,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Extensibility audit
+        run: bun run check:extensibility
+
       - name: Build npm bundle
         run: bun run build
 

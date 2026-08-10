@@ -47,6 +47,7 @@ describe("CI quality gate", () => {
       "bun run lint",
       "bun run typecheck",
       "bun run check:boundaries",
+      "bun run check:extensibility",
       "bun run docs:deps:check",
       "bun run docs:changelog:check",
       "bun run docs:version:check",
@@ -73,6 +74,7 @@ describe("CI quality gate", () => {
     expect(packageJson.scripts?.lint).toBe("biome check .");
     expect(packageJson.scripts?.typecheck).toBe("bunx tsc --noEmit --pretty false");
     expect(packageJson.scripts?.["check:boundaries"]).toBe("bun run scripts/check-boundaries.ts");
+    expect(packageJson.scripts?.["check:extensibility"]).toBe("bun run scripts/check-extensibility.ts");
     expect(packageJson.scripts?.["docs:deps:check"]).toBe("bun run scripts/generate-dependency-graph.ts --check");
     expect(packageJson.scripts?.["docs:changelog"]).toBe("bun run scripts/generate-changelog.ts");
     expect(packageJson.scripts?.["docs:changelog:check"]).toBe(
