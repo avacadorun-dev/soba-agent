@@ -1,3 +1,4 @@
+import "@fontsource-variable/onest/wght.css";
 import { zhTW } from "@fumadocs/language/zh-tw";
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";

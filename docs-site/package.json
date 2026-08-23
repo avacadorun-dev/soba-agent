@@ -15,6 +15,7 @@
     "check": "biome check . && fumadocs-mdx && tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/onest": "^5.3.0",
     "@fumadocs/language": "^0.1.0",
     "@orama/tokenizers": "^3.1.18",
     "@tanstack/react-router": "^1.170.15",

@@ -438,7 +438,7 @@ html > body[data-scroll-locked] {
 .workflow-card h3,
 .landing-feature-card h3 {
   color: var(--color-fd-foreground);
-  font-weight: 750;
+  font-weight: 620;
 }
 
 .workflow-card p,
@@ -848,7 +848,14 @@ html > body[data-scroll-locked] {
 /* Landing art direction — editorial systems manifesto */
 .landing-shell {
   --landing-gutter: clamp(1.5rem, 4vw, 4rem);
+  --landing-display-font: "Onest Variable", "Onest", ui-sans-serif, system-ui, sans-serif;
   background: var(--color-fd-background);
+}
+
+.landing-shell :is(h1, h2, h3),
+.landing-shell .stat-card > div:first-of-type {
+  font-family: var(--landing-display-font);
+  font-synthesis: none;
 }
 
 .landing-shell ::selection {
@@ -920,9 +927,9 @@ html > body[data-scroll-locked] {
 .hero-copy h1 {
   margin-top: 2rem;
   font-size: clamp(4.75rem, 7.2vw, 7.7rem) !important;
-  font-weight: 830;
-  letter-spacing: -0.072em !important;
-  line-height: 0.82 !important;
+  font-weight: 470;
+  letter-spacing: -0.052em !important;
+  line-height: 0.88 !important;
 }
 
 .hero-copy h1 .headline-line {
@@ -1121,7 +1128,8 @@ html > body[data-scroll-locked] {
 .stat-card > div:first-of-type {
   color: var(--color-fd-background) !important;
   font-size: clamp(1.7rem, 3vw, 2.55rem);
-  letter-spacing: -0.04em;
+  font-weight: 520;
+  letter-spacing: -0.035em;
 }
 
 .stat-card > div:last-child {
@@ -1167,9 +1175,10 @@ html > body[data-scroll-locked] {
 .section-heading h2 {
   max-width: 19ch;
   font-size: clamp(2.65rem, 5vw, 5rem);
-  font-weight: 820;
-  letter-spacing: -0.064em;
-  line-height: 0.94;
+  font-weight: 520;
+  letter-spacing: -0.045em;
+  line-height: 0.99;
+  text-wrap: balance;
 }
 
 .section-heading p:not(.eyebrow) {
@@ -1247,6 +1256,7 @@ html > body[data-scroll-locked] {
 .landing-feature-card h3 {
   margin-top: 1.7rem;
   font-size: 1.13rem;
+  font-weight: 620;
 }
 
 .landing-feature-card p {
@@ -1310,7 +1320,7 @@ html > body[data-scroll-locked] {
 
   .hero-copy h1 {
     font-size: clamp(3.45rem, 15.8vw, 4.5rem) !important;
-    line-height: 0.86 !important;
+    line-height: 0.9 !important;
   }
 
   .hero-badge {
