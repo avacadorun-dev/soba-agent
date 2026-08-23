@@ -104,6 +104,36 @@ describe("Evidence Bundle builder", () => {
     expect(bundle.risks).toEqual([]);
   });
 
+  test("copies an optional worktree workspace onto the sealed bundle", () => {
+    const bundle = buildEvidenceBundle({
+      sessionId: "sess_1",
+      turnId: "turn_1",
+      completionStatus: "completed",
+      summary: "Inspected the isolated checkout.",
+      ledger: summary([], { hasCodeMutations: false }),
+      workspace: {
+        kind: "worktree",
+        id: "ws_1",
+        sourceRoot: "/repo",
+        executionRoot: "/tmp/wt",
+        canonicalRoot: "/repo",
+        branch: "soba/ws-1",
+        head: "abc123",
+      },
+      now: () => NOW,
+    });
+
+    expect(bundle.workspace).toEqual({
+      kind: "worktree",
+      id: "ws_1",
+      sourceRoot: "/repo",
+      executionRoot: "/tmp/wt",
+      canonicalRoot: "/repo",
+      branch: "soba/ws-1",
+      head: "abc123",
+    });
+  });
+
   test("marks criteria without known evidence as unsupported or unverified claims", () => {
     const bundle = buildEvidenceBundle({
       sessionId: "sess_1",

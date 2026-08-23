@@ -158,7 +158,6 @@ export class AgentLoop {
 
   setSessionManager(session: SessionPort): void {
     this.session = session;
-    this.cwd = session.getCwd();
     this.runtime.trustManager.setRepoRoot(this.cwd);
   }
 

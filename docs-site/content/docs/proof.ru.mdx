@@ -45,6 +45,7 @@ Proof receipt может включать:
 - permission receipts для tool calls;
 - safer alternatives для рискованных команд, если SOBA может предложить least-privilege rewrite;
 - метрики запуска: число model calls и input/output/total tokens;
+- необязательный объект `workspace`, если ход выполнялся в изолированном git worktree (`kind`, `id`, source/execution/canonical roots, branch, head);
 - `runId`, детерминированно выведенный из `sessionId` + `turnId`, и content-addressed `proofId`;
 - SHA-256 digest всего отредактированного receipt.
 

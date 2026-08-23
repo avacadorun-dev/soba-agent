@@ -281,6 +281,19 @@ export function getTrustBadgeParts(trusted: boolean): {
     : { icon: "⚠", label: "untrusted", detail: "approve", tone: "untrusted" };
 }
 
+function WorkspaceStatusLine(props: { store: TuiStore }) {
+  const theme = () => getTuiTheme(props.store.themeName());
+  const workspace = () => props.store.options.workspace;
+  if (workspace()?.kind !== "worktree") return null;
+
+  return (
+    <text fg={theme().text} wrapMode="none" truncate>
+      <span style={{ fg: theme().success, bold: true }}>worktree</span>
+      <span style={{ fg: theme().dim }}> · {workspace()?.branch ?? workspace()?.id}</span>
+    </text>
+  );
+}
+
 function TrustStatusLine(props: { store: TuiStore }) {
   const theme = () => getTuiTheme(props.store.themeName());
   const badge = () => getTrustBadgeParts(props.store.projectTrusted());
@@ -305,6 +318,7 @@ function ProjectStatus(props: { store: TuiStore; cwd: string }) {
       <text fg={theme().muted} wrapMode="none" truncate>
         {props.cwd}
       </text>
+      <WorkspaceStatusLine store={props.store} />
       <TrustStatusLine store={props.store} />
     </>
   );

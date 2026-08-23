@@ -2,6 +2,7 @@ import type { FunctionCallField, ItemParam, MessageField, Usage } from "../../ke
 import type { SessionPort } from "../../kernel/session/session-port";
 import type { DebugEntry, FlightRecordData } from "../../kernel/transcript/types";
 import type { WorkMode } from "../../kernel/work-mode/public";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 import type { CompletionController } from "../completion/completion-controller";
 import type { EvidenceApproval, EvidenceProofSink } from "../evidence";
 import type { EvidenceLedger } from "../evidence/evidence-ledger";
@@ -52,6 +53,7 @@ export async function handleAgentTurnCompletionStage(input: {
   successfulToolCallIds: Set<string>;
   approvalReceipts: EvidenceApproval[];
   evidenceProofSink?: EvidenceProofSink;
+  workspace?: WorkspaceRef;
   emit(event: AgentEvent): void;
   flight(data: Omit<FlightRecordData, "version">): void;
   debug(data: DebugEntry["data"]): void;
@@ -81,6 +83,7 @@ export async function handleAgentTurnCompletionStage(input: {
     successfulToolCallIds,
     approvalReceipts,
     evidenceProofSink,
+    workspace,
     emit,
     flight,
     debug,
@@ -117,6 +120,7 @@ export async function handleAgentTurnCompletionStage(input: {
       successfulToolCallIds,
       approvalReceipts,
       evidenceProofSink,
+      workspace,
       emit,
       flight,
       debug,

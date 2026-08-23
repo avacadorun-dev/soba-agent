@@ -27,7 +27,20 @@ soba -c
 
 # Open the session picker
 soba -r
+
+# Run the session in a disposable git worktree
+soba -i --worktree
+
+# Keep the worktree after exit
+soba -i --worktree --keep
 ```
+
+`--worktree` checks out a clean branch from `HEAD` under `~/.soba/worktrees/`. Tools, `!` shell, and the TUI file tree
+use that checkout. Sessions, Project Memory, and proof receipts stay in the original project. The worktree is removed
+on a clean exit unless you pass `--keep` or run `/worktree keep`. This is not a sandbox.
+
+Use `/worktree` to inspect the isolated checkout, `/worktree keep` to keep it, and `/worktree cleanup` to remove it
+immediately. `--worktree` starts a new session only; do not combine it with `--continue`, `--resume`, or `--session`.
 
 ### TUI shape
 

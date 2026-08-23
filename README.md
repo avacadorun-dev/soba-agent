@@ -45,6 +45,7 @@ SOBA is a coding agent with a local workflow:
 - **Run metrics in sealed receipts** for model calls and input/output/total tokens, so eval consumers do not have to
   infer usage from terminal output.
 - **Project Memory** in `.soba/memory/` with source receipts, stale checks, doctor output, and explanations.
+- **Isolated git worktrees** through `soba --worktree`, so the agent can edit a disposable branch without touching the live checkout.
 - **Bounded permissions** for dangerous operations, with permission receipts recorded in proof output.
 - **MCP support** for local `stdio` servers and remote `streamableHttp` endpoints.
 - **Skills** for reusable project workflows, plus eval, bench, and trace commands for improving them over time.

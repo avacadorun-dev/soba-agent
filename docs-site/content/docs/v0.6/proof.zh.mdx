@@ -43,6 +43,7 @@ Proof receipt 可以包含：
 - tool calls 的 permission receipts；
 - 对危险命令的 safer alternatives，如果 SOBA 能推断出 least-privilege rewrite；
 - 运行指标，包括 model calls 数量和 input/output/total tokens；
+- 可选的 `workspace` 对象：当该 turn 运行在隔离 git worktree 中时记录 `kind`、`id`、source/execution/canonical roots、branch、head；
 - 由 `sessionId` + `turnId` 确定性派生的 `runId`，以及内容寻址的 `proofId`；
 - 整个脱敏 receipt 的 SHA-256 digest。
 

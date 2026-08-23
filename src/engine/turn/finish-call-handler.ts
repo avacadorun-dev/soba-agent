@@ -6,6 +6,7 @@ import type {
   FlightRecordData,
   ItemParam as SessionItemParam,
 } from "../../kernel/transcript/types";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 import type { CompletionController } from "../completion/completion-controller";
 import { acknowledgeErrors, type FinishCriterion } from "../completion/completion-gate";
 import {
@@ -52,6 +53,7 @@ export interface FinishCallHandlerInput {
   successfulToolCallIds: Set<string>;
   approvalReceipts: EvidenceApproval[];
   evidenceProofSink?: EvidenceProofSink;
+  workspace?: WorkspaceRef;
   emit: (event: AgentEvent) => void;
   flight: (data: Omit<FlightRecordData, "version">) => void;
   debug: (data: DebugEntry["data"]) => void;
@@ -189,6 +191,7 @@ export async function handleFinishCall(input: FinishCallHandlerInput): Promise<F
         total: input.usage.total_tokens,
       },
     },
+    workspace: evidenceWorkspaceFrom(input.workspace),
   });
   let proofPath: string | undefined;
   let proofMetadata: { proofId?: string; runId?: string; digest?: string } | undefined;
@@ -392,4 +395,17 @@ function semanticEvidenceMatch(
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function evidenceWorkspaceFrom(workspace?: WorkspaceRef) {
+  if (!workspace || workspace.kind === "local") return undefined;
+  return {
+    kind: workspace.kind,
+    id: workspace.id,
+    sourceRoot: workspace.sourceRoot,
+    executionRoot: workspace.executionRoot,
+    canonicalRoot: workspace.canonicalRoot,
+    branch: workspace.branch,
+    head: workspace.head,
+  };
 }

@@ -18,6 +18,7 @@ export {
   normalizeWorkModeId,
   WORK_MODES,
 } from "../../kernel/work-mode/public";
+export type { WorkspaceKind, WorkspaceRef } from "../../kernel/workspace/public";
 export { detectLocale, I18n, isLocale, resetI18n } from "../../shared/i18n/i18n";
 export type { Locale, TranslationKey } from "../../shared/i18n/types";
 export type {

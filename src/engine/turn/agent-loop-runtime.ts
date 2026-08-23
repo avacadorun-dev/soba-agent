@@ -3,6 +3,7 @@ import type { SessionPort } from "../../kernel/session/session-port";
 import type { ToolRegistry } from "../../kernel/tools/tool-registry";
 import type { ToolContext } from "../../kernel/tools/types";
 import type { FlightRecordData } from "../../kernel/transcript/types";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 import { BudgetTracker } from "../budget/budget-tracker";
 import type { ContextManager } from "../compaction/context-manager";
 import type { BackgroundScheduler } from "../compaction/scheduler";
@@ -61,6 +62,7 @@ export interface AgentLoopRuntimeServices {
   evidenceProofSink: EvidenceProofSink | undefined;
   projectContextReader: ProjectContextReader | undefined;
   projectCommandFiles: ProjectCommandFileReader | undefined;
+  workspace: WorkspaceRef | undefined;
   eventBus: AgentLoopEventBus;
   toolExecutor: ToolCallExecutor;
   clarificationAvailable(): boolean;
@@ -124,6 +126,7 @@ export function createAgentLoopRuntime(input: AgentLoopRuntimeInput): AgentLoopR
     evidenceProofSink: input.evidenceProofSink,
     projectContextReader: input.projectContextReader,
     projectCommandFiles: input.projectCommandFiles,
+    workspace: options.workspace,
     eventBus,
     toolExecutor,
     clarificationAvailable: () => clarificationState.available,

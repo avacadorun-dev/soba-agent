@@ -44,6 +44,7 @@ A proof receipt can include:
 - permission receipts for tool calls;
 - safer alternatives for risky commands when SOBA can infer them;
 - run metrics with model-call and input/output/total token counts;
+- an optional `workspace` object when the turn ran in an isolated git worktree (`kind`, `id`, source/execution/canonical roots, branch, head);
 - a `runId` deterministically derived from `sessionId` + `turnId`, and a content-addressed `proofId`;
 - a SHA-256 digest for the complete redacted receipt.
 

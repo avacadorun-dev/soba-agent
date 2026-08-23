@@ -156,6 +156,7 @@ export function verifyEvidenceProof(proof: EvidenceProofDocument): ProofVerifica
   const checkIds = validateChecks(bundle.checks, commandIds, issues);
   validateApprovals(bundle.approvals, issues);
   validateMetrics(bundle.metrics, issues);
+  validateWorkspace(bundle.workspace, issues);
   const riskIds = validateRisks(bundle.risks, issues);
   validateClaims(bundle.claims, knownEvidenceIds(bundle, evidenceIds, commandIds, checkIds, riskIds), issues);
   validateEvidenceConsistency(bundle, issues);
@@ -835,6 +836,28 @@ function validateApprovals(value: unknown, issues: ProofVerificationIssue[]): vo
     }
     validateApprovalAlternatives(approval.alternatives, `${path}.alternatives`, issues);
   });
+}
+
+function validateWorkspace(value: unknown, issues: ProofVerificationIssue[]): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) {
+    addError(issues, "invalid_workspace", "$.workspace", "Expected workspace to be an object.");
+    return;
+  }
+  const kind = stringField(value.kind);
+  if (kind !== "local" && kind !== "worktree") {
+    addError(issues, "invalid_workspace_kind", "$.workspace.kind", "Expected workspace.kind to be local or worktree.");
+  }
+  requireNonEmptyString(value, "id", "$.workspace.id", issues);
+  requireNonEmptyString(value, "sourceRoot", "$.workspace.sourceRoot", issues);
+  requireNonEmptyString(value, "executionRoot", "$.workspace.executionRoot", issues);
+  requireNonEmptyString(value, "canonicalRoot", "$.workspace.canonicalRoot", issues);
+  if (value.branch !== undefined && typeof value.branch !== "string") {
+    addError(issues, "invalid_workspace_branch", "$.workspace.branch", "Expected branch to be a string.");
+  }
+  if (value.head !== undefined && typeof value.head !== "string") {
+    addError(issues, "invalid_workspace_head", "$.workspace.head", "Expected head to be a string.");
+  }
 }
 
 function validateMetrics(value: unknown, issues: ProofVerificationIssue[]): void {

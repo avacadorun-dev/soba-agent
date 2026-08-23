@@ -134,3 +134,6 @@ Proof receipts add a separate local audit artifact in `.soba/evidence/`. New rec
 with a SHA-256 digest, and stored with owner-only permissions on POSIX systems. `soba verify` detects tampering and rejects
 successful evidence associated with a denied tool call. This does not make the workspace a sandbox and does not replace
 careful credential handling; redaction cannot recognize every possible secret format.
+
+`--worktree` isolates edits in a disposable git worktree. It is convenience isolation, not a security boundary:
+absolute paths can still reach the source checkout, and SOBA does not sandbox network or process access.

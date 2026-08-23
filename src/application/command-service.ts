@@ -109,6 +109,13 @@ export const RUNTIME_COMMANDS = [
     surfaces: ALL_RUNTIME_COMMAND_SURFACES,
   },
   {
+    id: "worktree",
+    name: "/worktree",
+    descriptionKey: "command.description.worktree",
+    usage: "/worktree [keep|cleanup]",
+    surfaces: ALL_RUNTIME_COMMAND_SURFACES,
+  },
+  {
     id: "notifications",
     name: "/notifications",
     descriptionKey: "command.description.notifications",

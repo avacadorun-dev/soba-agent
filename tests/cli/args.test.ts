@@ -93,6 +93,15 @@ describe("parseArgs — B1e: --max-tokens alias", () => {
   });
 });
 
+describe("parseArgs — worktree", () => {
+  test("parses --worktree and --keep", () => {
+    expect(parseArgs(["--worktree"]).worktree).toBe(true);
+    expect(parseArgs(["--worktree"]).keep).toBe(false);
+    expect(parseArgs(["--worktree", "--keep"]).keep).toBe(true);
+    expect(parseArgs(["-i"]).worktree).toBe(false);
+  });
+});
+
 describe("parseArgs — reasoning controls", () => {
   test("parses ranked effort", () => {
     expect(parseArgs(["--reasoning-effort", "xhigh"]).reasoning)

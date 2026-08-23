@@ -15,6 +15,7 @@ import { createInterface } from "node:readline";
 import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
 import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
+import { isWorkspaceError, WorkspaceService, workspaceKindFromFlag } from "../../application/workspace/public";
 import { runFilesystemExplainClaimCommand } from "../../composition/cli/explain-claim-command";
 import { runFilesystemMemoryCommand } from "../../composition/cli/memory-command";
 import { runFilesystemProveCommand } from "../../composition/cli/prove-command";
@@ -33,6 +34,7 @@ import {
   validateConfig,
 } from "../../composition/config/config-loader";
 import { createSobaRuntime } from "../../composition/runtime/create-soba-runtime";
+import { createWorkspaceLifecycle } from "../../composition/runtime/create-workspace";
 import { SoundNotifier } from "../../infrastructure/terminal/sound-notifier";
 import { detectLocale, I18n, isLocale } from "../../shared/i18n/i18n";
 import type { Locale } from "../../shared/i18n/types";
@@ -472,6 +474,11 @@ async function main() {
 
   // Create session
   const cwd = process.cwd();
+  if (cliArgs.worktree && (cliArgs.continueLast || cliArgs.resume || cliArgs.sessionId)) {
+    console.error(i18n.t("cli.error.worktreeIncompatibleSession"));
+    process.exit(1);
+  }
+
   let session: SessionManager;
   if (cliArgs.noSession) {
     session = SessionManager.inMemory(cwd);
@@ -493,8 +500,47 @@ async function main() {
     session = interactive || cliArgs.prompt ? SessionManager.create(cwd) : SessionManager.inMemory(cwd);
   }
 
+  const workspaceLifecycle = createWorkspaceLifecycle();
+  let workspace;
+  try {
+    workspace = await workspaceLifecycle.prepare({
+      kind: workspaceKindFromFlag(cliArgs.worktree),
+      sourceRoot: cwd,
+      keep: cliArgs.keep || !cliArgs.worktree,
+    });
+  } catch (error) {
+    const message = isWorkspaceError(error) || error instanceof Error ? error.message : String(error);
+    console.error(i18n.t("cli.error.worktreePrepare", { message }));
+    process.exit(1);
+  }
+  const workspaceService = new WorkspaceService(workspaceLifecycle, workspace);
+  const executionRoot = workspace.executionRoot;
+  let cleanedWorkspace = false;
+  const cleanupWorkspace = async (): Promise<void> => {
+    if (cleanedWorkspace || workspaceService.getWorkspace().keep) return;
+    cleanedWorkspace = true;
+    try {
+      await workspaceService.cleanup();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(i18n.t("command.worktree.cleanupFailed", { message }));
+    }
+  };
+  const exitAfterCleanup = async (code: number): Promise<void> => {
+    await cleanupWorkspace();
+    process.exit(code);
+  };
+  process.once("SIGINT", () => {
+    void exitAfterCleanup(130);
+  });
+  process.once("SIGTERM", () => {
+    void exitAfterCleanup(143);
+  });
+
+  try {
   const runtimeComposition = await createSobaRuntime({
     cwd,
+    workspace,
     session,
     config,
     compactionConfig,
@@ -538,7 +584,7 @@ async function main() {
   const renderer = createRenderer({
     mode: interactive ? "interactive" : "print",
     model: config.model,
-    cwd,
+    cwd: executionRoot,
     tokenBudget: cliArgs.budget ?? 0,
     i18n,
   });
@@ -554,7 +600,8 @@ async function main() {
     // Reuse the outer i18n instance (already synced with config.lang after loadConfig)
     const providerStore = new ProviderStore({ registry: providerRegistry, proxy: client, i18n });
     const tui = new InteractiveTUI({
-      cwd,
+      cwd: executionRoot,
+      workspace,
       tokenBudget: cliArgs.budget ?? 0,
       contextWindow: config.contextWindow,
       theme: config.theme,
@@ -596,6 +643,7 @@ async function main() {
           portableCapsuleServiceFactory,
           projectMemory,
           fallbackCompactor,
+          workspaceService,
           tuiRegistry: slashCommandRegistry,
           notify,
           syncMcpToolsIntoRegistry,
@@ -647,6 +695,9 @@ async function main() {
   console.log(i18n.t("cli.status.ready", { version: VERSION, model: config.model, baseUrl: config.baseUrl }));
   console.log(i18n.t("cli.status.interactiveHint"));
   console.log(i18n.t("cli.status.helpHint"));
+  } finally {
+    await cleanupWorkspace();
+  }
 }
 
 // ─── Entry ───

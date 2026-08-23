@@ -28,7 +28,20 @@ soba -c
 
 # Селектор сессий
 soba -r
+
+# Сессия в одноразовом git worktree
+soba -i --worktree
+
+# Оставить worktree после выхода
+soba -i --worktree --keep
 ```
+
+`--worktree` создаёт чистую ветку от `HEAD` в `~/.soba/worktrees/`. Tools, `!` shell и дерево файлов TUI работают в этом
+checkout. Сессии, Project Memory и proof receipts остаются в исходном проекте. Worktree удаляется при чистом выходе,
+если не передан `--keep` и не выполнена `/worktree keep`. Это не sandbox.
+
+`/worktree` показывает изолированный checkout, `/worktree keep` сохраняет его, `/worktree cleanup` удаляет сразу.
+`--worktree` только для новой сессии: не сочетайте с `--continue`, `--resume` или `--session`.
 
 ### Интерфейс TUI
 

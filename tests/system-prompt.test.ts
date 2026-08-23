@@ -190,6 +190,25 @@ describe("System Prompt", () => {
     expect(prompt).toContain("Current working directory: /workspace/repo");
   });
 
+  test("worktree workspace adds isolated execution guidance", () => {
+    const prompt = buildSystemPrompt({
+      cwd: "/tmp/wt",
+      workspace: {
+        id: "ws_1",
+        kind: "worktree",
+        sourceRoot: "/workspace/repo",
+        executionRoot: "/tmp/wt",
+        canonicalRoot: "/workspace/repo",
+        branch: "soba/ws-1",
+        keep: false,
+      },
+    });
+
+    expect(prompt).toContain("Execution workspace: isolated git worktree on branch soba/ws-1");
+    expect(prompt).toContain("Source checkout (do not treat as the writable tree): /workspace/repo");
+    expect(prompt).toContain("Writable worktree: /tmp/wt");
+  });
+
   test("промпт всегда на английском", () => {
     const prompt = buildSystemPrompt({ cwd: "/project" });
 

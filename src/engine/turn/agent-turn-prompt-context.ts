@@ -48,6 +48,7 @@ export async function prepareAgentTurnPromptContext(input: {
     skillManager: runtime.skillManager,
     projectMemory: runtime.projectMemory,
     modelConfig,
+    workspace: runtime.workspace,
   });
   const { contextFiles, systemPrompt, model } = preparedPrompt;
   narrate(

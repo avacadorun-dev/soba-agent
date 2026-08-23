@@ -296,6 +296,7 @@ export async function runAgentTurn(
         successfulToolCallIds,
         approvalReceipts,
         evidenceProofSink: runtime.evidenceProofSink,
+        workspace: runtime.workspace,
         emit: (event) => emit(event),
         flight: (data) => flight(data),
         debug: (data) => debug(data),

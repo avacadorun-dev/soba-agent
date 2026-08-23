@@ -115,6 +115,16 @@ export interface EvidenceRunMetrics {
   };
 }
 
+export interface EvidenceWorkspace {
+  kind: "local" | "worktree";
+  id: string;
+  sourceRoot: string;
+  executionRoot: string;
+  canonicalRoot: string;
+  branch?: string;
+  head?: string;
+}
+
 export interface EvidenceBundle {
   version: 1;
   sessionId: string;
@@ -131,6 +141,7 @@ export interface EvidenceBundle {
   diff?: EvidenceDiffSummary;
   reviewActions: DiffReviewActionRecord[];
   metrics?: EvidenceRunMetrics;
+  workspace?: EvidenceWorkspace;
   createdAt: string;
 }
 
@@ -209,6 +220,7 @@ export interface BuildEvidenceBundleInput {
   diff?: EvidenceDiffSummary;
   reviewActions?: DiffReviewActionRecord[];
   metrics?: EvidenceRunMetrics;
+  workspace?: EvidenceWorkspace;
   now?: () => Date;
 }
 
@@ -248,6 +260,7 @@ export function buildEvidenceBundle(input: BuildEvidenceBundleInput): EvidenceBu
     diff,
     reviewActions: input.reviewActions ?? [],
     metrics: input.metrics,
+    workspace: input.workspace,
     createdAt: (input.now ?? (() => new Date()))().toISOString(),
   };
 }

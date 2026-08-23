@@ -14,6 +14,7 @@ import type {
   RuntimeCommandExecutor,
   SobaRuntime,
 } from "../../application/types";
+import type { WorkspaceRef } from "../../application/workspace/public";
 import { ContextManager } from "../../engine/compaction/context-manager";
 import type { BackgroundScheduler } from "../../engine/compaction/scheduler";
 import { AgentLoop } from "../../engine/turn/agent-loop";
@@ -40,6 +41,7 @@ import { createProjectCommandFileReader, createProjectContextReader } from "./pr
 
 export interface RuntimeFactoryInput {
   cwd: string;
+  workspace?: WorkspaceRef;
   session: SessionManager;
   config: SobaConfig;
   compactionConfig: CompactionConfig;
@@ -104,6 +106,7 @@ export interface SobaRuntimeComposition {
 export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<SobaRuntimeComposition> {
   const {
     cwd,
+    workspace,
     session,
     config,
     compactionConfig,
@@ -132,14 +135,17 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
 
   const tools = createToolStack(toolDelegation);
 
-  const projectMemory = new ProjectMemory({ projectRoot: cwd });
+  const sourceRoot = workspace?.sourceRoot ?? cwd;
+  const executionRoot = workspace?.executionRoot ?? cwd;
+
+  const projectMemory = new ProjectMemory({ projectRoot: sourceRoot });
   projectMemory.initialize();
-  const evidenceProofStorage = new FilesystemEvidenceProofStorage({ projectRoot: cwd });
+  const evidenceProofStorage = new FilesystemEvidenceProofStorage({ projectRoot: sourceRoot });
 
   const homeDir = homedir();
   const trustManager = new TrustManager();
   const { mcpSecretStore, mcpRuntime, mcpManager } = await createMcpStack({
-    projectRoot: cwd,
+    projectRoot: sourceRoot,
     homeDir,
     toolRegistry: tools,
     trustManager,
@@ -194,7 +200,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     );
   });
   const { skillManager, skillCommands, skillCatalog, trustStore } = await createSkillStack({
-    projectPath: cwd,
+    projectPath: sourceRoot,
     homeDir,
     session,
     toolRegistry: tools,
@@ -205,7 +211,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     client,
     session,
     tools,
-    cwd,
+    executionRoot,
     {
       emitEvents: true,
       tokenBudget,
@@ -215,6 +221,7 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
       maxStalledIterations: config.maxStalledIterations,
       maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
       bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
+      workspace,
     },
     trustManager,
     undefined,
@@ -224,10 +231,10 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
     { enabled: compactionConfig.auto },
     projectMemory,
     createProjectContextReader(),
-    createProjectCommandFileReader(cwd),
+    createProjectCommandFileReader(executionRoot),
     evidenceProofStorage,
   );
-  const sessionLifecycle = new PersistentSessionLifecycleService(cwd);
+  const sessionLifecycle = new PersistentSessionLifecycleService(sourceRoot);
   const portableCapsuleServiceFactory = createFilesystemPortableCapsuleService;
   const fallbackCompactor = new EngineCompactFallbackCompactor();
   const runtime = new AgentLoopRuntimeAdapter(agentLoop, session, sessionLifecycle, providerRegistry, skillManager);

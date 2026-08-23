@@ -1,4 +1,4 @@
-import type { CommandResult, I18n, ProjectTrustStore, RuntimeAgentHandle, RuntimeModelChangeSource, SobaRuntime, TuiThemeName } from "../../../../application/ui/public";
+import type { CommandResult, I18n, ProjectTrustStore, RuntimeAgentHandle, RuntimeModelChangeSource, SobaRuntime, TuiThemeName, WorkspaceRef } from "../../../../application/ui/public";
 import type { TuiEvidenceSummary } from "../lib/evidence-summary";
 import type { ComposerBlock } from "../lib/rich-paste";
 import type { NotificationStore } from "./notification-store";
@@ -8,6 +8,7 @@ export type CommandOutput = { type: string; timestamp: number; [key: string]: un
 
 export interface InteractiveTUIOptions {
   cwd: string;
+  workspace?: WorkspaceRef;
   tokenBudget: number;
   contextWindow: number;
   theme: TuiThemeName;

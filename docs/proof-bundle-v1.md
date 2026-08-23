@@ -18,6 +18,10 @@ The persisted file is written with mode `0600` where POSIX permissions are avail
 The optional `metrics` object records the turn's model-call count and input, output, and total token usage. Each value
 must be a non-negative integer. Consumers must preserve absence as unknown instead of converting it to zero.
 
+The optional `workspace` object records isolated execution. When present it must include `kind` (`local` or
+`worktree`), `id`, `sourceRoot`, `executionRoot`, and `canonicalRoot`. `branch` and `head` are optional strings.
+Absence means the producer did not declare a workspace; consumers must not invent a local workspace.
+
 ## Stable identifiers
 
 Evidence, command, check, claim, risk, session, turn, run, and proof identifiers are explicit fields. Consumers must join

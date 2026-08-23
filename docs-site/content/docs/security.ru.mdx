@@ -136,3 +136,6 @@ Proof receipts добавляют отдельный локальный audit ar
 sealed SHA-256 digest и на POSIX записываются с правами только владельца. `soba verify` обнаруживает изменение файла и
 отклоняет successful evidence, связанный с denied tool call. Это не превращает workspace в sandbox и не заменяет
 аккуратную работу с credentials: redaction не умеет распознавать любой возможный формат секрета.
+
+`--worktree` изолирует правки в одноразовом git worktree. Это удобная изоляция, а не security boundary: абсолютные
+пути всё ещё могут достать исходный checkout, и SOBA не sandbox-ит сеть или процессы.

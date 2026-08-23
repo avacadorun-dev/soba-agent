@@ -137,6 +137,8 @@ export {
 } from "../commands/session";
 export type { SkillCommandView } from "../commands/skill";
 export { executeSkillCommand } from "../commands/skill";
+export type { WorktreeCommandView } from "../commands/worktree";
+export { executeWorktreeCommand } from "../commands/worktree";
 export type {
   SobaConfig,
   SoundConfig,

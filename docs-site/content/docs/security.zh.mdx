@@ -133,3 +133,6 @@ Proof receipts 会在 `.soba/evidence/` 中增加独立的本地 audit artifact�
 digest sealing，并在 POSIX 系统上以仅所有者可读写的权限保存。`soba verify` 可以检测篡改，并拒绝与 denied
 tool call 关联的 successful evidence。这不会把 workspace 变成 sandbox，也不能代替谨慎的 credential 处理；
 redaction 无法识别所有可能的 secret 格式。
+
+`--worktree` 把编辑隔离到一次性 git worktree。这是便利隔离，不是安全边界：绝对路径仍可到达源 checkout，SOBA
+也不会对网络或进程做 sandbox。

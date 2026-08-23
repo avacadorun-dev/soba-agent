@@ -21,6 +21,7 @@ import type { RuntimeSessionHandle, SessionLifecycleService } from "../../sessio
 import type { SkillCommands } from "../../skills/commands";
 import type { SkillManager } from "../../skills/skill-manager";
 import type { SlashCommandFallbackRegistry } from "../../skills/slash-handler";
+import type { WorkspaceController } from "../../workspace/public";
 import {
   handleSkillSlashCommand,
   isSkillSlashCommand,
@@ -42,6 +43,7 @@ import {
 import { handleMcp } from "./mcp";
 import { handleBudget, handleSession, handleSessions } from "./session";
 import { handlePermissions, handlePlan, handleProjectTrust, handleSkill } from "./skill";
+import { handleWorktree } from "./worktree";
 
 // ─── Types ───
 
@@ -66,6 +68,7 @@ export interface CommandContext {
   trustManager?: TrustController;
   portableCapsuleServiceFactory?: PortableCapsuleServiceFactory;
   projectMemory?: ContextCapsuleMemorySink;
+  workspaceService?: WorkspaceController;
   notify?: (type: "info" | "success" | "warning" | "error", title: string, message: string) => void;
   syncMcpToolsIntoRegistry?: (
     registry: ToolRegistry,
@@ -132,6 +135,7 @@ const COMMAND_HANDLERS: Record<
   theme: handleTheme,
   permissions: handlePermissions,
   plan: handlePlan,
+  worktree: handleWorktree,
   skill: handleSkill,
   "project-trust": handleProjectTrust,
   mcp: handleMcp,

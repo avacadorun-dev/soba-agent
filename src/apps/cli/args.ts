@@ -116,6 +116,10 @@ export interface CliArgs {
   providerSubcommand?: string;
   /** Raw argv slice after the `provider <sub>` tokens. */
   providerSubArgs: string[];
+  /** Run tools in a disposable git worktree instead of the live checkout. */
+  worktree: boolean;
+  /** Keep a --worktree checkout after the process exits. */
+  keep: boolean;
 }
 
 // ─── Defaults ───
@@ -151,6 +155,8 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   memory: false,
   memoryArgs: [],
   providerSubArgs: [],
+  worktree: false,
+  keep: false,
 };
 
 // ─── Parse ───
@@ -341,6 +347,16 @@ export function parseArgs(argv: string[]): CliArgs {
 
       case "--no-auto-compact":
         args.noAutoCompact = true;
+        i++;
+        break;
+
+      case "--worktree":
+        args.worktree = true;
+        i++;
+        break;
+
+      case "--keep":
+        args.keep = true;
         i++;
         break;
 

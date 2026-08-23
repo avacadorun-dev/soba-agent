@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
   type ProjectIdentityResolver,
   type ProjectTrustStorage,
@@ -72,10 +72,10 @@ export class FilesystemProjectIdentityResolver implements ProjectIdentityResolve
 
     while (!visited.has(current)) {
       visited.add(current);
-      const gitDir = join(current, ".git");
+      const gitPath = join(current, ".git");
 
-      if (existsSync(gitDir)) {
-        return gitDir;
+      if (existsSync(gitPath)) {
+        return resolveGitCommonDir(gitPath);
       }
 
       const parent = dirname(current);
@@ -85,6 +85,39 @@ export class FilesystemProjectIdentityResolver implements ProjectIdentityResolve
 
     return undefined;
   }
+}
+
+function resolveGitCommonDir(gitPath: string): string | undefined {
+  try {
+    const stat = statSync(gitPath);
+    if (stat.isDirectory()) return realpathSync(gitPath);
+    if (!stat.isFile()) return undefined;
+
+    const gitdir = parseGitdirFile(gitPath);
+    if (!gitdir) return undefined;
+
+    const commondirFile = join(gitdir, "commondir");
+    if (existsSync(commondirFile)) {
+      const common = readFileSync(commondirFile, "utf-8").trim();
+      if (!common) return realpathSync(gitdir);
+      return realpathSync(isAbsolute(common) ? common : resolve(gitdir, common));
+    }
+
+    return realpathSync(gitdir);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseGitdirFile(gitFilePath: string): string | undefined {
+  const contents = readFileSync(gitFilePath, "utf-8");
+  for (const line of contents.split(/\r?\n/)) {
+    const match = /^gitdir:\s*(.+)$/i.exec(line.trim());
+    if (!match?.[1]) continue;
+    const raw = match[1].trim();
+    return realpathSync(isAbsolute(raw) ? raw : resolve(dirname(gitFilePath), raw));
+  }
+  return undefined;
 }
 
 export function createFilesystemProjectTrustStore(options: FilesystemProjectTrustStorageOptions): ProjectTrustStore {

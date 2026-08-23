@@ -9,6 +9,7 @@
  */
 
 import { systemGuidelinesForWorkMode, type WorkMode } from "../../kernel/work-mode/public";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 
 export interface SystemPromptOptions {
   /** Working directory */
@@ -29,6 +30,8 @@ export interface SystemPromptOptions {
   projectMemorySection?: string;
   /** Skills loaded from markdown files */
   skills?: Array<{ name: string; description: string; location: string; triggers?: string[] }>;
+  /** Isolated execution workspace, when tools do not run in the session source root. */
+  workspace?: WorkspaceRef;
 }
 
 const TOOL_SNIPPETS: Record<string, string> = {
@@ -248,6 +251,7 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
     contextFiles = [],
     projectMemorySection = "",
     skills = [],
+    workspace,
   } = options;
 
   const now = new Date();
@@ -274,6 +278,7 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
     }
     prompt += `\nCurrent date: ${date}`;
     prompt += `\nCurrent working directory: ${cwd}`;
+    prompt += workspacePromptSection(workspace);
     return prompt;
   }
 
@@ -314,8 +319,20 @@ ${guidelines}${sobaDocs}`;
 
   prompt += `\nCurrent date: ${date}`;
   prompt += `\nCurrent working directory: ${cwd}`;
+  prompt += workspacePromptSection(workspace);
 
   return prompt;
+}
+
+function workspacePromptSection(workspace?: WorkspaceRef): string {
+  if (!workspace || workspace.kind !== "worktree") return "";
+  const branch = workspace.branch ? ` on branch ${workspace.branch}` : "";
+  return [
+    `\nExecution workspace: isolated git worktree${branch}`,
+    `Source checkout (do not treat as the writable tree): ${workspace.sourceRoot}`,
+    `Writable worktree: ${workspace.executionRoot}`,
+    "This checkout is a clean committed tree. Dependencies such as node_modules may be missing until you install them. The user's dirty files in the source checkout are not copied here.",
+  ].join("\n");
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   filterToolsForWorkMode,
   type WorkMode,
 } from "../../kernel/work-mode/public";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 import { buildProjectMemorySection, type ProjectMemorySource } from "../memory/memory-injector";
 import { buildSystemPrompt } from "../prompt/system-prompt";
 import type { SkillSource } from "./skill-source";
@@ -35,6 +36,7 @@ export async function prepareTurnPrompt(input: {
   skillManager?: SkillSource;
   projectMemory?: ProjectMemorySource;
   modelConfig: OpenResponsesClientConfig;
+  workspace?: WorkspaceRef;
 }): Promise<PreparedTurnPrompt> {
   const workMode = input.workMode ?? "agent";
   const selectedTools = filterToolsForSkillPolicy(
@@ -60,6 +62,7 @@ export async function prepareTurnPrompt(input: {
     contextFiles,
     skills,
     projectMemorySection,
+    workspace: input.workspace,
   });
 
   return {

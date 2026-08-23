@@ -27,7 +27,20 @@ soba -c
 
 # 打开会话选择器
 soba -r
+
+# 在一次性 git worktree 中运行会话
+soba -i --worktree
+
+# 退出后保留 worktree
+soba -i --worktree --keep
 ```
+
+`--worktree` 会从 `HEAD` 检出一条干净分支到 `~/.soba/worktrees/`。Tools、`!` shell 和 TUI 文件树使用该 checkout。
+会话、Project Memory 和 proof receipts 仍留在原项目中。除非传入 `--keep` 或执行 `/worktree keep`，干净退出时会删除
+worktree。这不是 sandbox。
+
+用 `/worktree` 查看隔离 checkout，`/worktree keep` 保留它，`/worktree cleanup` 立即删除。`--worktree` 只能开新会话，
+不要与 `--continue`、`--resume` 或 `--session` 一起使用。
 
 ### TUI 大致长这样
 

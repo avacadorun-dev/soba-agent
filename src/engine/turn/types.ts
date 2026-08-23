@@ -8,6 +8,7 @@ import type { ItemParam, ResponseResource, Usage } from "../../kernel/model/open
 import type { PermissionAlternative } from "../../kernel/permissions/trust";
 import type { AskUserArgs, ClarificationOutcome } from "../../kernel/tools/ask-user";
 import type { ToolResult } from "../../kernel/tools/types";
+import type { WorkspaceRef } from "../../kernel/workspace/public";
 import type { EvidenceHandoff } from "../evidence/evidence-bundle";
 import type { EvidenceLedgerSummary } from "../evidence/evidence-ledger";
 import type { WorkingNarrationEventType } from "./narration";
@@ -413,6 +414,8 @@ export interface AgentLoopOptions {
   maxAutonomousFollowUps: number;
   /** Enable debug mode — writes loop decision entries to session JSONL */
   debug: boolean;
+  /** Isolated execution workspace, when different from the session source root. */
+  workspace?: WorkspaceRef;
 }
 
 export const DEFAULT_LOOP_OPTIONS: AgentLoopOptions = {
