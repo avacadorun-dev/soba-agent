@@ -1,0 +1,334 @@
+---
+title: 快速开始
+description: "快速启动 SOBA Agent v0.6.15：安装、provider、TUI、代理命令实时输出、proof receipts、Project Memory、MCP、skills 和验证。"
+---
+
+本指南从干净安装开始，带你完成 SOBA v0.6.15 的可用工作流：安装、检查 provider、启动 TUI、执行有边界的任务、
+查看 evidence proof receipts、保存 Project Memory、连接 MCP、使用 skills，并用真实检查收尾。
+
+---
+
+## 1. 安装并检查
+
+使用 npm：
+
+```bash
+npm install -g soba-agent
+```
+
+npm 包包含固定版本的 Bun runtime 依赖，因此运行 `soba` 前不需要单独安装 Bun。
+
+使用 Bun：
+
+```bash
+bun add -g soba-agent
+```
+
+如果 Bun 已经是你的工具链的一部分，并且你希望由 Bun 管理全局包，可以使用这种方式。
+
+macOS 和 Linux 的 standalone binaries 会附在 GitHub Releases 中。普通使用建议优先选择 npm 或 Bun 包；如果不想全局安装包，可以使用二进制文件。
+
+检查 CLI：
+
+```bash
+soba --version
+soba --help
+soba init --check
+```
+
+如果从源码运行：
+
+```bash
+git clone <repo-url> soba-agent
+cd soba-agent
+bun install
+bun run build
+bun run src/cli.ts --version
+```
+
+---
+
+## 2. 配置 provider
+
+查看 providers：
+
+```bash
+soba provider list
+```
+
+执行最小 one-shot 检查：
+
+```bash
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+添加本地 OpenAI-compatible provider：
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+本地模型建议先用较小的 context 和输出上限。`8192,2048` 对笔记本会友好很多；只有在模型和硬件都稳定时，再慢慢调大。
+
+完整说明见 [Provider 与模型](/zh/docs/v0.7/providers)。
+
+---
+
+## 3. 启动 TUI
+
+```bash
+soba -i --lang zh --theme graphite
+```
+
+常用起始命令：
+
+```text
+/session
+/sessions list
+/budget
+/permissions ask
+/auto-compact on
+/plan on
+```
+
+一次性仓库可以使用 repo-scoped permissions：
+
+```text
+/permissions repo
+```
+
+`repo` 只会跳过当前仓库内 dangerous 操作的确认。只有当你要在当前 session 中信任所有 dangerous 操作
+（包括外部命令）时，才使用 `/permissions full`。
+
+当你希望在修改项目之前先获得只读实施计划时，使用 `/plan on`。参见 [Plan 与 goal 模式](/zh/docs/v0.7/plan-mode)。
+
+---
+
+## 4. 执行第一个有边界的任务
+
+示例 prompt：
+
+```text
+Inspect this project.
+Read package.json and the src/tests layout first.
+Then propose a short plan.
+If edits are needed, keep them inside the plan and run a targeted test.
+Do not create a git commit.
+```
+
+使用 direct shell `!` 快速执行你自己的命令：
+
+```text
+!git status --short
+!git diff --stat
+!bun test
+```
+
+如果不想把输出放进 transcript，用 `!!`：
+
+```text
+!!bun run build
+```
+
+如果需要 agent 分析命令输出，请用普通消息要求它运行命令，这样它会通过 `bash` tool 获取输出。
+模型调用 `bash` 后，命令块会立即展开，并在运行期间实时显示经过敏感信息脱敏的输出。按 `Ctrl+C`
+可以停止 active tool；已经收到的输出会保留，agent turn 会继续。
+
+---
+
+## 5. 继续 session
+
+```bash
+soba -i
+soba -c -i
+soba -r
+soba -s <SESSION_ID> "Continue the task"
+```
+
+TUI 内：
+
+```text
+/session
+/sessions list
+/budget
+```
+
+一次性问题可以不保存 session：
+
+```bash
+soba --no-session "One-off question"
+```
+
+---
+
+## 6. 管理长上下文
+
+开启 proactive compaction：
+
+```text
+/auto-compact on
+```
+
+创建手动 compact checkpoint：
+
+```text
+/compact Preserve the goal, decisions, changed files, checks, risks, and next step.
+```
+
+查看或回退 checkpoint：
+
+```text
+/capsule
+/capsule CHECKPOINT_ID
+/rewind
+/rewind CHECKPOINT_ID
+```
+
+---
+
+## 7. 保存 Project Memory
+
+Project Memory 把长期项目事实保存在 `.soba/memory/`，并在后续 sessions 中继续可用。
+
+请 SOBA 写入带 memory source receipts 的长期事实：
+
+```text
+Update Project Memory:
+- architecture: core modules and data flow;
+- conventions: Bun only, strict TypeScript, tests with bun test;
+- known-errors: recurring failures and verification commands;
+- dependencies: important runtime and dev dependencies.
+
+Use project memory tools. Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange when a source can be verified.
+Do not store secrets.
+```
+
+检查 Project Memory doctor 和 Memory health commands：
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory stale
+soba memory verify
+soba memory explain "provider registry"
+```
+
+`soba memory explain` 用于 Memory receipt explanations：它会显示匹配 capsules、source receipts、relevance score
+和 doctor issues。
+
+详见 [Project Memory](/zh/docs/v0.7/project-memory)。
+
+---
+
+## 8. 连接 MCP tools
+
+MCP servers 通过 `.soba/mcp.json` 配置：
+
+```text
+/mcp status
+/mcp start <server>
+/mcp reload
+/mcp status
+```
+
+SOBA 支持本地 `stdio` servers 和远程 `streamableHttp` endpoints。远程认证建议使用 `bearerEnv` 或 `apiKeyEnv`；
+OAuth 命令需要对应 provider 的 auth controller：
+
+```text
+/mcp auth login <server>
+/mcp auth status <server>
+```
+
+MCP tools 会以这种名字出现在 agent tool registry：
+
+```text
+mcp_<server-id>_<tool-name>
+```
+
+---
+
+## 9. 使用 skills
+
+查看 skills：
+
+```text
+/skill list
+```
+
+激活 skill：
+
+```text
+/skill:commit-message Suggest a conventional commit message for staged changes.
+```
+
+Project skills 需要 trust：
+
+```text
+/project-trust status
+/project-trust approve
+```
+
+可复用 skills 应跑 Skill eval bench and trace 循环：
+
+```text
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+```
+
+详见 [Skills](/zh/docs/v0.7/skills)。
+
+---
+
+## 10. 验证 proof receipts
+
+非平凡任务结束后，检查本地 proof trail：
+
+```bash
+soba prove --last
+soba explain-claim 1
+soba verify --last --format json
+```
+
+默认 `soba prove` 会先显示 `已验证` 或 `需要注意`，然后显示变更文件、检查、声明、风险和 receipt 路径，
+不会暴露内部 IDs。添加 `--verbose` 可查看 contract-level 细节。Evidence proof receipts 保存在
+`.soba/evidence/*.soba-proof.json`，没有证据支持的声明会保持明确 unverified。要解释指定 receipt 中显示的声明，
+使用 `soba explain-claim 1 --proof .soba/evidence/<id>.soba-proof.json`。
+
+详见 [Proof receipts](/zh/docs/v0.7/proof)。
+
+---
+
+## 11. 最小 finish gate
+
+对于 Bun/TypeScript 项目：
+
+```text
+!bun test
+!bun run build
+!bunx tsc --noEmit
+!git diff --check
+!git status --short
+```
+
+开发 SOBA 本身时，还要运行：
+
+```text
+!bun run lint
+```
+
+---
+
+## 12. 下一步
+
+| 任务 | 文档 |
+|---|---|
+| 完整 end-to-end 项目 | [Project walkthrough](/zh/docs/v0.7/walkthrough-building-a-project) |
+| CLI 标志 | [CLI 参考](/zh/docs/v0.7/cli-reference) |
+| TUI 和 slash commands | [界面与命令](/zh/docs/v0.7/usage) |
+| Proof receipts | [Proof receipts](/zh/docs/v0.7/proof) |
+| Project Memory | [Project Memory](/zh/docs/v0.7/project-memory) |
+| Skills | [Skills](/zh/docs/v0.7/skills) |

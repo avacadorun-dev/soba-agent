@@ -1,0 +1,86 @@
+---
+title: Plan and goal modes
+description: Design safely with SOBA's read-only plan and goal modes, then switch to agent mode only when ready to implement.
+---
+
+Plan mode separates design from implementation. It lets SOBA inspect a project and produce an implementation plan without
+changing files, Git state, project memory, configuration, or running shell commands.
+
+---
+
+## 1. Switch modes
+
+Use `/plan` inside the TUI:
+
+```text
+/plan                 # show the current mode
+/plan on              # enter plan mode
+/plan goal            # clarify objective and success criteria
+/plan off             # return to normal agent mode
+/plan toggle          # switch between plan and agent mode
+```
+
+`plan` focuses on an implementation brief: scope, files, risks, checks, and open decisions. `goal` focuses on the
+problem statement, success criteria, constraints, and what is out of scope. `agent` is the normal mode that can make
+changes after the usual permission checks.
+
+## 2. What is allowed
+
+In plan and goal modes SOBA can use inspection tools such as `read`, `ls`, `search_files`, `inspect_file`,
+`read_project_memory`, and `checkpoint`. Read-only MCP tools are also available when the server declares
+`annotations.readOnlyHint: true`. It can finish with a written plan or goal brief.
+
+The following remain unavailable by design:
+
+- file and memory mutation tools (`write`, `edit`, `write_project_memory`);
+- `bash`, including apparently read-only commands such as `git status` or `bun test`;
+- custom or MCP tools without explicitly safe semantics, including tools with `destructiveHint: true`.
+
+SOBA uses declared tool effects rather than guessing from a tool name. Built-ins carry canonical semantics; MCP
+`readOnlyHint` maps to inspection, while destructive or unannotated MCP tools fail closed in restricted modes.
+
+This strict boundary is intentional. Shell allowlists are easy to bypass through scripts, redirects, Git subcommands, or
+interpreters. Run diagnostics yourself with `!command`, or switch to `/plan off` when you explicitly want the agent to
+implement and verify changes.
+
+## 3. How implementation requests behave
+
+The active restricted-mode contract is placed at the beginning of the model prompt, before generic agent-loop guidance.
+Tool schemas are filtered by their canonical registry names before transport conversion, so `bash` cannot reappear as an
+anonymous `local_shell` capability and mutation tools are not advertised to the model at all.
+
+That makes the same imperative request mode-dependent:
+
+| Active mode | Request: “Implement the notes endpoint, add tests, and run them” |
+| --- | --- |
+| `agent` | Inspect, change files, run the relevant checks, and report verified completion. |
+| `plan` | Inspect the relevant code and return a decision-complete implementation plan. Do not attempt changes or ask the user to switch modes. |
+| `goal` | Clarify the objective, constraints, scope, and success criteria without designing or executing a patch. |
+
+The runtime execution policy remains a second safety boundary. A stale, manually constructed, or otherwise unexpected
+mutation call is still rejected with `plan_mode_blocked`, even though the normal model path can no longer see that tool.
+
+## 4. Ask for a decision with buttons
+
+When the active client supports structured clarification, SOBA can call `ask_user` while planning. It presents one
+concise question with two to five choices and, when useful, an **Other** text field. The selected answer returns to the
+same agent turn, so the completed plan reflects the decision instead of leaving it as an open question.
+
+ACP clients use `elicitation.form`. The terminal TUI uses an inline blocking dialog: the model turn pauses, while the
+input remains responsive. Choose with `1`–`5`, arrows/Tab and Enter, click an option, type a free-form answer when
+**Other** is enabled, press Esc to decline, or Ctrl+C to cancel. Clients without a structured clarification capability do
+not receive the tool; SOBA keeps the question visible in the final response instead.
+
+## 5. Recommended workflow
+
+```text
+/plan on
+Review the repository and propose the smallest safe implementation plan.
+Ask for a choice if the release strategy is ambiguous.
+
+/plan off
+Implement the approved plan and run the required checks.
+```
+
+Use plan mode whenever a wrong assumption would change the design, the user needs to choose among alternatives, or you
+want a reviewable implementation brief before touching the workspace.

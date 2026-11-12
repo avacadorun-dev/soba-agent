@@ -1,0 +1,250 @@
+---
+title: "Project walkthrough: v0.6 workflow"
+description: "End-to-end SOBA Agent v0.6.x guide: first run, TUI, evidence proof receipts, diff review, Project Memory, skills, MCP, and final handoff."
+---
+
+This walkthrough shows a complete SOBA Agent v0.6.x terminal workflow on one small project. The goal is not to demo every
+integration; it is to make the core loop inspectable: plan, edit, verify, explain claims, store memory, and leave a
+handoff that another engineer can audit.
+
+The tutorial project is `shipyard-lite`, a small Bun/TypeScript release cockpit for a local repository. It prints git
+state, scripts from `package.json`, TODO/FIXME markers, diff size, and next actions.
+
+## What this walkthrough proves
+
+| Capability | Step |
+|---|---|
+| First run | `soba init --check`, then `soba init` |
+| TUI workflow | development through `soba -i --lang en --theme graphite` |
+| Bounded permissions | `/permissions ask`, then optional `/permissions repo` |
+| Evidence proof receipts | `soba prove --last`, `soba verify --last`, `soba explain-claim` |
+| Proof claim mapping | final claims must point to evidence ids |
+| Proof permission receipts | sensitive tool calls stay visible in the proof receipt |
+| Project Memory doctor | `soba memory doctor --format json` after writing memory |
+| Memory source receipts | prompts require `source.file`, `source.lines`, and `staleIfFilesChange` |
+| Memory receipt explanations | `soba memory explain <query>` |
+| Memory health commands | `soba memory stale` and `soba memory verify` |
+| Skill eval bench and trace | `/skill eval <name>`, `/skill bench <name>`, `/skill trace <name>` |
+
+---
+
+## 1. Prepare an empty project
+
+```bash
+mkdir -p ~/projects/shipyard-lite
+cd ~/projects/shipyard-lite
+git init
+bun init -y
+soba --version
+soba init --check
+```
+
+`soba init --check` should either confirm the provider/trust/MCP baseline or tell you exactly what is missing.
+
+---
+
+## 2. Start SOBA in the TUI
+
+```bash
+soba -i --lang en --theme graphite
+```
+
+Inside the TUI:
+
+```text
+/session
+/budget
+/permissions ask
+/auto-compact on
+```
+
+Check the direct shell bridge:
+
+```text
+!git status --short
+!pwd
+```
+
+`!` commands run immediately. If the agent must reason over output, ask it in a normal prompt so it can call its `bash`
+tool and record evidence.
+
+---
+
+## 3. Give a bounded implementation prompt
+
+```text
+Create a Bun/TypeScript project named shipyard-lite.
+
+Goal:
+- CLI command scan prints a release cockpit for the current git repository;
+- scan includes git status, package scripts, tsconfig, TODO/FIXME markers, and diff stat;
+- scan --json returns stable JSON without ANSI;
+- watch runs one scan now and explains that a full watcher is a later scope.
+
+Constraints:
+- Bun only;
+- TypeScript strict mode;
+- no external runtime dependencies;
+- adapters accept cwd/rootDir and do not rely on process.cwd();
+- do not run network commands;
+- do not create a git commit.
+
+Definition of Done:
+- src/, tests/, package.json, and tsconfig.json exist;
+- no git repo, clean repo, dirty repo, missing scripts, and TODO/FIXME markers are covered;
+- bun test, bunx tsc --noEmit, bun run build, and git diff --check pass;
+- final answer includes changed files, checks, unverified areas, and risks.
+```
+
+---
+
+## 4. Review the evidence block
+
+After the implementation turn, the final answer should include:
+
+- changed files;
+- checks and command exit status;
+- claims mapped to evidence ids;
+- risks and unverified areas;
+- permission receipts for sensitive tool calls.
+
+If the answer is too vague, ask:
+
+```text
+Do not finish with a generic summary.
+Inspect the current diff, run bun test, bunx tsc --noEmit, bun run build, and git diff --check.
+Then give a final handoff with changed files, checks, claim evidence, and risks.
+```
+
+---
+
+## 5. Inspect proof receipts
+
+```bash
+soba prove --last
+soba verify --last
+soba explain-claim "No test regressions detected"
+```
+
+Evidence proof receipts live in `.soba/evidence/*.soba-proof.json`. `soba verify` checks the proof claim mapping:
+supported claim references must point to known evidence, command, check, file mutation, or risk ids. Use
+`soba explain-claim --proof .soba/evidence/<id>.soba-proof.json` for Proof claim explanations from a specific receipt.
+
+---
+
+## 6. Do a read-only diff review
+
+```text
+Review the current diff as a reviewer.
+
+Look for:
+- unnecessary dependencies;
+- brittle tests;
+- hidden process.cwd() coupling;
+- unclear JSON contract;
+- weak git-command error handling.
+
+Do not edit files yet. End with findings and one proposed patch.
+```
+
+Then apply only the accepted findings:
+
+```text
+Fix only the review findings.
+After edits, run targeted tests and tsc.
+Do not expand scope.
+```
+
+---
+
+## 7. Save Project Memory with receipts
+
+```text
+Update Project Memory for shipyard-lite.
+
+Save:
+- architecture: CLI layer, analyzer core, git/filesystem/process adapters, reporter;
+- conventions: Bun only, strict TypeScript, no external runtime dependencies by default;
+- known-errors: git commands outside a git repo must return controlled diagnostics;
+- dependencies: runtime dependencies are absent; dev flow uses bun test/build/tsc.
+
+Use project memory tools. Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange where possible.
+Do not store secrets, tokens, or absolute home paths.
+```
+
+Verify memory:
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory stale
+soba memory verify
+soba memory explain "git commands outside a git repo"
+```
+
+`soba memory explain` provides Memory receipt explanations: matching capsules, source receipts, score, and doctor issues.
+
+---
+
+## 8. Add a local MCP server
+
+```text
+Add a local MCP stdio server named shipyard-metrics.
+
+Scope:
+- file tools/shipyard-metrics-mcp.ts;
+- support initialize, tools/list, and tools/call;
+- tool release_summary returns JSON: branch, dirtyFiles, todoCount, hasTestScript, hasBuildScript;
+- add .soba/mcp.json with canonical key servers and server id shipyard-metrics;
+- do not use an external MCP package;
+- add a minimal protocol smoke test.
+
+After changes, run the targeted test and tsc.
+```
+
+Check lifecycle:
+
+```text
+/mcp status
+/mcp start shipyard-metrics
+/mcp reload
+/mcp status
+```
+
+---
+
+## 9. Use skills and trust
+
+```text
+/skill list
+/project-trust status
+/project-trust approve
+```
+
+For a reusable project skill:
+
+```text
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+```
+
+The Skill eval bench and trace loop should pass before promotion.
+
+---
+
+## 10. Final handoff
+
+Before calling the task done, run:
+
+```text
+!bun test
+!bunx tsc --noEmit
+!bun run build
+!git diff --check
+!git status --short
+```
+
+The final answer should include changed files, checks, claim evidence, permission receipts if any, remaining risks, and
+the next action for a human reviewer.
+

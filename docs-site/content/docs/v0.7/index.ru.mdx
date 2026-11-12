@@ -1,0 +1,51 @@
+---
+title: Руководство пользователя SOBA
+description: Руководство пользователя SOBA Agent — local-first агент с proof receipts, Project Memory provenance, MCP, sessions, tools, skills и bounded permissions.
+---
+
+SOBA Agent — local-first инженерный агент, который помнит проект, работает в ограниченных tool loops, проверяет
+результат и оставляет receipts. Текущая линия 0.6.x — стабилизационная перед 0.7.0: фокус на proof receipts, memory
+provenance, permission receipts, skill eval/bench/trace и надёжной установке через npm/Bun. В версии 0.6.15 proof
+handoff стал проще для чтения, сохранив строгую machine-readable проверку, а запущенный моделью `bash` теперь показывает
+в TUI live-вывод с редактированием секретов.
+
+## Быстрый старт
+
+- [**Быстрый старт**](/ru/docs/v0.7/quick-start) — установка, конфигурация, все режимы CLI/TUI, инструменты, разрешения,
+  очередь, persistent-сессии, Context Capsules, proactive compaction и полный lifecycle skills за 10 минут.
+
+## Пошаговое руководство
+
+- [**Проект шаг за шагом: v0.6 workflow**](/ru/docs/v0.7/walkthrough-building-a-project) — end-to-end сценарий
+  работы с агентом: first-run init, постановка задачи, evidence summary, diff review, MCP reload, sessions и handoff.
+- [**Remote MCP: пошаговый гайд**](/ru/docs/v0.7/remote-mcp-guide) — подключение hosted Streamable HTTP MCP server,
+  env-backed auth, проверка `/mcp status` и типовые ошибки.
+
+## Справочные руководства
+
+| Раздел | Содержание |
+|---|---|
+| [**CLI reference**](/ru/docs/v0.7/cli-reference) | Режимы запуска, top-level flags, `soba provider` subcommands |
+| [**Конфигурация**](/ru/docs/v0.7/configuration) | Файл `~/.soba/config.json`, CLI-флаги, переменные окружения, приоритет настроек |
+| [**Провайдеры и модели**](/ru/docs/v0.7/providers) | 5 встроенных провайдеров (DeepSeek, Moonshot Kimi, Alibaba Qwen, OpenRouter, OpenAI), динамический discovery моделей и reasoning capabilities, кастомные провайдеры через `soba provider` |
+| [**Интерфейс и команды**](/ru/docs/v0.7/usage) | TUI, slash-команды, прямая оболочка `!` / `!!`, очередь, горячие клавиши |
+| [**Proof receipts**](/ru/docs/v0.7/proof) | `.soba/evidence/*.soba-proof.json`, `soba prove`, `soba verify`, `soba explain-claim`, permission receipts и release-ready finish |
+| [**Инструменты агента**](/ru/docs/v0.7/tools) | Built-in tools, Project Memory tools, MCP tools, direct shell и trust boundary |
+| [**ACP и Zed**](/ru/docs/v0.7/acp) | `soba acp`, ACP v1 server, sessions, permissions, tool updates, evidence metadata и ограничения |
+| [**Сессии**](/ru/docs/v0.7/sessions) | Формат JSONL, продолжение, rewind, ветвление, навигация по дереву |
+| [**Project Memory**](/ru/docs/v0.7/project-memory) | `.soba/memory/`, knowledge files, memory capsules, entity graph, `read_project_memory` / `write_project_memory` |
+| [**Compaction и Context Capsules**](/ru/docs/v0.7/compaction) | Proactive compaction, триггеры, метрики, ручной compact, портативные капсулы |
+| [**Portable Capsules**](/ru/docs/v0.7/portable-capsules) | Создание, экспорт и загрузка `.capsule.md` handoff-файлов между сессиями, агентами и проектами |
+| [**MCP-серверы**](/ru/docs/v0.7/mcp) | Подключение project-local stdio и remote Streamable HTTP MCP tools через `.soba/mcp.json`, auth, trustMode и `/mcp` commands |
+| [**Безопасность**](/ru/docs/v0.7/security) | Разрешения, trust-уровни, project trust, PermissionMode |
+| [**Skills**](/ru/docs/v0.7/skills) | Bundled-, user-, project-скилы, создание, edit, eval, bench, trace, promote, revision history |
+| [**Звуковые уведомления**](/ru/docs/v0.7/notifications) | Sound config, CLI-флаги, env и практические режимы |
+| [**Темы**](/ru/docs/v0.7/themes) | Цветовые режимы TUI (dark, light, forest), семантические токены, создание пользовательских тем |
+| [**Changelog**](/ru/docs/v0.7/changelog) | История версий, собранная из git-тегов и commit subjects |
+
+## Сборка
+
+- **GitHub** — исходный код, issues и releases живут в
+  [avacadorun-dev/soba-agent](https://github.com/avacadorun-dev/soba-agent).
+- **GitHub Releases** — tagged releases собирают standalone-бинарники для macOS/Linux и прикладывают их к релизу вместе
+  с SHA256SUMS. Основной способ установки для пользователей: `npm install -g soba-agent` или `bun add -g soba-agent`.

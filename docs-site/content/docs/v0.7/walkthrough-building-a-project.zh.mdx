@@ -1,0 +1,247 @@
+---
+title: "Project walkthrough: v0.6 workflow"
+description: "SOBA Agent v0.6.x end-to-end 指南：首次运行、TUI、evidence proof receipts、diff review、Project Memory、skills、MCP 和最终 handoff。"
+---
+
+本 walkthrough 在一个小项目上走完整 SOBA Agent v0.6.x terminal workflow。目标不是展示所有集成，而是让核心循环可检查：
+plan、edit、verify、explain claims、store memory，并留下其他工程师可以审计的 handoff。
+
+教程项目是 `shipyard-lite`：一个 Bun/TypeScript release cockpit，用来显示 git 状态、`package.json` scripts、
+TODO/FIXME markers、diff size 和 next actions。
+
+## 本 walkthrough 覆盖什么
+
+| Capability | Step |
+|---|---|
+| First run | `soba init --check`，然后 `soba init` |
+| TUI workflow | 通过 `soba -i --lang zh --theme graphite` 开发 |
+| Bounded permissions | `/permissions ask`，必要时 `/permissions repo` |
+| Evidence proof receipts | `soba prove --last`、`soba verify --last`、`soba explain-claim` |
+| Proof claim mapping | 最终 claims 应映射到 evidence ids |
+| Proof permission receipts | 敏感 tool calls 在 proof receipt 中保持可见 |
+| Project Memory doctor | 写入 memory 后运行 `soba memory doctor --format json` |
+| Memory source receipts | prompt 要求 `source.file`、`source.lines` 和 `staleIfFilesChange` |
+| Memory receipt explanations | `soba memory explain <query>` |
+| Memory health commands | `soba memory stale` 和 `soba memory verify` |
+| Skill eval bench and trace | `/skill eval <name>`、`/skill bench <name>`、`/skill trace <name>` |
+
+---
+
+## 1. 准备空项目
+
+```bash
+mkdir -p ~/projects/shipyard-lite
+cd ~/projects/shipyard-lite
+git init
+bun init -y
+soba --version
+soba init --check
+```
+
+`soba init --check` 应确认 provider/trust/MCP baseline，或者明确说明缺少什么。
+
+---
+
+## 2. 在 TUI 中启动 SOBA
+
+```bash
+soba -i --lang zh --theme graphite
+```
+
+TUI 内：
+
+```text
+/session
+/budget
+/permissions ask
+/auto-compact on
+```
+
+检查 direct shell：
+
+```text
+!git status --short
+!pwd
+```
+
+`!` 命令会立即执行。如果 agent 需要分析输出，请用普通 prompt，让它调用 `bash` tool 并记录 evidence。
+
+---
+
+## 3. 给出有边界的实现 prompt
+
+```text
+Create a Bun/TypeScript project named shipyard-lite.
+
+Goal:
+- CLI command scan prints a release cockpit for the current git repository;
+- scan includes git status, package scripts, tsconfig, TODO/FIXME markers, and diff stat;
+- scan --json returns stable JSON without ANSI;
+- watch runs one scan now and explains that a full watcher is a later scope.
+
+Constraints:
+- Bun only;
+- TypeScript strict mode;
+- no external runtime dependencies;
+- adapters accept cwd/rootDir and do not rely on process.cwd();
+- do not run network commands;
+- do not create a git commit.
+
+Definition of Done:
+- src/, tests/, package.json, and tsconfig.json exist;
+- no git repo, clean repo, dirty repo, missing scripts, and TODO/FIXME markers are covered;
+- bun test, bunx tsc --noEmit, bun run build, and git diff --check pass;
+- final answer includes changed files, checks, unverified areas, and risks.
+```
+
+---
+
+## 4. 检查 evidence block
+
+实现 turn 结束后，最终回答应包含：
+
+- changed files；
+- checks 和 command exit status；
+- 映射到 evidence ids 的 claims；
+- risks 和 unverified areas；
+- 敏感 tool calls 的 permission receipts。
+
+如果回答太泛，继续要求：
+
+```text
+Do not finish with a generic summary.
+Inspect the current diff, run bun test, bunx tsc --noEmit, bun run build, and git diff --check.
+Then give a final handoff with changed files, checks, claim evidence, and risks.
+```
+
+---
+
+## 5. 检查 proof receipts
+
+```bash
+soba prove --last
+soba verify --last
+soba explain-claim "No test regressions detected"
+```
+
+Evidence proof receipts 保存在 `.soba/evidence/*.soba-proof.json`。`soba verify` 会检查 proof claim mapping：
+supported claim references 必须指向已知 evidence、command、check、file mutation 或 risk ids。使用
+`soba explain-claim --proof .soba/evidence/<id>.soba-proof.json` 查看指定 receipt 的 Proof claim explanations。
+
+---
+
+## 6. 做 read-only diff review
+
+```text
+Review the current diff as a reviewer.
+
+Look for:
+- unnecessary dependencies;
+- brittle tests;
+- hidden process.cwd() coupling;
+- unclear JSON contract;
+- weak git-command error handling.
+
+Do not edit files yet. End with findings and one proposed patch.
+```
+
+然后只修已接受的问题：
+
+```text
+Fix only the review findings.
+After edits, run targeted tests and tsc.
+Do not expand scope.
+```
+
+---
+
+## 7. 保存带 receipts 的 Project Memory
+
+```text
+Update Project Memory for shipyard-lite.
+
+Save:
+- architecture: CLI layer, analyzer core, git/filesystem/process adapters, reporter;
+- conventions: Bun only, strict TypeScript, no external runtime dependencies by default;
+- known-errors: git commands outside a git repo must return controlled diagnostics;
+- dependencies: runtime dependencies are absent; dev flow uses bun test/build/tsc.
+
+Use project memory tools. Include source.file, source.lines, source.lastVerified, source.confidence, and staleIfFilesChange where possible.
+Do not store secrets, tokens, or absolute home paths.
+```
+
+验证 memory：
+
+```bash
+soba memory doctor
+soba memory doctor --format json
+soba memory stale
+soba memory verify
+soba memory explain "git commands outside a git repo"
+```
+
+`soba memory explain` 会给出 Memory receipt explanations：匹配 capsules、source receipts、score 和 doctor issues。
+
+---
+
+## 8. 添加本地 MCP server
+
+```text
+Add a local MCP stdio server named shipyard-metrics.
+
+Scope:
+- file tools/shipyard-metrics-mcp.ts;
+- support initialize, tools/list, and tools/call;
+- tool release_summary returns JSON: branch, dirtyFiles, todoCount, hasTestScript, hasBuildScript;
+- add .soba/mcp.json with canonical key servers and server id shipyard-metrics;
+- do not use an external MCP package;
+- add a minimal protocol smoke test.
+
+After changes, run the targeted test and tsc.
+```
+
+检查 lifecycle：
+
+```text
+/mcp status
+/mcp start shipyard-metrics
+/mcp reload
+/mcp status
+```
+
+---
+
+## 9. 使用 skills 和 trust
+
+```text
+/skill list
+/project-trust status
+/project-trust approve
+```
+
+可复用 project skill：
+
+```text
+/skill eval <name>
+/skill bench <name>
+/skill trace <name>
+```
+
+promote 之前应先通过 Skill eval bench and trace 循环。
+
+---
+
+## 10. 最终 handoff
+
+完成前运行：
+
+```text
+!bun test
+!bunx tsc --noEmit
+!bun run build
+!git diff --check
+!git status --short
+```
+
+最终回答应包含 changed files、checks、claim evidence、permission receipts、remaining risks，以及 human reviewer 的下一步。
+

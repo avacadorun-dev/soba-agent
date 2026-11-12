@@ -1,0 +1,160 @@
+---
+title: Proof receipts
+description: SOBA proof bundles、claim explanations、verification commands、permission receipts 和发布级证据工作流。
+---
+
+SOBA 的 0.6.x 线转向 evidence-first。代理不应只说“完成了”，还应留下可检查的证据链：改了什么、运行了什么、
+哪些声明有证据、哪些风险仍然存在，以及哪些权限被使用。
+
+Proof receipts 保存在 `.soba/evidence/*.soba-proof.json`。它们是本地项目文件；查看时不需要启动代理，也不需要
+provider credentials。
+
+---
+
+## Evidence proof receipts
+
+Evidence proof receipts 是 SOBA 在 accepted finish 之后写入磁盘的 proof 文件。使用 `soba prove --last`
+查看最新 receipt；如果要检查较早任务，可以传入具体的 `.soba/evidence/<id>.soba-proof.json`。
+
+默认视图刻意保持简短。它先显示一个 verdict：`已验证` 或 `需要注意`，然后显示摘要、变更文件、检查、声明、
+风险和 receipt 路径。已验证 proof 在 TUI 中保持折叠；部分验证、未验证、阻塞、无效或未保存的 proof
+会自动展开，并用易懂的语言说明原因。严格 outcome 仍可在展开的卡片中查看。
+
+Proof claim mapping 表示重要 finish claims 会映射到 evidence ids。一个 claim 可以指向 command、check、
+changed file、file mutation、risk 或 review action。`soba verify` 会检查 supported references 是否指向已知 ids，
+而不是只留下无法验证的文本。
+
+Proof claim explanations 通过 `soba explain-claim` 查看。可以传入界面显示的序号、claim 文本或 id；
+如果不是最新 proof，添加 `--proof .soba/evidence/<id>.soba-proof.json`。
+
+Proof permission receipts 会记录 trust level、approval kind、approval value、decision、reason，以及 SOBA 能推断出时的
+least-privilege alternatives。
+
+---
+
+## Proof receipt 包含什么
+
+Proof receipt 可以包含：
+
+- changed files 和 mutation summary；
+- checks 和 command evidence；
+- 映射到 evidence ids 的 finish claims；
+- risks 和 unverified 区域；
+- tool calls 的 permission receipts；
+- 对危险命令的 safer alternatives，如果 SOBA 能推断出 least-privilege rewrite；
+- 运行指标，包括 model calls 数量和 input/output/total tokens；
+- 可选的 `workspace` 对象：当该 turn 运行在隔离 git worktree 中时记录 `kind`、`id`、source/execution/canonical roots、branch、head；
+- 由 `sessionId` + `turnId` 确定性派生的 `runId`，以及内容寻址的 `proofId`；
+- 整个脱敏 receipt 的 SHA-256 digest。
+
+目标是让最终回答可审计。比如 “tests passed” 应指向真实运行过的命令；没有证据的 claim 应明确保持 unverified。
+
+当 completion gate 接受未显式提供 evidence IDs 的 criteria 时，SOBA 只把每个 criterion 关联到当前 turn 中
+相关的 evidence。它先使用词汇和语义线索，再沿用明确的 mutation/check 关系；不会再把所有成功 inspection
+自动附加到每个 claim。没有匹配记录时，claim 仍为 unverified。紧凑的 TUI handoff 只显示 activity 计数，
+不暴露内部 evidence IDs；持久化 proof 仍保留完整引用，供 `soba prove` 和 `soba explain-claim` 使用。
+
+新写入的 Proof Bundle v1 会在持久化前完成 sealing 和 validation：SOBA 递归脱敏可识别 credentials、
+规范化 JSON、派生 `proofId`，并写入 `integrity.digest`。结构无效的 producer 结果不会作为普通 proof
+receipt 写入；诊断会保留在 flight record 中。`soba prove --verbose` 会显示 proof ID、run ID 和 digest。
+对同一 session/turn 再次 sealing 会保持相同的 run ID，而另一个 turn 会得到不同的 run ID。Sealing 后修改任何
+受覆盖字段，`soba verify` 都会以 `proof_digest_mismatch` 失败。
+
+旧的、没有 integrity metadata 的 v1 receipts 仍可读取，但 verification 会报告 `legacy_unsealed_proof`：
+可以检查结构，但文件不具备篡改检测能力。
+Policy 不会将这种 receipt 接受为 verified；其 outcome 为 `partially_verified`，exit code 为 2。
+
+---
+
+## 命令
+
+```bash
+soba prove
+soba prove --last
+soba prove --last --verbose
+soba prove --format markdown
+soba prove --format json
+soba prove .soba/evidence/<id>.soba-proof.json
+
+soba verify
+soba verify --verbose
+soba verify --format json
+soba verify .soba/evidence/<id>.soba-proof.json
+
+soba explain-claim 1
+soba explain-claim "All TypeScript errors are fixed" --proof .soba/evidence/<id>.soba-proof.json
+```
+
+这些命令只读取已保存的 proof 数据。它们不会启动 agent runtime，也不需要 API credentials。
+Human output 默认保持紧凑；`--verbose` 会恢复 contract-level IDs、digests、commands 和 references。
+`--format json` 仍是稳定的 machine-readable 格式。
+
+### Verification outcomes 和 exit codes
+
+`soba verify` 会检查 schema version、IDs 和引用、命令 exit code 与 output digest、mutation/verification 顺序、
+diff 完整性、permission 一致性、secret redaction，以及整个 receipt 的 integrity。格式正确的 `unverified`
+或 `blocked` receipt 可以读取，但不会通过 policy gate。
+包含 changed files 的 sealed receipt 必须带有匹配的 diff summary。没有 evidence IDs 的 completion criteria
+会保持 `unverified`；producer 成功退出本身不能让 bundle 变成 verified。
+
+| Outcome | 稳定原因 | Exit code |
+|---|---|---:|
+| `verified` | `proof_verified` | 0 |
+| 无效 receipt | 第一条 validation issue code | 1 |
+| `partially_verified` | `proof_partially_verified` | 2 |
+| `unverified` | `proof_unverified` | 3 |
+| `blocked` | `proof_blocked` | 4 |
+
+脚本中请使用 `--format json`；输出包含 `accepted`、`outcome`、`reason`、`exitCode`、计数和 validation issues。
+
+---
+
+## 推荐的完成标准
+
+对于代码任务，一个发布级 SOBA turn 应以这些内容结束：
+
+1. changed-files summary；
+2. 实际运行过的 checks，包括 exit status；
+3. 重要 claims 的 proof 或明确 unverified status；
+4. 验证后仍存在的 risks；
+5. 敏感 tool calls 的 permission receipts。
+
+如果需要更强保证，请在 prompt 中写明 required checks：
+
+```text
+Fix the failing parser tests.
+Before finishing, run bun test tests/parser.test.ts and bunx tsc --noEmit --pretty false.
+If either check fails, do not call the task complete.
+```
+
+---
+
+## Permission receipts
+
+Permission receipts 记录为什么某个 tool call 被允许或拒绝。对于危险命令，SOBA 也可以展示 least-privilege
+alternatives。
+
+示例：
+
+```text
+Instead of approving rm -rf dist && bun run build:
+1. allow deleting only ./dist inside the repository
+2. run bun run build separately
+3. deny external deletion patterns
+```
+
+这让 local-first delegation 保持有边界：代理可以快速工作，但高风险范围始终可见。
+
+## 安全限制
+
+Proof sealing 可以降低意外持久化 credentials 的风险，并检测后续文件修改，但不能证明命令运行在可信机器上；
+redaction 也不是通用 secret scanner。不要把 credentials 放入 prompts 或 command arguments，保持
+`.soba/evidence/` 私密，并把 legacy unsealed receipts 仅当作信息参考。
+
+---
+
+## 相关页面
+
+- [CLI 参考](/zh/docs/v0.7/cli-reference)
+- [代理工具](/zh/docs/v0.7/tools)
+- [安全](/zh/docs/v0.7/security)

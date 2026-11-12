@@ -1,0 +1,79 @@
+---
+title: Plan 与 goal 模式
+description: 在 SOBA 的只读计划模式中安全地设计变更，并且只在准备实施时切回 agent 模式。
+---
+
+Plan mode 将设计与实施分开。SOBA 可以检查项目并输出实施计划，但不会修改文件、Git 状态、Project Memory、配置，也不会运行 shell 命令。
+
+---
+
+## 1. 切换模式
+
+在 TUI 中使用 `/plan`：
+
+```text
+/plan                 # 显示当前模式
+/plan on              # 进入 plan mode
+/plan goal            # 澄清目标和成功标准
+/plan off             # 回到普通 agent mode
+/plan toggle          # 在 plan 与 agent 之间切换
+```
+
+`plan` 关注实施简报：范围、文件、风险、检查和待决问题。`goal` 关注问题定义、成功标准、约束以及不在范围内的内容。`agent` 是正常模式，在常规权限检查后可以修改内容。
+
+## 2. 允许的操作
+
+在 plan 和 goal mode 中，SOBA 可以使用检查工具：`read`、`ls`、`search_files`、`inspect_file`、
+`read_project_memory` 和 `checkpoint`。当服务器声明 `annotations.readOnlyHint: true` 时，也可以使用只读 MCP
+工具。它还可以用完成的计划或 goal brief 结束 turn。
+
+以下能力被刻意禁止：
+
+- 文件和内存修改工具：`write`、`edit`、`write_project_memory`；
+- `bash`，即使是看起来只读的 `git status` 或 `bun test`；
+- 没有显式安全语义的 custom 或 MCP 工具，包括带有 `destructiveHint: true` 的工具。
+
+SOBA 使用工具声明的 effects，而不是根据工具名称猜测行为。Built-in tools 具有规范语义；MCP
+`readOnlyHint` 映射为 inspection，而 destructive 或未标注的 MCP tools 在 restricted mode 中按 fail-closed
+规则阻止。
+
+这是有意采用的严格安全边界。shell allowlist 很容易通过脚本、重定向、Git 子命令或解释器绕过。请自行通过 `!command` 运行诊断；只有在明确希望 agent 实施并验证变更时，才切换到 `/plan off`。
+
+## 3. 实施类请求的处理方式
+
+当前 restricted mode 的契约会放在 model prompt 的最前面，早于通用的 agent-loop 指令。Tool schemas 会在
+transport conversion 之前按 registry 中的规范名称过滤，因此 `bash` 不会以匿名 `local_shell` 能力重新出现，
+修改类工具也完全不会展示给模型。
+
+因此，同一条命令式请求会根据模式产生不同结果：
+
+| 当前模式 | 请求：“实现 notes endpoint，添加测试并运行测试” |
+| --- | --- |
+| `agent` | 检查代码、修改文件、运行相关检查，并报告经过验证的完成结果。 |
+| `plan` | 检查相关代码并返回可直接执行的完整实施计划；不尝试修改，也不要求用户切换模式。 |
+| `goal` | 澄清目标、约束、范围和成功标准，不设计或执行补丁。 |
+
+Runtime execution policy 仍然是第二道安全边界。过期、手工构造或其他意外的 mutation call 仍会以
+`plan_mode_blocked` 被拒绝，即使正常 model path 已经看不到该工具。
+
+## 4. 用按钮澄清决策
+
+当当前 client 支持 structured clarification 时，SOBA 可以在计划过程中调用 `ask_user`。它会显示一个简短问题、两到五个选项，并在需要时提供 **Other** 文本字段。选择结果会回到同一 agent turn，因此最终计划会直接反映该决定。
+
+ACP client 使用 `elicitation.form`。终端 TUI 会显示 inline blocking dialog：model turn 暂停等待，但输入仍然响应。
+可以用 `1`–`5`、方向键/Tab 和 Enter 或鼠标选择；启用 **Other** 时也可输入自由文本。Esc 表示拒绝回答，
+Ctrl+C 表示取消。没有 structured clarification capability 的 client 不会向模型提供此工具，SOBA 会在最终回答中
+保留未解决的问题。
+
+## 5. 推荐工作流
+
+```text
+/plan on
+检查仓库并提出最小、安全的实施计划。
+当发布策略不明确时，请求用户选择。
+
+/plan off
+实施已批准的计划并运行所需检查。
+```
+
+当错误假设会改变设计、用户必须在方案之间选择，或在修改 workspace 前需要可审阅的实施简报时，请使用 plan mode。
