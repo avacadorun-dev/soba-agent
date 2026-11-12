@@ -1,5 +1,6 @@
 import type { ItemParam } from "../../kernel/model/openresponses-types";
 import type { SessionPort } from "../../kernel/session/session-port";
+import type { PlanItem } from "../../kernel/tools/checkpoint";
 import type { DebugEntry, ItemParam as SessionItemParam } from "../../kernel/transcript/types";
 import { EvidenceLedger } from "../evidence/evidence-ledger";
 import { allowsUnverifiedCompletion, inferTaskKindFromPrompt } from "../verification/verification-policy";
@@ -33,6 +34,7 @@ export function beginAgentTurn(input: {
   setAbortController(controller: AbortController): void;
   emit(event: AgentEvent): void;
   debug(data: DebugEntry["data"]): void;
+  knownFailures?: import("../verification/verification-baseline").KnownFailureDeclaration[];
 }): BeginAgentTurnResult {
   const { userInput, session, state, setAbortController, emit, debug } = input;
   const userText = userInputToText(userInput);
@@ -51,6 +53,13 @@ export function beginAgentTurn(input: {
   const errors: AgentTurnError[] = [];
   const allItems: ItemParam[] = [];
   const evidenceLedger = new EvidenceLedger();
+  const persistedPlan = readPersistedPlan(session.getSessionConfig("soba.plan"));
+  if (persistedPlan.length > 0) {
+    evidenceLedger.setPlanItems(persistedPlan);
+  }
+  if (input.knownFailures && input.knownFailures.length > 0) {
+    evidenceLedger.setKnownFailures(input.knownFailures);
+  }
   const taskKind = inferTaskKindFromPrompt(userText);
   const allowUnverifiedCompletion = allowsUnverifiedCompletion(userText);
   const emitNarrationOnce = createWorkingNarrationGate({
@@ -85,3 +94,22 @@ export function beginAgentTurn(input: {
     emitNarrationOnce,
   };
 }
+
+function readPersistedPlan(value: unknown): PlanItem[] {
+  if (!Array.isArray(value)) return [];
+  const validStatuses = new Set(["pending", "active", "done", "blocked"]);
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const record = item as Record<string, unknown>;
+    const title = typeof record.title === "string" ? record.title.trim() : "";
+    if (!title) return [];
+    const status = validStatuses.has(record.status as string)
+      ? (record.status as PlanItem["status"])
+      : "pending";
+    const evidenceIds = Array.isArray(record.evidenceIds)
+      ? record.evidenceIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    return [{ title, status, ...(evidenceIds.length > 0 ? { evidenceIds } : {}) }];
+  });
+}
+

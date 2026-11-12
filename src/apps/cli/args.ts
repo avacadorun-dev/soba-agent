@@ -106,6 +106,8 @@ export interface CliArgs {
   memory: boolean;
   /** Raw argv slice after the `memory` token. */
   memoryArgs: string[];
+  /** Probe environment capabilities (vision, screenshot, accessibility, ...) and exit. */
+  doctor: boolean;
   /**
    * `soba provider <sub> ...` sub-route. When this is defined, the binary
    * dispatches into the provider-cli module and skips agent setup. The
@@ -154,6 +156,7 @@ export const DEFAULT_CLI_ARGS: CliArgs = {
   explainClaimArgs: [],
   memory: false,
   memoryArgs: [],
+  doctor: false,
   providerSubArgs: [],
   worktree: false,
   keep: false,
@@ -438,6 +441,10 @@ export function parseArgs(argv: string[]): CliArgs {
       case "memory":
         args.memory = true;
         args.memoryArgs = argv.slice(i + 1);
+        return args;
+
+      case "doctor":
+        args.doctor = true;
         return args;
 
       case "acp":

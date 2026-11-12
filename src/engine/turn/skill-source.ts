@@ -19,4 +19,6 @@ export interface SkillSource {
   getSkill(name: string): SkillLookupEntry | undefined;
   getMemoryAccess?(): SkillMemoryAccess;
   evaluateToolPolicy?(toolName: string): SkillToolPolicyDecision;
+  /** Activate project-declared required skills matching the user prompt; returns newly activated names. */
+  activateDeclaredSkillsForPrompt?(prompt: string): string[];
 }

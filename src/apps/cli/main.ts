@@ -16,6 +16,7 @@ import type { AcpClientRequester } from "../../adapters/acp/client-delegation";
 import { executeCommand } from "../../application/cli/commands/public";
 import type { RuntimeEvent, RuntimeSessionHandle, SobaConfig, SoundConfig } from "../../application/cli/public";
 import { isWorkspaceError, WorkspaceService, workspaceKindFromFlag } from "../../application/workspace/public";
+import { runFilesystemDoctorCommand } from "../../composition/cli/doctor-command";
 import { runFilesystemExplainClaimCommand } from "../../composition/cli/explain-claim-command";
 import { runFilesystemMemoryCommand } from "../../composition/cli/memory-command";
 import { runFilesystemProveCommand } from "../../composition/cli/prove-command";
@@ -326,6 +327,16 @@ async function main() {
     if (result.stream === "stdout") process.stdout.write(result.output);
     else process.stderr.write(result.output);
     if (result.exitCode !== 0) process.exit(result.exitCode);
+    return;
+  }
+
+  if (cliArgs.doctor) {
+    const result = await runFilesystemDoctorCommand({
+      projectRoot: process.cwd(),
+      model: "unknown",
+      visionSupported: false,
+    });
+    process.stdout.write(result.output);
     return;
   }
 

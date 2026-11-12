@@ -57,6 +57,21 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
         description: "List of pending items (optional)",
         items: { type: "string" },
       },
+      items: {
+        type: "array",
+        description:
+          "Optional structured plan: ordered items that replace the persisted plan. Each item has a title, a status (pending, active, done, blocked), and optional evidenceIds linking done items to evidence.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            status: { type: "string", enum: ["pending", "active", "done", "blocked"] },
+            evidenceIds: { type: "array", items: { type: "string" } },
+          },
+          required: ["title"],
+          additionalProperties: false,
+        },
+      },
     },
     required: ["kind", "reason"],
   },
@@ -65,6 +80,7 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
   async execute(args: CheckpointArgs, _context: ToolContext, _signal?: AbortSignal): Promise<ToolResult> {
     const completed = args.completed ?? [];
     const pending = args.pending ?? [];
+    const items = normalizePlanItems(args.items);
 
     const lines: string[] = [];
     lines.push(`Checkpoint recorded: ${args.kind}`);
@@ -79,6 +95,13 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
     if (pending.length > 0) {
       lines.push(`Pending: ${pending.join(", ")}`);
     }
+    if (items.length > 0) {
+      lines.push("Plan items:");
+      for (const item of items) {
+        const evidence = item.evidenceIds && item.evidenceIds.length > 0 ? ` (evidence: ${item.evidenceIds.join(", ")})` : "";
+        lines.push(`  [${item.status}] ${item.title}${evidence}`);
+      }
+    }
 
     lines.push("Compaction will be evaluated after this tool batch completes.");
 
@@ -91,7 +114,23 @@ export const checkpointTool: ToolDefinition<CheckpointArgs> = {
         nextDirection: args.nextDirection,
         completed,
         pending,
+        ...(items.length > 0 ? { items } : {}),
       },
     };
   },
 };
+
+function normalizePlanItems(items: CheckpointArgs["items"]): NonNullable<CheckpointArgs["items"]> {
+  if (!Array.isArray(items)) return [];
+  const validStatuses = new Set(["pending", "active", "done", "blocked"]);
+  return items.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    if (!title) return [];
+    const status = validStatuses.has(item.status) ? item.status : "pending";
+    const evidenceIds = Array.isArray(item.evidenceIds)
+      ? item.evidenceIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    return [{ title, status, ...(evidenceIds.length > 0 ? { evidenceIds } : {}) }];
+  });
+}

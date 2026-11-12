@@ -23,6 +23,7 @@ import { createAgentTurnVerificationStage } from "./agent-turn-verification-stag
 import { LoopGuard } from "./loop-guard";
 import { executeModelTurn } from "./model-turn-execution";
 import { completeAgentTurn } from "./turn-completion";
+import { buildCapabilityEphemeralMessage, buildPlanEphemeralMessage } from "./turn-ephemeral-messages";
 import type { AgentUserInput } from "./turn-helpers";
 import { userInputToText } from "./turn-helpers";
 import { evaluateTurnStopGuards } from "./turn-stop-guards";
@@ -80,14 +81,10 @@ export async function runAgentTurn(
     allowUnverifiedCompletion,
     emitNarrationOnce,
   } = beginAgentTurn({
-    userInput,
-    session,
-    state,
+    userInput, session, state,
     setAbortController,
-    emit,
-    debug,
-  });
-  try {
+    emit, debug, knownFailures: runtime.options.knownFailures,
+  });  try {
     const preparedPrompt = await prepareAgentTurnPromptContext({
       cwd,
       userText,
@@ -190,9 +187,10 @@ export async function runAgentTurn(
         narrateBlocked: (message) => emitNarrationOnce("blocked", message),
       });
       if (stopGuardDecision === "break") break;
-      // Get ephemeral developer messages from active skills + denial warnings
       const ephemeralMessages = [
         ...(runtime.skillManager?.buildEphemeralMessages() ?? []),
+        ...buildPlanEphemeralMessage(evidenceLedger),
+        ...buildCapabilityEphemeralMessage(runtime.options.capabilityReport),
         ...buildDenialEphemeralMessages(state),
       ];
       const modelTurnExecution = await executeModelTurn({
@@ -397,3 +395,4 @@ export async function runAgentTurn(
     state.isProcessing = false;
   }
 }
+

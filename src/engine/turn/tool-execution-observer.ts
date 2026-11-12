@@ -141,16 +141,42 @@ function observeCheckpoint(
   if (!checkpointArgs) return undefined;
 
   const checkpointEvent = extractCheckpointEvent(checkpointArgs);
+  const items = readPlanItems(execution.parsedArgs);
   input.evidenceLedger.recordCheckpoint({
     kind: checkpointEvent.kind,
     reason: checkpointEvent.reason,
     nextDirection: checkpointEvent.nextDirection,
     completed: checkpointEvent.completed,
     pending: checkpointEvent.pending,
+    ...(items.length > 0 ? { items } : {}),
     toolCallId: toolCall.call_id,
     iteration: input.iteration,
   });
+  if (items.length > 0) {
+    // Persist the plan in session config so it survives compaction and is
+    // visible to later turns.
+    input.session.appendSessionConfig("soba.plan", items);
+  }
   return checkpointEvent;
+}
+
+function readPlanItems(parsedArgs: Record<string, unknown>): Array<{ title: string; status: "pending" | "active" | "done" | "blocked"; evidenceIds?: string[] }> {
+  const raw = parsedArgs.items;
+  if (!Array.isArray(raw)) return [];
+  const validStatuses = new Set(["pending", "active", "done", "blocked"]);
+  return raw.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const record = item as Record<string, unknown>;
+    const title = typeof record.title === "string" ? record.title.trim() : "";
+    if (!title) return [];
+    const status = validStatuses.has(record.status as string)
+      ? (record.status as "pending" | "active" | "done" | "blocked")
+      : "pending";
+    const evidenceIds = Array.isArray(record.evidenceIds)
+      ? record.evidenceIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    return [{ title, status, ...(evidenceIds.length > 0 ? { evidenceIds } : {}) }];
+  });
 }
 
 function observeSkillLifecycle(input: ToolExecutionObservationInput): void {

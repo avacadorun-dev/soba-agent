@@ -1,6 +1,12 @@
 import type { FunctionCallField } from "../../kernel/model/openresponses-types";
 import type { AgentTurnError } from "../turn/types";
 import {
+  classifyFailure,
+  type FailureClassification,
+  type FailureRecord,
+  type KnownFailureDeclaration,
+} from "../verification/verification-baseline";
+import {
   decideVerificationPolicy,
   decideVerificationPolicyForContext,
   type TaskKind,
@@ -12,6 +18,8 @@ export interface FinishRequest {
   status: "completed" | "blocked" | "completed_with_unverified_changes";
   criteria: FinishCriterion[];
   acknowledgedErrorIds: string[];
+  /** Unfinished plan items explicitly disclosed (and waived by the user) at finish time. */
+  disclosedPlanItems?: string[];
 }
 
 export interface FinishCriterion {
@@ -34,12 +42,21 @@ export interface CompletionState {
   unverifiedCodeMutationIds?: string[];
   unverifiedDocsMutationIds?: string[];
   unresolvedVerificationFailureIds?: string[];
+  unresolvedVerificationFailures?: FailureRecord[];
+  mutatedFilePaths?: string[];
+  knownFailures?: KnownFailureDeclaration[];
+  acceptanceCommands?: string[];
+  activePlanItems?: import("../../kernel/tools/checkpoint").PlanItem[];
+  docsClassifiedPaths?: string[];
+  codeClassifiedPaths?: string[];
   taskKind?: TaskKind;
   evidenceIds?: Set<string>;
   allowUnverifiedCompletion?: boolean;
 }
 
-export type CompletionDecision = { accepted: true; request: FinishRequest } | { accepted: false; reasons: string[] };
+export type CompletionDecision =
+  | { accepted: true; request: FinishRequest; classifications?: FailureClassification[] }
+  | { accepted: false; reasons: string[] };
 
 /**
  * Diagnose what's wrong with finish tool arguments.
@@ -123,6 +140,9 @@ export function parseFinishRequest(toolCall: FunctionCallField): FinishRequest |
         status: args.status,
         criteria,
         acknowledgedErrorIds: readStringArray(args.acknowledged_error_ids),
+        ...(Array.isArray(args.disclosed_plan_items)
+          ? { disclosedPlanItems: readStringArray(args.disclosed_plan_items) }
+          : {}),
       };
     }
 
@@ -131,6 +151,9 @@ export function parseFinishRequest(toolCall: FunctionCallField): FinishRequest |
       status: args.status,
       criteria: readCriteria(args.criteria) ?? [],
       acknowledgedErrorIds: readStringArray(args.acknowledged_error_ids),
+      ...(Array.isArray(args.disclosed_plan_items)
+        ? { disclosedPlanItems: readStringArray(args.disclosed_plan_items) }
+        : {}),
     };
   } catch {
     return null;
@@ -206,13 +229,59 @@ export function evaluateCompletion(request: FinishRequest, state: CompletionStat
       `Fix active tool errors with additional tool calls before finishing, or use status blocked with a concrete blocker if they are unfixable: ${formatted}`,
     );
   }
-  if (request.status === "completed" && (state.unresolvedVerificationFailureIds?.length ?? 0) > 0) {
-    reasons.push(
-      "A completed outcome cannot include unresolved failed verification checks. Re-run the failing check successfully or use blocked only for a concrete external blocker.",
-    );
+  const classifications: FailureClassification[] = [];
+  if (request.status === "completed") {
+    const unfinishedPlanItems = (state.activePlanItems ?? []).filter((item) => item.status !== "done");
+    if (unfinishedPlanItems.length > 0) {
+      const disclosed = new Set((request.disclosedPlanItems ?? []).map((item) => item.trim().toLowerCase()));
+      const undisclosed = unfinishedPlanItems.filter((item) => !disclosed.has(item.title.trim().toLowerCase()));
+      if (undisclosed.length > 0) {
+        const listing = unfinishedPlanItems
+          .map((item) => `"${item.title}" [${item.status}]`)
+          .join(", ");
+        reasons.push(
+          `Unfinished plan items remain: ${listing}. Finish them, or disclose each one in finish.disclosed_plan_items only when the user explicitly waived it.`,
+        );
+      } else {
+        classifications.push({
+          failureId: "plan_items",
+          status: "unverified_change",
+          reason: `Completed with unfinished plan items explicitly disclosed: ${unfinishedPlanItems.map((item) => `"${item.title}"`).join(", ")}.`,
+          blocking: false,
+        });
+      }
+    }
   }
 
-  return reasons.length === 0 ? { accepted: true, request } : { accepted: false, reasons };
+  if (request.status === "completed") {
+    const records = state.unresolvedVerificationFailures;
+    if (records && records.length > 0) {
+      for (const record of records) {
+        const classification = classifyFailure({
+          record,
+          agentChangedFiles: state.mutatedFilePaths ?? [],
+          acceptanceCommands: state.acceptanceCommands ?? [],
+          knownFailures: state.knownFailures ?? [],
+        });
+        classifications.push(classification);
+        if (classification.blocking) reasons.push(classification.reason);
+      }
+    } else if ((state.unresolvedVerificationFailureIds?.length ?? 0) > 0) {
+      reasons.push(
+        "A completed outcome cannot include unresolved failed verification checks. Re-run the failing check successfully or use blocked only for a concrete external blocker.",
+      );
+    }
+  }
+  if (request.status === "completed_with_unverified_changes") {
+    classifications.push({
+      failureId: "unverified_changes",
+      status: "unverified_change",
+      reason: "Completion was claimed with unverified changes; the receipt must name them.",
+      blocking: false,
+    });
+  }
+
+  return reasons.length === 0 ? { accepted: true, request, classifications } : { accepted: false, reasons };
 }
 
 function decideEffectiveVerificationPolicy(state: CompletionState): ReturnType<typeof decideVerificationPolicy> {
@@ -279,16 +348,24 @@ function appendVerificationReasons(input: {
 
   if (policy.requirement === "inspection") {
     if (!hasAcceptedInspectionEvidence && unverifiedDocsMutationIds.length > 0) {
+      const docsPaths = state.docsClassifiedPaths ?? [];
       reasons.push(
-        `Docs-only changes need inspection evidence before completed finish. Next allowed action: read the edited docs or inspect git diff.`,
+        [
+          "Docs-only changes need inspection evidence before completed finish. Next allowed action: read the edited docs or inspect git diff.",
+          docsPaths.length > 0 ? `Docs-classified paths: ${docsPaths.join(", ")}.` : "",
+        ].filter(Boolean).join(" "),
       );
     }
     return;
   }
 
   if (!hasAcceptedCommandEvidence || state.verificationEvidenceCallIds.size === 0 || state.needsVerification) {
+    const codePaths = state.codeClassifiedPaths ?? [];
     reasons.push(
-      `Completed ${policy.requirement} task requires passing command evidence after the latest mutation. Next allowed action: run one of ${formatCommands(policy.commands)}.`,
+      [
+        `Completed ${policy.requirement} task requires passing command evidence after the latest mutation. Next allowed action: run one of ${formatCommands(policy.commands)}.`,
+        codePaths.length > 0 ? `Code-classified paths: ${codePaths.join(", ")}.` : "",
+      ].filter(Boolean).join(" "),
     );
   }
 }

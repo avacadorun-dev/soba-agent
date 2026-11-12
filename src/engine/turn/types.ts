@@ -11,6 +11,7 @@ import type { ToolResult } from "../../kernel/tools/types";
 import type { WorkspaceRef } from "../../kernel/workspace/public";
 import type { EvidenceHandoff } from "../evidence/evidence-bundle";
 import type { EvidenceLedgerSummary } from "../evidence/evidence-ledger";
+import type { KnownFailureDeclaration } from "../verification/verification-baseline";
 import type { WorkingNarrationEventType } from "./narration";
 
 // ─── Agent State ───
@@ -416,6 +417,10 @@ export interface AgentLoopOptions {
   debug: boolean;
   /** Isolated execution workspace, when different from the session source root. */
   workspace?: WorkspaceRef;
+  /** Known-failure exceptions declared by the user or a repository policy file. */
+  knownFailures?: KnownFailureDeclaration[];
+  /** Cached environment capability report text for the session context (from `soba doctor`). */
+  capabilityReport?: string;
 }
 
 export const DEFAULT_LOOP_OPTIONS: AgentLoopOptions = {

@@ -150,4 +150,32 @@ describe("verification policy", () => {
     expect(isCodePath("Makefile")).toBe(true);
     expect(isCodePath("README.md")).toBe(false);
   });
+
+  test("docs classification covers extensionless and less common prose files", () => {
+    expect(isDocumentationPath("NOTES.markdown")).toBe(true);
+    expect(isDocumentationPath("CHANGELOG")).toBe(true);
+    expect(isDocumentationPath("README")).toBe(true);
+    expect(isDocumentationPath("notes.org")).toBe(true);
+    expect(isDocumentationPath("CONTRIBUTING.rst")).toBe(true);
+    expect(isDocumentationPath("SECURITY.md")).toBe(true);
+    expect(isDocumentationPath("AUTHORS")).toBe(true);
+    expect(isDocumentationPath("docs/NOTES.markdown")).toBe(true);
+    expect(isCodePath("CHANGELOG")).toBe(false);
+    expect(isCodePath("NOTES.markdown")).toBe(false);
+  });
+
+  test("docs classification never swallows code or build files", () => {
+    expect(isCodePath("SECURITY.ts")).toBe(true);
+    expect(isCodePath("src/notes.rs")).toBe(true);
+    expect(isCodePath("package.json")).toBe(true);
+    expect(isCodePath("bun.lock")).toBe(true);
+    expect(isCodePath("tsconfig.json")).toBe(true);
+    expect(isCodePath(".github/workflows/ci.yml")).toBe(true);
+    expect(isCodePath("Makefile")).toBe(true);
+    expect(isCodePath("Dockerfile")).toBe(true);
+    expect(isCodePath("src/README.parser.ts")).toBe(true);
+    expect(isDocumentationPath("package.json")).toBe(false);
+    expect(isDocumentationPath("bun.lock")).toBe(false);
+    expect(isDocumentationPath(".github/workflows/ci.yml")).toBe(false);
+  });
 });

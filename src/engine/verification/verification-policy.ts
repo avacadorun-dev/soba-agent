@@ -36,7 +36,18 @@ export interface VerificationPolicyContext {
   forceFullGate?: boolean;
 }
 
-const DOC_EXTENSIONS = new Set([".md", ".mdx", ".txt", ".rst", ".adoc"]);
+const DOC_EXTENSIONS = new Set([".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc", ".org"]);
+
+const EXTENSIONLESS_DOC_BASENAME_PREFIXES = [
+  "readme",
+  "changelog",
+  "notes",
+  "authors",
+  "contributing",
+  "security",
+  "news",
+  "copying",
+];
 
 export function decideVerificationPolicy(taskKind: TaskKind = "unknown"): VerificationPolicyDecision {
   switch (taskKind) {
@@ -314,7 +325,18 @@ function commandWords(segment: string): string[] {
 export function isDocumentationPath(path: string): boolean {
   const normalized = path.toLowerCase();
   if (normalized.startsWith("docs/") || normalized.includes("/docs/")) return true;
-  return DOC_EXTENSIONS.has(extensionOf(normalized));
+  const extension = extensionOf(normalized);
+  if (DOC_EXTENSIONS.has(extension)) return true;
+  if (extension !== "") return false;
+  const baseName = basenameOf(normalized);
+  return EXTENSIONLESS_DOC_BASENAME_PREFIXES.some(
+    (prefix) => baseName === prefix || baseName.startsWith(`${prefix}.`) || baseName.startsWith(`${prefix}-`),
+  );
+}
+
+export function basenameOf(path: string): string {
+  const lastSlash = path.lastIndexOf("/");
+  return lastSlash === -1 ? path : path.slice(lastSlash + 1);
 }
 
 export function isCodePath(path: string): boolean {

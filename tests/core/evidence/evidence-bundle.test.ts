@@ -779,6 +779,12 @@ function summary(
     unverifiedDocsMutationIds: [],
     activeDiagnosticIds: [],
     unresolvedVerificationFailureIds: unresolvedVerificationFailures(entries),
+    unresolvedVerificationFailures: [],
+    mutatedFilePaths: [],
+    knownFailures: [],
+    activePlanItems: [],
+    docsClassifiedPaths: [],
+    codeClassifiedPaths: [],
     entries,
     ...overrides,
   };

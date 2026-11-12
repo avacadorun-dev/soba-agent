@@ -1,9 +1,19 @@
+export type PlanItemStatus = "pending" | "active" | "done" | "blocked";
+
+export interface PlanItem {
+  title: string;
+  status: PlanItemStatus;
+  evidenceIds?: string[];
+}
+
 export interface CheckpointArgs {
   kind: "milestone" | "plan_pivot";
   reason: string;
   nextDirection?: string;
   completed?: string[];
   pending?: string[];
+  /** Structured plan state: ordered items with status and evidence links. Replaces the persisted plan. */
+  items?: PlanItem[];
 }
 
 export interface CheckpointEvent {

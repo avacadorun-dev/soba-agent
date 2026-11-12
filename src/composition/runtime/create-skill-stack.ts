@@ -1,9 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SkillCatalog } from "../../application/skills/catalog";
 import { SkillCommands } from "../../application/skills/commands";
 import { SkillDiscovery } from "../../application/skills/discovery";
 import { DraftStore } from "../../application/skills/drafts";
 import { SkillEvaluator } from "../../application/skills/evaluator";
+import { parseProjectSkillDeclarations } from "../../application/skills/project-declarations";
 import type { ProjectTrustStore } from "../../application/skills/project-trust-store";
 import { RevisionStore } from "../../application/skills/revisions";
 import { SkillManager } from "../../application/skills/skill-manager";
@@ -79,6 +81,7 @@ export async function createSkillStack(input: SkillStackInput): Promise<SkillSta
   });
   skillManager.refresh();
   reconcileActiveSkills(skillManager, input.session);
+  applyProjectSkillDeclarations(skillManager, input.projectPath);
 
   if (skillCatalog.getModelInvocable().length > 0) {
     const { createActivateSkillTool, createDeactivateSkillTool } = await import("../../infrastructure/tools/local/activate-skill");
@@ -114,6 +117,32 @@ export function reconcileActiveSkills(skillManager: SkillManager, session: Sessi
   for (const rejected of result.rejected) {
     session.appendSkillActivation({ action: "deactivate", skill: rejected });
   }
+}
+
+/**
+ * Load project-declared required skills from AGENTS.md and activate the
+ * `always` set at session start. `required` entries with a `when` condition
+ * are activated per turn by the agent loop once the user prompt is known.
+ */
+export function applyProjectSkillDeclarations(skillManager: SkillManager, projectPath: string): void {
+  const agentsPath = join(projectPath, "AGENTS.md");
+  if (!existsSync(agentsPath)) return;
+
+  let content: string;
+  try {
+    content = readFileSync(agentsPath, "utf-8");
+  } catch {
+    return;
+  }
+
+  const { declarations, warnings } = parseProjectSkillDeclarations(content);
+  for (const warning of warnings) {
+    console.warn(`[soba] ${warning}`);
+  }
+  if (declarations.length === 0) return;
+
+  skillManager.setProjectDeclarations(declarations);
+  skillManager.activateDeclaredSkillsForPrompt("");
 }
 
 function sessionFromToolContext(context: ToolContext, fallback: SessionManager): SessionManager {

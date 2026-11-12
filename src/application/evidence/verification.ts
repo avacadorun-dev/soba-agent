@@ -722,8 +722,28 @@ function validateEvidenceConsistency(bundle: Record<string, unknown>, issues: Pr
   }
 }
 
+const DOC_EXTENSIONS = new Set(["md", "mdx", "markdown", "txt", "rst", "adoc", "org"]);
+const EXTENSIONLESS_DOC_BASENAME_PREFIXES = [
+  "readme",
+  "changelog",
+  "notes",
+  "authors",
+  "contributing",
+  "security",
+  "news",
+  "copying",
+];
+
 function isDocumentationPath(path: string): boolean {
-  return /(?:^|\/)(?:docs?|documentation)(?:\/|$)/i.test(path) || /\.(?:md|mdx|txt|rst|adoc)$/i.test(path);
+  const normalized = path.toLowerCase();
+  if (/(?:^|\/)(?:docs?|documentation)(?:\/|$)/.test(normalized)) return true;
+  const lastSlash = normalized.lastIndexOf("/");
+  const baseName = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
+  const lastDot = baseName.lastIndexOf(".");
+  if (lastDot !== -1) return DOC_EXTENSIONS.has(baseName.slice(lastDot + 1));
+  return EXTENSIONLESS_DOC_BASENAME_PREFIXES.some(
+    (prefix) => baseName === prefix || baseName.startsWith(`${prefix}.`) || baseName.startsWith(`${prefix}-`),
+  );
 }
 
 function validateCommands(value: unknown, issues: ProofVerificationIssue[]): Set<string> {
