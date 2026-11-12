@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
@@ -13,6 +13,13 @@ export interface SearchFilesArgs {
   glob?: string;
   caseSensitive?: boolean;
   maxMatches?: number;
+  /** Lines of surrounding context to include before and after each match. Bounded by the same output limits. */
+  contextLines?: number;
+}
+
+interface SearchMatchContext {
+  line: number;
+  text: string;
 }
 
 interface SearchMatch {
@@ -20,10 +27,12 @@ interface SearchMatch {
   line: number;
   column: number;
   text: string;
+  context?: SearchMatchContext[];
 }
 
 const DEFAULT_MAX_MATCHES = 50;
 const MAX_MATCHES = 200;
+const MAX_CONTEXT_LINES = 5;
 const MAX_OUTPUT_BYTES = 50 * 1024;
 const MAX_CAPTURE_BYTES = 256 * 1024;
 const FALLBACK_MAX_FILES = 1000;
@@ -57,6 +66,10 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
         type: "number",
         description: `Maximum total matches to return. Defaults to ${DEFAULT_MAX_MATCHES}, capped at ${MAX_MATCHES}.`,
       },
+      contextLines: {
+        type: "number",
+        description: `Optional lines of context before and after each match (0-${MAX_CONTEXT_LINES}). Bounded by the same output limits.`,
+      },
     },
     required: ["query"],
   },
@@ -85,6 +98,7 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
     }
 
     const maxMatches = normalizeMaxMatches(args.maxMatches);
+    const contextLines = normalizeContextLines(args.contextLines);
     const targetPath = resolve(context.cwd, args.path ?? ".");
 
     const rgResult = await runRipgrepSearch({
@@ -94,6 +108,7 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
       glob: args.glob,
       caseSensitive: args.caseSensitive === true,
       maxMatches,
+      contextLines,
       signal,
     });
 
@@ -124,6 +139,7 @@ export const searchFilesTool: ToolDefinition<SearchFilesArgs> = {
       glob: args.glob,
       caseSensitive: args.caseSensitive === true,
       maxMatches,
+      contextLines,
       signal,
     });
 
@@ -154,6 +170,7 @@ async function runRipgrepSearch(options: {
   glob?: string;
   caseSensitive: boolean;
   maxMatches: number;
+  contextLines: number;
   signal?: AbortSignal;
 }): Promise<
   | { status: "ok"; matches: SearchMatch[]; truncated: boolean }
@@ -163,6 +180,7 @@ async function runRipgrepSearch(options: {
   const args = ["--line-number", "--column", "--no-heading", "--color", "never"];
   if (!options.caseSensitive) args.push("-i");
   if (options.glob) args.push("--glob", options.glob);
+  if (options.contextLines > 0) args.push("--context", String(options.contextLines));
   args.push("--", options.query, options.targetPath);
 
   return new Promise((resolvePromise) => {
@@ -186,7 +204,7 @@ async function runRipgrepSearch(options: {
 
     const onAbort = () => {
       child.kill("SIGTERM");
-      finish({ status: "ok", matches: parseRgOutput(stdout, options.cwd, options.maxMatches), truncated: true });
+      finish({ status: "ok", matches: parseRgOutput(stdout, options.cwd, options.maxMatches, options.contextLines), truncated: true });
     };
 
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -213,7 +231,7 @@ async function runRipgrepSearch(options: {
         finish({ status: "invalid_query", message: redactSecrets(stderr.trim() || "Search query is invalid.") });
         return;
       }
-      const matches = parseRgOutput(stdout, options.cwd, options.maxMatches);
+      const matches = parseRgOutput(stdout, options.cwd, options.maxMatches, options.contextLines);
       finish({ status: "ok", matches, truncated: truncated || matches.length >= options.maxMatches });
     });
   });
@@ -226,6 +244,7 @@ async function runFallbackSearch(options: {
   glob?: string;
   caseSensitive: boolean;
   maxMatches: number;
+  contextLines: number;
   signal?: AbortSignal;
 }): Promise<{ status: "ok"; matches: SearchMatch[]; truncated: boolean } | { status: "error"; message: string }> {
   let pattern: RegExp;
@@ -245,13 +264,22 @@ async function runFallbackSearch(options: {
       scannedFiles += 1;
       if (scannedFiles > FALLBACK_MAX_FILES) break;
 
-      const fileMatches = await scanFileForMatches({
-        cwd: options.cwd,
-        filePath,
-        pattern,
-        remaining: options.maxMatches - matches.length,
-        signal: options.signal,
-      });
+      const fileMatches = options.contextLines > 0
+        ? await scanFileForMatchesWithContext({
+            cwd: options.cwd,
+            filePath,
+            pattern,
+            contextLines: options.contextLines,
+            remaining: options.maxMatches - matches.length,
+            signal: options.signal,
+          })
+        : await scanFileForMatches({
+            cwd: options.cwd,
+            filePath,
+            pattern,
+            remaining: options.maxMatches - matches.length,
+            signal: options.signal,
+          });
       matches.push(...fileMatches);
       if (matches.length >= options.maxMatches) {
         return { status: "ok", matches, truncated: true };
@@ -264,6 +292,59 @@ async function runFallbackSearch(options: {
       status: "error",
       message: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+const CONTEXT_FILE_MAX_BYTES = 1024 * 1024;
+
+async function scanFileForMatchesWithContext(options: {
+  cwd: string;
+  filePath: string;
+  pattern: RegExp;
+  contextLines: number;
+  remaining: number;
+  signal?: AbortSignal;
+}): Promise<SearchMatch[]> {
+  try {
+    const statResult = await stat(options.filePath);
+    if (statResult.size > CONTEXT_FILE_MAX_BYTES) {
+      // Very large files fall back to match-only scanning to bound memory.
+      return scanFileForMatches({
+        cwd: options.cwd,
+        filePath: options.filePath,
+        pattern: options.pattern,
+        remaining: options.remaining,
+        signal: options.signal,
+      });
+    }
+    const content = await readFile(options.filePath, "utf-8");
+    const lines = content.split("\n");
+    const matches: SearchMatch[] = [];
+
+    lines.forEach((line, index) => {
+      if (matches.length >= options.remaining) return;
+      options.pattern.lastIndex = 0;
+      const match = options.pattern.exec(line);
+      if (!match) return;
+      const context: SearchMatchContext[] = [];
+      for (let offset = -options.contextLines; offset <= options.contextLines; offset += 1) {
+        if (offset === 0) continue;
+        const contextLine = lines[index + offset];
+        if (contextLine === undefined) continue;
+        context.push({ line: index + offset + 1, text: contextLine });
+      }
+      matches.push({
+        path: relative(options.cwd, options.filePath) || ".",
+        line: index + 1,
+        column: match.index + 1,
+        text: line,
+        ...(context.length > 0 ? { context } : {}),
+      });
+    });
+
+    return matches;
+  } catch {
+    return [];
   }
 }
 
@@ -334,19 +415,46 @@ async function collectSearchFiles(root: string, glob: string | undefined, signal
   return files;
 }
 
-function parseRgOutput(output: string, cwd: string, maxMatches: number): SearchMatch[] {
+function parseRgOutput(output: string, cwd: string, maxMatches: number, contextLines: number): SearchMatch[] {
   const matches: SearchMatch[] = [];
+  let current: SearchMatch | null = null;
+  let pendingLeading: SearchMatchContext[] = [];
+  const matchLine = /^(.*?):(\d+):(\d+):(.*)$/;
+  const contextLine = /^(.*?)-(\d+)-(.*)$/;
+
+  const attachContext = (target: SearchMatch, entry: SearchMatchContext) => {
+    target.context = [...(target.context ?? []), entry];
+  };
+
   for (const line of output.split("\n")) {
-    if (!line) continue;
-    const parsed = /^(.*?):(\d+):(\d+):(.*)$/.exec(line);
-    if (!parsed) continue;
-    matches.push({
-      path: relative(cwd, parsed[1]) || parsed[1],
-      line: Number(parsed[2]),
-      column: Number(parsed[3]),
-      text: parsed[4],
-    });
+    if (!line || line === "--") continue;
     if (matches.length >= maxMatches) break;
+
+    const asMatch = matchLine.exec(line);
+    if (asMatch) {
+      current = {
+        path: relative(cwd, asMatch[1]) || asMatch[1],
+        line: Number(asMatch[2]),
+        column: Number(asMatch[3]),
+        text: asMatch[4],
+      };
+      matches.push(current);
+      if (contextLines > 0) {
+        for (const entry of pendingLeading) attachContext(current, entry);
+      }
+      pendingLeading = [];
+      continue;
+    }
+
+    const asContext = contextLine.exec(line);
+    if (asContext && contextLines > 0) {
+      const entry = { line: Number(asContext[2]), text: asContext[3] };
+      if (current) {
+        attachContext(current, entry);
+      } else {
+        pendingLeading.push(entry);
+      }
+    }
   }
   return matches;
 }
@@ -363,7 +471,13 @@ function formatSearchResult(
     };
   }
 
-  const lines = matches.map((match) => `${match.path}:${match.line}:${match.column}: ${redactSecrets(match.text.trim())}`);
+  const lines: string[] = [];
+  for (const match of matches) {
+    lines.push(`${match.path}:${match.line}:${match.column}: ${redactSecrets(match.text.trim())}`);
+    for (const context of match.context ?? []) {
+      lines.push(`  ${context.line}: ${redactSecrets(context.text.trim())}`);
+    }
+  }
   if (options.truncated || matches.length >= options.maxMatches) {
     lines.push(`[Output truncated: returned ${matches.length} match(es); narrow query/path or raise maxMatches.]`);
   }
@@ -386,6 +500,11 @@ function formatSearchResult(
 function normalizeMaxMatches(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value)) return DEFAULT_MAX_MATCHES;
   return Math.max(1, Math.min(MAX_MATCHES, Math.floor(value)));
+}
+
+function normalizeContextLines(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(MAX_CONTEXT_LINES, Math.floor(value)));
 }
 
 function matchesSimpleGlob(filePath: string, glob: string | undefined): boolean {

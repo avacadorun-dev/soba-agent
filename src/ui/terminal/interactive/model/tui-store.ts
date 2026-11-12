@@ -39,7 +39,7 @@ import {
 import type { NotificationStore } from "./notification-store";
 import { type ActivePane, type ChangeStat, type InteractiveTUIOptions, type QueuedMessage, SIDEBAR_MODES, type SidebarMode, type TuiMessage, type TuiMessageInput } from "./types";
 
-const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "checkpoint", "activate_skill"]);
+const PROJECT_INFO_READ_ONLY_TOOLS = new Set(["read", "inspect_file", "ls", "search_files", "find_files", "checkpoint", "activate_skill"]);
 const PROJECT_INFO_REFRESH_DELAY_MS = 0;
 const MAX_LIVE_TOOL_OUTPUT_BYTES = 50 * 1024;
 

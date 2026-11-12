@@ -60,10 +60,15 @@ export class PermissionBroker {
     toolCall: Pick<FunctionCallField, "call_id" | "name" | "arguments">,
     parsedArgs: Record<string, unknown>,
   ): Promise<PermissionDecision> {
-    const trustCheck =
-      toolCall.name === "bash" && typeof parsedArgs.command === "string"
-        ? this.trustManager.checkCommand(parsedArgs.command)
-        : this.trustManager.checkTool(toolCall.name);
+    const command = typeof parsedArgs.command === "string" ? parsedArgs.command : undefined;
+    // process start is command-backed: it must pass the same command trust
+    // check as bash so a backgrounded job cannot bypass foreground approval.
+    const isCommandBacked =
+      (toolCall.name === "bash" || (toolCall.name === "process" && parsedArgs.action === "start")) &&
+      command !== undefined;
+    const trustCheck = isCommandBacked
+      ? this.trustManager.checkCommand(command as string)
+      : this.trustManager.checkTool(toolCall.name);
 
     const request = this.buildRequest(toolCall, parsedArgs, trustCheck);
     if (!trustCheck.needsConfirmation) {
@@ -97,8 +102,10 @@ export class PermissionBroker {
   ): PermissionRequest {
     const command = typeof parsedArgs.command === "string" ? parsedArgs.command : undefined;
     const isBashCommand = toolCall.name === "bash" && command !== undefined;
-    const description = isBashCommand
-      ? `bash: ${command}`
+    const isProcessStart = toolCall.name === "process" && parsedArgs.action === "start";
+    const isCommandBacked = isBashCommand || (isProcessStart && command !== undefined);
+    const description = isCommandBacked
+      ? `${toolCall.name}: ${command}`
       : `${toolCall.name}(${formatPermissionArguments(parsedArgs)})`;
 
     return {
@@ -107,10 +114,10 @@ export class PermissionBroker {
       description,
       reason: trustCheck.reason,
       level: trustCheck.level,
-      approvalKind: isBashCommand ? "command" : "tool",
-      approvalValue: isBashCommand ? command : toolCall.name,
+      approvalKind: isCommandBacked ? "command" : "tool",
+      approvalValue: isCommandBacked ? (command as string) : toolCall.name,
       trustLevel: trustCheck.level,
-      alternatives: isBashCommand && trustCheck.level === "dangerous" ? permissionAlternativesForCommand(command) : undefined,
+      alternatives: isBashCommand && trustCheck.level === "dangerous" ? permissionAlternativesForCommand(command as string) : undefined,
     };
   }
 

@@ -330,9 +330,10 @@ export class ToolCallExecutor {
       turnSignal?.addEventListener("abort", abortToolWithTurn, { once: true });
     }
     try {
+      const baseContext = { ...context, toolCallId: toolCall.call_id };
       const executionContext = toolCall.name === "bash"
-        ? this.withLiveOutput(toolCall, context, toolAbortController.signal)
-        : context;
+        ? this.withLiveOutput(toolCall, baseContext, toolAbortController.signal)
+        : baseContext;
       return await tool.execute(args, executionContext, toolAbortController.signal);
     } finally {
       turnSignal?.removeEventListener("abort", abortToolWithTurn);
@@ -395,7 +396,10 @@ export class ToolCallExecutor {
       return this.policyDenialReceipt(toolCall, parsedArgs, toolDecision.reason);
     }
 
-    if (toolCall.name === "bash" && typeof parsedArgs.command === "string") {
+    const isCommandBackedTool =
+      toolCall.name === "bash" ||
+      (toolCall.name === "process" && parsedArgs.action === "start");
+    if (isCommandBackedTool && typeof parsedArgs.command === "string") {
       const commandDecision = isCommandAllowedInPlanMode(parsedArgs.command);
       if (!commandDecision.allowed) {
         return this.policyDenialReceipt(toolCall, parsedArgs, commandDecision.reason);

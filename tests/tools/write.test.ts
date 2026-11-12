@@ -35,10 +35,10 @@ describe("write tool", () => {
     expect(readFileSync(join(cwd, "new-file.txt"), "utf-8")).toBe("Hello, Bun!");
   });
 
-  test("перезаписывает существующий файл", async () => {
+  test("перезаписывает существующий файл с overwrite: true", async () => {
     const cwd = makeCwd();
     await writeTool.execute({ path: "file.txt", content: "original" }, { cwd });
-    const result = await writeTool.execute({ path: "file.txt", content: "updated" }, { cwd });
+    const result = await writeTool.execute({ path: "file.txt", content: "updated", overwrite: true }, { cwd });
 
     expect(result.isError).toBe(false);
     expect(result.details).toMatchObject({

@@ -11,6 +11,8 @@ export interface OpenResponsesClientConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Wire-compatibility features declared for the active model (e.g. "input_image" for vision). */
+  modelCompatibility?: string[];
   maxOutputTokens: number;
   maxCompletionTokens: number;
   contextWindow: number;

@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { classifyFileSystemError, createToolErrorResult } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import { recordFileState } from "./file-state";
 import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "./protected-paths";
 
 // ─── Types ───
@@ -15,6 +16,8 @@ import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "./
 export interface WriteArgs {
   path: string;
   content: string;
+  /** Required when the target path already exists. Without it the write is refused without mutating. */
+  overwrite?: boolean;
 }
 
 function validateWriteArgs(args: WriteArgs): ToolResult | null {
@@ -45,7 +48,7 @@ export const writeTool: ToolDefinition<WriteArgs> = {
   name: "write",
   label: "write",
   description:
-    "Create a new file or overwrite a whole file. Prefer edit for localized changes to an existing file. Automatically creates parent directories.",
+    "Create a new file, or overwrite a whole file with overwrite: true. Prefer edit for localized changes to an existing file; without overwrite: true the call fails with no mutation. Automatically creates parent directories.",
   parameters: {
     type: "object",
     properties: {
@@ -56,6 +59,10 @@ export const writeTool: ToolDefinition<WriteArgs> = {
       content: {
         type: "string",
         description: "Content to write to the file",
+      },
+      overwrite: {
+        type: "boolean",
+        description: "Must be true to replace an existing file. Refused without mutation otherwise.",
       },
     },
     required: ["path", "content"],
@@ -93,12 +100,23 @@ export const writeTool: ToolDefinition<WriteArgs> = {
         throw error;
       });
 
+      if (oldText !== null && args.overwrite !== true) {
+        return createToolErrorResult({
+          code: "write_path_exists",
+          category: "validation",
+          message: `Refusing to overwrite existing file "${args.path}" without overwrite: true. Nothing was written.`,
+          nextAction: "Use edit for localized changes to an existing file, or pass overwrite: true only when replacing the whole file is intended. Do not retry unchanged.",
+          fingerprint: `validation:write_path_exists:${args.path}`,
+        });
+      }
+
       // Ensure parent directory exists
       const dir = dirname(absolutePath);
       await mkdir(dir, { recursive: true });
 
       // Write file
       await writeFile(absolutePath, args.content, "utf-8");
+      recordFileState(context.cwd, absolutePath, args.content);
 
       const size = Buffer.byteLength(args.content, "utf-8");
       const lines = args.content.split("\n").length;
