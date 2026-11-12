@@ -239,6 +239,20 @@ In interactive mode, shell commands can be run directly:
 `!` runs the command immediately. `!!` runs it without adding output to the transcript. If you want the agent to see and
 analyze the output, ask it to run the command through a normal prompt, which uses the `bash` tool.
 
+## 7. Environment capability doctor
+
+`soba doctor` probes the capabilities that verification claims depend on — vision (from the active model's declared
+`input_image` support), screenshot, accessibility automation, clipboard, display server, and browser — and writes the
+report to `.soba/capabilities.json`. The report is injected into the session context, and the agent must refuse claims
+that need an unavailable capability instead of degrading silently.
+
+| Command | Purpose |
+|---|---|
+| `soba doctor` | Re-probe environment capabilities and refresh the cached report |
+
+Re-run `soba doctor` after changing OS permissions (for example granting Screen Recording or Accessibility access) to
+refresh the report.
+
 ## Next
 
 - [Providers and models](/en/docs/v0.6/providers)
