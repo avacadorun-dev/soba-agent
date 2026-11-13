@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import { classifyFileSystemError, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import { truncateOutput } from "../../../kernel/tools/types";
+import { recordFileState } from "./file-state";
 
 export interface InspectFileArgs {
   path: string;
@@ -81,7 +82,7 @@ export const inspectFileTool: ToolDefinition<InspectFileArgs> = {
     }
 
     try {
-      return await inspectFileRange(absolutePath, args, signal);
+      return await inspectFileRange(absolutePath, args, context, signal);
     } catch (error) {
       const classification = classifyFileSystemError(error, "read");
       return createToolErrorResult({
@@ -96,6 +97,7 @@ export const inspectFileTool: ToolDefinition<InspectFileArgs> = {
 async function inspectFileRange(
   absolutePath: string,
   args: InspectFileArgs,
+  context: ToolContext,
   signal?: AbortSignal,
 ): Promise<ToolResult> {
   const maxLines = normalizeMaxLines(args.maxLines);
@@ -194,6 +196,11 @@ async function inspectFileRange(
     .concat(notices.map((notice) => `[${notice}]`))
     .join("\n");
   const truncated = truncateOutput(output, maxLines + 5, MAX_BYTES);
+
+  if (requestedRange.startLine === 1 && !stoppedEarly && actualEndLine >= lineNumber) {
+    // Whole file was inspected; record freshness state for edit staleness checks.
+    recordFileState(context.cwd, absolutePath, selected.join("\n"));
+  }
 
   return {
     content: [{ type: "text", text: truncated.text }],

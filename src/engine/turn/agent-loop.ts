@@ -32,6 +32,7 @@ import {
 import { runAgentTurn } from "./agent-turn-runner";
 import type { SkillSource } from "./skill-source";
 import type { AgentUserInput } from "./turn-helpers";
+import { userInputToText } from "./turn-helpers";
 import type { ProjectContextReader } from "./turn-prompt-preparation";
 import {
   type AgentEvent,
@@ -167,6 +168,7 @@ export class AgentLoop {
       sessionId: this.session.getSessionId(),
       session: this.session,
       bashMaxTimeoutSeconds: this.runtime.options.bashMaxTimeoutSeconds,
+      visionSupported: this.runtime.client.getConfig().modelCompatibility?.includes("input_image") ?? false,
       requestClarification: (request, signal) => this.runtime.eventBus.requestClarification(request, signal),
     };
   }
@@ -250,6 +252,7 @@ export class AgentLoop {
    * the LLM returns a response without tool calls.
    */
   async runTurn(userInput: AgentUserInput): Promise<AgentTurnResult> {
+    this.runtime.skillManager?.activateDeclaredSkillsForPrompt?.(userInputToText(userInput));
     return runAgentTurn({
       userInput,
       session: this.session,

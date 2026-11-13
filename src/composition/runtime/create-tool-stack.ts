@@ -10,9 +10,12 @@ import {
 import { bashTool } from "../../infrastructure/tools/local/bash";
 import { checkpointTool } from "../../infrastructure/tools/local/checkpoint";
 import { editTool } from "../../infrastructure/tools/local/edit";
+import { findFilesTool } from "../../infrastructure/tools/local/find-files";
+import { inspectDiffTool } from "../../infrastructure/tools/local/inspect-diff";
 import { inspectFileTool } from "../../infrastructure/tools/local/inspect-file";
 import { lsTool } from "../../infrastructure/tools/local/ls";
 import { createMemoryTools } from "../../infrastructure/tools/local/memory-tools";
+import { processTool } from "../../infrastructure/tools/local/process";
 import { readTool } from "../../infrastructure/tools/local/read";
 import { searchFilesTool } from "../../infrastructure/tools/local/search-files";
 import { writeTool } from "../../infrastructure/tools/local/write";
@@ -27,6 +30,9 @@ export function createToolStack(delegation?: RuntimeToolDelegation): ToolRegistr
   registry.register(editTool);
   registry.register(delegation ? createDelegatedLsTool(delegation) : lsTool);
   registry.register(delegation ? createDelegatedSearchFilesTool(delegation) : searchFilesTool);
+  registry.register(findFilesTool);
+  registry.register(inspectDiffTool);
+  registry.register(processTool);
   registry.register(delegation ? createDelegatedInspectFileTool(delegation) : inspectFileTool);
   registry.register(checkpointTool);
   registry.register(askUserTool);

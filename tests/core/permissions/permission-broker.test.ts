@@ -282,3 +282,68 @@ describe("PermissionBroker", () => {
     expect(decision).toBe("deny");
   });
 });
+
+describe("PermissionBroker process tool parity", () => {
+  test("process start with a dangerous command goes through the same command trust check as bash", async () => {
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+    });
+
+    const bashResult = await broker.authorizeToolCall(toolCall("bash", '{"command":"rm -rf node_modules"}'), {
+      command: "rm -rf node_modules",
+    });
+    const processResult = await broker.authorizeToolCall(
+      toolCall("process", '{"action":"start","command":"rm -rf node_modules"}'),
+      { action: "start", command: "rm -rf node_modules" },
+    );
+
+    expect(processResult.approved).toBe(false);
+    expect(processResult.receipt).toMatchObject({
+      toolName: "process",
+      trustLevel: bashResult.receipt.trustLevel,
+      approvalKind: "command",
+      approvalValue: "rm -rf node_modules",
+      reason: bashResult.receipt.reason,
+    });
+  });
+
+  test("process start with a safe command is auto-approved like bash", async () => {
+    let requested = false;
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+      requestPermission: async () => {
+        requested = true;
+        return "deny";
+      },
+    });
+
+    const result = await broker.authorizeToolCall(
+      toolCall("process", '{"action":"start","command":"git status"}'),
+      { action: "start", command: "git status" },
+    );
+
+    expect(result.approved).toBe(true);
+    expect(result.decision).toBe("auto");
+    expect(requested).toBe(false);
+  });
+
+  test("non-start process actions are normal tool calls, not command-backed", async () => {
+    let requestSeen: PermissionRequest | undefined;
+    const broker = new PermissionBroker({
+      trustManager: new TrustManager({ repoRoot: "/repo" }),
+      requestPermission: async (request) => {
+        requestSeen = request;
+        return "deny";
+      },
+    });
+
+    const result = await broker.authorizeToolCall(toolCall("process", '{"action":"logs","jobId":"pj_1"}'), {
+      action: "logs",
+      jobId: "pj_1",
+    });
+
+    expect(result.approved).toBe(true);
+    expect(result.decision).toBe("auto");
+    expect(requestSeen).toBeUndefined();
+  });
+});

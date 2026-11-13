@@ -12,6 +12,7 @@ import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { classifyEditError, classifyFileSystemError, createToolErrorResult } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
+import { checkFileFreshness, hashContent, recordFileState } from "./file-state";
 import { isProjectMemoryPath, PROJECT_MEMORY_DIRECT_WRITE_NEXT_ACTION } from "./protected-paths";
 
 // ─── Types ───
@@ -26,6 +27,8 @@ export interface EditEntry {
 export interface EditArgs {
   path: string;
   edits: EditEntry[];
+  /** Compute and preview the patch without writing. Returns the patch and the unchanged file hash. */
+  dryRun?: boolean;
 }
 
 // ─── Helpers ───
@@ -153,11 +156,23 @@ function generateDiffSummary(_original: string, _modified: string, edits: EditEn
 
 // ─── Tool Definition ───
 
+const LARGE_REMOVAL_ABSOLUTE_LINES = 100;
+const LARGE_REMOVAL_FRACTION = 0.5;
+
+function countRemovedLines(original: string, modified: string): number {
+  return Math.max(0, original.split("\n").length - modified.split("\n").length);
+}
+
+function isLargeRemoval(removedLines: number, original: string): boolean {
+  const totalLines = original.split("\n").length;
+  return removedLines >= LARGE_REMOVAL_ABSOLUTE_LINES || removedLines >= totalLines * LARGE_REMOVAL_FRACTION;
+}
+
 export const editTool: ToolDefinition<EditArgs> = {
   name: "edit",
   label: "edit",
   description:
-    "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead. Do not include large unchanged regions just to connect distant changes.",
+    "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead. Do not include large unchanged regions just to connect distant changes. An edit is refused when the file changed since the last read in this session; re-read it and retry. Use dryRun to preview the patch without writing.",
   parameters: {
     type: "object",
     properties: {
@@ -185,6 +200,10 @@ export const editTool: ToolDefinition<EditArgs> = {
           required: ["oldText", "newText"],
           additionalProperties: false,
         },
+      },
+      dryRun: {
+        type: "boolean",
+        description: "Preview the computed patch and file hash without writing. The file is left unchanged.",
       },
     },
     required: ["path", "edits"],
@@ -216,6 +235,7 @@ export const editTool: ToolDefinition<EditArgs> = {
     return {
       path: raw.path as string,
       edits: edits as EditEntry[],
+      ...(raw.dryRun === true ? { dryRun: true } : {}),
     };
   },
 
@@ -258,6 +278,17 @@ export const editTool: ToolDefinition<EditArgs> = {
       const buffer = await readFile(absolutePath);
       const originalContent = buffer.toString("utf-8");
 
+      const freshness = await checkFileFreshness(context.cwd, absolutePath);
+      if (freshness.stale) {
+        return createToolErrorResult({
+          code: "edit_stale_content",
+          category: "validation",
+          message: `Refusing to edit "${args.path}": ${freshness.reason ?? "the file changed since the last read"}. Nothing was modified.`,
+          nextAction: "Read the current file content with read or inspect_file, recompute the edit against it, then retry.",
+          fingerprint: `validation:edit_stale_content:${args.path}`,
+        });
+      }
+
       if (signal?.aborted) {
         return createToolErrorResult({
           code: "edit_aborted",
@@ -271,17 +302,41 @@ export const editTool: ToolDefinition<EditArgs> = {
       // Apply edits
       const modifiedContent = applyEdits(originalContent, args.edits);
 
+      const summary = generateDiffSummary(originalContent, modifiedContent, args.edits);
+      const removedLines = countRemovedLines(originalContent, modifiedContent);
+      const deletionWarning = removedLines > 0 && isLargeRemoval(removedLines, originalContent)
+        ? `[Warning: this edit removes ${removedLines} line(s) from a ${originalContent.split("\n").length}-line file. Verify the deletion is intentional.]\n`
+        : "";
+
+      if (args.dryRun === true) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${deletionWarning}Dry run: no changes written to ${args.path}.\nFile sha256 (unchanged): ${hashContent(originalContent)}\n\n${summary}`,
+            },
+          ],
+          isError: false,
+          details: {
+            path: absolutePath,
+            editCount: args.edits.length,
+            dryRun: true,
+            sha256: hashContent(originalContent),
+            oldText: originalContent,
+            newText: modifiedContent,
+          },
+        };
+      }
+
       // Write back
       await writeFile(absolutePath, modifiedContent, "utf-8");
-
-      // Generate summary
-      const summary = generateDiffSummary(originalContent, modifiedContent, args.edits);
+      recordFileState(context.cwd, absolutePath, modifiedContent);
 
       return {
         content: [
           {
             type: "text",
-            text: `Successfully applied ${args.edits.length} edit(s) to ${args.path}.\n\n${summary}`,
+            text: `${deletionWarning}Successfully applied ${args.edits.length} edit(s) to ${args.path}.\n\n${summary}`,
           },
         ],
         isError: false,
@@ -290,6 +345,7 @@ export const editTool: ToolDefinition<EditArgs> = {
           editCount: args.edits.length,
           oldText: originalContent,
           newText: modifiedContent,
+          ...(removedLines > 0 ? { removedLines } : {}),
         },
       };
     } catch (error) {

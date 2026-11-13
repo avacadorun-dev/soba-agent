@@ -1,0 +1,260 @@
+---
+title: CLI reference
+description: SOBA launch modes, top-level flags, provider subcommands, and check commands.
+---
+
+This page lists the SOBA Agent v0.6.x CLI surface available from the console.
+
+---
+
+## 1. Launch modes
+
+| Command | Purpose |
+|---|---|
+| `soba "prompt"` | One-shot task with session persistence |
+| `soba` | Interactive TUI when the process is running in a TTY |
+| `soba -i` | Explicit interactive TUI |
+| `soba -c` | Continue the latest session |
+| `soba -r` | Pick a session with the interactive selector |
+| `soba -s <id> "prompt"` | Continue a specific session |
+| `soba --no-session "prompt"` | Run without saving session history |
+
+---
+
+## 2. Top-level flags
+
+### Session and modes
+
+| Flag | Short | Description |
+|---|---|---|
+| `--interactive` | `-i` | Start the TUI |
+| `--continue` | `-c` | Continue the latest session |
+| `--resume` | `-r` | Pick a session |
+| `--session <id>` | `-s` | Open a specific session |
+| `--no-session` | — | Do not save history to disk |
+
+### Provider and model
+
+| Flag | Short | Description |
+|---|---|---|
+| `--model <id>` | `-m` | Override the model for one run; use `provider/model` to select a provider explicitly |
+| `--api-key <key>` | `-k` | Override the API key for one run |
+| `--base-url <url>` | — | Override the OpenAI-compatible base URL |
+
+An unqualified model ID stays on the configured default provider. A qualified value such as
+`openrouter/deepseek/deepseek-v4-flash` selects `openrouter` and sends `deepseek/deepseek-v4-flash` as its model ID.
+
+### Limits
+
+| Flag | Description |
+|---|---|
+| `--budget <n>` | Limit the task token budget |
+| `--max-output-tokens <n>` | Limit response output tokens |
+| `--max-tokens <n>` | Deprecated alias for `--max-output-tokens` |
+| `--max-completion-tokens <n>` | Limit reasoning/completion tokens |
+| `--reasoning-effort <level>` | Request `default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` |
+| `--reasoning-budget <n>` | Request a positive numeric reasoning budget |
+| `--reasoning-enabled` | Enable a toggle-based reasoning control |
+| `--no-reasoning` | Disable reasoning when supported |
+| `--context-window <n>` | Override the model context window |
+| `--max-agent-iterations <n>` | Emergency limit for model/tool loop iterations |
+| `--max-stalled-iterations <n>` | Iterations without progress before stall recovery |
+| `--max-run-minutes <n>` | Maximum duration of one task |
+| `--bash-max-timeout-seconds <n>` | Maximum timeout for one `bash` tool call in seconds; default is 300 |
+
+### Interface and behavior
+
+| Flag | Description |
+|---|---|
+| `--lang <en\|ru\|zh>` | Interface language |
+| `--theme <name>` | TUI theme |
+| `--no-color` | Disable ANSI colors |
+| `--no-stream` | Disable streaming |
+| `--stream` | Explicitly enable streaming |
+| `--debug` | Write loop decisions to the session JSONL |
+| `--no-auto-compact` | Disable proactive compaction |
+| `--worktree` | Run tools in a disposable git worktree instead of the live checkout |
+| `--keep` | Keep a `--worktree` checkout after the process exits |
+
+### Sound
+
+| Flag | Description |
+|---|---|
+| `--sound-enabled` | Enable sound notifications |
+| `--no-sound` | Disable sound notifications |
+| `--sound-volume <0..1>` | Volume |
+| `--sound-repeat` | Repeat the sound until the next event or state change |
+
+### Info
+
+| Flag | Short | Description |
+|---|---|---|
+| `--help` | `-h` | Show help |
+| `--version` | `-v` | Show version |
+
+---
+
+## 3. Proof commands
+
+Proof bundles are persisted in `.soba/evidence/*.soba-proof.json` after accepted agent finishes.
+Current proof bundles include a compact evidence index, finish claims, changed files, checks, commands, permission receipts, risks, and review actions.
+Permission receipts record each executed tool call's trust level, approval kind, approval value, decision, reason, and safer alternatives when SOBA can suggest a least-privilege rewrite; `auto` means SOBA's trust policy allowed the call without prompting.
+New receipts also contain `proofId`, `runId`, and a SHA-256 `integrity.digest`. `soba verify` validates schema and
+content integrity, supported claim references, command outcomes, mutation ordering, diff completeness, permissions, and
+secret redaction.
+
+| Command | Purpose |
+|---|---|
+| `soba prove` | Show a compact `Verified` / `Needs attention` summary for the latest proof |
+| `soba prove --last` | Explicitly show the latest proof bundle |
+| `soba prove --verbose` | Show contract-level IDs, digests, commands, and evidence references |
+| `soba prove --format markdown` | Render the latest proof as Markdown |
+| `soba prove --format json` | Print the latest proof as JSON with `proofPath` |
+| `soba prove <path>` | Show a specific `.soba-proof.json` file |
+| `soba verify` | Run the strict policy validation and show a compact result |
+| `soba verify --verbose` | Show every validation count and issue |
+| `soba verify --format json` | Print verification issues as JSON |
+| `soba verify <path>` | Validate a specific `.soba-proof.json` file |
+| `soba explain-claim 1` | Explain the first displayed claim without copying an internal ID |
+| `soba explain-claim <claim> --verbose` | Show the claim's complete evidence references |
+| `soba explain-claim <claim> --proof <path>` | Explain one claim from a specific `.soba-proof.json` file |
+
+`soba prove`, `soba verify`, and `soba explain-claim` do not start the agent runtime and do not require provider credentials.
+Their human output is compact by default. `--verbose` restores technical detail, while JSON schemas and exit codes stay
+unchanged for automation.
+
+`soba verify` uses stable policy exits: `0` verified, `1` invalid, `2` partially verified, `3` unverified, and `4`
+blocked. JSON output includes `accepted`, `outcome`, `reason`, and `exitCode`. Legacy receipts without integrity metadata
+remain readable, but are downgraded to `partially_verified` with reason `legacy_unsealed_proof` and exit code 2.
+
+---
+
+## 4. Project Memory commands
+
+Project Memory lives in `.soba/memory/`. `soba memory doctor` inspects the persisted knowledge files and memory capsules without starting the agent runtime.
+It reports knowledge file counts, estimated token usage, capsule source provenance, stale capsules, missing sources, outside-project source references, and corrupt capsule files.
+
+| Command | Purpose |
+|---|---|
+| `soba memory doctor` | Inspect Project Memory health for the current project |
+| `soba memory doctor --format json` | Print the report as JSON for CI or scripts |
+| `soba memory doctor --format markdown` | Render the report as Markdown |
+| `soba memory stale` | Show only stale or broken memory capsules and related issues |
+| `soba memory stale --format json` | Print stale/broken memory receipts as JSON for CI or scripts |
+| `soba memory verify` | Verify Project Memory health with a compact CI-friendly report |
+| `soba memory explain <query>` | Explain relevant memory capsules, source receipts, and doctor issues |
+| `soba memory explain <query> --format json` | Print the explanation as JSON for scripts |
+
+Exit code is `0` only when memory is `healthy`. Stale or broken memory returns `1` and writes the report to stderr.
+For `soba memory stale`, exit code is `0` only when there are no stale or broken capsules and no memory doctor issues.
+For `soba memory verify`, exit code is `0` only when the verification report is `verified: true`.
+For `soba memory explain`, exit code is `0` only when at least one matching capsule is safe to use; stale, broken, or missing matches return `1`.
+
+`soba memory doctor`, `soba memory stale`, `soba memory verify`, and `soba memory explain` do not start the agent runtime and do not require provider credentials.
+
+---
+
+## 5. Provider subcommands
+
+The provider registry is managed through the `soba provider` sub-route.
+
+| Command | Purpose |
+|---|---|
+| `soba provider help` | Provider CLI help |
+| `soba provider list` | List built-in and custom providers |
+| `soba provider show <id>` | Show provider definition |
+| `soba provider use <id>` | Make a provider active |
+| `soba provider add <id> ...` | Add a custom provider |
+| `soba provider remove <id>` | Remove a custom provider |
+
+### `soba provider add`
+
+Supported flags:
+
+| Flag | Description |
+|---|---|
+| `--name <name>` | Human-readable name |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | Env var with the API key; empty value means a keyless provider |
+| `--adapter <openai\|openai-responses\|anthropic>` | Adapter id. Use `openai-responses` only for an endpoint that implements the Responses API |
+| `--metadata-profile <profile>` | Discovery profile: `auto`, `generic_openai`, `openrouter`, `vllm`, `ollama`, `lmstudio`, `llamacpp`, or `none` |
+| `--default-model <id>` | Default model |
+| `--model <spec>` | Model spec; the flag can be repeated |
+| `--from-file <path>` | Load provider definition from JSON |
+| `--set-active` | Switch to the added provider immediately |
+
+`--model` format:
+
+```text
+id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]
+```
+
+Example keyless local provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+`8192,2048` is a gentle starting point for a local model: context window first, max output tokens second. Larger values such as `128000,8192` can put a lot of pressure on memory and make a laptop feel painfully slow.
+
+Limits are optional. For example, `--model local-code="Local Code" --metadata-profile vllm` lets SOBA fill context/output values from the endpoint when it exposes them. If metadata is absent, SOBA uses conservative assumed values and marks them with `~`; pass explicit numbers when the server catalogue is incomplete.
+
+Structured reasoning capabilities and the provider-specific wire transport are declared in a full JSON definition loaded with `--from-file`. SOBA never sends reasoning fields to an unknown endpoint merely because the model name looks familiar.
+
+---
+
+## 5. Practical check commands
+
+```bash
+soba --version
+soba --help
+soba prove --last
+soba verify --last
+soba explain-claim claim_1 --last
+soba provider list
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+For development in the repository:
+
+```bash
+soba -i --lang en --theme graphite
+```
+
+---
+
+## 6. Direct shell in the TUI
+
+In interactive mode, shell commands can be run directly:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` runs the command immediately. `!!` runs it without adding output to the transcript. If you want the agent to see and
+analyze the output, ask it to run the command through a normal prompt, which uses the `bash` tool.
+
+## 7. Environment capability doctor
+
+`soba doctor` probes the capabilities that verification claims depend on — vision (from the active model's declared
+`input_image` support), screenshot, accessibility automation, clipboard, display server, and browser — and writes the
+report to `.soba/capabilities.json`. The report is injected into the session context, and the agent must refuse claims
+that need an unavailable capability instead of degrading silently.
+
+| Command | Purpose |
+|---|---|
+| `soba doctor` | Re-probe environment capabilities and refresh the cached report |
+
+Re-run `soba doctor` after changing OS permissions (for example granting Screen Recording or Accessibility access) to
+refresh the report.
+
+## Next
+
+- [Providers and models](/en/docs/v0.7/providers)
+- [Interface and commands](/en/docs/v0.7/usage)
+- [Configuration](/en/docs/v0.7/configuration)

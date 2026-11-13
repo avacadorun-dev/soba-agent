@@ -12,6 +12,7 @@ import { createInterface } from "node:readline";
 import { classifyFileSystemError, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 import { truncateOutput } from "../../../kernel/tools/types";
+import { recordFileState } from "./file-state";
 
 // ─── Types ───
 
@@ -92,6 +93,24 @@ export const readTool: ToolDefinition<ReadArgs> = {
 
     // Handle images
     if (isImagePath(absolutePath)) {
+      if (context.visionSupported === false) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[Image read skipped: the active model does not declare vision (input_image) support. ` +
+                `Visual verification claims are not allowed with this model. ` +
+                `Re-run after switching to a vision-capable model, or describe the image contents another way.]`,
+            },
+          ],
+          isError: false,
+          details: {
+            path: absolutePath,
+            visionSupported: false,
+            stub: true,
+          },
+        };
+      }
       try {
         const buffer = await readFile(absolutePath);
         const mimeType = `image/${basename(absolutePath).split(".").pop()?.replace("jpg", "jpeg") ?? "png"}`;
@@ -128,6 +147,7 @@ export const readTool: ToolDefinition<ReadArgs> = {
     try {
       const buffer = await readFile(absolutePath);
       const textContent = buffer.toString("utf-8");
+      recordFileState(context.cwd, absolutePath, buffer);
       const allLines = textContent.split("\n");
       const totalLines = allLines.length;
 

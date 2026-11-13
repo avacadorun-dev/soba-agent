@@ -89,10 +89,14 @@ export interface ToolContext {
   cwd: string;
   /** Current runtime session id, when tool execution is scoped to a session */
   sessionId?: string;
+  /** Id of the tool call being executed, when the host provides one */
+  toolCallId?: string;
   /** Session manager reference (for in-memory sessions) */
   session?: unknown;
   /** Maximum timeout any bash tool call may request, in seconds */
   bashMaxTimeoutSeconds?: number;
+  /** Whether the active model declares vision (input_image) support. When false, read returns a text stub for images. */
+  visionSupported?: boolean;
   /** Optional interactive clarification bridge supplied by the active host. */
   requestClarification?: (request: AskUserArgs, signal?: AbortSignal) => Promise<ClarificationOutcome>;
   /** Optional ephemeral output sink for tools that can report progress while running. */

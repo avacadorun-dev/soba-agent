@@ -485,4 +485,155 @@ describe("EvidenceLedger", () => {
     expect(completionState.successfulToolCallIds).toEqual(new Set(["edit_1"]));
     expect(completionState.verificationEvidenceCallIds).toEqual(new Set());
   });
+
+  test("passing verification records a hashed log artifact reference", () => {
+    const ledger = new EvidenceLedger();
+    const entry = ledger.recordToolOutcome({
+      toolCallId: "verify_1",
+      toolName: "bash",
+      arguments: recordArgs("bun test"),
+      isError: false,
+      output: "pass\n",
+      iteration: 1,
+      details: {
+        command: "bun test",
+        exitCode: 0,
+        logPath: ".soba/evidence/logs/run-1/verify_1.log",
+        logBytes: 5,
+        logSha256: "sha256:abc123",
+      },
+    });
+
+    expect(entry).toMatchObject({
+      kind: "verification",
+      status: "success",
+      exitCode: 0,
+      logPath: ".soba/evidence/logs/run-1/verify_1.log",
+      logBytes: 5,
+      logSha256: "sha256:abc123",
+    });
+  });
+
+  test("timed-out verification is reported as timed out, not as failed", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "verify_timeout",
+      toolName: "bash",
+      arguments: recordArgs("bun test"),
+      isError: true,
+      output: "…\n[Command timed out after 30s]",
+      iteration: 1,
+      details: { command: "bun test", exitCode: null, timedOut: true },
+    });
+
+    const entry = ledger.getEntries().find((item) => item.kind === "verification");
+    expect(entry).toMatchObject({ kind: "verification", status: "failure", timedOut: true });
+    expect(entry?.summary).toContain("timed out");
+    expect(entry?.summary).not.toContain("failed:");
+  });
+
+  test("allowFailure probe never becomes verification evidence", () => {
+    const ledger = new EvidenceLedger();
+    ledger.recordToolOutcome({
+      toolCallId: "edit_1",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "src/file.ts" }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const entry = ledger.recordToolOutcome({
+      toolCallId: "probe_1",
+      toolName: "bash",
+      arguments: recordArgs("bun test"),
+      isError: false,
+      output: "pass\n",
+      iteration: 2,
+      details: { command: "bun test", exitCode: 0, allowFailure: true },
+    });
+
+    const summary = ledger.getSummary();
+    expect(entry.kind).toBe("inspect");
+    expect(entry.summary).toContain("never verification evidence");
+    expect(summary.verificationEvidenceCallIds).toEqual(new Set());
+    expect(summary.verificationKinds).toEqual(new Set());
+    expect(summary.needsVerification).toBe(true);
+    expect(summary.unverifiedMutationIds.length).toBe(1);
+  });
+
+  test("failed allowFailure probe records a diagnostic, not a verification failure", () => {
+    const ledger = new EvidenceLedger();
+    const entry = ledger.recordToolOutcome({
+      toolCallId: "probe_2",
+      toolName: "bash",
+      arguments: recordArgs("curl -sf http://localhost:9999/health"),
+      isError: true,
+      output: "connection refused",
+      iteration: 1,
+      details: { command: "curl -sf http://localhost:9999/health", exitCode: 7, allowFailure: true },
+    });
+
+    const summary = ledger.getSummary();
+    expect(entry.kind).toBe("diagnostic");
+    expect(summary.unresolvedVerificationFailureIds).toEqual([]);
+  });
+});
+
+describe("EvidenceLedger inspect_diff", () => {
+  test("inspect_diff resolves docs-only mutations as diff inspection evidence", () => {
+    const ledger = new EvidenceLedger();
+    const mutation = ledger.recordToolOutcome({
+      toolCallId: "edit_docs",
+      toolName: "edit",
+      arguments: JSON.stringify({ path: "README.md", edits: [{ oldText: "a", newText: "b" }] }),
+      isError: false,
+      output: "edited",
+      iteration: 1,
+    });
+
+    const entry = ledger.recordToolOutcome({
+      toolCallId: "diff_1",
+      toolName: "inspect_diff",
+      arguments: JSON.stringify({ glob: "*.md" }),
+      isError: false,
+      output: "README.md: +1/-1",
+      iteration: 2,
+    });
+
+    const summary = ledger.getSummary();
+    expect(entry).toMatchObject({ kind: "verification", status: "success", verificationKind: "diff_inspection" });
+    expect(entry.mutationIds).toEqual([mutation.id]);
+    expect(summary.unverifiedMutationIds).toEqual([]);
+    expect(summary.inspectionEvidenceCallIds.has("diff_1")).toBe(true);
+  });
+});
+
+describe("EvidenceLedger plan items", () => {
+  test("checkpoint items replace the plan and expose active items", () => {
+    const ledger = new EvidenceLedger();
+    ledger.setPlanItems([{ title: "carried over", status: "active" }]);
+
+    const entry = ledger.recordCheckpoint({
+      kind: "plan_pivot",
+      reason: "replan",
+      completed: [],
+      pending: [],
+      items: [
+        { title: "write tests", status: "done", evidenceIds: ["ev_verification_1"] },
+        { title: "update docs", status: "pending" },
+        { title: "fix lint", status: "blocked" },
+      ],
+      toolCallId: "ck_1",
+      iteration: 2,
+    });
+
+    expect(entry.planItems?.length).toBe(3);
+    expect(ledger.getActivePlanItems().map((item) => item.title)).toEqual(["update docs", "fix lint"]);
+    expect(ledger.getSummary().activePlanItems.length).toBe(2);
+
+    // A checkpoint without items keeps the existing plan.
+    ledger.recordCheckpoint({ kind: "milestone", reason: "progress", completed: [], pending: [] });
+    expect(ledger.getActivePlanItems().length).toBe(2);
+  });
 });

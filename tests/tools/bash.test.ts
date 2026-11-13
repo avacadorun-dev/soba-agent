@@ -363,4 +363,58 @@ describe("bash tool", () => {
     expect(result.details?.timedOut).toBe(false);
     expect(result.content[0].text).toContain("Command stopped by user");
   });
+
+  test("сохраняет полный лог с sha256 под .soba/evidence/logs", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute(
+      { command: "printf 'line1\\nline2\\nline3\\n'" },
+      { cwd, sessionId: "sess-1", toolCallId: "call-1" },
+    );
+
+    expect(result.isError).toBe(false);
+    const logPath = join(cwd, ".soba", "evidence", "logs", "sess-1", "call-1.log");
+    expect(result.details?.logPath).toBe(logPath);
+    expect(existsSync(logPath)).toBe(true);
+    expect(readFileSync(logPath, "utf-8")).toBe("line1\nline2\nline3\n");
+    expect(String(result.details?.logBytes)).toBe(String(18));
+    expect(String(result.details?.logSha256)).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  test("tailLines усекает только представление, полный лог остаётся целым", async () => {
+    const cwd = makeCwd();
+    const result = await bashTool.execute(
+      { command: "seq 1 50", tailLines: 3 },
+      { cwd, sessionId: "sess-1", toolCallId: "call-tail" },
+    );
+
+    expect(result.isError).toBe(false);
+    const text = result.content[0].text;
+    expect(text).toContain("50");
+    expect(text).not.toContain("\n1\n");
+    expect(text).toContain("Presentation truncated to last 3 lines");
+    const logPath = join(cwd, ".soba", "evidence", "logs", "sess-1", "call-tail.log");
+    const fullLog = readFileSync(logPath, "utf-8");
+    expect(fullLog).toContain("1\n");
+    expect(fullLog).toContain("50\n");
+    expect(fullLog.split("\n").length).toBe(51);
+  });
+
+  test("allowFailure помечает пробу в details", async () => {
+    const cwd = makeCwd();
+    const failing = await bashTool.execute(
+      { command: "exit 3", allowFailure: true },
+      { cwd, sessionId: "sess-1", toolCallId: "call-probe" },
+    );
+
+    expect(failing.isError).toBe(true);
+    expect(failing.details?.allowFailure).toBe(true);
+    expect(failing.details?.exitCode).toBe(3);
+
+    const passing = await bashTool.execute(
+      { command: "echo ok", allowFailure: true },
+      { cwd, sessionId: "sess-1", toolCallId: "call-probe-ok" },
+    );
+    expect(passing.isError).toBe(false);
+    expect(passing.details?.allowFailure).toBe(true);
+  });
 });

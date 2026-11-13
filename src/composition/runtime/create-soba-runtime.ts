@@ -37,6 +37,8 @@ import { createMcpStack } from "./create-mcp-stack";
 import { createProviderStack } from "./create-provider-stack";
 import { createSkillStack } from "./create-skill-stack";
 import { createToolStack } from "./create-tool-stack";
+import { cachedCapabilityReportForPrompt } from "./environment-capabilities";
+import { loadKnownFailures } from "./known-failures";
 import { createProjectCommandFileReader, createProjectContextReader } from "./project-files";
 
 export interface RuntimeFactoryInput {
@@ -207,6 +209,10 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
   });
 
   const useStreaming = noStream ? false : stream || interactive;
+  const knownFailures = loadKnownFailures(sourceRoot);
+  for (const warning of knownFailures.warnings) {
+    console.warn(`[soba] ${warning}`);
+  }
   const agentLoop = new AgentLoop(
     client,
     session,
@@ -222,6 +228,8 @@ export async function createSobaRuntime(input: RuntimeFactoryInput): Promise<Sob
       maxRunDurationMs: config.maxRunMinutes * 60 * 1000,
       bashMaxTimeoutSeconds: config.bashMaxTimeoutSeconds,
       workspace,
+      knownFailures: knownFailures.declarations,
+      capabilityReport: cachedCapabilityReportForPrompt(sourceRoot) ?? undefined,
     },
     trustManager,
     undefined,

@@ -203,6 +203,12 @@ function emptySummary(): EvidenceLedgerSummary {
     unverifiedDocsMutationIds: [],
     activeDiagnosticIds: [],
     unresolvedVerificationFailureIds: [],
+    unresolvedVerificationFailures: [],
+    mutatedFilePaths: [],
+    knownFailures: [],
+    activePlanItems: [],
+    docsClassifiedPaths: [],
+    codeClassifiedPaths: [],
     entries: [],
   };
 }

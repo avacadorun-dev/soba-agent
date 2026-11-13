@@ -11,8 +11,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, statSync, writeSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, statSync, writeSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { commandErrorInfo, createToolErrorResult, redactSecrets } from "../../../kernel/tools/errors";
 import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/tools/types";
 
@@ -21,6 +21,10 @@ import type { ToolContext, ToolDefinition, ToolResult } from "../../../kernel/to
 export interface BashArgs {
   command: string;
   timeout?: number;
+  /** Presentation-only truncation: keep only the last N lines in the tool result. The stored evidence log stays complete. */
+  tailLines?: number;
+  /** Label this run as a probe that is allowed to fail. allowFailure output is never verification evidence and cannot satisfy a completed claim. */
+  allowFailure?: boolean;
 }
 
 function validateBashArgs(args: BashArgs): ToolResult | null {
@@ -56,6 +60,7 @@ const SNAPSHOT_SKIP_DIRS = new Set([
   ".git",
   ".hg",
   ".svn",
+  ".soba",
   ".soba-tmp",
   "node_modules",
   "vendor",
@@ -78,6 +83,7 @@ async function execCommand(
   timeoutSec: number,
   signal?: AbortSignal,
   onOutput?: (chunk: string) => void,
+  evidenceLogPath?: string,
 ): Promise<{
   output: string;
   exitCode: number | null;
@@ -86,6 +92,8 @@ async function execCommand(
   aborted: boolean;
   truncated: boolean;
   tempPath?: string;
+  logBytes?: number;
+  logSha256?: string;
 }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
@@ -98,7 +106,7 @@ async function execCommand(
       detached: process.platform !== "win32",
     });
 
-    const capture = new StreamingOutputCapture(cwd, MAX_LINES, MAX_BYTES, onOutput);
+    const capture = new StreamingOutputCapture(cwd, MAX_LINES, MAX_BYTES, onOutput, evidenceLogPath);
     let timedOut = false;
     let aborted = false;
     let settled = false;
@@ -168,6 +176,8 @@ async function execCommand(
         aborted,
         truncated: capture.truncated,
         tempPath: capture.tempPath,
+        logBytes: capture.logBytes,
+        logSha256: capture.logSha256,
       });
     });
   });
@@ -177,6 +187,7 @@ class StreamingOutputCapture {
   private readonly cwd: string;
   private readonly maxLines: number;
   private readonly maxBytes: number;
+  private readonly evidenceLogPath?: string;
   private preview = "";
   private redactionCarry = "";
   private pendingFullOutput: string[] = [];
@@ -185,6 +196,9 @@ class StreamingOutputCapture {
   private totalBytes = 0;
   private totalLineBreaks = 0;
   private _truncated = false;
+  private readonly logHash = createHash("sha256");
+  private _logBytes = 0;
+  private _logSha256: string | undefined;
   private readonly onOutput?: (chunk: string) => void;
 
   constructor(
@@ -192,11 +206,13 @@ class StreamingOutputCapture {
     maxLines: number,
     maxBytes: number,
     onOutput?: (chunk: string) => void,
+    evidenceLogPath?: string,
   ) {
     this.cwd = cwd;
     this.maxLines = maxLines;
     this.maxBytes = maxBytes;
     this.onOutput = onOutput;
+    this.evidenceLogPath = evidenceLogPath;
   }
 
   get truncated(): boolean {
@@ -205,6 +221,19 @@ class StreamingOutputCapture {
 
   get tempPath(): string | undefined {
     return this._tempPath;
+  }
+
+  /** Path of the persisted full log, when spooling succeeded. */
+  get logPath(): string | undefined {
+    return this._tempPath;
+  }
+
+  get logBytes(): number {
+    return this._logBytes;
+  }
+
+  get logSha256(): string | undefined {
+    return this._logSha256;
   }
 
   append(data: Buffer): void {
@@ -229,9 +258,14 @@ class StreamingOutputCapture {
       this.appendRedacted(redactSecrets(this.redactionCarry));
       this.redactionCarry = "";
     }
+    if (this.spoolFd === null && this._tempPath === undefined) {
+      // Even a silent run persists an empty evidence log with a stable hash.
+      this.ensureSpool();
+    }
     if (this.spoolFd !== null) {
       closeSync(this.spoolFd);
       this.spoolFd = null;
+      this._logSha256 = this.logHash.digest("hex");
     }
   }
 
@@ -251,13 +285,15 @@ class StreamingOutputCapture {
     this.totalBytes += Buffer.byteLength(chunk, "utf-8");
     this.totalLineBreaks += countLineBreaks(chunk);
 
+    // Every run persists its complete redacted output as a hashed evidence log.
+    this.ensureSpool();
+    this.logHash.update(chunk, "utf-8");
+    this._logBytes += Buffer.byteLength(chunk, "utf-8");
+
     if (this.spoolFd !== null) {
       writeSync(this.spoolFd, chunk);
     } else {
       this.pendingFullOutput.push(chunk);
-      if (this.totalBytes > this.maxBytes || this.totalLineBreaks >= this.maxLines) {
-        this.ensureSpool();
-      }
     }
 
     this.preview += chunk;
@@ -266,18 +302,33 @@ class StreamingOutputCapture {
 
   private ensureSpool(): void {
     if (this._tempPath || this.spoolFd !== null) return;
+    if (this.openSpoolAt(this.evidenceLogPath)) return;
+    // Fall back to a temp spool when the evidence directory is not writable.
     try {
       mkdirSync(join(this.cwd, ".soba-tmp"), { recursive: true });
       const tempDir = mkdtempSync(join(join(this.cwd, ".soba-tmp"), "bash-"));
-      this._tempPath = join(tempDir, "output.txt");
-      this.spoolFd = openSync(this._tempPath, "w");
+      this.openSpoolAt(join(tempDir, "output.txt"));
+    } catch {
+      this._tempPath = undefined;
+      this.spoolFd = null;
+    }
+  }
+
+  private openSpoolAt(path: string | undefined): boolean {
+    if (!path) return false;
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      this._tempPath = path;
+      this.spoolFd = openSync(path, "w");
       for (const chunk of this.pendingFullOutput) {
         writeSync(this.spoolFd, chunk);
       }
       this.pendingFullOutput = [];
+      return true;
     } catch {
       this._tempPath = undefined;
       this.spoolFd = null;
+      return false;
     }
   }
 
@@ -344,6 +395,55 @@ function lastPatternIndex(value: string, pattern: RegExp): number {
   return lastIndex;
 }
 
+const FAILING_TEST_ID_PATTERNS = [
+  /(?:\(fail\)|✗|✕|×)\s*([A-Za-z0-9_./:$<>-]+)/g,
+  /FAILED\s+(\S+?)(?:\s+[-—]|\s*$)/gim,
+];
+const IMPLICATED_FILE_RE = /((?:[\w.@~-]+\/)+[\w.@~-]+\.[A-Za-z0-9]+)(?::\d+)?:?/g;
+const MAX_FAILURE_TEST_IDS = 50;
+const MAX_IMPLICATED_FILES = 20;
+
+function extractFailingTestIds(output: string): string[] {
+  const ids = new Set<string>();
+  for (const pattern of FAILING_TEST_ID_PATTERNS) {
+    for (const match of output.matchAll(pattern)) {
+      const id = match[1]?.replace(/[.,;:[\]()]+$/, "");
+      if (id && id.length > 1) ids.add(id);
+      if (ids.size >= MAX_FAILURE_TEST_IDS) return [...ids];
+    }
+  }
+  return [...ids];
+}
+
+function extractImplicatedFiles(output: string, cwd: string): { path: string; sha256?: string }[] {
+  const candidates = new Set<string>();
+  for (const match of output.matchAll(IMPLICATED_FILE_RE)) {
+    const candidate = match[1];
+    if (candidate && !candidate.includes("node_modules/")) candidates.add(candidate);
+    if (candidates.size >= MAX_IMPLICATED_FILES * 3) break;
+  }
+
+  const files: { path: string; sha256?: string }[] = [];
+  for (const candidate of candidates) {
+    if (files.length >= MAX_IMPLICATED_FILES) break;
+    let absolute: string;
+    try {
+      absolute = new URL(candidate, `file://${cwd}/`).pathname;
+    } catch {
+      continue;
+    }
+    if (!existsSync(absolute)) continue;
+    try {
+      if (!statSync(absolute).isFile()) continue;
+      const sha256 = createHash("sha256").update(readFileSync(absolute)).digest("hex");
+      files.push({ path: candidate, sha256 });
+    } catch {
+      // Unreadable candidate path; skip it rather than failing the extraction.
+    }
+  }
+  return files;
+}
+
 function normalizeMaxTimeout(maxTimeout: number | undefined): number {
   if (maxTimeout === undefined || !Number.isFinite(maxTimeout)) {
     return DEFAULT_MAX_TIMEOUT;
@@ -379,6 +479,23 @@ function normalizeTimeout(
     maxSeconds,
     note: `[Requested timeout ${timeout}s adjusted to ${seconds}s; allowed range is ${MIN_TIMEOUT}-${maxSeconds}s]`,
   };
+}
+
+function normalizeTailLines(value: number | undefined): number | null {
+  if (value === undefined) return null;
+  if (!Number.isFinite(value)) return null;
+  return Math.max(1, Math.floor(value));
+}
+
+function sanitizePathSegment(value: string): string {
+  const sanitized = value.replace(/[^A-Za-z0-9._-]/g, "_");
+  return sanitized.length > 0 ? sanitized.slice(0, 80) : "unknown";
+}
+
+function evidenceLogPathFor(context: ToolContext): string {
+  const runId = sanitizePathSegment(context.sessionId ?? "default");
+  const callId = sanitizePathSegment(context.toolCallId ?? crypto.randomUUID().slice(0, 12));
+  return join(context.cwd, ".soba", "evidence", "logs", runId, `${callId}.log`);
 }
 
 type ProjectFileSnapshot = Map<string, string>;
@@ -454,7 +571,7 @@ export const bashTool: ToolDefinition<BashArgs> = {
   name: "bash",
   label: "bash",
   description:
-    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Prefer ls, search_files, read, or inspect_file for bounded routine file inspection when they fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail/tee or masked by `; echo exit` wrappers are diagnostic only and do not count as passing verification evidence. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first). When truncated, full output is saved to a temp file.",
+    "Run project commands, verification workflows, git, package-manager scripts, and shell-only operations in the current working directory. Prefer ls, search_files, read, or inspect_file for bounded routine file inspection when they fit. Run final verification directly; --help/--version/which probes and verification piped through head/tail/tee or masked by `; echo exit` wrappers are diagnostic only and do not count as passing verification evidence. Default timeout is 30s and requested timeouts are capped by the runtime bashMaxTimeoutSeconds setting (default 300s). Output is truncated to the last 2000 lines or 50KB (whichever is hit first); use tailLines for presentation-only truncation of the result. Every run persists its complete redacted output under .soba/evidence/logs/<session>/<call>.log with a sha256 hash. allowFailure labels a probe that is expected to fail; its output is never verification evidence.",
   parameters: {
     type: "object",
     properties: {
@@ -465,6 +582,16 @@ export const bashTool: ToolDefinition<BashArgs> = {
       timeout: {
         type: "number",
         description: "Timeout in seconds (optional, default 30s, capped by runtime config)",
+      },
+      tailLines: {
+        type: "number",
+        description:
+          "Optional. Keep only the last N lines in the tool result. Presentation only: the persisted evidence log stays complete.",
+      },
+      allowFailure: {
+        type: "boolean",
+        description:
+          "Optional. Label this run as a probe that is allowed to fail. allowFailure output is never verification evidence and cannot satisfy a completed claim.",
       },
     },
     required: ["command"],
@@ -486,10 +613,12 @@ export const bashTool: ToolDefinition<BashArgs> = {
     }
 
     const timeout = normalizeTimeout(args.timeout, context.bashMaxTimeoutSeconds);
+    const tailLines = normalizeTailLines(args.tailLines);
+    const evidenceLogPath = evidenceLogPathFor(context);
 
     try {
       const beforeSnapshot = shouldTrackShellFileChanges(args.command) ? snapshotProjectFiles(context.cwd) : null;
-      const result = await execCommand(args.command, context.cwd, timeout.seconds, signal, context.onOutput);
+      const result = await execCommand(args.command, context.cwd, timeout.seconds, signal, context.onOutput, evidenceLogPath);
       const changedFiles = beforeSnapshot ? changedFilesBetween(beforeSnapshot, snapshotProjectFiles(context.cwd)) : [];
 
       let output = timeout.note ? `${timeout.note}\n` : "";
@@ -509,9 +638,6 @@ export const bashTool: ToolDefinition<BashArgs> = {
       if (result.truncated) {
         outputText += `\n[Output truncated to last ${MAX_LINES} lines / ${MAX_BYTES / 1024}KB]`;
       }
-      if (result.tempPath) {
-        outputText += `\n[Full output saved to ${result.tempPath}]`;
-      }
 
       const reportedExitCode = detectReportedExitCode(args.command, outputText);
       const effectiveExitCode = effectiveCommandExitCode(result.exitCode, reportedExitCode);
@@ -524,11 +650,32 @@ export const bashTool: ToolDefinition<BashArgs> = {
       if (error) {
         outputText += `\n[${error.code}: ${error.nextAction}]`;
       }
+
+      const logPath = result.tempPath;
+      const logSha256 = result.logSha256;
+      if (tailLines !== null) {
+        const lines = outputText.split("\n");
+        if (lines.length > tailLines) {
+          outputText = lines.slice(-tailLines).join("\n");
+          outputText += `\n[Presentation truncated to last ${tailLines} lines; full log: ${logPath ?? "unavailable"}${logSha256 ? ` sha256:${logSha256}` : ""}]`;
+        }
+      } else if (result.truncated && logPath) {
+        outputText += `\n[Full output saved to ${logPath}]`;
+      }
       const outputDigest = `sha256:${createHash("sha256").update(outputText).digest("hex")}`;
+      const failed = effectiveExitCode !== 0 || result.signalCode !== null || result.aborted;
+      const failureSignal = failed
+        ? {
+            command: args.command,
+            exitCode: effectiveExitCode,
+            failingTestIds: extractFailingTestIds(outputText),
+            implicatedFiles: extractImplicatedFiles(outputText, context.cwd),
+          }
+        : undefined;
 
       return {
         content: [{ type: "text", text: outputText || "(no output)" }],
-        isError: effectiveExitCode !== 0 || result.signalCode !== null || result.aborted,
+        isError: failed,
         error,
         details: {
           command: args.command,
@@ -543,6 +690,11 @@ export const bashTool: ToolDefinition<BashArgs> = {
           timeoutSeconds: timeout.seconds,
           maxTimeoutSeconds: timeout.maxSeconds,
           tempPath: result.tempPath,
+          logPath,
+          logBytes: result.logBytes ?? 0,
+          ...(logSha256 ? { logSha256: `sha256:${logSha256}` } : {}),
+          ...(args.allowFailure === true ? { allowFailure: true } : {}),
+          ...(failureSignal ? { failureSignal } : {}),
           ...(changedFiles.length > 0
             ? {
                 changedFiles: changedFiles.slice(0, MAX_REPORTED_CHANGED_FILES),

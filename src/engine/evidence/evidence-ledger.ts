@@ -1,6 +1,13 @@
+import type { PlanItem } from "../../kernel/tools/checkpoint";
 import { hasToolEffect, resolveToolSemantics, type ToolSemantics } from "../../kernel/tools/semantics";
 import type { FixUntilGreenDecision } from "../recovery";
 import type { AgentTurnError } from "../turn/types";
+import {
+  type BaselineMatch,
+  type FailureSignal,
+  failureSignature,
+  type KnownFailureDeclaration,
+} from "../verification/verification-baseline";
 import {
   isCodePath,
   isDocumentationPath,
@@ -17,7 +24,8 @@ export type EvidenceKind =
   | "checkpoint"
   | "reflection"
   | "recovery_attempt"
-  | "finish_attempt";
+  | "finish_attempt"
+  | "process_job";
 
 export type EvidenceStatus = "success" | "failure" | "active" | "resolved" | "unverified" | "rejected";
 
@@ -31,6 +39,7 @@ export interface EvidenceEntry {
   nextDirection?: string;
   completed?: string[];
   pending?: string[];
+  planItems?: PlanItem[];
   toolCallId?: string;
   toolName?: string;
   command?: string;
@@ -40,6 +49,12 @@ export interface EvidenceEntry {
   cwd?: string;
   outputPreview?: string;
   outputDigest?: string;
+  logPath?: string;
+  logBytes?: number;
+  logSha256?: string;
+  timedOut?: boolean;
+  failureSignal?: FailureSignal;
+  baselineMatch?: BaselineMatch;
   files?: string[];
   mutationIds?: string[];
   resolves?: string[];
@@ -72,6 +87,7 @@ export interface CheckpointEvidenceNotice {
   nextDirection?: string;
   completed: string[];
   pending: string[];
+  items?: PlanItem[];
   toolCallId?: string;
   iteration?: number;
 }
@@ -91,6 +107,19 @@ export interface EvidenceLedgerSummary {
   unverifiedDocsMutationIds: string[];
   activeDiagnosticIds: string[];
   unresolvedVerificationFailureIds: string[];
+  unresolvedVerificationFailures: {
+    id: string;
+    command?: string;
+    failureSignal?: FailureSignal;
+    baselineMatch?: BaselineMatch;
+    timedOut?: boolean;
+    summary?: string;
+  }[];
+  mutatedFilePaths: string[];
+  knownFailures: KnownFailureDeclaration[];
+  activePlanItems: PlanItem[];
+  docsClassifiedPaths: string[];
+  codeClassifiedPaths: string[];
   entries: EvidenceEntry[];
 }
 
@@ -99,13 +128,36 @@ const OUTPUT_PREVIEW_MAX_CHARS = 2_000;
 export class EvidenceLedger {
   private readonly entries: EvidenceEntry[] = [];
   private readonly successfulToolCallIds = new Set<string>();
+  private readonly commandOutcomes = new Map<string, "passed" | "failed">();
+  private readonly failureBaselines = new Map<string, string>();
+  private knownFailures: KnownFailureDeclaration[] = [];
+  private planItems: PlanItem[] = [];
+
+  /** Seed the persisted plan (from session config) so it survives compaction. */
+  setPlanItems(items: PlanItem[]): void {
+    this.planItems = items.map((item) => ({ ...item, evidenceIds: item.evidenceIds?.slice() }));
+  }
+
+  getPlanItems(): PlanItem[] {
+    return this.planItems.map((item) => ({ ...item, evidenceIds: item.evidenceIds?.slice() }));
+  }
+
+  /** Items that still need work: pending, active, or blocked. */
+  getActivePlanItems(): PlanItem[] {
+    return this.planItems.filter((item) => item.status !== "done");
+  }
+
+  /** Declare known-failure exceptions (user or repo policy). The agent can never set these. */
+  setKnownFailures(declarations: KnownFailureDeclaration[]): void {
+    this.knownFailures = declarations.map((declaration) => ({ ...declaration }));
+  }
 
   recordToolOutcome(outcome: EvidenceToolOutcome): EvidenceEntry {
     const semantics = resolveToolSemantics(outcome.toolName, outcome.semantics);
     const shellMutation = outcome.toolName === "bash" ? this.recordShellMutation(outcome) : null;
 
     if (outcome.isError) {
-      if (outcome.toolName === "bash") {
+      if (outcome.toolName === "bash" && !isAllowFailureProbe(outcome)) {
         const command = readCommand(outcome.arguments);
         const verificationKind = verificationKindForOutcome(outcome, command);
         if (verificationKind && verificationKind !== "diff_inspection" && verificationKind !== "manual_inspection") {
@@ -119,6 +171,56 @@ export class EvidenceLedger {
     const resolvedDiagnosticIds = this.resolveActiveDiagnosticsForSuccessfulTool(outcome);
 
     if (shellMutation) return shellMutation;
+
+    if (outcome.toolName === "inspect_diff") {
+      const files = readFiles(outcome.arguments, outcome.cwd);
+      const mutationIds = this.resolveDocsMutationsWithDiffInspection(outcome.toolCallId);
+      return this.addEntry({
+        id: evidenceId("inspection", outcome.toolCallId),
+        kind: "verification",
+        status: "success",
+        timestamp: Date.now(),
+        toolCallId: outcome.toolCallId,
+        toolName: outcome.toolName,
+        verificationKind: "diff_inspection",
+        ...(files.length > 0 ? { files } : {}),
+        ...(mutationIds.length > 0 ? { mutationIds } : {}),
+        iteration: outcome.iteration,
+        summary: "Inspected project diff with inspect_diff",
+      });
+    }
+
+    if (outcome.toolName === "process") {
+      const processAction = readStringField(outcome.arguments, "action") ?? "unknown";
+      const command = readStringField(outcome.arguments, "command");
+      return this.addEntry({
+        id: evidenceId("process", outcome.toolCallId),
+        kind: "process_job",
+        status: "success",
+        timestamp: Date.now(),
+        toolCallId: outcome.toolCallId,
+        toolName: outcome.toolName,
+        ...(command ? { command } : {}),
+        iteration: outcome.iteration,
+        summary: `process ${processAction}${command ? `: ${command}` : ""}`,
+      });
+    }
+
+    if (outcome.toolName === "bash" && isAllowFailureProbe(outcome)) {
+      const command = readCommand(outcome.arguments);
+      return this.addEntry({
+        id: evidenceId("inspect", outcome.toolCallId),
+        kind: "inspect",
+        status: "success",
+        timestamp: Date.now(),
+        toolCallId: outcome.toolCallId,
+        toolName: outcome.toolName,
+        command,
+        iteration: outcome.iteration,
+        ...commandEvidenceFields(outcome),
+        summary: `Allow-failure probe (never verification evidence): ${command}`,
+      });
+    }
 
     if (hasToolEffect(semantics, "mutation")) {
       const files = readFiles(outcome.arguments, outcome.cwd);
@@ -268,6 +370,10 @@ export class EvidenceLedger {
     if (notice.completed.length > 0) parts.push(`completed: ${notice.completed.join(", ")}`);
     if (notice.pending.length > 0) parts.push(`pending: ${notice.pending.join(", ")}`);
 
+    if (notice.items && notice.items.length > 0) {
+      this.planItems = notice.items.map((item) => ({ ...item, evidenceIds: item.evidenceIds?.slice() }));
+    }
+
     return this.addEntry({
       id: evidenceId("checkpoint", crypto.randomUUID().slice(0, 8)),
       kind: "checkpoint",
@@ -279,6 +385,9 @@ export class EvidenceLedger {
       nextDirection: notice.nextDirection,
       completed: notice.completed.slice(),
       pending: notice.pending.slice(),
+      ...(notice.items && notice.items.length > 0
+        ? { planItems: notice.items.map((item) => ({ ...item, evidenceIds: item.evidenceIds?.slice() })) }
+        : {}),
       iteration: notice.iteration,
       summary: parts.join("; "),
     });
@@ -316,6 +425,7 @@ export class EvidenceLedger {
       files: entry.files?.slice(),
       mutationIds: entry.mutationIds?.slice(),
       resolves: entry.resolves?.slice(),
+      planItems: entry.planItems?.map((item) => ({ ...item, evidenceIds: item.evidenceIds?.slice() })),
     }));
   }
 
@@ -369,6 +479,22 @@ export class EvidenceLedger {
       return [];
     });
     const unresolvedVerificationFailureIds = unresolvedVerificationFailures(this.entries).map((entry) => entry.id);
+    const unresolvedVerificationFailuresRecords = unresolvedVerificationFailures(this.entries).map((entry) => ({
+      id: entry.id,
+      command: entry.command,
+      failureSignal: entry.failureSignal,
+      baselineMatch: entry.baselineMatch,
+      timedOut: entry.timedOut,
+      summary: entry.summary,
+    }));
+    const mutatedFilePaths = [
+      ...new Set(this.entries.flatMap((entry) => (entry.kind === "mutation" ? (entry.files ?? []) : []))),
+    ];
+    const mutationFiles = this.entries.flatMap((entry) =>
+      entry.kind === "mutation" ? (entry.files ?? []) : [],
+    );
+    const docsClassifiedPaths = [...new Set(mutationFiles.filter(isDocumentationPath))];
+    const codeClassifiedPaths = [...new Set(mutationFiles.filter(isCodePath))];
 
     return {
       successfulToolCallIds: new Set(this.successfulToolCallIds),
@@ -385,6 +511,12 @@ export class EvidenceLedger {
       unverifiedDocsMutationIds,
       activeDiagnosticIds,
       unresolvedVerificationFailureIds,
+      unresolvedVerificationFailures: unresolvedVerificationFailuresRecords,
+      mutatedFilePaths,
+      knownFailures: this.knownFailures.map((declaration) => ({ ...declaration })),
+      activePlanItems: this.getActivePlanItems(),
+      docsClassifiedPaths,
+      codeClassifiedPaths,
       entries: this.getEntries(),
     };
   }
@@ -406,6 +538,12 @@ export class EvidenceLedger {
       unverifiedCodeMutationIds: summary.unverifiedCodeMutationIds,
       unverifiedDocsMutationIds: summary.unverifiedDocsMutationIds,
       unresolvedVerificationFailureIds: summary.unresolvedVerificationFailureIds,
+      unresolvedVerificationFailures: summary.unresolvedVerificationFailures,
+      mutatedFilePaths: summary.mutatedFilePaths,
+      knownFailures: summary.knownFailures,
+      activePlanItems: summary.activePlanItems,
+      docsClassifiedPaths: summary.docsClassifiedPaths,
+      codeClassifiedPaths: summary.codeClassifiedPaths,
       evidenceIds: new Set(summary.entries.map((entry) => entry.id)),
     };
   }
@@ -431,6 +569,7 @@ export class EvidenceLedger {
     verificationKind: VerificationKind,
     alreadyResolvedDiagnosticIds: string[] = [],
   ): EvidenceEntry {
+    this.commandOutcomes.set(normalizeCommandKey(command), "passed");
     const unverifiedMutations = this.entries.filter((entry) => entry.kind === "mutation" && entry.status === "unverified");
     const activeDiagnostics = this.entries.filter((entry) => entry.kind === "diagnostic" && entry.status === "active");
     const mutationIds = unverifiedMutations.map((entry) => entry.id);
@@ -470,6 +609,8 @@ export class EvidenceLedger {
     command: string,
     verificationKind: VerificationKind,
   ): EvidenceEntry {
+    const failureSignal = readFailureSignal(outcome.details);
+    const baselineMatch = this.classifyAgainstBaseline(command, failureSignal);
     return this.addEntry({
       id: evidenceId("verification", outcome.toolCallId),
       kind: "verification",
@@ -481,8 +622,37 @@ export class EvidenceLedger {
       verificationKind,
       iteration: outcome.iteration,
       ...commandEvidenceFields(outcome),
-      summary: `Verification command failed: ${command}`,
+      ...(failureSignal ? { failureSignal } : {}),
+      ...(baselineMatch ? { baselineMatch } : {}),
+      summary: outcome.details?.timedOut === true
+        ? `Verification command timed out: ${command}`
+        : `Verification command failed: ${command}`,
     });
+  }
+
+  /**
+   * Attribute a failure against the session baseline.
+   * The first failing run of a command records the baseline; later identical
+   * failures match it. A failure after a passing run of the same command is a
+   * regression and always differs from the baseline.
+   */
+  private classifyAgainstBaseline(command: string, failureSignal: FailureSignal | undefined): BaselineMatch {
+    const key = normalizeCommandKey(command);
+    const passedEarlier = this.commandOutcomes.get(key) === "passed";
+    this.commandOutcomes.set(key, "failed");
+    // A failure after a passing run of the same command is a regression: it
+    // can never be attributed to a pre-existing baseline.
+    if (passedEarlier) return "differs_from_baseline";
+    if (failureSignal === undefined) {
+      return this.failureBaselines.has(key) ? "matches_baseline" : "recorded_baseline";
+    }
+    const signature = failureSignature(failureSignal);
+    const baseline = this.failureBaselines.get(key);
+    if (baseline === undefined) {
+      this.failureBaselines.set(key, signature);
+      return "recorded_baseline";
+    }
+    return baseline === signature ? "matches_baseline" : "differs_from_baseline";
   }
 
   private recordShellMutation(outcome: EvidenceToolOutcome): EvidenceEntry | null {
@@ -577,6 +747,10 @@ function unresolvedVerificationFailures(entries: EvidenceEntry[]): EvidenceEntry
   return unresolved.reverse();
 }
 
+function isAllowFailureProbe(outcome: EvidenceToolOutcome): boolean {
+  return outcome.toolName === "bash" && outcome.details?.allowFailure === true;
+}
+
 function readFiles(args: string, cwd?: string): string[] {
   try {
     const parsed = JSON.parse(args) as Record<string, unknown>;
@@ -625,7 +799,7 @@ function entryFilesAreCode(entry: EvidenceEntry): boolean {
   return files.some(isCodePath);
 }
 
-function evidenceId(kind: EvidenceKind | "finish" | "inspection", suffix: string): string {
+function evidenceId(kind: EvidenceKind | "finish" | "inspection" | "process", suffix: string): string {
   return `ev_${kind}_${suffix}`;
 }
 
@@ -639,6 +813,16 @@ function readCommand(args: string): string {
   }
 }
 
+function readStringField(args: string, field: string): string | undefined {
+  try {
+    const parsed = JSON.parse(args) as Record<string, unknown>;
+    const value = parsed[field];
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isSearchCommand(command: string): boolean {
   return /\b(rg|grep|find)\b/.test(command);
 }
@@ -649,17 +833,30 @@ function verificationKindForOutcome(outcome: EvidenceToolOutcome, command: strin
 
 function commandEvidenceFields(outcome: EvidenceToolOutcome): Pick<
   EvidenceEntry,
-  "durationMs" | "exitCode" | "cwd" | "outputPreview" | "outputDigest"
+  "durationMs" | "exitCode" | "cwd" | "outputPreview" | "outputDigest" | "logPath" | "logBytes" | "logSha256" | "timedOut"
 > {
   const exitCode = readExitCode(outcome.details);
   const outputDigest = readStringDetail(outcome.details, "outputDigest");
+  const logPath = readStringDetail(outcome.details, "logPath");
+  const logBytes = readNumberDetail(outcome.details, "logBytes");
+  const logSha256 = readStringDetail(outcome.details, "logSha256");
+  const timedOut = outcome.details?.timedOut === true;
   return {
     durationMs: outcome.durationMs,
     exitCode,
     cwd: outcome.cwd,
     outputPreview: previewOutput(outcome.output),
     outputDigest,
+    ...(logPath ? { logPath } : {}),
+    ...(logBytes !== undefined ? { logBytes } : {}),
+    ...(logSha256 ? { logSha256 } : {}),
+    ...(timedOut ? { timedOut: true } : {}),
   };
+}
+
+function readNumberDetail(details: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = details?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function readExitCode(details: Record<string, unknown> | undefined): number | null | undefined {
@@ -671,6 +868,34 @@ function readChangedFiles(details: Record<string, unknown> | undefined): string[
   const value = details?.changedFiles;
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function normalizeCommandKey(command: string): string {
+  return command.replaceAll(/\s+/g, " ").trim().toLowerCase();
+}
+
+function readFailureSignal(details: Record<string, unknown> | undefined): FailureSignal | undefined {
+  const raw = details?.failureSignal;
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.command !== "string") return undefined;
+  const failingTestIds = Array.isArray(record.failingTestIds)
+    ? record.failingTestIds.filter((item): item is string => typeof item === "string")
+    : [];
+  const implicatedFiles = Array.isArray(record.implicatedFiles)
+    ? record.implicatedFiles.flatMap((item) => {
+        if (typeof item !== "object" || item === null) return [];
+        const file = item as Record<string, unknown>;
+        if (typeof file.path !== "string") return [];
+        return [{ path: file.path, ...(typeof file.sha256 === "string" ? { sha256: file.sha256 } : {}) }];
+      })
+    : [];
+  return {
+    command: record.command,
+    exitCode: record.exitCode === null || typeof record.exitCode === "number" ? record.exitCode : null,
+    failingTestIds,
+    implicatedFiles,
+  };
 }
 
 function readStringDetail(details: Record<string, unknown> | undefined, key: string): string | undefined {

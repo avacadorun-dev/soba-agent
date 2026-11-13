@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type CompletionState,
   diagnoseFinishArguments,
   evaluateCompletion,
   parseFinishRequest,
@@ -655,6 +656,74 @@ describe("evaluateCompletion", () => {
         allowUnverifiedCompletion: true,
       }),
     );
+
+    expect(decision.accepted).toBe(true);
+  });
+});
+
+describe("finish plan item gate", () => {
+  function requestWithDisclosure(disclosed: string[]) {
+    return {
+      summary: "done",
+      status: "completed" as const,
+      criteria: [{ criterion: "implemented" }],
+      acknowledgedErrorIds: [],
+      disclosedPlanItems: disclosed,
+    };
+  }
+
+  function stateWithPlan(): CompletionState {
+    return {
+      errors: [],
+      successfulToolCallIds: new Set(["edit_1"]),
+      verificationEvidenceCallIds: new Set(["test_1"]),
+      inspectionEvidenceCallIds: new Set<string>(),
+      verificationKinds: new Set<"test">(["test"]),
+      needsVerification: false,
+      hasUsedTools: true,
+      hasMutatedFiles: true,
+      hasCodeMutations: true,
+      hasDocsMutations: false,
+      taskKind: "feature" as const,
+      activePlanItems: [
+        { title: "update docs", status: "pending" as const },
+        { title: "fix lint", status: "active" as const },
+      ],
+    };
+  }
+
+  test("finish with active plan items is refused and reports them", () => {
+    const decision = evaluateCompletion(requestWithDisclosure([]), stateWithPlan());
+
+    expect(decision.accepted).toBe(false);
+    if (!decision.accepted) {
+      expect(decision.reasons.join("\n")).toContain("update docs");
+      expect(decision.reasons.join("\n")).toContain("fix lint");
+    }
+  });
+
+  test("finish with every active item explicitly disclosed is accepted with a note", () => {
+    const decision = evaluateCompletion(
+      requestWithDisclosure(["update docs", "fix lint"]),
+      stateWithPlan(),
+    );
+
+    expect(decision.accepted).toBe(true);
+    if (decision.accepted) {
+      expect(decision.classifications?.some((c) => c.failureId === "plan_items")).toBe(true);
+    }
+  });
+
+  test("partial disclosure still refuses", () => {
+    const decision = evaluateCompletion(requestWithDisclosure(["update docs"]), stateWithPlan());
+
+    expect(decision.accepted).toBe(false);
+  });
+
+  test("a done-only plan does not block completion", () => {
+    const state = stateWithPlan();
+    state.activePlanItems = [{ title: "write tests", status: "done" }];
+    const decision = evaluateCompletion(requestWithDisclosure([]), state);
 
     expect(decision.accepted).toBe(true);
   });

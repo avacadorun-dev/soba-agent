@@ -1,0 +1,262 @@
+---
+title: CLI reference
+description: Режимы запуска SOBA, top-level флаги, provider subcommands и проверочные команды.
+---
+
+Эта страница перечисляет CLI-поверхность SOBA Agent v0.6.x, которая доступна из консоли.
+
+---
+
+## 1. Режимы запуска
+
+| Команда | Назначение |
+|---|---|
+| `soba "prompt"` | One-shot задача с сохранением сессии |
+| `soba` | Интерактивный TUI, если процесс запущен в TTY |
+| `soba -i` | Явно интерактивный TUI |
+| `soba -c` | Продолжить последнюю сессию |
+| `soba -r` | Выбрать сессию через интерактивный selector |
+| `soba -s <id> "prompt"` | Продолжить конкретную сессию |
+| `soba --no-session "prompt"` | Выполнить без сохранения session history |
+
+---
+
+## 2. Top-level флаги
+
+### Session и режимы
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--interactive` | `-i` | Запустить TUI |
+| `--continue` | `-c` | Продолжить последнюю сессию |
+| `--resume` | `-r` | Выбрать сессию |
+| `--session <id>` | `-s` | Открыть конкретную сессию |
+| `--no-session` | — | Не сохранять историю на диск |
+
+### Provider и модель
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--model <id>` | `-m` | Переопределить модель на один запуск; `provider/model` явно выбирает provider |
+| `--api-key <key>` | `-k` | Переопределить API key на один запуск |
+| `--base-url <url>` | — | Переопределить OpenAI-compatible base URL |
+
+Model ID без квалификатора остаётся на настроенном default provider. Значение
+`openrouter/deepseek/deepseek-v4-flash` явно выбирает `openrouter` и передаёт ему model ID
+`deepseek/deepseek-v4-flash`.
+
+### Лимиты
+
+| Флаг | Описание |
+|---|---|
+| `--budget <n>` | Ограничить token budget задачи |
+| `--max-output-tokens <n>` | Лимит выходных токенов ответа |
+| `--max-tokens <n>` | Устаревший alias для `--max-output-tokens` |
+| `--max-completion-tokens <n>` | Лимит reasoning/completion токенов |
+| `--reasoning-effort <level>` | Запросить `default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh` или `max` |
+| `--reasoning-budget <n>` | Запросить положительный числовой reasoning budget |
+| `--reasoning-enabled` | Включить toggle-based reasoning control |
+| `--no-reasoning` | Отключить reasoning, если модель это поддерживает |
+| `--context-window <n>` | Переопределить context window модели |
+| `--max-agent-iterations <n>` | Аварийный лимит model/tool loop iterations |
+| `--max-stalled-iterations <n>` | Итерации без прогресса до stall recovery |
+| `--max-run-minutes <n>` | Максимальная длительность одной задачи |
+| `--bash-max-timeout-seconds <n>` | Верхняя граница timeout для одного вызова `bash` tool в секундах; по умолчанию 300 |
+
+### Интерфейс и поведение
+
+| Флаг | Описание |
+|---|---|
+| `--lang <en\|ru\|zh>` | Язык интерфейса |
+| `--theme <name>` | Тема TUI |
+| `--no-color` | Отключить ANSI-цвета |
+| `--no-stream` | Отключить streaming |
+| `--stream` | Включить streaming явно |
+| `--debug` | Записывать loop decisions в session JSONL |
+| `--no-auto-compact` | Отключить proactive compaction |
+| `--worktree` | Запустить tools в одноразовом git worktree вместо живого checkout |
+| `--keep` | Сохранить `--worktree` checkout после выхода |
+
+### Sound
+
+| Флаг | Описание |
+|---|---|
+| `--sound-enabled` | Включить sound notifications |
+| `--no-sound` | Отключить sound notifications |
+| `--sound-volume <0..1>` | Громкость |
+| `--sound-repeat` | Повторять звук до следующего события/смены состояния |
+
+### Информация
+
+| Флаг | Коротко | Описание |
+|---|---|---|
+| `--help` | `-h` | Показать справку |
+| `--version` | `-v` | Показать версию |
+
+---
+
+## 3. Proof-команды
+
+Proof bundles сохраняются в `.soba/evidence/*.soba-proof.json` после accepted finish агента.
+Текущие proof bundles включают компактный evidence index, finish claims, измененные файлы, checks, commands, permission receipts, risks и review actions.
+Permission receipts записывают trust level, approval kind, approval value, decision, reason и более безопасные альтернативы, когда SOBA может предложить least-privilege rewrite; `auto` означает, что trust policy SOBA разрешила вызов без запроса подтверждения.
+Новые receipts также содержат `proofId`, `runId` и SHA-256 `integrity.digest`. `soba verify` проверяет schema и
+content integrity, ссылки supported claims, outcomes команд, порядок mutations, полноту diff, permissions и redaction
+секретов.
+
+| Команда | Назначение |
+|---|---|
+| `soba prove` | Показать компактный verdict `Проверено` / `Нужно внимание` для последнего proof |
+| `soba prove --last` | Явно показать последний proof bundle |
+| `soba prove --verbose` | Показать contract-level IDs, digests, commands и evidence references |
+| `soba prove --format markdown` | Вывести последний proof как Markdown |
+| `soba prove --format json` | Вывести последний proof как JSON с `proofPath` |
+| `soba prove <path>` | Показать конкретный `.soba-proof.json` файл |
+| `soba verify` | Запустить строгую policy validation и показать компактный результат |
+| `soba verify --verbose` | Показать все validation counts и issues |
+| `soba verify --format json` | Вывести найденные ошибки проверки как JSON |
+| `soba verify <path>` | Проверить конкретный `.soba-proof.json` файл |
+| `soba explain-claim 1` | Объяснить первое показанное утверждение без копирования внутреннего ID |
+| `soba explain-claim <claim> --verbose` | Показать полные evidence references утверждения |
+| `soba explain-claim <claim> --proof <path>` | Объяснить claim из конкретного `.soba-proof.json` файла |
+
+`soba prove`, `soba verify` и `soba explain-claim` не запускают agent runtime и не требуют credentials провайдера.
+Их human output по умолчанию компактный. `--verbose` возвращает технические детали, а JSON schemas и exit codes
+остаются неизменными для автоматизации.
+
+У `soba verify` стабильные policy exits: `0` verified, `1` invalid, `2` partially verified, `3` unverified и `4`
+blocked. JSON содержит `accepted`, `outcome`, `reason` и `exitCode`. Legacy receipts без integrity metadata остаются
+читаемыми, но понижаются до `partially_verified` с reason `legacy_unsealed_proof` и exit code 2.
+
+---
+
+## 4. Project Memory команды
+
+Project Memory хранится в `.soba/memory/`. `soba memory doctor` проверяет persisted knowledge files и memory capsules без запуска agent runtime.
+Команда показывает количество knowledge files, оценку token usage, provenance источников capsules, stale capsules, отсутствующие источники, ссылки за пределы проекта и битые capsule files.
+
+| Команда | Назначение |
+|---|---|
+| `soba memory doctor` | Проверить здоровье Project Memory текущего проекта |
+| `soba memory doctor --format json` | Вывести отчёт как JSON для CI или скриптов |
+| `soba memory doctor --format markdown` | Вывести отчёт как Markdown |
+| `soba memory stale` | Показать только stale или broken memory capsules и связанные issues |
+| `soba memory stale --format json` | Вывести stale/broken memory receipts как JSON для CI или скриптов |
+| `soba memory verify` | Проверить Project Memory компактным CI-friendly отчётом |
+| `soba memory explain <query>` | Объяснить релевантные memory capsules, source receipts и doctor issues |
+| `soba memory explain <query> --format json` | Вывести объяснение как JSON для скриптов |
+
+Exit code равен `0` только для состояния `healthy`. Stale или broken memory возвращает `1` и пишет отчёт в stderr.
+Для `soba memory stale` exit code равен `0` только если нет stale или broken capsules и нет memory doctor issues.
+Для `soba memory verify` exit code равен `0` только если verification report содержит `verified: true`.
+Для `soba memory explain` exit code равен `0` только если найдена хотя бы одна capsule, которую безопасно использовать;
+stale, broken или отсутствующие matches возвращают `1`.
+
+`soba memory doctor`, `soba memory stale`, `soba memory verify` и `soba memory explain` не запускают agent runtime и не требуют credentials провайдера.
+
+---
+
+## 5. Provider subcommands
+
+Provider registry управляется через sub-route `soba provider`.
+
+| Команда | Назначение |
+|---|---|
+| `soba provider help` | Справка по provider CLI |
+| `soba provider list` | Список built-in и custom providers |
+| `soba provider show <id>` | Показать provider definition |
+| `soba provider use <id>` | Сделать provider активным |
+| `soba provider add <id> ...` | Добавить custom provider |
+| `soba provider remove <id>` | Удалить custom provider |
+
+### `soba provider add`
+
+Поддержанные флаги:
+
+| Флаг | Описание |
+|---|---|
+| `--name <name>` | Человекочитаемое имя |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | Env var с API key; пустое значение = keyless provider |
+| `--adapter <openai\|openai-responses\|anthropic>` | Adapter id. `openai-responses` используйте только для endpoint с Responses API |
+| `--metadata-profile <profile>` | Discovery-профиль: `auto`, `generic_openai`, `openrouter`, `vllm`, `ollama`, `lmstudio`, `llamacpp` или `none` |
+| `--default-model <id>` | Default model |
+| `--model <spec>` | Model spec; флаг можно повторять |
+| `--from-file <path>` | Загрузить provider definition из JSON |
+| `--set-active` | Сразу переключиться на добавленный provider |
+
+Формат `--model`:
+
+```text
+id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]
+```
+
+Пример keyless local provider:
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+`8192,2048` — бережные стартовые значения для локальной модели: сначала контекстное окно, затем максимум выходных токенов. Большие значения вроде `128000,8192` могут резко нагрузить память и сильно замедлить ноутбук.
+
+Лимиты необязательны. Например, `--model local-code="Local Code" --metadata-profile vllm` позволяет SOBA получить context/output из endpoint, если тот их публикует. Если metadata отсутствует, SOBA использует консервативные предполагаемые значения и помечает их `~`; при неполном server catalogue передайте числа явно.
+
+Структурированные reasoning capabilities и provider-specific wire transport задаются в полном JSON definition через `--from-file`. SOBA не отправляет reasoning fields неизвестному endpoint только потому, что имя модели выглядит знакомым.
+
+---
+
+## 5. Практические команды проверки
+
+```bash
+soba --version
+soba --help
+soba prove --last
+soba verify --last
+soba explain-claim claim_1 --last
+soba provider list
+soba --no-session --max-agent-iterations 1 "Ответь одним словом: ok"
+```
+
+Для разработки в репозитории:
+
+```bash
+soba -i --lang ru --theme graphite
+```
+
+---
+
+## 6. Direct shell в TUI
+
+В интерактивном режиме shell-команды можно запускать напрямую:
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` выполняет команду сразу, `!!` выполняет команду без вывода в transcript. Если нужно, чтобы агент увидел и
+проанализировал output, попросите его выполнить команду через обычный prompt — тогда будет использован `bash` tool.
+
+## 7. Doctor возможностей окружения
+
+`soba doctor` проверяет возможности, от которых зависят verification-claims — vision (по объявленной моделью поддержке
+`input_image`), screenshot, accessibility-автоматизацию, clipboard, display server и browser — и записывает отчёт в
+`.soba/capabilities.json`. Отчёт подмешивается в session context, и агент обязан отказывать в claims, которым не хватает
+возможности, вместо тихой деградации.
+
+| Команда | Назначение |
+|---|---|
+| `soba doctor` | Повторно проверить возможности окружения и обновить кешированный отчёт |
+
+Перезапустите `soba doctor` после изменения системных разрешений (например Screen Recording или Accessibility), чтобы
+обновить отчёт.
+
+## Что дальше
+
+- [Провайдеры и модели](/ru/docs/v0.7/providers)
+- [Интерфейс и команды](/ru/docs/v0.7/usage)
+- [Конфигурация](/ru/docs/v0.7/configuration)

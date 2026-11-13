@@ -238,6 +238,18 @@ soba -i --lang zh --theme graphite
 `!` 会立即执行命令。`!!` 会执行命令，但不会把输出写入 transcript。若希望代理看到并分析输出，请用普通
 prompt 让它运行命令，这样会使用 `bash` tool。
 
+## 7. 环境能力 doctor
+
+`soba doctor` 会探测验证声明所依赖的能力——vision（取决于当前模型声明的 `input_image` 支持）、screenshot、
+accessibility 自动化、clipboard、display server 和 browser——并把报告写入 `.soba/capabilities.json`。报告会注入
+session context；缺少某项能力时，代理必须拒绝相关声明，而不是静默降级。
+
+| 命令 | 用途 |
+|---|---|
+| `soba doctor` | 重新探测环境能力并刷新缓存报告 |
+
+修改系统权限（例如授予 Screen Recording 或 Accessibility）后，请重新运行 `soba doctor` 刷新报告。
+
 ## 下一步
 
 - [Provider 与模型](/zh/docs/v0.6/providers)

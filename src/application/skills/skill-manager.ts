@@ -12,6 +12,7 @@ import type {
 } from "../../kernel/transcript/types-v2";
 import type { SkillCatalog } from "./catalog";
 import type { SkillDiscovery } from "./discovery";
+import type { ProjectSkillDeclaration } from "./project-declarations";
 import type { ProjectTrustStore } from "./project-trust-store";
 import type { SkillCatalogEntry } from "./types";
 
@@ -30,6 +31,8 @@ export class SkillManager {
   readonly trustStore: ProjectTrustStore;
   private readonly readSkillContent: SkillContentReader;
   private activeSkills: Map<string, ActivatedSkillRef> = new Map();
+  private projectDeclarations: ProjectSkillDeclaration[] = [];
+  private activationReasons = new Map<string, string>();
 
   constructor(options: SkillManagerOptions) {
     this.catalog = options.catalog;
@@ -83,13 +86,63 @@ export class SkillManager {
     };
 
     this.activeSkills.set(name, ref);
+    if (!this.activationReasons.has(name)) {
+      this.activationReasons.set(name, "activated by the model via activate_skill");
+    }
     return { success: true };
+  }
+
+  /**
+   * Register project-declared skill requirements (from AGENTS.md). The model
+   * never creates these; loading them is deterministic.
+   */
+  setProjectDeclarations(declarations: ProjectSkillDeclaration[]): void {
+    this.projectDeclarations = declarations.map((declaration) => ({ ...declaration }));
+  }
+
+  /**
+   * Activate declared skills whose `when` condition matches the user prompt.
+   * Declarations without `when`, and `always` declarations, match every
+   * prompt. Returns the names newly activated by this call.
+   */
+  activateDeclaredSkillsForPrompt(prompt: string): string[] {
+    const normalizedPrompt = prompt.toLowerCase();
+    const activated: string[] = [];
+
+    for (const declaration of this.projectDeclarations) {
+      if (this.activeSkills.has(declaration.name)) continue;
+      if (declaration.when && !normalizedPrompt.includes(declaration.when.toLowerCase())) continue;
+
+      const result = this.activate(declaration.name);
+      if (!result.success) continue;
+
+      this.activationReasons.set(
+        declaration.name,
+        declaration.always
+          ? "declared in AGENTS.md (always)"
+          : declaration.when
+            ? `declared in AGENTS.md (matches "${declaration.when}")`
+            : "declared in AGENTS.md (required)",
+      );
+      activated.push(declaration.name);
+    }
+
+    return activated;
+  }
+
+  /** Active skills with the reason each is active, for session context. */
+  getActiveSkillsWithReasons(): Array<{ ref: ActivatedSkillRef; reason: string }> {
+    return this.getActiveSkills().map((ref) => ({
+      ref,
+      reason: this.activationReasons.get(ref.name) ?? "restored from session",
+    }));
   }
 
   /**
    * Deactivate a skill by name.
    */
   deactivate(name: string): boolean {
+    this.activationReasons.delete(name);
     return this.activeSkills.delete(name);
   }
 
@@ -168,10 +221,13 @@ export class SkillManager {
         continue; // Could not read skill content
       }
 
+      const reason = this.activationReasons.get(ref.name) ?? "restored from session";
+
       messages.push({
         role: "developer",
         content: [
           `SOBA Active Skill: ${skill.name}`,
+          `Active because: ${reason}`,
           "",
           "Follow this skill only for the current task aspects it covers.",
           "Core safety, completion, verification, tool-selection, and project instructions override this skill.",

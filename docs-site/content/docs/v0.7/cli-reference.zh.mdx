@@ -1,0 +1,257 @@
+---
+title: CLI 参考
+description: SOBA 的启动模式、顶层标志、provider 子命令和检查命令。
+---
+
+本页列出可以在控制台中使用的 SOBA Agent v0.6.x CLI。
+
+---
+
+## 1. 启动模式
+
+| 命令 | 作用 |
+|---|---|
+| `soba "prompt"` | 执行一次性任务，并保存会话 |
+| `soba` | 当进程运行在 TTY 中时，进入交互式 TUI |
+| `soba -i` | 显式进入交互式 TUI |
+| `soba -c` | 继续最近的会话 |
+| `soba -r` | 通过交互式选择器选择会话 |
+| `soba -s <id> "prompt"` | 继续指定会话 |
+| `soba --no-session "prompt"` | 执行时不保存会话历史 |
+
+---
+
+## 2. 顶层标志
+
+### 会话和模式
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--interactive` | `-i` | 启动 TUI |
+| `--continue` | `-c` | 继续最近的会话 |
+| `--resume` | `-r` | 选择会话 |
+| `--session <id>` | `-s` | 打开指定会话 |
+| `--no-session` | — | 不把历史保存到磁盘 |
+
+### Provider 和模型
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--model <id>` | `-m` | 为本次运行覆盖模型；使用 `provider/model` 可显式选择 provider |
+| `--api-key <key>` | `-k` | 为本次运行覆盖 API key |
+| `--base-url <url>` | — | 覆盖 OpenAI-compatible base URL |
+
+未限定的 model ID 会继续使用已配置的 default provider。像
+`openrouter/deepseek/deepseek-v4-flash` 这样的限定值会选择 `openrouter`，并向其发送 model ID
+`deepseek/deepseek-v4-flash`。
+
+### 限制
+
+| 标志 | 说明 |
+|---|---|
+| `--budget <n>` | 限制任务 token budget |
+| `--max-output-tokens <n>` | 限制回答的输出 token |
+| `--max-tokens <n>` | `--max-output-tokens` 的 deprecated alias |
+| `--max-completion-tokens <n>` | 限制 reasoning/completion token |
+| `--reasoning-effort <level>` | 请求 `default`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 或 `max` |
+| `--reasoning-budget <n>` | 请求正整数 reasoning budget |
+| `--reasoning-enabled` | 启用 toggle-based reasoning control |
+| `--no-reasoning` | 在模型支持时关闭 reasoning |
+| `--context-window <n>` | 覆盖模型 context window |
+| `--max-agent-iterations <n>` | model/tool loop iterations 的应急上限 |
+| `--max-stalled-iterations <n>` | 触发 stall recovery 前允许的无进展迭代数 |
+| `--max-run-minutes <n>` | 单个任务的最长运行时间 |
+| `--bash-max-timeout-seconds <n>` | 单次 `bash` tool 调用的最大 timeout，单位是秒；默认 300 |
+
+### 界面和行为
+
+| 标志 | 说明 |
+|---|---|
+| `--lang <en\|ru\|zh>` | 界面语言 |
+| `--theme <name>` | TUI 主题 |
+| `--no-color` | 关闭 ANSI 颜色 |
+| `--no-stream` | 关闭 streaming |
+| `--stream` | 显式启用 streaming |
+| `--debug` | 将 loop decisions 写入 session JSONL |
+| `--no-auto-compact` | 关闭 proactive compaction |
+| `--worktree` | 在一次性 git worktree 中运行 tools，而不是实时 checkout |
+| `--keep` | 进程退出后保留 `--worktree` checkout |
+
+### 声音
+
+| 标志 | 说明 |
+|---|---|
+| `--sound-enabled` | 启用声音通知 |
+| `--no-sound` | 关闭声音通知 |
+| `--sound-volume <0..1>` | 音量 |
+| `--sound-repeat` | 重复播放声音，直到下一个事件或状态变化 |
+
+### 信息
+
+| 标志 | 简写 | 说明 |
+|---|---|---|
+| `--help` | `-h` | 显示帮助 |
+| `--version` | `-v` | 显示版本 |
+
+---
+
+## 3. Proof 命令
+
+Agent accepted finish 后，proof bundles 会保存到 `.soba/evidence/*.soba-proof.json`。
+当前 proof bundles 包含紧凑 evidence index、finish claims、changed files、checks、commands、permission receipts、risks 和 review actions。
+Permission receipts 会记录每个已执行 tool call 的 trust level、approval kind、approval value、decision、reason，以及 SOBA 能够建议 least-privilege rewrite 时的更安全替代方案；`auto` 表示 SOBA trust policy 无需提示即可允许该调用。
+新 receipts 还包含 `proofId`、`runId` 和 SHA-256 `integrity.digest`。`soba verify` 会检查 schema 与 content
+integrity、supported claim 引用、命令 outcomes、mutation 顺序、diff 完整性、permissions 和 secret redaction。
+
+| 命令 | 作用 |
+|---|---|
+| `soba prove` | 显示最新 proof 的紧凑 `已验证` / `需要注意` verdict |
+| `soba prove --last` | 显式显示最新 proof bundle |
+| `soba prove --verbose` | 显示 contract-level IDs、digests、commands 和 evidence references |
+| `soba prove --format markdown` | 以 Markdown 渲染最新 proof |
+| `soba prove --format json` | 以 JSON 输出最新 proof，并包含 `proofPath` |
+| `soba prove <path>` | 显示指定的 `.soba-proof.json` 文件 |
+| `soba verify` | 运行严格 policy validation，并显示紧凑结果 |
+| `soba verify --verbose` | 显示所有 validation counts 和 issues |
+| `soba verify --format json` | 以 JSON 输出校验问题 |
+| `soba verify <path>` | 校验指定的 `.soba-proof.json` 文件 |
+| `soba explain-claim 1` | 解释界面显示的第一项声明，无需复制内部 ID |
+| `soba explain-claim <claim> --verbose` | 显示声明的完整 evidence references |
+| `soba explain-claim <claim> --proof <path>` | 展开指定 `.soba-proof.json` 文件中的某个 claim |
+
+`soba prove`、`soba verify` 和 `soba explain-claim` 不启动 agent runtime，也不需要 provider credentials。
+Human output 默认保持紧凑。`--verbose` 会恢复技术细节，而 JSON schemas 和 exit codes 对自动化保持不变。
+
+`soba verify` 使用稳定的 policy exits：`0` verified、`1` invalid、`2` partially verified、`3` unverified、`4`
+blocked。JSON 输出包含 `accepted`、`outcome`、`reason` 和 `exitCode`。没有 integrity metadata 的 legacy receipts
+仍可读取，但会降级为 `partially_verified`，reason 为 `legacy_unsealed_proof`，exit code 为 2。
+
+---
+
+## 4. Project Memory 命令
+
+Project Memory 保存在 `.soba/memory/`。`soba memory doctor` 会检查 persisted knowledge files 和 memory capsules，而不会启动 agent runtime。
+报告包含 knowledge file 数量、估算 token usage、capsule source provenance、stale capsules、缺失 source、指向项目外部的 source，以及损坏的 capsule files。
+
+| 命令 | 作用 |
+|---|---|
+| `soba memory doctor` | 检查当前项目的 Project Memory 健康状态 |
+| `soba memory doctor --format json` | 以 JSON 输出报告，便于 CI 或脚本使用 |
+| `soba memory doctor --format markdown` | 以 Markdown 渲染报告 |
+| `soba memory stale` | 只显示 stale 或 broken memory capsules 及相关 issues |
+| `soba memory stale --format json` | 以 JSON 输出 stale/broken memory receipts，便于 CI 或脚本使用 |
+| `soba memory verify` | 用紧凑的 CI-friendly 报告校验 Project Memory 健康状态 |
+| `soba memory explain <query>` | 解释相关 memory capsules、source receipts 和 doctor issues |
+| `soba memory explain <query> --format json` | 以 JSON 输出解释，便于脚本使用 |
+
+只有状态为 `healthy` 时 exit code 才是 `0`。Stale 或 broken memory 会返回 `1`，并把报告写入 stderr。
+对于 `soba memory stale`，只有没有 stale 或 broken capsules 且没有 memory doctor issues 时 exit code 才是 `0`。
+对于 `soba memory verify`，只有 verification report 为 `verified: true` 时 exit code 才是 `0`。
+对于 `soba memory explain`，只有找到至少一个可安全使用的 capsule 时 exit code 才是 `0`；stale、broken 或没有匹配时返回 `1`。
+
+`soba memory doctor`、`soba memory stale`、`soba memory verify` 和 `soba memory explain` 不启动 agent runtime，也不需要 provider credentials。
+
+---
+
+## 5. Provider 子命令
+
+Provider registry 通过 `soba provider` 子路由管理。
+
+| 命令 | 作用 |
+|---|---|
+| `soba provider help` | Provider CLI 帮助 |
+| `soba provider list` | 列出 built-in 和 custom providers |
+| `soba provider show <id>` | 显示 provider definition |
+| `soba provider use <id>` | 将 provider 设为 active |
+| `soba provider add <id> ...` | 添加 custom provider |
+| `soba provider remove <id>` | 删除 custom provider |
+
+### `soba provider add`
+
+支持的标志：
+
+| 标志 | 说明 |
+|---|---|
+| `--name <name>` | 给人看的名称 |
+| `--base-url <url>` | OpenAI-compatible base URL |
+| `--api-key-env <VAR>` | 保存 API key 的环境变量；空值表示 keyless provider |
+| `--adapter <openai\|openai-responses\|anthropic>` | Adapter id。仅对实现 Responses API 的 endpoint 使用 `openai-responses` |
+| `--metadata-profile <profile>` | Discovery profile：`auto`、`generic_openai`、`openrouter`、`vllm`、`ollama`、`lmstudio`、`llamacpp` 或 `none` |
+| `--default-model <id>` | 默认模型 |
+| `--model <spec>` | Model spec；该标志可以重复 |
+| `--from-file <path>` | 从 JSON 加载 provider definition |
+| `--set-active` | 添加后立即切换到这个 provider |
+
+`--model` 格式：
+
+```text
+id[=name][,contextWindow[,maxOutput[,supportsStreaming[,supportsThinking]]]]
+```
+
+keyless 本地 provider 示例：
+
+```bash
+soba provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3.1="Llama 3.1",8192,2048 \
+  --set-active
+```
+
+`8192,2048` 是本地模型更温和的起步值：前者是 context window，后者是最大输出 token。像 `128000,8192` 这样的大值会明显占用内存，也可能让笔记本变得很慢。
+
+Limits 可以省略。例如，`--model local-code="Local Code" --metadata-profile vllm` 可以在 endpoint 提供 metadata 时让 SOBA 填充 context/output。若 metadata 不存在，SOBA 会使用保守的推定值并用 `~` 标记；server catalogue 不完整时请显式传入数字。
+
+结构化 reasoning capabilities 和 provider-specific wire transport 通过 `--from-file` 加载的完整 JSON definition 声明。SOBA 不会仅因为模型名称看起来熟悉，就向未知 endpoint 发送 reasoning fields。
+
+---
+
+## 5. 实用检查命令
+
+```bash
+soba --version
+soba --help
+soba prove --last
+soba verify --last
+soba explain-claim claim_1 --last
+soba provider list
+soba --no-session --max-agent-iterations 1 "Answer with one word: ok"
+```
+
+在仓库中开发时：
+
+```bash
+soba -i --lang zh --theme graphite
+```
+
+---
+
+## 6. TUI 中的 direct shell
+
+在交互模式中，可以直接运行 shell 命令：
+
+```text
+!git status --short
+!bun test
+!!bun run build
+```
+
+`!` 会立即执行命令。`!!` 会执行命令，但不会把输出写入 transcript。若希望代理看到并分析输出，请用普通
+prompt 让它运行命令，这样会使用 `bash` tool。
+
+## 7. 环境能力 doctor
+
+`soba doctor` 会探测验证声明所依赖的能力——vision（取决于当前模型声明的 `input_image` 支持）、screenshot、
+accessibility 自动化、clipboard、display server 和 browser——并把报告写入 `.soba/capabilities.json`。报告会注入
+session context；缺少某项能力时，代理必须拒绝相关声明，而不是静默降级。
+
+| 命令 | 用途 |
+|---|---|
+| `soba doctor` | 重新探测环境能力并刷新缓存报告 |
+
+修改系统权限（例如授予 Screen Recording 或 Accessibility）后，请重新运行 `soba doctor` 刷新报告。
+
+## 下一步
+
+- [Provider 与模型](/zh/docs/v0.7/providers)
+- [界面与命令](/zh/docs/v0.7/usage)
+- [配置](/zh/docs/v0.7/configuration)
