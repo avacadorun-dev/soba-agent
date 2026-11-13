@@ -42,6 +42,16 @@ const CONNECTIONS: Array<[number, number]> = [
   [6, 4],
 ];
 
+const COMPACT_POSITIONS: Point3D[] = [
+  { x: -0.3, y: -0.27, z: 20 },
+  { x: 0.27, y: -0.28, z: 30 },
+  { x: 0.3, y: 0.13, z: 20 },
+  { x: -0.3, y: 0.15, z: 10 },
+  { x: 0, y: 0.31, z: 30 },
+  { x: 0.3, y: -0.08, z: 10 },
+  { x: -0.31, y: -0.03, z: 20 },
+];
+
 function rotate(point: Point3D, yaw: number, pitch: number): Point3D {
   const cosY = Math.cos(yaw);
   const sinY = Math.sin(yaw);
@@ -202,6 +212,20 @@ export function SobaOrbitCanvas() {
       const centerPulse = 1 + Math.sin(frame * 2.1) * 0.035;
 
       const points = NODES.map((node, index) => {
+        const compactPosition = COMPACT_POSITIONS[index];
+        if (width < 520 && compactPosition) {
+          return {
+            node,
+            projected: {
+              x: width / 2 + compactPosition.x * width,
+              y: height / 2 + compactPosition.y * height + Math.sin(frame * 0.7 + index) * 3,
+              scale: 0.9,
+              viewportScale: 0.8,
+              depth: compactPosition.z,
+            },
+          };
+        }
+
         const angle = frame * node.speed + node.phase;
         const orbital: Point3D = {
           x: node.x + Math.cos(angle) * node.radius * 0.28,
