@@ -2,250 +2,244 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import {
   ArrowRight,
-  BrainCircuit,
+  ArrowUpRight,
+  Blocks,
+  Check,
   CheckCircle2,
   ClipboardCheck,
+  Database,
+  FileCode2,
   GitBranch,
-  Languages,
+  History,
   LockKeyhole,
   Network,
-  Shield,
-  Sparkles,
+  ShieldCheck,
   Terminal,
-  Workflow,
-  Zap,
 } from "lucide-react";
 import { SobaOrbitCanvas } from "@/components/soba-orbit-canvas";
-import { TerminalCanvas } from "@/components/terminal-canvas";
 import { baseOptions } from "@/lib/layout.shared";
 import { alternateLanguageLinks, canonicalUrl, getLandingSeo, previewImageUrl } from "@/lib/seo";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
-const features = [
+type Locale = "en" | "ru" | "zh";
+type LocalizedText = Record<Locale, string>;
+
+const text = (en: string, ru: string, zh: string): LocalizedText => ({ en, ru, zh });
+
+const copy = {
+  release: text(
+    `${APP_VERSION_LABEL} is now available`,
+    `${APP_VERSION_LABEL} уже доступна`,
+    `${APP_VERSION_LABEL} 现已发布`,
+  ),
+  headlineFirst: text("Code finished.", "Код готов.", "代码完成。"),
+  headlineSecond: text("Proof included.", "Доказательства — тоже.", "证据齐备。"),
+  lead: text(
+    "SOBA is an open-source, local-first coding agent that works in your terminal, verifies its changes, and shows exactly what happened.",
+    "SOBA — open-source агент для разработки, который работает в вашем терминале, проверяет изменения и наглядно показывает, что именно было сделано.",
+    "SOBA 是开源的 local-first 编码代理，在你的终端中工作，验证每次变更，并清楚展示整个过程。",
+  ),
+  primaryCta: text("Get started", "Начать работу", "快速开始"),
+  secondaryCta: text("Explore the docs", "Документация", "查看文档"),
+  installLabel: text("Install with npm", "Установка через npm", "使用 npm 安装"),
+  openSource: text("Free and open source under MIT", "Бесплатно и открыто по лицензии MIT", "基于 MIT 许可免费开放"),
+  principlesEyebrow: text("Designed for engineering teams", "Для инженерной работы", "为工程团队而设计"),
+  workflowEyebrow: text("A visible working loop", "Прозрачный цикл работы", "清晰可见的工作循环"),
+  workflowTitle: text("From task to verified result", "От задачи к проверенному результату", "从任务到验证结果"),
+  workflowLead: text(
+    "A clear process instead of a black box. You can inspect the context, the changes, and the evidence at every step.",
+    "Понятный процесс вместо чёрного ящика. Контекст, изменения и доказательства доступны на каждом шаге.",
+    "用清晰的流程取代黑盒。每一步的上下文、变更和证据都可以检查。",
+  ),
+  featuresEyebrow: text("Built for real projects", "Создан для реальных проектов", "为真实项目而生"),
+  featuresTitle: text("The context stays. So does the control.", "Контекст сохраняется. Контроль тоже.", "上下文不丢失，控制权不放手。"),
+  featuresLead: text(
+    "The details that matter after the demo: durable memory, resumable sessions, explicit permissions, and tools you can extend.",
+    "Всё, что важно после первого демо: долговременная память, продолжение сессий, явные разрешения и расширяемые инструменты.",
+    "关注演示之后真正重要的能力：持久记忆、可恢复会话、明确权限和可扩展工具。",
+  ),
+  orbitEyebrow: text("One connected system", "Единая система", "一个互联的系统"),
+  orbitTitle: text("See how the work fits together", "Вся работа — как на ладони", "看清工作如何协同"),
+  orbitLead: text(
+    "Memory, sessions, tools, permissions, and proof are part of the same local workflow — not a collection of disconnected add-ons.",
+    "Память, сессии, инструменты, разрешения и доказательства работают в одном локальном процессе, а не как набор несвязанных дополнений.",
+    "记忆、会话、工具、权限和证据同属一个本地工作流，而不是彼此孤立的附加组件。",
+  ),
+  releaseEyebrow: text(`New in ${APP_VERSION_LABEL}`, `Новое в ${APP_VERSION_LABEL}`, `${APP_VERSION_LABEL} 新功能`),
+  releaseTitle: text("A more reliable agent, under the hood", "Больше надёжности в каждой задаче", "更可靠的代理，更扎实的能力"),
+  releaseLead: text(
+    "The latest release strengthens the unglamorous parts of agent work: long-running commands, safe edits, useful evidence, and environment diagnostics.",
+    "Новый релиз улучшает самую важную часть работы агента: длинные команды, безопасные правки, полезные доказательства и диагностику окружения.",
+    "新版本强化了代理工作的关键环节：长时间运行的命令、安全修改、有效证据和环境诊断。",
+  ),
+  releaseLink: text("Read the release notes", "Что нового в релизе", "查看发布说明"),
+  finalEyebrow: text("Start with one bounded task", "Начните с одной конкретной задачи", "从一个明确的任务开始"),
+  finalTitle: text("Let your next change come with proof.", "Пусть у следующего изменения будут доказательства.", "让下一次变更自带证据。"),
+  finalText: text(
+    "Install SOBA, connect your model, and see exactly how your agent works.",
+    "Установите SOBA, подключите модель и посмотрите, как агент решает вашу задачу.",
+    "安装 SOBA，连接你的模型，清楚了解代理如何完成任务。",
+  ),
+  footerTagline: text(
+    "Local-first engineering. Verifiable results.",
+    "Локальная разработка. Проверяемые результаты.",
+    "本地优先的工程代理，结果可验证。",
+  ),
+};
+
+const principles = [
   {
-    icon: ClipboardCheck,
-    title: {
-      en: "Evidence-first finishes",
-      ru: "Финиш с доказательствами",
-      zh: "证据优先的完成状态",
-    },
-    desc: {
-      en: "Proof receipts map changed files, checks, claims, risks, and permissions to the final answer.",
-      ru: "Proof receipts связывают изменённые файлы, проверки, claims, риски и разрешения с финальным ответом.",
-      zh: "Proof receipts 会把变更文件、检查、声明、风险和权限映射到最终回答。",
-    },
+    value: "Local-first",
+    label: text("Your project stays on your machine", "Проект остаётся на вашем компьютере", "项目保留在你的设备上"),
   },
   {
-    icon: GitBranch,
-    title: {
-      en: "Session time machine",
-      ru: "Сессии как time machine",
-      zh: "会话时间机器",
-    },
-    desc: {
-      en: "Continue, rewind, branch, and inspect past turns without losing the work trail.",
-      ru: "Можно продолжить, откатиться, ветвиться и смотреть прошлые turn'ы без потери следа работы.",
-      zh: "继续、回退、分支并查看过去回合，同时保留工作轨迹。",
-    },
+    value: "MIT",
+    label: text("Open source, ready to inspect", "Открытый код, который можно проверить", "开源代码，随时可查"),
   },
   {
-    icon: BrainCircuit,
-    title: {
-      en: "Portable handoff capsules",
-      ru: "Portable handoff capsules",
-      zh: "可移植交接胶囊",
-    },
-    desc: {
-      en: "Capsules keep goals, decisions, files, risks, and next steps compact enough to resume elsewhere.",
-      ru: "Капсулы держат цель, решения, файлы, риски и следующие шаги так, чтобы задачу можно было продолжить.",
-      zh: "胶囊保存目标、决策、文件、风险和下一步，方便在别处继续。",
-    },
+    value: "MCP",
+    label: text("Your tools, connected explicitly", "Ваши инструменты с явным подключением", "明确连接你的工具"),
   },
   {
-    icon: BrainCircuit,
-    title: {
-      en: "Memory with provenance",
-      ru: "Память с provenance",
-      zh: "带来源的项目记忆",
-    },
-    desc: {
-      en: "Project facts can carry source files, verification time, confidence, and stale-if-changed rules.",
-      ru: "Факты проекта получают source files, время проверки, confidence и правила устаревания.",
-      zh: "项目事实可以带有源文件、验证时间、置信度和变更即过期规则。",
-    },
-  },
-  {
-    icon: Network,
-    title: {
-      en: "MCP without losing control",
-      ru: "MCP без потери контроля",
-      zh: "可控的 MCP 工具",
-    },
-    desc: {
-      en: "Connect stdio or Streamable HTTP servers while SOBA keeps permissions and tool results visible.",
-      ru: "Подключайте stdio или Streamable HTTP servers, а SOBA оставит права и результаты инструментов видимыми.",
-      zh: "接入 stdio 或 Streamable HTTP 服务，同时保持权限和工具结果可见。",
-    },
-  },
-  {
-    icon: LockKeyhole,
-    title: {
-      en: "Permission receipts",
-      ru: "Permission receipts",
-      zh: "权限回执",
-    },
-    desc: {
-      en: "Risky operations show scope, alternatives, and the decision that allowed or denied them.",
-      ru: "Рискованные операции показывают scope, альтернативы и решение, которым их разрешили или запретили.",
-      zh: "高风险操作会显示范围、替代方案以及允许或拒绝的决定。",
-    },
-  },
-  {
-    icon: Zap,
-    title: {
-      en: "Skill evolution lab",
-      ru: "Skill evolution lab",
-      zh: "技能演进实验室",
-    },
-    desc: {
-      en: "Markdown skills have evals, bench, trace, revision history, promotion, and rollback.",
-      ru: "Markdown skills получают eval, bench, trace, историю версий, promote и rollback.",
-      zh: "Markdown 技能支持 eval、bench、trace、版本历史、promote 和 rollback。",
-    },
-  },
-  {
-    icon: Languages,
-    title: {
-      en: "Three languages",
-      ru: "Три языка",
-      zh: "三种语言",
-    },
-    desc: {
-      en: "English, Russian, and Chinese UI/docs, with release messaging kept aligned.",
-      ru: "Интерфейс и документация на английском, русском и китайском языках, с синхронным release message.",
-      zh: "英文、俄文和中文 UI/文档，并保持发布信息一致。",
-    },
+    value: "EN · RU · 中文",
+    label: text("Interface and documentation", "Интерфейс и документация", "界面与文档"),
   },
 ];
 
 const workflow = [
   {
-    icon: Network,
-    title: { en: "Read", ru: "Читает", zh: "读取" },
-    desc: {
-      en: "Looks at code, docs, session state, memory receipts, and MCP context first.",
-      ru: "Сначала смотрит код, документацию, состояние сессии, memory receipts и MCP context.",
-      zh: "先查看代码、文档、会话状态、记忆回执和 MCP 上下文。",
-    },
+    number: "01",
+    icon: FileCode2,
+    title: text("Understand", "Изучает", "理解"),
+    description: text(
+      "Reads the codebase, project memory, and existing session before touching anything.",
+      "Сначала изучает код, память проекта и текущую сессию — и только потом вносит изменения.",
+      "在修改之前，先读取代码库、项目记忆和现有会话。",
+    ),
+    meta: text("Code · docs · memory", "Код · документы · память", "代码 · 文档 · 记忆"),
   },
   {
-    icon: Workflow,
-    title: { en: "Do", ru: "Делает", zh: "执行" },
-    desc: {
-      en: "Edits through bounded tools, skills, shell checks, and MCP integrations.",
-      ru: "Правит через ограниченные tools, skills, shell checks и MCP integrations.",
-      zh: "通过有边界的工具、技能、shell 检查和 MCP 集成执行。",
-    },
+    number: "02",
+    icon: GitBranch,
+    title: text("Make the change", "Изменяет", "修改"),
+    description: text(
+      "Works through bounded tools and explicit permissions, with every action visible.",
+      "Работает через ограниченные инструменты и явные разрешения. Каждое действие видно.",
+      "通过有边界的工具和明确权限执行，每个操作都清晰可见。",
+    ),
+    meta: text("Tools · skills · MCP", "Инструменты · навыки · MCP", "工具 · 技能 · MCP"),
   },
   {
-    icon: Shield,
-    title: { en: "Prove", ru: "Доказывает", zh: "证明" },
-    desc: {
-      en: "Maps checks, claims, risks, and permissions into a visible proof trail.",
-      ru: "Связывает проверки, claims, риски и разрешения в понятный отчёт с доказательствами.",
-      zh: "把检查、声明、风险和权限映射成可见证据链。",
-    },
+    number: "03",
+    icon: ShieldCheck,
+    title: text("Prove the result", "Доказывает", "验证"),
+    description: text(
+      "Runs relevant checks and connects the final claims to files, results, and remaining risks.",
+      "Запускает нужные проверки и связывает итог с файлами, результатами и оставшимися рисками.",
+      "运行相关检查，将最终结论与文件、结果和剩余风险关联。",
+    ),
+    meta: text("Checks · claims · receipts", "Проверки · выводы · receipts", "检查 · 声明 · 回执"),
   },
 ];
 
-const copy = {
-  badge: {
-    en: `SOBA Agent ${APP_VERSION_LABEL} · local-first engineering agent`,
-    ru: `SOBA Agent ${APP_VERSION_LABEL} · local-first инженерный агент`,
-    zh: `SOBA Agent ${APP_VERSION_LABEL} · local-first 工程代理`,
+const features = [
+  {
+    icon: ClipboardCheck,
+    title: text("Proof receipts", "Proof receipts", "Proof receipts"),
+    description: text(
+      "See which files changed, which checks ran, and what is still uncertain — not just a confident summary.",
+      "Какие файлы изменены, какие проверки выполнены и что осталось неясным — не просто уверенный отчёт.",
+      "查看变更文件、已运行检查和仍不确定的事项，而不只是一个自信的总结。",
+    ),
   },
-  headlineLines: {
-    en: ["The coding agent", "that leaves receipts"],
-    ru: ["SOBA", "агент для", "разработки"],
-    zh: ["编码代理", "会留下证据"],
+  {
+    icon: Database,
+    title: text("Memory with sources", "Память с источниками", "带来源的记忆"),
+    description: text(
+      "Project facts keep their origin, verification time, and rules for when they become stale.",
+      "У фактов есть источник, время проверки и правила, по которым они устаревают.",
+      "项目事实保留来源、验证时间以及失效规则。",
+    ),
   },
-  lead: {
-    en: "SOBA is a local-first engineering agent for teams that want more than code edits. It remembers the project, works inside bounded tool loops, verifies outcomes, and turns work into evidence.",
-    ru: "SOBA — local-first инженерный агент для работы, где важны не только правки кода. Он помнит проект, работает в ограниченных tool loops, проверяет результат и сохраняет подтверждения того, что сделал.",
-    zh: "SOBA 是 local-first 工程代理，不只是改代码。它记住项目，在有边界的工具循环中工作，验证结果，并把工作转成证据。",
+  {
+    icon: History,
+    title: text("Resumable sessions", "Сессии с продолжением", "可恢复的会话"),
+    description: text(
+      "Continue, rewind, or branch past work without losing the decisions that got you there.",
+      "Продолжайте, откатывайте или ветвите работу, не теряя принятые решения.",
+      "继续、回退或分支过往工作，同时保留完整决策过程。",
+    ),
   },
-  primaryCta: { en: "Read the docs", ru: "Документы", zh: "阅读文档" },
-  secondaryCta: { en: "Quick start", ru: "Быстрый старт", zh: "快速入门" },
-  githubCta: { en: "GitHub", ru: "GitHub", zh: "GitHub" },
-  roadmapCta: { en: "Roadmap", ru: "Дорожная карта", zh: "路线图" },
-  proof: {
-    en: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
-    ru: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
-    zh: ["Proof receipts", "Memory provenance", "Permission receipts", "Skill bench"],
+  {
+    icon: LockKeyhole,
+    title: text("Explicit permissions", "Явные разрешения", "明确的权限"),
+    description: text(
+      "Risky operations show their scope and leave a receipt for the decision you made.",
+      "Для рискованных операций видны область действия и запись о принятом решении.",
+      "高风险操作会显示范围，并记录你做出的权限决定。",
+    ),
   },
-  orbitEyebrow: { en: "Execution model", ru: "Модель работы", zh: "执行模型" },
-  orbitTitle: {
-    en: "Local control, visible proof, repeatable habits.",
-    ru: "Локальный контроль, видимый proof, повторяемые привычки.",
-    zh: "本地控制、可见证据、可重复习惯。",
+  {
+    icon: Blocks,
+    title: text("Skills you can evaluate", "Навыки с оценкой качества", "可评估的技能"),
+    description: text(
+      "Turn repeatable workflows into versioned Markdown skills with benchmarks and rollback.",
+      "Превращайте повторяемые процессы в версионируемые Markdown-навыки с бенчмарками и откатом.",
+      "将重复工作流变成可版本化的 Markdown 技能，支持基准测试和回滚。",
+    ),
   },
-  orbitText: {
-    en: "SOBA keeps memory, tools, MCP, skills, sessions, capsules, and proof receipts in the same local workflow.",
-    ru: "SOBA держит memory, tools, MCP, skills, sessions, capsules и proof receipts в одном локальном workflow.",
-    zh: "SOBA 把记忆、工具、MCP、技能、会话、胶囊和 proof receipts 放在同一个本地工作流。",
+  {
+    icon: Network,
+    title: text("MCP on your terms", "MCP на ваших условиях", "由你掌控的 MCP"),
+    description: text(
+      "Connect local or remote tools while keeping permissions and results visible in one place.",
+      "Подключайте локальные и удалённые инструменты, сохраняя права и результаты на виду.",
+      "连接本地或远程工具，同时集中查看权限和结果。",
+    ),
   },
-  architectureInput: {
-    en: "task · files · session · memory receipts · MCP",
-    ru: "задача · файлы · сессия · memory receipts · MCP",
-    zh: "任务 · 文件 · 会话 · 记忆回执 · MCP",
-  },
-  architectureInputLabel: {
-    en: "input",
-    ru: "на входе",
-    zh: "输入",
-  },
-  architectureOutput: {
-    en: "patches · checks · claims · risks · proof receipts",
-    ru: "правки · проверки · claims · риски · proof receipts",
-    zh: "补丁 · 检查 · 声明 · 风险 · proof receipts",
-  },
-  architectureOutputLabel: {
-    en: "output",
-    ru: "на выходе",
-    zh: "输出",
-  },
-  featuresTitle: {
-    en: "What makes SOBA different",
-    ru: "Чем SOBA отличается",
-    zh: "SOBA 的不同之处",
-  },
-  workflowTitle: {
-    en: "Read. Do. Prove.",
-    ru: "Прочитал. Сделал. Доказал.",
-    zh: "读取。执行。证明。",
-  },
-  terminalEyebrow: {
-    en: "TUI preview",
-    ru: "Интерфейс",
-    zh: "TUI 预览",
-  },
-  terminalTitle: {
-    en: "A terminal surface for verifiable work",
-    ru: "Терминал для проверяемой работы",
-    zh: "用于可验证工作的终端界面",
-  },
-  terminalText: {
-    en: "Use one-shot prompts for small tasks or the TUI for long work. Slash commands, model switching, proof summaries, memory, permissions, and MCP status stay visible.",
-    ru: "Для коротких задач есть one-shot, для длинных — TUI. Slash-команды, выбор модели, proof summaries, memory, permissions и MCP status остаются видимыми.",
-    zh: "小任务用 one-shot，长任务用 TUI。斜杠命令、模型切换、proof summaries、记忆、权限和 MCP 状态保持可见。",
-  },
-};
+];
 
-const stats = [
-  { value: "Proof", label: { en: "Claim-mapped evidence", ru: "Доказательства для claims", zh: "声明映射证据" } },
-  { value: "Memory", label: { en: "Provenance + staleness", ru: "Provenance + staleness", zh: "来源 + 过期检测" } },
-  { value: "MCP", label: { en: "stdio + remote tools", ru: "stdio + remote tools", zh: "stdio + remote 工具" } },
-  { value: "Local", label: { en: "Bounded permissions", ru: "Ограниченные права", zh: "有边界的权限" } },
+const releaseHighlights = [
+  {
+    icon: Terminal,
+    title: text("Background processes", "Фоновые процессы", "后台进程"),
+    description: text(
+      "Start a dev server, watch its status, read logs, and stop it without blocking the rest of the session.",
+      "Запускайте dev-сервер, следите за статусом, читайте логи и останавливайте процесс, не блокируя сессию.",
+      "启动开发服务器、查看状态和日志或停止进程，无需阻塞当前会话。",
+    ),
+    meta: "process start · status · logs · stop",
+  },
+  {
+    icon: FileCode2,
+    title: text("Safer edits", "Безопасные правки", "更安全的修改"),
+    description: text(
+      "Preview diffs before writing, detect stale files, and require an explicit choice before overwriting work.",
+      "Смотрите diff до записи, отслеживайте устаревшие файлы и явно подтверждайте перезапись своей работы.",
+      "写入前预览差异、检测过期文件，并在覆盖工作成果前明确要求确认。",
+    ),
+    meta: "dryRun · stale check · overwrite guard",
+  },
+  {
+    icon: ClipboardCheck,
+    title: text("Evidence you can trace", "Доказательства с историей", "可追溯的证据"),
+    description: text(
+      "Hashed command logs and session baselines make verification results easier to audit and reproduce.",
+      "Хэшированные логи команд и базовые состояния сессии упрощают аудит и воспроизведение результатов проверок.",
+      "哈希命令日志和会话基线让验证结果更易于审计和复现。",
+    ),
+    meta: ".soba/evidence/logs/ · baselines",
+  },
+  {
+    icon: CheckCircle2,
+    title: text("Environment diagnostics", "Диагностика окружения", "环境诊断"),
+    description: text(
+      "Check required and optional capabilities before a task fails on a missing tool or provider.",
+      "Проверяйте обязательные и дополнительные возможности окружения до того, как задача остановится из-за отсутствующего инструмента или провайдера.",
+      "在任务因缺少工具或提供商而失败之前，检查必需和可选的环境能力。",
+    ),
+    meta: "soba doctor",
+  },
 ];
 
 export const Route = createFileRoute("/$lang/")({
@@ -274,214 +268,224 @@ export const Route = createFileRoute("/$lang/")({
 
 function Home() {
   const { lang } = Route.useParams();
-  const t = (obj: Record<string, string>) => obj[lang] ?? obj.en;
-  const localizedHeadlineLines = copy.headlineLines[lang as keyof typeof copy.headlineLines] ?? copy.headlineLines.en;
-  const localizedProof = copy.proof[lang as keyof typeof copy.proof] ?? copy.proof.en;
+  const locale: Locale = lang === "ru" || lang === "zh" ? lang : "en";
+  const t = (value: LocalizedText) => value[locale];
 
   return (
     <HomeLayout {...baseOptions(lang)}>
       <main className="landing-shell">
         <section className="hero-section">
-          <div className="hero-bg" aria-hidden />
-          <div className="hero-coordinate hero-coordinate-side" aria-hidden>
-            LOCAL / VERIFIABLE / OPEN
-          </div>
-          <div className="hero-grid mx-auto grid items-start px-6 lg:px-8">
+          <div className="landing-container hero-layout">
             <div className="hero-copy">
-              <div className="hero-badge">
-                <Sparkles className="size-3.5" />
-                <span>{t(copy.badge)}</span>
-              </div>
-              <h1
-                className="mt-6 text-5xl font-bold tracking-[-0.045em] text-fd-foreground sm:text-7xl lg:text-[4.25rem] lg:leading-[4.5rem]"
-                aria-label={localizedHeadlineLines.join(" ")}
+              <Link
+                to="/$lang/docs/$"
+                params={{ lang, _splat: "changelog" }}
+                className="release-link"
               >
-                {localizedHeadlineLines.map((line, index) => (
-                  <span
-                    key={line}
-                    className={index === 0 ? "headline-line" : "headline-line headline-accent"}
-                    aria-hidden="true"
-                  >
-                    {line}
-                  </span>
-                ))}
+                <span className="release-dot" aria-hidden />
+                {t(copy.release)}
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </Link>
+              <h1>
+                <span>{t(copy.headlineFirst)}</span>
+                <span>{t(copy.headlineSecond)}</span>
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-fd-muted-foreground sm:text-xl">{t(copy.lead)}</p>
-
-              <div className="hero-actions mt-8 flex flex-wrap items-center gap-4">
-                <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="hero-cta hero-cta-primary">
-                  {t(copy.primaryCta)}
-                  <ArrowRight className="size-4" />
-                </Link>
+              <p className="hero-lead">{t(copy.lead)}</p>
+              <div className="hero-actions">
                 <Link
                   to="/$lang/docs/$"
                   params={{ lang, _splat: "quick-start" }}
-                  className="hero-cta hero-cta-secondary"
+                  className="landing-button landing-button-primary"
                 >
+                  {t(copy.primaryCta)}
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+                <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="landing-button landing-button-secondary">
                   {t(copy.secondaryCta)}
                 </Link>
-                <Link to="/$lang/roadmap" params={{ lang }} className="hero-cta hero-cta-secondary">
-                  {t(copy.roadmapCta)}
-                </Link>
-                <a
-                  href="https://github.com/avacadorun-dev/soba-agent"
-                  className="hero-cta hero-cta-secondary"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <GitBranch className="size-4" />
-                  {t(copy.githubCta)}
-                </a>
               </div>
-
-              <div className="hero-proof-ledger mt-6 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
-                {localizedProof.map((item, index) => (
-                  <div key={item} className="proof-pill">
-                    <span className="proof-index">0{index + 1}</span>
-                    <span>{item}</span>
-                    <CheckCircle2 className="size-4" />
-                  </div>
-                ))}
+              <div className="install-block">
+                <span>{t(copy.installLabel)}</span>
+                <code>
+                  <span aria-hidden>$</span> npm install -g soba-agent
+                </code>
               </div>
-            </div>
-
-            <div className="hero-visual-card">
-              <div className="hero-visual-header" aria-hidden>
-                <span>SOBA / SYSTEM MAP</span>
-                <span className="visual-live-dot">LIVE</span>
-              </div>
-              <SobaOrbitCanvas />
-              <div className="hero-visual-caption">
-                <span>OpenResponses</span>
-                <span>•</span>
-                <span>MCP</span>
-                <span>•</span>
-                <span>Memory</span>
-                <span>•</span>
-                <span>trust layer</span>
-              </div>
+              <p className="open-source-note">
+                <Check className="size-3.5" aria-hidden />
+                {t(copy.openSource)}
+              </p>
             </div>
           </div>
         </section>
 
-        <section className="stats-band border-y border-fd-border bg-fd-muted/20 py-8">
-          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-6 lg:grid-cols-4 lg:px-8">
-            {stats.map((stat, index) => (
-              <div key={stat.label.en} className="stat-card">
-                <span className="stat-index">0{index + 1}</span>
-                <div className="text-2xl font-bold text-fd-foreground sm:text-3xl">{stat.value}</div>
-                <div className="mt-1 text-sm text-fd-muted-foreground">{t(stat.label)}</div>
+        <section className="principles-band" aria-label={t(copy.principlesEyebrow)}>
+          <div className="landing-container principles-grid">
+            {principles.map((principle) => (
+              <div key={principle.value} className="principle-item">
+                <strong>{principle.value}</strong>
+                <span>{t(principle.label)}</span>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="section-block">
-          <div className="mx-auto grid max-w-7xl gap-10 px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
-            <div className="section-heading lg:sticky lg:top-24 lg:self-start">
-              <p className="eyebrow"><span>01</span>{t(copy.orbitEyebrow)}</p>
-              <h2>{t(copy.orbitTitle)}</h2>
-              <p>{t(copy.orbitText)}</p>
-            </div>
-            <div className="architecture-panel">
-              <div className="architecture-row">
-                <span>{t(copy.architectureInputLabel)}</span>
-                <strong>{t(copy.architectureInput)}</strong>
+        <section className="landing-section workflow-section">
+          <div className="landing-container">
+            <div className="section-heading section-heading-split">
+              <div>
+                <p className="landing-eyebrow">{t(copy.workflowEyebrow)}</p>
+                <h2>{t(copy.workflowTitle)}</h2>
               </div>
-              <div className="architecture-core-row">
-                <div className="architecture-agent-core">
-                  <img src="/brand/soba-mascot-alpha.png" alt="" aria-hidden />
-                </div>
-                <div className="architecture-flow">
-                  {workflow.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div key={item.title.en} className="workflow-card">
-                        <div className="workflow-icon">
-                          <Icon className="size-5" />
-                        </div>
-                        <h3>{t(item.title)}</h3>
-                        <p>{t(item.desc)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="architecture-row">
-                <span>{t(copy.architectureOutputLabel)}</span>
-                <strong>{t(copy.architectureOutput)}</strong>
-              </div>
+              <p>{t(copy.workflowLead)}</p>
             </div>
-          </div>
-        </section>
-
-        <section className="section-block border-t border-fd-border">
-          <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="section-heading mx-auto max-w-3xl text-center">
-              <p className="eyebrow"><span>02</span>SOBA / DIFFERENCE</p>
-              <h2>{t(copy.featuresTitle)}</h2>
-            </div>
-            <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature, index) => {
-                const Icon = feature.icon;
+            <div className="workflow-grid">
+              {workflow.map((step) => {
+                const Icon = step.icon;
                 return (
-                  <div key={feature.title.en} className="feature-card landing-feature-card">
-                    <span className="feature-number">{String(index + 1).padStart(2, "0")}</span>
-                    <div className="feature-icon">
-                      <Icon className="size-5" />
+                  <article key={step.number} className="workflow-step">
+                    <div className="workflow-step-top">
+                      <span className="workflow-step-icon">
+                        <Icon className="size-5" strokeWidth={1.7} aria-hidden />
+                      </span>
+                      <span className="workflow-step-number">{step.number}</span>
                     </div>
-                    <h3>{t(feature.title)}</h3>
-                    <p>{t(feature.desc)}</p>
-                  </div>
+                    <h3>{t(step.title)}</h3>
+                    <p>{t(step.description)}</p>
+                    <span className="workflow-step-meta">{t(step.meta)}</span>
+                  </article>
                 );
               })}
             </div>
           </div>
         </section>
 
-        <section className="section-block border-t border-fd-border">
-          <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
-            <div className="section-heading">
-              <p className="eyebrow"><span>03</span>{t(copy.terminalEyebrow)}</p>
-              <h2>{t(copy.terminalTitle)}</h2>
-              <p>{t(copy.terminalText)}</p>
-              <div className="mt-8">
-                <Link to="/$lang/docs/$" params={{ lang, _splat: "quick-start" }} className="hero-cta hero-cta-primary">
-                  {t(copy.workflowTitle)}
-                  <ArrowRight className="size-4" />
+        <section className="landing-section features-section">
+          <div className="landing-container">
+            <div className="section-heading section-heading-centered">
+              <p className="landing-eyebrow">{t(copy.featuresEyebrow)}</p>
+              <h2>{t(copy.featuresTitle)}</h2>
+              <p>{t(copy.featuresLead)}</p>
+            </div>
+            <div className="features-grid">
+              {features.map((feature) => {
+                const Icon = feature.icon;
+                return (
+                  <article key={feature.title.en} className="feature-card">
+                    <span className="feature-icon">
+                      <Icon className="size-5" strokeWidth={1.7} aria-hidden />
+                    </span>
+                    <h3>{t(feature.title)}</h3>
+                    <p>{t(feature.description)}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section orbit-section">
+          <div className="landing-container">
+            <div className="section-heading section-heading-split">
+              <div>
+                <p className="landing-eyebrow">{t(copy.orbitEyebrow)}</p>
+                <h2>{t(copy.orbitTitle)}</h2>
+              </div>
+              <p>{t(copy.orbitLead)}</p>
+            </div>
+            <div className="orbit-panel orbit-showcase">
+              <div className="orbit-panel-bar">
+                <span>SOBA / EXECUTION MAP</span>
+                <span className="orbit-live">
+                  <span aria-hidden />
+                  LOCAL
+                </span>
+              </div>
+              <SobaOrbitCanvas />
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section release-section">
+          <div className="landing-container">
+            <div className="section-heading section-heading-split release-heading">
+              <div>
+                <p className="landing-eyebrow">{t(copy.releaseEyebrow)}</p>
+                <h2>{t(copy.releaseTitle)}</h2>
+              </div>
+              <div>
+                <p>{t(copy.releaseLead)}</p>
+                <Link to="/$lang/docs/$" params={{ lang, _splat: "changelog" }} className="text-link">
+                  {t(copy.releaseLink)}
+                  <ArrowRight className="size-4" aria-hidden />
                 </Link>
               </div>
             </div>
-            <div className="terminal-showcase">
-              <TerminalCanvas />
+            <div className="release-grid">
+              {releaseHighlights.map((highlight) => {
+                const Icon = highlight.icon;
+                return (
+                  <article key={highlight.title.en} className="release-card">
+                    <span className="release-card-icon">
+                      <Icon className="size-5" strokeWidth={1.7} aria-hidden />
+                    </span>
+                    <div>
+                      <h3>{t(highlight.title)}</h3>
+                      <p>{t(highlight.description)}</p>
+                      <code>{highlight.meta}</code>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section final-section">
+          <div className="landing-container">
+            <div className="final-panel">
+              <div>
+                <p className="landing-eyebrow">{t(copy.finalEyebrow)}</p>
+                <h2>{t(copy.finalTitle)}</h2>
+                <p>{t(copy.finalText)}</p>
+              </div>
+              <div className="final-actions">
+                <Link
+                  to="/$lang/docs/$"
+                  params={{ lang, _splat: "quick-start" }}
+                  className="landing-button landing-button-primary"
+                >
+                  {t(copy.primaryCta)}
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+                <a
+                  href="https://github.com/avacadorun-dev/soba-agent"
+                  className="landing-button landing-button-secondary"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  GitHub
+                  <ArrowUpRight className="size-4" aria-hidden />
+                </a>
+              </div>
             </div>
           </div>
         </section>
 
         <footer className="landing-footer">
-          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 text-sm text-fd-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <div className="landing-container landing-footer-inner">
             <p>
-              SOBA Agent {APP_VERSION_LABEL} —{" "}
-              {lang === "ru"
-                ? "local-first агент для разработки"
-                : lang === "zh"
-                  ? "会留下证据的 local-first 工程代理"
-                  : "local-first engineering agent that leaves receipts"}
+              <strong>SOBA Agent</strong>
+              <span>{t(copy.footerTagline)}</span>
             </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <a
-                href="https://github.com/avacadorun-dev/soba-agent"
-                className="footer-link"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <GitBranch className="size-3.5" />
-                {t(copy.githubCta)}
-              </a>
-              <Link to="/$lang/docs/$" params={{ lang, _splat: "" }} className="footer-link">
-                {t(copy.primaryCta)}
-                <ArrowRight className="size-3.5" />
+            <div>
+              <span>{APP_VERSION_LABEL}</span>
+              <Link to="/$lang/roadmap" params={{ lang }}>
+                {lang === "ru" ? "Дорожная карта" : lang === "zh" ? "路线图" : "Roadmap"}
               </Link>
+              <a href="https://github.com/avacadorun-dev/soba-agent" target="_blank" rel="noreferrer">
+                GitHub
+                <ArrowUpRight className="size-3.5" aria-hidden />
+              </a>
             </div>
           </div>
         </footer>
